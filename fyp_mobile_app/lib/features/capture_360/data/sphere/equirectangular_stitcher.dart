@@ -328,6 +328,7 @@ int resolveSphereStitchWidth(int requested) {
     );
     registration = registerSphereFrames(
       frames: registrationFrames,
+      enableLocalMesh: kSphereEnableLocalMeshWarp,
       verticalFovDeg: kSphereAssumedVerticalFovDeg,
       onStage: progress.send,
     );

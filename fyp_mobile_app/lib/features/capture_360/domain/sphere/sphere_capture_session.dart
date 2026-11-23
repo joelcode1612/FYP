@@ -320,6 +320,7 @@ class CapturedFrame {
     this.cropOffsetY = 0,
     this.toleranceDeg = 0,
     this.captureStatus = 'captured',
+    this.qualityJson,
   });
 
   final String sessionId;
@@ -355,6 +356,13 @@ class CapturedFrame {
   /// "superseded" state does not need a format change.
   final String captureStatus;
 
+  /// The device quality verification report for this photograph, JSON-encoded
+  /// [FrameQualityReport] (`domain/quality/`), or `null` when the frame was
+  /// captured before quality checking existed. The JPEG itself is never
+  /// influenced by this field: a warning keeps the photograph exactly as it
+  /// was saved, and only the user decides on a retake.
+  final String? qualityJson;
+
   /// Projects this row back into the record the stitcher consumes, so a
   /// restored session can regenerate its panorama without a second code path.
   CaptureRecord toCaptureRecord() => CaptureRecord(
@@ -378,6 +386,29 @@ class CapturedFrame {
     cropOffsetY: cropOffsetY,
     imageFormat: 'jpeg',
     toleranceDeg: toleranceDeg,
+  );
+
+  /// Re-attaches a quality report to this frame without touching any of the
+  /// capture evidence. Used by the controller after the analyzer finishes —
+  /// the JPEG and the capture metadata stay byte-for-byte identical.
+  CapturedFrame withQualityJson(String? qualityJson) => CapturedFrame(
+    sessionId: sessionId,
+    targetId: targetId,
+    imagePath: imagePath,
+    capturedAt: capturedAt,
+    targetYawDegrees: targetYawDegrees,
+    targetPitchDegrees: targetPitchDegrees,
+    cameraOrientation: cameraOrientation,
+    imageWidth: imageWidth,
+    imageHeight: imageHeight,
+    sourceImageWidth: sourceImageWidth,
+    sourceImageHeight: sourceImageHeight,
+    cropOffsetX: cropOffsetX,
+    cropOffsetY: cropOffsetY,
+    alignmentErrorDeg: alignmentErrorDeg,
+    toleranceDeg: toleranceDeg,
+    captureStatus: captureStatus,
+    qualityJson: qualityJson,
   );
 
   static CapturedFrame fromCaptureRecord(CaptureRecord record) => CapturedFrame(
@@ -418,6 +449,7 @@ class CapturedFrame {
     'alignment_error_deg': alignmentErrorDeg,
     'tolerance_deg': toleranceDeg,
     'capture_status': captureStatus,
+    'quality_json': qualityJson,
   };
 
   static CapturedFrame fromRow(Map<String, Object?> row) => CapturedFrame(
@@ -442,6 +474,7 @@ class CapturedFrame {
     alignmentErrorDeg: (row['alignment_error_deg'] as num?)?.toDouble() ?? 0,
     toleranceDeg: (row['tolerance_deg'] as num?)?.toDouble() ?? 0,
     captureStatus: row['capture_status'] as String? ?? 'captured',
+    qualityJson: row['quality_json'] as String?,
   );
 }
 

@@ -391,10 +391,18 @@ class BackendCaptureCoordinator {
   /// idempotent with the batched backup: the same signed-URL transport, the
   /// same confirmation endpoint, and a repeat PUT of identical bytes is the
   /// stored success case. Returns the confirmed storage path.
+  ///
+  /// [qualityReport] is the device quality evidence for this photograph,
+  /// optional and advisory. It rides inside the frame's `capture_pose` JSON —
+  /// a field the worker already treats as an open metadata bag — so no
+  /// backend schema changes and no second record are introduced. A warning
+  /// never blocks or alters the upload: the photograph is confirmed exactly
+  /// as captured.
   Future<String> uploadFrame({
     required String sessionId,
     required CapturedFrame frame,
     required String checksum,
+    Map<String, Object?>? qualityReport,
   }) async {
     final permission = await _issueUploadUrls(sessionId, <int>[frame.targetId]);
     await _uploadOne(
@@ -402,6 +410,7 @@ class BackendCaptureCoordinator {
       frame: frame,
       checksum: checksum,
       permission: permission[frame.targetId],
+      qualityReport: qualityReport,
       onProgress: () {},
     );
     return permission[frame.targetId]!['storagePath'] as String;
@@ -412,17 +421,24 @@ class BackendCaptureCoordinator {
   /// Returns the confirmation payload (`panoramaId`, `storagePath`,
   /// `width`, `height`). Safe to call again: the same verified object
   /// returns the existing row untouched.
+  ///
+  /// [deviceQuality] is the device's own frame-quality summary (how many
+  /// photographs carry warnings, how many are unreadable). It is merged into
+  /// the coverage report sent with the confirmation so the backend can store
+  /// it alongside its own panorama verification — evidence, never a gate.
   Future<Map<String, dynamic>> syncPanoramaDraft({
     required String sessionId,
     required int propertyId,
     required String panoramaPath,
     required String checksum,
+    Map<String, Object?>? deviceQuality,
   }) async {
     return _uploadAndConfirmPanorama(
       sessionId: sessionId,
       propertyId: propertyId,
       panoramaPath: panoramaPath,
       checksum: checksum,
+      deviceQuality: deviceQuality,
     );
   }
 
@@ -431,6 +447,18 @@ class BackendCaptureCoordinator {
   Future<Map<String, dynamic>?> latestPropertyPanorama(int propertyId) async {
     try {
       return await _client.get('$_api/properties/$propertyId/panorama');
+    } on NotFoundFailure {
+      return null;
+    }
+  }
+
+  /// The backend's capture-quality report for one session: the registration,
+  /// coverage and seam verification the server ran, plus per-frame integrity
+  /// evidence. `null` when the session does not exist or the checks have not
+  /// run yet — consumers must treat null as "not available", never "failed".
+  Future<Map<String, dynamic>?> fetchSessionQuality(String sessionId) async {
+    try {
+      return await _client.get('$_api/sessions/$sessionId/quality');
     } on NotFoundFailure {
       return null;
     }
@@ -689,6 +717,7 @@ class BackendCaptureCoordinator {
     required int propertyId,
     required String panoramaPath,
     required String checksum,
+    Map<String, Object?>? deviceQuality,
   }) async {
     final coverage = await _coverageFor(panoramaPath, checksum);
     var permission = await _issuePanoramaUploadUrl(sessionId);
@@ -740,6 +769,7 @@ class BackendCaptureCoordinator {
           'source': 'device_capture_v2',
           'stitched_on': 'flutter',
           'photo_coverage': ?coverage,
+          'frame_quality': ?deviceQuality,
         },
       },
     );
@@ -776,6 +806,7 @@ class BackendCaptureCoordinator {
     required CapturedFrame frame,
     required String checksum,
     required Map<String, dynamic>? permission,
+    Map<String, Object?>? qualityReport,
     required void Function() onProgress,
   }) async {
     if (permission == null) {
@@ -841,7 +872,8 @@ class BackendCaptureCoordinator {
         'path.',
       );
     }
-    await _confirm(sessionId, frame, checksum, storagePath);
+    await _confirm(sessionId, frame, checksum, storagePath,
+        qualityReport: qualityReport);
     onProgress();
   }
 
@@ -912,8 +944,9 @@ class BackendCaptureCoordinator {
     String sessionId,
     CapturedFrame frame,
     String checksum,
-    String storagePath,
-  ) async {
+    String storagePath, {
+    Map<String, Object?>? qualityReport,
+  }) async {
     await _client.post('$_api/sessions/$sessionId/frames', <String, dynamic>{
       'target_index': frame.targetId,
       'storage_path': storagePath,
@@ -929,6 +962,9 @@ class BackendCaptureCoordinator {
         'sourceImageHeight': frame.sourceImageHeight,
         'cropOffsetX': frame.cropOffsetX,
         'cropOffsetY': frame.cropOffsetY,
+        // Device quality evidence rides inside the open pose metadata — the
+        // worker reads only the keys it knows, so this stays additive.
+        'quality': ?qualityReport,
       },
       'captured_at': frame.capturedAt.toUtc().toIso8601String(),
     });

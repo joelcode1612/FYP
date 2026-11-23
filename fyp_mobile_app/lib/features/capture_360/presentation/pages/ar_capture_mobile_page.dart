@@ -19,8 +19,11 @@ import 'package:fyp/features/capture_360/application/backend_capture_coordinator
 import 'package:fyp/features/capture_360/application/capture_panorama_generation_service.dart';
 import 'package:fyp/features/capture_360/application/frame_upload_queue.dart';
 import 'package:fyp/features/capture_360/data/repositories/sitewise_capture_repository.dart';
+import 'package:fyp/features/capture_360/data/quality/dartcv_overlap_probe.dart';
+import 'package:fyp/features/capture_360/data/quality/ui_frame_pixels_decoder.dart';
 import 'package:fyp/features/capture_360/data/sphere/equirectangular_stitcher.dart';
 import 'package:fyp/features/capture_360/data/sphere/sitewise_sphere_session_store.dart';
+import 'package:fyp/features/capture_360/domain/quality/frame_quality_analyzer.dart';
 import 'package:fyp/features/capture_360/domain/sphere/sphere_capture_session.dart';
 import 'package:fyp/features/capture_360/domain/sphere/sphere_target.dart';
 import 'package:fyp/features/capture_360/guide/presentation/screens/capture_guide_screen.dart';
@@ -70,6 +73,11 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
   /// queued here the moment it hits disk; the panorama joins it when the
   /// stitch completes. One instance per station, shared process-wide.
   FrameUploadQueue? _uploadQueue;
+
+  /// The per-photograph quality verifier. Warnings are attached to the saved
+  /// frames and shown in the capture UI; this page never acts on them
+  /// automatically — the agent decides on any retake.
+  FrameQualityAnalyzer? _qualityAnalyzer;
   String? _tourId;
   bool _preparing = true;
   bool _guideCompleted = false;
@@ -184,6 +192,14 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
           ? FrameUploadQueue.forTour(frameStore: frameStore, tourId: tour.id)
           : null;
 
+      // The lightweight on-device quality checks (sharpness/blur, exposure,
+      // integrity/dimensions, orientation metadata, advisory overlap). The
+      // decoder and probe are stateless, so one instance serves the session.
+      final qualityAnalyzer = FrameQualityAnalyzer(
+        decoder: const UiJpegFrameDecoder(),
+        overlapProbe: const DartCvOverlapProbe(),
+      );
+
       // App-closed recovery: if all originals are already on disk, do not open
       // the camera or re-run the guide. The resume path saves the panorama
       // draft (stitching first if the previous launch never got to it), then
@@ -204,6 +220,7 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
         _repository = repository;
         _sessions = sessions;
         _uploadQueue = uploadQueue;
+        _qualityAnalyzer = qualityAnalyzer;
         _guideCompleted = shouldResume;
         _resumedComplete = shouldResume;
         _preparing = false;
@@ -565,6 +582,8 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
       onPanoramaReady: _onPanoramaReady,
       // Every photograph is queued for Supabase upload the moment it lands.
       onFrameSaved: _onFrameSaved,
+      // Quality warnings are shown in the capture UI; only the agent retakes.
+      qualityAnalyzer: _qualityAnalyzer,
     );
   }
 }

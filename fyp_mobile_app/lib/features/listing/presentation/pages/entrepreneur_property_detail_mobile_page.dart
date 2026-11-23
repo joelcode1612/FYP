@@ -15,6 +15,7 @@ import 'package:fyp/shared/presentation/widgets/sitewise_secondary_button.dart';
 import 'package:fyp/shared/presentation/components/mobile_property_gallery.dart';
 import 'package:fyp/features/assessment/presentation/widgets/mobile_insights_panel.dart';
 import 'package:fyp/shared/presentation/components/mobile_skeleton.dart';
+import 'package:fyp/features/listing/presentation/widgets/business_concept_panel.dart';
 
 /// Mobile property detail — Option A layout over the existing evaluation flow.
 ///
@@ -249,6 +250,8 @@ class _EntrepreneurPropertyDetailMobilePageState
                 const SizedBox(height: 24),
                 // Always visible: switching tabs must not reset map context.
                 _webSurroundings(p),
+                const SizedBox(height: 20),
+                BusinessConceptPanel(propertyId: p.id),
                 const SizedBox(height: 28),
                 const Text('Explore this property', style: TextStyle(
                   color: SitewiseColors.action, fontWeight: FontWeight.w700,

@@ -15,6 +15,7 @@ record must exist before the submit action can require ownership evidence.
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -37,6 +38,7 @@ from sitewise.db.models.property_verification import (
 from sitewise.repositories.fyp_property_repository import FypPropertyRepository
 from sitewise.services import provider_scope
 from sitewise.services import verification_storage as storage
+from sitewise.services.agent_inspection_policy import REQUIRED_INSPECTION
 
 DECISIONABLE = ("pending", "under_review")
 RESUBMITTABLE = ("not_submitted", "rejected", "information_requested")
@@ -408,6 +410,21 @@ class PropertyVerificationService:
                     "Upload at least one ownership or authorisation document "
                     "before submitting for verification."
                 )
+            # SITEWISE_PROOF_FILE_AVAILABLE_V1: document metadata is not
+            # evidence if the private file disappeared or moved to another host.
+            readable_proof = False
+            for proof in ownership_docs:
+                try:
+                    storage.open_document(proof.storage_key)
+                    readable_proof = True
+                    break
+                except Exception:
+                    continue
+            if not readable_proof:
+                raise ConflictError(
+                    "Ownership proof is recorded but its private file cannot "
+                    "be opened on this server. Ask the Owner to re-upload it."
+                )
         if verification.listing_status in RESUBMITTABLE:
             verification.listing_status = "pending"
         # The listing-only scope NEVER advances ownership: without evidence
@@ -448,6 +465,12 @@ class PropertyVerificationService:
         # sessions keep the same semantics: their panorama row only exists
         # after the worker completed the stitch.
         if provider_scope.is_agent_role(role):
+            # SQLAlchemy's text() parses ':true' inside a JSON string literal
+            # as a bind parameter, which made this UPDATE fail with
+            # "A value is required for bind parameter 'true'". Bind the whole
+            # required-check object instead; the database still enforces that
+            # every on-site check was saved before the assignment can submit.
+            required_checks = json.dumps({key: True for key in REQUIRED_INSPECTION})
             linked_panorama = self.session.execute(text("""
                 UPDATE fyp.agent_listing_assignment a
                    SET workflow_status='submitted', submitted_at=now(), updated_at=now(),
@@ -462,10 +485,14 @@ class PropertyVerificationService:
                                AND (CAST(:panorama_id AS text) IS NULL OR CAST(p.panorama_id AS text) = :panorama_id)
                              ORDER BY p.created_at DESC LIMIT 1)
                  WHERE a.listing_id=:pid AND a.workflow_status IN ('accepted','needs_correction')
-                   AND a.inspection_data @> '{"floor_area_verified":true,"condition_verified":true,
-                                                "parking_verified":true,"accessibility_verified":true}'::jsonb
+                   AND a.inspection_data @> CAST(:required_checks AS jsonb)
                 RETURNING a.panorama_id
-            """), {"pid": property_id, "uid": str(submitter_id), "panorama_id": panorama_id}).scalar()
+            """), {
+                "pid": property_id,
+                "uid": str(submitter_id),
+                "panorama_id": panorama_id,
+                "required_checks": required_checks,
+            }).scalar()
             if linked_panorama is None:
                 raise ConflictError("Agent assignment changed during submission.")
         self.session.commit()
@@ -488,6 +515,7 @@ class PropertyVerificationService:
             raise ConflictError("verification_type must be 'listing' or 'ownership'.")
         if not (document_type or "").strip():
             raise ConflictError("A document type is required.")
+        ext = storage.validate_upload(original_filename, content_type, data)
         verification = verification_row(self.session, property_id)
         if verification is not None and (
             verification.listing_status == "verified"
@@ -500,7 +528,6 @@ class PropertyVerificationService:
             verification = PropertyVerification(property_id=property_id, submitted_by=uploader_id)
             self.session.add(verification)
             self.session.flush()
-        ext = storage.validate_upload(original_filename, content_type, len(data))
         key = storage.save_document(data, ext)
         try:
             document = VerificationDocument(

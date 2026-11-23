@@ -533,6 +533,19 @@ def get_panorama(
     return session.get(Panorama, panorama_id)
 
 
+def panorama_for_session(
+    session: Session, session_id: uuid.UUID
+) -> Panorama | None:
+    """The canonical panorama row for one capture session, when it exists."""
+    row = session.execute(
+        text("SELECT panorama_id FROM fyp.panoramas WHERE session_id = :sid"),
+        {"sid": str(session_id)},
+    ).first()
+    if row is None:
+        return None
+    return session.get(Panorama, row[0])
+
+
 def create_panorama(
     session: Session,
     *,

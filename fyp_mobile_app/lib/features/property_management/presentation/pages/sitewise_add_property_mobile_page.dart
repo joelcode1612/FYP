@@ -55,7 +55,7 @@ class _SitewiseAddPropertyMobilePageState
 
   static const List<String> _stepNames = <String>[
     'Property details',
-    'Location',
+    'Location & extras',
     'Agent verification',
     'Review',
     'Confirmation',
@@ -63,10 +63,10 @@ class _SitewiseAddPropertyMobilePageState
 
   static const List<String> _stepDescriptions = <String>[
     'Enter the basic details of your commercial unit.',
-    'Add the address details of your commercial unit.',
+    'Add the address and any optional property details.',
     'An authorized Agent will independently inspect and capture the 360° tour.',
-    'Review the information before submission.',
-    'Save or submit your property.',
+    'Check the details before saving your draft.',
+    'Save the property as a draft. Assign an Agent later in Requests.',
   ];
 
   // The one Agent/Owner Add Property form offers only two property types.
@@ -96,6 +96,11 @@ class _SitewiseAddPropertyMobilePageState
   final TextEditingController _districtController = TextEditingController();
   final TextEditingController _postcodeController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
+  // SITEWISE_OWNER_OPTIONAL_FIELDS_PRESERVE_V1
+  // Stored on the existing listing: not new tables or verification flags.
+  final TextEditingController _availabilityController = TextEditingController();
+  final TextEditingController _floorLevelController = TextEditingController();
+  final TextEditingController _frontageController = TextEditingController();
 
   int _step = 1;
   String _propertyType = 'Shoplot';
@@ -110,7 +115,6 @@ class _SitewiseAddPropertyMobilePageState
   String _serverStatus = 'draft';
   String? _rejectionReason;
   bool _saving = false;
-  bool _submitting = false;
   String? _serverMessage;
   String? _serverError;
 
@@ -121,6 +125,9 @@ class _SitewiseAddPropertyMobilePageState
   String get _stateName => _stateController.text.trim();
   String get _district => _districtController.text.trim();
   String get _postcode => _postcodeController.text.trim();
+  String get _availability => _availabilityController.text.trim();
+  String get _floorLevel => _floorLevelController.text.trim();
+  String get _frontage => _frontageController.text.trim();
 
   /// The record can only be edited while the backend policy allows it
   /// (draft, rejected or corrections-requested). The backend enforces the
@@ -152,6 +159,9 @@ class _SitewiseAddPropertyMobilePageState
     _districtController.dispose();
     _postcodeController.dispose();
     _descriptionController.dispose();
+    _availabilityController.dispose();
+    _floorLevelController.dispose();
+    _frontageController.dispose();
     super.dispose();
   }
 
@@ -189,23 +199,26 @@ class _SitewiseAddPropertyMobilePageState
       c.text = v ?? '';
       return c.text;
     }
+    // Never round persisted values before returning them to an editable form:
+    // editing an unrelated field must not change rent or area implicitly.
+    String originalNumber(double? value) {
+      if (value == null) return '';
+      return value == value.truncateToDouble()
+          ? value.toStringAsFixed(0)
+          : value.toString();
+    }
 
     text(_nameController, listing.name);
-    text(
-      _rentController,
-      listing.rentalPrice == null
-          ? ''
-          : listing.rentalPrice!.toStringAsFixed(0),
-    );
-    text(
-      _areaController,
-      listing.sizeSqft == null ? '' : listing.sizeSqft!.toStringAsFixed(0),
-    );
+    text(_rentController, originalNumber(listing.rentalPrice));
+    text(_areaController, originalNumber(listing.sizeSqft));
     text(_addressController, listing.address);
     text(_stateController, listing.state);
     text(_districtController, listing.city);
     text(_postcodeController, listing.postcode);
     text(_descriptionController, listing.description);
+    text(_availabilityController, listing.availability);
+    text(_floorLevelController, originalNumber(listing.floorLevel));
+    text(_frontageController, originalNumber(listing.frontageFt));
     final normalizedType = normalizeCommercialPropertyType(
       listing.propertyType,
     );
@@ -266,12 +279,17 @@ class _SitewiseAddPropertyMobilePageState
           postcode: _postcode.isEmpty ? null : _postcode,
           rentalPrice: double.tryParse(_monthlyRent),
           sizeSqft: double.tryParse(_builtUpArea),
+          availability: _availability.isEmpty ? null : _availability,
+          floorLevel: _floorLevel.isEmpty ? null : _floorLevel,
+          frontageFt: _frontage.isEmpty ? null : double.tryParse(_frontage),
         )
+        // toDraftJson would otherwise send null coordinates on EVERY save and
+        // accidentally erase server-enriched geospatial data. These are not
+        // owner-entered fields. Keep both flags outside this form as well.
         ..removeWhere(
           (key, _) => const {
-            'availability',
-            'floor_level',
-            'frontage_ft',
+            'latitude',
+            'longitude',
             'has_parking',
             'is_fnb_suitable',
           }.contains(key),
@@ -279,15 +297,31 @@ class _SitewiseAddPropertyMobilePageState
 
   /// Save Draft: create the row once, then update the SAME row. The backend
   /// stamps the owner from the verified token and assigns the persistent id.
-  Future<void> _saveDraft() async {
-    if (_saving || _submitting) return;
+  // SITEWISE_ADD_PROPERTY_EXPLICIT_DRAFT_V1
+  // Persist the row first; only an acknowledged server save is a success.
+  Future<bool> _saveDraft() async {
+    if (_saving) return false;
     if (!_live) {
       setState(() {
         _serverError =
             'Draft saving requires the live Sitewise service '
             '(a demo build keeps no property records).';
       });
-      return;
+      return false;
+    }
+    // Partial drafts are allowed, but invalid optional values are not.
+    _fieldErrors.remove('availability');
+    _fieldErrors.remove('floor_level');
+    _fieldErrors.remove('frontage_ft');
+    _collectOptionalDetailsErrors();
+    if (_fieldErrors.containsKey('availability') ||
+        _fieldErrors.containsKey('floor_level') ||
+        _fieldErrors.containsKey('frontage_ft')) {
+      setState(() {
+        _step = 2;
+        _validationMessage = 'Correct the optional details before saving.';
+      });
+      return false;
     }
     setState(() {
       _saving = true;
@@ -303,7 +337,7 @@ class _SitewiseAddPropertyMobilePageState
       } else {
         saved = await repository.updateDraft(_draftId!, _draftFields());
       }
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() {
         _draftId = saved.id;
         _serverStatus = saved.verificationStatus;
@@ -311,73 +345,18 @@ class _SitewiseAddPropertyMobilePageState
             'Draft saved to Sitewise (ID ${saved.id}). '
             'You can leave this page and resume it later from My listings.';
       });
+      return true;
     } on Object catch (error) {
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() {
         _serverError = _readableError(
           error,
           fallback: 'Could not save the draft.',
         );
       });
+      return false;
     } finally {
       if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  /// Save a complete set of property details for the Agent request.
-  Future<void> _saveForAgentRequest() async {
-    if (_saving || _submitting || !_editable) return;
-    if (!_live) {
-      setState(() {
-        _serverError =
-            'Submission requires the live Sitewise service '
-            '(a demo build keeps no property records).';
-      });
-      return;
-    }
-    _fieldErrors.clear();
-    _collectDetailsErrors();
-    final detailsInvalid = _fieldErrors.isNotEmpty;
-    _collectLocationErrors();
-    if (_fieldErrors.isNotEmpty) {
-      setState(() {
-        _step = detailsInvalid ? 1 : 2;
-        _validationMessage = 'Please correct the highlighted information.';
-      });
-      return;
-    }
-    setState(() {
-      _submitting = true;
-      _validationMessage = null;
-      _serverError = null;
-      _serverMessage = null;
-    });
-    try {
-      // The record must exist before evidence can attach to it.
-      final repository = ServiceLocator.ownerListings;
-      final saved = _draftId == null
-          ? await repository.createDraft(_draftFields())
-          : await repository.updateDraft(_draftId!, _draftFields());
-      if (!mounted) return;
-      setState(() {
-        _draftId = saved.id;
-        _serverStatus = saved.verificationStatus;
-        _serverMessage =
-            'Property #${saved.id} saved. Open Requests to assign an '
-            'authorized Agent. The Agent submits to Admin after inspection '
-            'and uploading the 360° panorama.';
-        _step = 5;
-      });
-    } on Object catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _serverError = _readableError(
-          error,
-          fallback: 'Could not save the property details.',
-        );
-      });
-    } finally {
-      if (mounted) setState(() => _submitting = false);
     }
   }
 
@@ -440,28 +419,48 @@ class _SitewiseAddPropertyMobilePageState
         city: _district,
       ),
     );
+    _collectOptionalDetailsErrors();
+  }
+
+  void _collectOptionalDetailsErrors() {
+    if (_availability.length > 60) {
+      _putField('availability', 'Use 60 characters or fewer.');
+    }
+    final floor = _floorLevel.isEmpty ? null : double.tryParse(_floorLevel);
+    if (_floorLevel.isNotEmpty &&
+        (floor == null || !floor.isFinite || floor < 0 || floor > 10000)) {
+      _putField('floor_level', 'Enter a valid floor number (0 = ground floor).');
+    }
+    final frontage = _frontage.isEmpty ? null : double.tryParse(_frontage);
+    if (_frontage.isNotEmpty &&
+        (frontage == null || !frontage.isFinite ||
+            frontage < 0 || frontage > 10000)) {
+      _putField('frontage_ft', 'Enter a valid frontage in feet.');
+    }
   }
 
   void _putField(String key, String? message) {
     if (message != null) _fieldErrors[key] = message;
   }
 
-  void _goNext() {
-    if (_step >= 5) return;
+  Future<void> _goNext() async {
+    if (_step >= 5 || _saving) return;
     FocusManager.instance.primaryFocus?.unfocus();
+    // On review, the existing form rules must still pass. The record is
+    // committed before opening the confirmation page.
+    if (!_validateCurrentStep()) {
+      if (mounted) setState(() {});
+      return;
+    }
+    if (_step == 4) {
+      final persisted = await _saveDraft();
+      if (!mounted || !persisted) return;
+    }
+    if (!mounted) return;
     setState(() {
-      if (_validateCurrentStep()) {
-        _step += 1;
-        _validationMessage = null;
-        if (_step == 5 && _live) {
-          // Reaching the confirmation step autosaves so the record exists
-          // even if the user leaves before pressing either button.
-          _saveDraft();
-        }
-      }
+      _step += 1;
+      _validationMessage = null;
     });
-    // Entering Step 3 decides whether "Resume Previous Capture" may be shown,
-    // so the lookup runs for the footer path as well as the stepper.
   }
 
   void _goBack() {
@@ -641,8 +640,8 @@ class _SitewiseAddPropertyMobilePageState
         const SizedBox(height: 7),
         Text(
           _draftId == null
-              ? 'Create a real property record, save it as a draft and submit '
-                    'it for administrator verification.'
+              ? 'Fill in the property details. On Review, tap Save draft '
+                    'to create the listing in My listings.'
               : 'Editing saved property #$_draftId (status: $_serverStatus).',
           style: const TextStyle(color: _muted, fontSize: 13, height: 1.5),
         ),
@@ -810,7 +809,7 @@ class _SitewiseAddPropertyMobilePageState
                         ),
                       ),
                       child: Text(
-                        _step == 4 ? 'Review & finish' : 'Continue →',
+                        _step == 4 ? 'Save draft' : 'Continue →',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontWeight: FontWeight.w800),
@@ -1022,7 +1021,69 @@ class _SitewiseAddPropertyMobilePageState
           error: _fieldErrors['postcode'],
           onSelected: _onPostcodeChanged,
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 12),
+        // Optional factual fields. Existing saved values stay visible when
+        // resuming drafts, and omissions never turn into synthetic defaults.
+        // SITEWISE_OWNER_OPTIONALS_VISIBLE_V1
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: SitewiseM3.surface,
+            border: Border.all(color: _border),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              const Row(
+                children: <Widget>[
+                  Icon(Icons.tune_rounded, color: _brand, size: 20),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Optional details',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: _ink,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 5),
+              const Text(
+                'Leave unknown details blank. You can update them while the property is a draft.',
+                style: TextStyle(fontSize: 13, height: 1.4, color: _muted),
+              ),
+              const SizedBox(height: 14),
+              _buildTextField(
+                label: 'Availability',
+                controller: _availabilityController,
+                hint: 'e.g. Available now or by arrangement',
+                error: _fieldErrors['availability'],
+              ),
+              const SizedBox(height: 13),
+              _buildTextField(
+                label: 'Floor level',
+                controller: _floorLevelController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                hint: '0 = ground floor, 1 = first floor',
+                error: _fieldErrors['floor_level'],
+              ),
+              const SizedBox(height: 13),
+              _buildTextField(
+                label: 'Shop frontage (ft)',
+                controller: _frontageController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                hint: 'e.g. 20',
+                error: _fieldErrors['frontage_ft'],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
         _buildInfoNotice(
           'SiteWise administrators separately verify the listing and '
           'ownership evidence after submission. Ownership evidence is '
@@ -1191,6 +1252,13 @@ class _SitewiseAddPropertyMobilePageState
             _ReviewRow('State', _display(_stateName)),
             _ReviewRow('City / township', _display(_district)),
             _ReviewRow('Postcode', _display(_postcode)),
+            if (_availability.isNotEmpty)
+              _ReviewRow('Availability', _availability),
+            if (_floorLevel.isNotEmpty)
+              _ReviewRow('Floor level', _floorLevel == '0'
+                  ? 'Ground floor' : 'Floor $_floorLevel'),
+            if (_frontage.isNotEmpty)
+              _ReviewRow('Shop frontage', '$_frontage ft'),
           ],
         ),
         const SizedBox(height: 16),
@@ -1244,176 +1312,74 @@ class _SitewiseAddPropertyMobilePageState
   }
 
   Widget _buildConfirmation() {
-    final submitted = _serverStatus == 'pending';
+    final saved = _draftId != null;
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 28, 18, 24),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          Container(
-            width: 66,
-            height: 66,
-            decoration: BoxDecoration(
-              color: submitted
-                  ? const Color(0xFFDDF8E9)
-                  : const Color(0xFFEDF4FF),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              submitted ? Icons.check_rounded : Icons.save_rounded,
-              color: submitted ? const Color(0xFF087443) : _brandStrong,
-              size: 39,
-            ),
+          Icon(
+            saved ? Icons.check_circle_outline_rounded : Icons.error_outline,
+            color: saved ? const Color(0xFF087443) : _errorInk,
+            size: 52,
           ),
-          const SizedBox(height: 17),
+          const SizedBox(height: 14),
           Text(
-            submitted
-                ? 'Submitted for listing review'
-                : _draftId != null
-                ? 'Draft saved'
-                : 'Draft not saved',
+            saved ? 'Property saved as draft' : 'Property not saved yet',
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: _ink,
-              fontSize: 19,
-              fontWeight: FontWeight.w900,
-              height: 1.25,
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
             ),
           ),
-          const SizedBox(height: 9),
+          const SizedBox(height: 10),
           Text(
-            submitted
-                ? 'Your property has been saved. '
-                      'Track its status in My listings.'
-                : 'This property record is persisted in Sitewise. Complete the '
-                      'details and attach ownership evidence, then '
-                      'request an Agent from the Requests tab.',
+            saved
+                ? 'Your listing is now in My listings. Ownership proof and '
+                    'Agent requests are separate next steps.'
+                : 'Please save the property before leaving this page.',
             textAlign: TextAlign.center,
-            style: const TextStyle(color: _muted, fontSize: 12, height: 1.5),
+            style: const TextStyle(color: _muted, fontSize: 15, height: 1.5),
           ),
-          const SizedBox(height: 19),
+          const SizedBox(height: 22),
           Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(15),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: Colors.white,
               border: Border.all(color: _border),
-              borderRadius: BorderRadius.circular(13),
+              borderRadius: BorderRadius.circular(14),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                const Text(
-                  'Property',
-                  style: TextStyle(
-                    color: _muted,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
+                const Text('Property', style: TextStyle(color: _muted)),
                 const SizedBox(height: 4),
-                Text(
-                  _display(_propertyName),
-                  style: const TextStyle(
-                    color: _ink,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 13),
-                  child: Divider(height: 1, color: Color(0xFFEEF1F5)),
-                ),
-                const Text(
-                  'Property ID',
-                  style: TextStyle(
-                    color: _muted,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
+                Text(_display(_propertyName),
+                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 12),
+                const Divider(height: 1),
+                const SizedBox(height: 12),
+                const Text('Database property ID',
+                    style: TextStyle(color: _muted)),
                 const SizedBox(height: 4),
-                Text(
-                  _draftId ?? 'Not saved yet',
-                  style: const TextStyle(
-                    color: _ink,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
+                Text(_draftId ?? 'Not assigned',
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 10),
+                Text('Status: ${_serverStatus.replaceAll('_', ' ')} · Not published',
+                    style: const TextStyle(color: _muted, fontSize: 14)),
               ],
             ),
           ),
-          const SizedBox(height: 14),
-          if (!submitted) ...<Widget>[
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: _saving || _submitting ? null : _saveForAgentRequest,
-                icon: _submitting
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(Icons.verified_outlined, size: 19),
-                label: Text(
-                  _submitting ? 'Saving…' : 'Save property details',
-                  style: const TextStyle(fontWeight: FontWeight.w800),
-                ),
-                style: FilledButton.styleFrom(
-                  backgroundColor: _brand,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size.fromHeight(47),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(11),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 9),
-          ],
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              onPressed: _saving || _submitting
-                  ? null
-                  : () {
-                      _saveDraft();
-                    },
-              style: OutlinedButton.styleFrom(
-                foregroundColor: _ink,
-                side: const BorderSide(color: _border),
-                minimumSize: const Size.fromHeight(46),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(11),
-                ),
-              ),
-              child: Text(
-                _saving ? 'Saving…' : 'Save draft',
-                style: const TextStyle(fontWeight: FontWeight.w800),
-              ),
-            ),
-          ),
-          const SizedBox(height: 9),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              onPressed: _goToListings,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: _ink,
-                side: const BorderSide(color: _border),
-                minimumSize: const Size.fromHeight(46),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(11),
-                ),
-              ),
-              child: const Text(
-                'Go to My listings',
-                style: TextStyle(fontWeight: FontWeight.w800),
-              ),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: saved && !_saving ? _goToListings : null,
+            icon: const Icon(Icons.list_alt_outlined),
+            label: const Text('View in My listings'),
+            style: FilledButton.styleFrom(
+              backgroundColor: _brand,
+              foregroundColor: Colors.white,
+              minimumSize: const Size.fromHeight(52),
             ),
           ),
         ],

@@ -414,6 +414,7 @@ class _PairMatches {
 SphereRegistrationOutcome registerSphereFrames({
   required List<SphereRegistrationFrame> frames,
   required double verticalFovDeg,
+  bool enableLocalMesh = true,
   void Function(String stage)? onStage,
 }) {
   if (frames.length < 2) {
@@ -781,13 +782,16 @@ SphereRegistrationOutcome registerSphereFrames({
                     .dv,
           ),
       ];
-      localMeshWarps[i] = SphereLocalMeshWarp.fit(
-        observations: remaining,
-        registrationWidth: subjectProjection.width,
-        registrationHeight: subjectProjection.height,
-      );
+      if (enableLocalMesh) {
+        localMeshWarps[i] = SphereLocalMeshWarp.fit(
+          observations: remaining,
+          registrationWidth: subjectProjection.width,
+          registrationHeight: subjectProjection.height,
+        );
+      }
       // Evaluate the proposed sampling offsets on matches excluded from the fit.
       var baseline = 0.0;
+      var affineError = 0.0;
       var corrected = 0.0;
       for (final point in validation) {
         final u = (point.x + 1) * subjectProjection.width / 2;
@@ -806,8 +810,15 @@ SphereRegistrationOutcome registerSphereFrames({
         );
         final dx = point.du - affine.du - mesh.du;
         final dy = point.dv - affine.dv - mesh.dv;
+        final ax = point.du - affine.du;
+        final ay = point.dv - affine.dv;
+        affineError += ax * ax + ay * ay;
         baseline += point.du * point.du + point.dv * point.dv;
         corrected += dx * dx + dy * dy;
+      }
+      if (corrected >= affineError) {
+        localMeshWarps[i] = SphereLocalMeshWarp.identity;
+        corrected = affineError;
       }
       if (validation.length < 6 || corrected >= baseline) {
         residualAffines[i] = SphereResidualAffine.identity;

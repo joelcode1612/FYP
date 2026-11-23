@@ -62,6 +62,7 @@ dependencies:
   # the direct import explicit without downloading a new package.
   url_launcher: ^6.3.3
   http: ^1.6.0
+  http_parser: ^4.1.2
   # SHA-256 frame checksums for the backend capture handoff (frame manifest
   # integrity, verified again by the stitching worker after download).
   crypto: ^3.0.3

@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -40,10 +41,9 @@ class MobileApiClient implements ApiClient {
 
   Uri _uri(String path, [Map<String, String>? query]) {
     final base = MobileEndpoints.apiBaseUrl;
-    return Uri.parse('$base$path').replace(
-      queryParameters:
-          (query == null || query.isEmpty) ? null : query,
-    );
+    return Uri.parse(
+      '$base$path',
+    ).replace(queryParameters: (query == null || query.isEmpty) ? null : query);
   }
 
   Future<Map<String, dynamic>> _send(
@@ -53,9 +53,7 @@ class MobileApiClient implements ApiClient {
   ]) async {
     final token = _bearer();
     if (token == null) {
-      throw const UnauthorizedFailure(
-        'No authenticated session is available.',
-      );
+      throw const UnauthorizedFailure('No authenticated session is available.');
     }
     final String text;
     final int status;
@@ -135,10 +133,8 @@ class MobileApiClient implements ApiClient {
   }
 
   @override
-  Future<Map<String, dynamic>> get(
-    String path, {
-    Map<String, String>? query,
-  }) => _send('GET', _uri(path, query));
+  Future<Map<String, dynamic>> get(String path, {Map<String, String>? query}) =>
+      _send('GET', _uri(path, query));
 
   @override
   Future<Map<String, dynamic>> post(String path, Map<String, dynamic> body) =>
@@ -165,17 +161,17 @@ class MobileApiClient implements ApiClient {
     if (token == null) {
       throw const NetworkFailure('No authenticated session is available.');
     }
-    final request =
-        http.MultipartRequest('POST', _uri(path))
-          ..fields.addAll(fields)
-          ..files.add(
-            http.MultipartFile.fromBytes(
-              fileField,
-              bytes,
-              filename: filename,
-            ),
-          )
-          ..headers[HttpHeaders.authorizationHeader] = 'Bearer $token';
+    final request = http.MultipartRequest('POST', _uri(path))
+      ..fields.addAll(fields)
+      ..files.add(
+        http.MultipartFile.fromBytes(
+          fileField,
+          bytes,
+          filename: filename,
+          contentType: MediaType.parse(contentType),
+        ),
+      )
+      ..headers[HttpHeaders.authorizationHeader] = 'Bearer $token';
     final streamed = await request.send().timeout(const Duration(seconds: 30));
     final response = await http.Response.fromStream(streamed);
     if (response.statusCode < 200 || response.statusCode >= 300) {

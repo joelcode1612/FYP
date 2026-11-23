@@ -16,6 +16,7 @@ import 'package:fyp/features/capture_360/data/api_panorama_viewer_repository.dar
 import 'package:fyp/features/capture_360/data/stitch/incremental_stitch_service.dart';
 import 'package:fyp/features/capture_360/data/stitch/incremental_stitch_worker.dart';
 import 'package:fyp/features/capture_360/domain/models/capture_record.dart';
+import 'package:fyp/features/capture_360/domain/quality/capture_quality_models.dart';
 import 'package:fyp/features/capture_360/domain/services/target_sphere.dart';
 import 'package:fyp/features/capture_360/data/sphere/equirectangular_stitcher.dart';
 import 'package:fyp/features/capture_360/data/sphere/sitewise_sphere_session_store.dart';
@@ -135,10 +136,13 @@ class TourPreviewViewModel extends ChangeNotifier {
       upload = await ServiceLocator.frameStore.loadPanoramaUpload(tourId);
       if (!_sphereEngine) _ensureStitchService(repository);
       if (_sphereEngine && MobileConfig.usesLiveApi) {
-        _sphereSessions = SitewiseSphereSessionStore(
+        // Keep a local, non-nullable reference: Dart cannot promote a mutable
+        // field across the awaits below, so every later use goes through this.
+        final sessions = SitewiseSphereSessionStore(
           frameStore: ServiceLocator.frameStore,
           tourId: tourId,
         );
+        _sphereSessions = sessions;
         await _queueSavedPanorama();
         await _refreshBackendState();
         // The durable upload queue's persisted state: what the cloud line
@@ -147,6 +151,15 @@ class TourPreviewViewModel extends ChangeNotifier {
           ServiceLocator.frameStore,
           tourId,
         );
+        // Persisted device quality verdicts, so the preview can show which
+        // photographs carry warnings without re-analyzing any pixels.
+        final savedFrames = await sessions.loadFrames(tourId);
+        final quality = <int, FrameQualityReport>{};
+        for (final frame in savedFrames) {
+          final report = FrameQualityReport.tryDecode(frame.qualityJson);
+          if (report != null) quality[frame.targetId] = report;
+        }
+        deviceQuality = quality;
       }
     } catch (e) {
       error = e.toString();
@@ -524,6 +537,58 @@ class TourPreviewViewModel extends ChangeNotifier {
   /// persisted, not an in-memory assumption.
   FrameUploadQueueState? queueState;
 
+  /// Persisted device quality verdicts per target id, read from the session
+  /// store. Empty when the tour has no 38-frame session store. This is
+  /// evidence for the review screen only — the photographs themselves are
+  /// never modified by it and nothing is retaken automatically.
+  Map<int, FrameQualityReport> deviceQuality = <int, FrameQualityReport>{};
+
+  /// The backend's capture-quality report (registration, coverage, seam
+  /// checks), when the server has produced one for this session. `null` when
+  /// unavailable — never treated as a failure.
+  Map<String, dynamic>? backendQuality;
+
+  int get deviceQualityWarnings => deviceQuality.values
+      .where((report) => report.verdict == QualityVerdict.warning)
+      .length;
+
+  int get deviceQualityInvalid => deviceQuality.values
+      .where((report) => report.verdict == QualityVerdict.invalid)
+      .length;
+
+  /// The one-line photo-check summary for the preview, or `null` when every
+  /// analyzed frame passed (and at least one frame was analyzed).
+  String? get deviceQualityLine {
+    if (deviceQuality.isEmpty) return null;
+    final warnings = deviceQualityWarnings;
+    final invalid = deviceQualityInvalid;
+    if (warnings == 0 && invalid == 0) return null;
+    if (invalid > 0) {
+      return '$warnings photo(s) with quality warnings, $invalid unreadable — '
+          'retake any you want to improve.';
+    }
+    return '$warnings photo(s) with quality warnings — retaking any of them '
+        'is optional.';
+  }
+
+  /// The backend panorama-check line for the preview. Only spoken when the
+  /// server actually produced a report; silence means "not available yet".
+  String? get backendQualityLine {
+    final quality = backendQuality;
+    if (quality == null) return null;
+    final panorama = quality['panorama'];
+    if (panorama is! Map) return null;
+    final verdict = '${panorama['verdict'] ?? ''}';
+    final warnings = (panorama['warning_count'] as num?)?.toInt() ?? 0;
+    return switch (verdict) {
+      'pass' => 'Panorama checks passed (registration, coverage, seams).',
+      'warning' =>
+        'Panorama checks flagged $warnings issue(s) — the tour is still '
+            'saved and reviewable.',
+      _ => null,
+    };
+  }
+
   /// Public re-read of the server-side state (canonical panorama, inspection
   /// status, handoff record, queue state) without touching any local file.
   /// The review card calls this after an upload or an inspection change.
@@ -625,6 +690,20 @@ class TourPreviewViewModel extends ChangeNotifier {
         failure,
         fallback: 'Could not refresh the saved inspection.',
       );
+    }
+    // The backend's own capture-quality report, when it has run its
+    // registration/coverage/seam checks for this session. Independent read:
+    // a failure here never disturbs the inspection state above.
+    final backendSessionId = backendSession?.backendSessionId;
+    if (backendSessionId != null && backendSessionId.isNotEmpty) {
+      try {
+        backendQuality = await ServiceLocator.apiClient
+            .get('/api/v1/360/sessions/$backendSessionId/quality');
+      } on Object {
+        backendQuality = null;
+      }
+    } else {
+      backendQuality = null;
     }
   }
 

@@ -311,6 +311,76 @@ Uint8List? findSeamLabels({
       }
     }
   }
+  // Refine the two cells straddling each coarse ownership boundary. Keep
+  // source identities fixed at junctions and only accept lower local energy.
+  if (scale > 1 && const bool.fromEnvironment('sphere_refine_seam_band')) {
+    int cellOwner(int cell) =>
+        level[cell] == -1 ? highFrame[cell] : lowFrame[cell];
+    int ownerAt(int i) => labels[i] == 0 ? bestFrame[i] : secondFrame[i];
+    final band = <int>[];
+    for (var cell = 0; cell < cells; cell++) {
+      if (active[cell] == 0) continue;
+      final gx = cell % gw;
+      final gy = cell ~/ gw;
+      final neighbours = [
+        gy * gw + (gx + gw - 1) % gw,
+        gy * gw + (gx + 1) % gw,
+        if (gy > 0) cell - gw,
+        if (gy + 1 < gh) cell + gw,
+      ];
+      if (!neighbours.any(
+        (other) => samePair(cell, other) && cellOwner(cell) != cellOwner(other),
+      )) {
+        continue;
+      }
+      for (var y = gy * scale; y < math.min(height, (gy + 1) * scale); y++) {
+        for (var x = gx * scale; x < math.min(width, (gx + 1) * scale); x++) {
+          final i = y * width + x;
+          if (secondFrame[i] >= 0 && secondWeight[i] > minWeight) band.add(i);
+        }
+      }
+    }
+    for (var pass = 0; pass < scale; pass++) {
+      var changed = false;
+      for (final i in band) {
+        final own = ownerAt(i);
+        final other = labels[i] == 0 ? secondFrame[i] : bestFrame[i];
+        final x = i % width;
+        final neighbours = [
+          x == 0 ? i + width - 1 : i - 1,
+          x == width - 1 ? i - width + 1 : i + 1,
+          if (i >= width) i - width,
+          if (i + width < labels.length) i + width,
+        ];
+        var boundaryChange = 0;
+        for (final j in neighbours) {
+          final adjacent = ownerAt(j);
+          if (adjacent == own) boundaryChange++;
+          if (adjacent == other) boundaryChange--;
+        }
+        final cost = seamPixelCostAt(
+          bestColour: bestColour,
+          secondColour: secondColour,
+          bestFrame: bestFrame,
+          secondFrame: secondFrame,
+          width: width,
+          height: height,
+          index: i,
+        );
+        final penalty = math.log(
+          (bestWeight[i] + 1e-6) / (secondWeight[i] + 1e-6),
+        );
+        final change =
+            (labels[i] == 0 ? penalty : -penalty) +
+            seamCostWeight * cost / 255 * boundaryChange;
+        if (change < -1e-6) {
+          labels[i] = 1 - labels[i];
+          changed = true;
+        }
+      }
+      if (!changed) break;
+    }
+  }
   return labels;
 }
 

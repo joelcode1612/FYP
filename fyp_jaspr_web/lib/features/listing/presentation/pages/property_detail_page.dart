@@ -8,6 +8,7 @@ import 'package:shared_logic/shared_logic.dart';
 
 import 'package:sitewise_jaspr_web/features/authentication/data/auth_browser.dart';
 import 'package:sitewise_jaspr_web/features/listing/presentation/components/property_detail/business_match_panel.dart';
+import 'package:sitewise_jaspr_web/features/listing/presentation/components/property_detail/business_concept_panel.dart';
 import 'package:sitewise_jaspr_web/features/listing/presentation/components/property_detail/combined_media_gallery.dart';
 import 'package:sitewise_jaspr_web/features/listing/presentation/components/property_detail/compact_location_explanation.dart';
 import 'package:sitewise_jaspr_web/features/listing/presentation/components/property_detail/district_demographics_panel.dart';
@@ -630,6 +631,7 @@ class _DetailState extends State<_Detail> {
       // is presented outside the map and the tabs.
       _detailsPanel(),
       _mapPanel(),
+      BusinessConceptPanel(propertyId: property.id),
       _insightTabs(),
       _notShownPanel(),
     ]);
@@ -1303,13 +1305,6 @@ class _DetailState extends State<_Detail> {
           strong([Component.text(layer.label)]),
           Component.text(_legendCounts(layer)),
         ]),
-      p(classes: 'sw-pd__legend-note', [
-        Component.text(
-          'Toggle the same categories on the map. A category marked "counts '
-          'only" has a recorded total but no stored locations, so the map draws '
-          'no pins for it.',
-        ),
-      ]),
     ]);
   }
 
@@ -1322,6 +1317,9 @@ class _DetailState extends State<_Detail> {
     // The properties layer is counted by the map itself, per the radius the
     // visitor picks, so the payload legitimately carries no total for it.
     if (parts.isNotEmpty) return ' — ${parts.join(' · ')}';
+    // The reference-property source note is not a count. Keep the map's
+    // real radius-dependent marker totals but do not repeat the explanation.
+    if (layer.label.trim().toLowerCase() == 'properties') return '';
     return layer.note == null || layer.note!.trim().isEmpty
         ? ' — counted on the map'
         : ' — ${layer.note!.trim()}';

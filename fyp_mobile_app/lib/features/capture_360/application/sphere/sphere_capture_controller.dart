@@ -27,6 +27,8 @@ import 'package:fyp/features/capture_360/domain/sphere/motion_detector.dart';
 import 'package:fyp/features/capture_360/domain/sphere/motion_freeze_gate.dart';
 import 'package:fyp/features/capture_360/domain/sphere/sphere_projection.dart';
 import 'package:fyp/features/capture_360/domain/sphere/sphere_target.dart';
+import 'package:fyp/features/capture_360/domain/quality/capture_quality_models.dart';
+import 'package:fyp/features/capture_360/domain/quality/frame_quality_analyzer.dart';
 import 'package:fyp/features/capture_360/domain/virtual_tour/math/scalars.dart';
 import 'package:fyp/features/capture_360/application/sphere/sphere_platform_ports.dart';
 import 'package:fyp/features/capture_360/domain/virtual_tour/math/quaternions.dart';
@@ -114,6 +116,7 @@ class SphereCaptureController extends ChangeNotifier {
     this.exitToleranceDeg = kSphereAlignmentExitDeg,
     this.holdDuration = const Duration(milliseconds: 600),
     this.onFrameSaved,
+    FrameQualityAnalyzer? qualityAnalyzer,
   }) : _rotation = rotation,
        _camera = camera,
        _repository = repository,
@@ -128,7 +131,8 @@ class SphereCaptureController extends ChangeNotifier {
        _gallery = gallerySaver ?? const GallerySaver(),
        _sessions = sessions,
        _userId = userId,
-       _propertyId = propertyId;
+       _propertyId = propertyId,
+       _qualityAnalyzer = qualityAnalyzer;
 
   final RotationSource _rotation;
   final SphereCamera _camera;
@@ -174,6 +178,15 @@ class SphereCaptureController extends ChangeNotifier {
   /// work itself; a callback failure must never cost a photograph, so it is
   /// invoked fire-and-forget by the caller.
   final void Function(CapturedFrame frame)? onFrameSaved;
+
+  /// The per-photograph quality verifier, when quality checking is enabled.
+  ///
+  /// Runs AFTER the photograph and its session row are safely persisted, and
+  /// its output is evidence only: a warning attaches to the saved frame and
+  /// surfaces in the capture UI, but nothing here deletes a photograph,
+  /// repeats the shutter, or retakes anything. `null` (demo builds, tests)
+  /// simply skips verification.
+  final FrameQualityAnalyzer? _qualityAnalyzer;
 
   final MotionDetector _motionDetector = MotionDetector();
 
@@ -231,6 +244,32 @@ class SphereCaptureController extends ChangeNotifier {
   String? _panoramaPath;
   String? _galleryPath;
 
+  /// Quality verdicts per saved target, keyed by target id. Restored from the
+  /// session store on resume; evidence only, never an instruction to retake.
+  final Map<int, FrameQualityReport> _qualityReports =
+      <int, FrameQualityReport>{};
+
+  /// The most recently ANALYZED frame's report, for the capture UI's notice.
+  /// Cleared when the next shutter fires.
+  FrameQualityReport? _lastQualityReport;
+
+  /// The target a MANUAL retake is armed for, or `null`. The guide arrow and
+  /// the shutter follow this target (instead of the first uncaptured one)
+  /// until the replacement photograph is saved. The previous photograph and
+  /// its session row stay untouched the whole time: the retake only replaces
+  /// them when the new JPEG is actually written.
+  int? _retakeTargetId;
+
+  /// The target captured immediately before the current one — the neighbor
+  /// the advisory overlap check measures against.
+  int? _lastCapturedTargetId;
+
+  /// Increments every time a new panorama file is persisted. The capture
+  /// screen uses it to notify the host once per NEW panorama — a retake that
+  /// re-stitches produces a second notification, which is what re-runs the
+  /// draft save and the cloud sync for the replacement.
+  int _panoramaRevision = 0;
+
   StreamSubscription<Quat>? _rotationSubscription;
   StreamSubscription<Vec3>? _motionSubscription;
   Timer? _bannerTimer;
@@ -280,6 +319,30 @@ class SphereCaptureController extends ChangeNotifier {
   /// The MediaStore URI of the Gallery copy, or `null` when it was not saved.
   String? get galleryPath => _galleryPath;
 
+  /// The quality report for one saved target, or `null` when the frame was
+  /// not analyzed (quality checking disabled, or captured before the checks
+  /// existed).
+  FrameQualityReport? qualityFor(int targetId) => _qualityReports[targetId];
+
+  /// The most recent quality report, for the capture screen's notice.
+  FrameQualityReport? get lastQualityReport => _lastQualityReport;
+
+  /// How many saved frames carry at least one quality warning.
+  int get qualityWarningCount => _qualityReports.values
+      .where((report) => report.verdict == QualityVerdict.warning)
+      .length;
+
+  /// How many saved frames are genuinely invalid (unreadable/corrupt).
+  int get qualityInvalidCount => _qualityReports.values
+      .where((report) => report.verdict == QualityVerdict.invalid)
+      .length;
+
+  /// The target id a manual retake is armed for, if any.
+  int? get retakeTargetId => _retakeTargetId;
+
+  /// How many times a new panorama has been persisted this session.
+  int get panoramaRevision => _panoramaRevision;
+
   /// `Pictures/SiteWise360/<stationId>`, the folder the Gallery copy lives in.
   String get galleryFolder => 'Pictures/SiteWise360/$_stationId';
 
@@ -315,6 +378,15 @@ class SphereCaptureController extends ChangeNotifier {
   /// another. One field now drives the arrow, the pill, the hold ring and the
   /// shutter, so they cannot disagree.
   SphereTargetState? get guideTarget {
+    // A manual retake redirects the whole guidance system: the arrow, the
+    // pill, the hold ring and the shutter all follow the target the user
+    // chose, regardless of capture order.
+    final retakeId = _retakeTargetId;
+    if (retakeId != null) {
+      for (final target in _targets) {
+        if (target.spec.targetId == retakeId) return target;
+      }
+    }
     final id = _guideTargetId;
     if (id == null) return null;
     for (final target in _targets) {
@@ -705,6 +777,9 @@ class SphereCaptureController extends ChangeNotifier {
     _capturing = true;
     _phase = SphereCapturePhase.capturing;
     _holdProgress = 0;
+    // A new shutter clears the previous frame's quality notice: the notice
+    // describes ONE photograph, and the user is already acting on the next.
+    _lastQualityReport = null;
     _notify();
     try {
       // Let the pipeline flush before the shutter.
@@ -782,7 +857,25 @@ class SphereCaptureController extends ChangeNotifier {
       // Persist after updating the captured target list: frame 38 can now
       // mark the session complete instead of leaving it in progress.
       await _persistFrame(record);
+      final neighborTargetId = _lastCapturedTargetId;
+      _lastCapturedTargetId = target.spec.targetId;
       _lastCapturedDirection = target.spec.direction;
+      // Quality verification runs AFTER the photograph is safely on disk and
+      // recorded. It is strictly additive evidence: a warning attaches to the
+      // saved frame, the capture continues to the next target, and nothing
+      // here deletes a photograph, re-arms the shutter, or retakes anything.
+      unawaited(
+        _analyzeQuality(
+          record: record,
+          jpegBytes: normalized.bytes,
+          currentSpec: target.spec,
+          neighborTargetId: neighborTargetId,
+        ),
+      );
+      // A manual retake ends the moment its replacement photograph exists.
+      if (_retakeTargetId == target.spec.targetId) {
+        _retakeTargetId = null;
+      }
       _recomputeGuide();
       _message = normalized.warning;
       // Haptics are a courtesy, not evidence: a device that refuses them must
@@ -968,10 +1061,23 @@ class SphereCaptureController extends ChangeNotifier {
   void _recomputeGuide() {
     final last = _lastCapturedDirection;
     SphereTargetState? next;
-    for (final target in _targets) {
-      if (!target.captured) {
-        next = target;
-        break;
+    // While a manual retake is armed, the guide is the retake target — not
+    // the first uncaptured direction, which could be somewhere else entirely.
+    final retakeId = _retakeTargetId;
+    if (retakeId != null) {
+      for (final target in _targets) {
+        if (target.spec.targetId == retakeId) {
+          next = target;
+          break;
+        }
+      }
+    }
+    if (next == null) {
+      for (final target in _targets) {
+        if (!target.captured) {
+          next = target;
+          break;
+        }
       }
     }
     _guideTargetId = next?.spec.targetId;
@@ -1065,6 +1171,15 @@ class SphereCaptureController extends ChangeNotifier {
     }
     _targets = restored;
 
+    // Restored frames carry their persisted quality verdicts, so the UI
+    // keeps showing warnings after a resume without re-analyzing pixels.
+    for (final frame in frames) {
+      final report = FrameQualityReport.tryDecode(frame.qualityJson);
+      if (report != null) {
+        _qualityReports[frame.targetId] = report;
+      }
+    }
+
     // The stitch path continues from the last saved frame, so the guide arrow
     // points at the next target in sequence rather than back at target 1.
     final capturedIds = <int>[
@@ -1134,6 +1249,132 @@ class SphereCaptureController extends ChangeNotifier {
     }
   }
 
+  /// Verifies one saved photograph's quality and attaches the report to its
+  /// session row.
+  ///
+  /// Failure modes are deliberately silent: an analyzer error or a metadata
+  /// write failure never touches the saved JPEG, never blocks the capture
+  /// loop, and never produces a second capture record — the photograph is
+  /// already durable, and this is evidence gathering on top of it.
+  Future<void> _analyzeQuality({
+    required CaptureRecord record,
+    required Uint8List jpegBytes,
+    required SphereTargetSpec currentSpec,
+    required int? neighborTargetId,
+  }) async {
+    final analyzer = _qualityAnalyzer;
+    if (analyzer == null) return;
+    try {
+      Uint8List? neighborBytes;
+      double? separationDeg;
+      final id = neighborTargetId;
+      if (id != null) {
+        SphereTargetState? neighbor;
+        for (final candidate in _targets) {
+          if (candidate.spec.targetId == id) {
+            neighbor = candidate;
+            break;
+          }
+        }
+        final neighborPath = neighbor?.imagePath;
+        if (neighbor != null && neighborPath != null) {
+          neighborBytes = await File(neighborPath).readAsBytes();
+          separationDeg = angleBetweenDeg(
+            neighbor.spec.direction,
+            currentSpec.direction,
+          );
+        }
+      }
+      final report = await analyzer.analyze(
+        FrameQualityInput(
+          targetId: record.targetId,
+          jpegBytes: jpegBytes,
+          recordedWidth: record.imageWidth,
+          recordedHeight: record.imageHeight,
+          targetYawDegrees: record.targetYawDegrees,
+          targetPitchDegrees: record.targetPitchDegrees,
+          cameraOrientation: record.cameraOrientation,
+          alignmentErrorDeg: record.alignmentErrorDeg,
+          toleranceDeg: record.toleranceDeg,
+          neighborJpegBytes: neighborBytes,
+          neighborSeparationDeg: separationDeg,
+        ),
+      );
+      _qualityReports[record.targetId] = report;
+      _lastQualityReport = report;
+      // Persist the verdict onto the frame's own row. A metadata failure
+      // keeps the in-memory report for the UI and leaves the file untouched.
+      final store = _sessions;
+      if (store != null) {
+        try {
+          final frames = await store.loadFrames(_stationId);
+          for (final frame in frames) {
+            if (frame.targetId != record.targetId) continue;
+            await store.saveFrame(frame.withQualityJson(report.encode()));
+            break;
+          }
+        } catch (error) {
+          debugPrint('SPHERE_QUALITY: report not persisted: $error');
+        }
+      }
+      _notify();
+    } catch (error) {
+      debugPrint('SPHERE_QUALITY: analysis for target ${record.targetId} '
+          'failed: $error');
+    }
+  }
+
+  /// Arms a MANUAL retake of one already-saved target.
+  ///
+  /// This is the only retake path the controller offers, and it is always
+  /// triggered by an explicit user action from the capture UI. What it does
+  /// NOT do: it never deletes the previous photograph, never clears its
+  /// session row, and never re-fires the shutter by itself. The previous
+  /// JPEG and record stay in place until a replacement photograph actually
+  /// saves over the same target — so an abandoned retake leaves the original
+  /// capture fully intact (including on resume).
+  void retakeTarget(int targetId) {
+    if (_capturing || _stitching) return;
+    var found = false;
+    for (final candidate in _targets) {
+      if (candidate.spec.targetId == targetId) {
+        found = candidate.captured;
+        break;
+      }
+    }
+    if (!found) return;
+    _retakeTargetId = targetId;
+    _targets = <SphereTargetState>[
+      for (final t in _targets)
+        if (t.spec.targetId == targetId)
+          SphereTargetState(spec: t.spec)
+        else
+          t,
+    ];
+    _qualityReports.remove(targetId);
+    _lastQualityReport = null;
+    _lastCapturedTargetId = null;
+    SphereTargetSpec? spec;
+    for (final candidate in _targets) {
+      if (candidate.spec.targetId == targetId) {
+        spec = candidate.spec;
+        break;
+      }
+    }
+    // The retake target becomes the "last captured" direction for guidance
+    // continuity; the separation it reports is zero, which is honest — the
+    // user is already standing where the photograph was taken.
+    _lastCapturedDirection = spec?.direction;
+    if (_phase == SphereCapturePhase.complete && capturedCount < kSphereTargetCount) {
+      _phase = SphereCapturePhase.ready;
+    }
+    _stitchError = null;
+    _message = 'Retake armed for ${spec?.shortName ?? 'target $targetId'} — '
+        'aim and hold to replace the photograph.';
+    _recomputeGuide();
+    _notify();
+  }
+
   /// Records the stitched panorama in the session metadata.
   Future<void> _recordPanorama(String panoramaPath) async {
     final store = _sessions;
@@ -1144,6 +1385,10 @@ class SphereCaptureController extends ChangeNotifier {
         localPanoramaPath: panoramaPath,
         status: PanoramaGenerationStatus.ready,
       );
+      // A NEW panorama exists — whether the first stitch or a replacement
+      // after a manual retake. The host page reacts to the revision change
+      // by re-running the draft save and cloud sync.
+      _panoramaRevision++;
     } catch (error) {
       debugPrint('SPHERE_SESSION: panorama could not be recorded: $error');
     }

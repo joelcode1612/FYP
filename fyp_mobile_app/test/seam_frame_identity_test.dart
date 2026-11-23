@@ -1,5 +1,5 @@
 import 'dart:typed_data';
-import '../lib/features/capture_360/domain/sphere/graph_cut_seams.dart';
+import 'package:fyp/features/capture_360/domain/sphere/graph_cut_seams.dart';
 
 void main() {
   const pixels = 128;
@@ -20,7 +20,8 @@ void main() {
     seamCostWeight: 20,
   )!;
   for (var i = 0; i < pixels; i++) {
-    if ((labels[i] == 0 ? best[i] : second[i]) != 0)
+    if ((labels[i] == 0 ? best[i] : second[i]) != 0) {
       throw StateError('Wrong source at pixel $i');
+    }
   }
 }

@@ -190,47 +190,51 @@ class _ProviderProfileMobilePageState
       onEdit: _editProfileFuture,
     ),
     const _SectionHead(title: 'Properties', hint: 'Your workspace'),
-    _ActionList(rows: [
-      _ActionRow(
-        icon: Icons.storefront_outlined,
-        title: 'My properties',
-        subtitle: 'Manage listings, documents and review progress',
-        onTap: () => _open('/provider/listings'),
-      ),
-      FutureBuilder<ProviderVerification>(
-        future: _verification,
-        builder: (context, snapshot) {
-          final status = snapshot.connectionState == ConnectionState.waiting
-              ? 'Loading'
-              : snapshot.hasError || snapshot.data == null
-                  ? 'Status unavailable'
-                  : _verificationPresentation(snapshot.data!.status).$1;
-          return _ActionRow(
-            icon: Icons.verified_user_outlined,
-            title: 'Account verification',
-            subtitle: 'SiteWise provider status: $status',
-            onTap: () => _open('/provider/verification'),
-          );
-        },
-      ),
-    ]),
+    _ActionList(
+      rows: [
+        _ActionRow(
+          icon: Icons.storefront_outlined,
+          title: 'My properties',
+          subtitle: 'Manage listings, documents and review progress',
+          onTap: () => _open('/provider/listings'),
+        ),
+        FutureBuilder<ProviderVerification>(
+          future: _verification,
+          builder: (context, snapshot) {
+            final status = snapshot.connectionState == ConnectionState.waiting
+                ? 'Loading'
+                : snapshot.hasError || snapshot.data == null
+                ? 'Status unavailable'
+                : _verificationPresentation(snapshot.data!.status).$1;
+            return _ActionRow(
+              icon: Icons.verified_user_outlined,
+              title: 'Account verification',
+              subtitle: 'SiteWise provider status: $status',
+              onTap: () => _open('/provider/verification'),
+            );
+          },
+        ),
+      ],
+    ),
     const _SectionHead(title: 'Account', hint: 'Personal settings'),
-    _ActionList(rows: [
-      _ActionRow(
-        icon: Icons.manage_accounts_outlined,
-        title: 'Account details',
-        subtitle: 'Your role, email and identity information',
-        greyIcon: true,
-        onTap: _openOwnerAccountSheet,
-      ),
-      _ActionRow(
-        icon: Icons.lock_outline_rounded,
-        title: 'Security & sign-in',
-        subtitle: 'Sign-in protection and authentication',
-        greyIcon: true,
-        onTap: _openSecuritySheet,
-      ),
-    ]),
+    _ActionList(
+      rows: [
+        _ActionRow(
+          icon: Icons.manage_accounts_outlined,
+          title: 'Account details',
+          subtitle: 'Your role, email and identity information',
+          greyIcon: true,
+          onTap: _openOwnerAccountSheet,
+        ),
+        _ActionRow(
+          icon: Icons.lock_outline_rounded,
+          title: 'Security & sign-in',
+          subtitle: 'Sign-in protection and authentication',
+          greyIcon: true,
+          onTap: _openSecuritySheet,
+        ),
+      ],
+    ),
     const SizedBox(height: 10),
     _SignOutButton(onSignOut: _signOut),
   ];
@@ -322,6 +326,8 @@ class _ProviderProfileMobilePageState
   /// The two hero stats for the OWNER layout: total listings and the count
   /// awaiting review. Both are arithmetic over the authorized listing rows —
   /// `—` while loading or when the read fails, never a fabricated zero.
+  // Legacy owner statistics presentation, currently not mounted.
+  // ignore: unused_element
   Widget _ownerStats(BuildContext context) {
     return FutureBuilder<ProviderWorkspace>(
       future: _workspace,
@@ -440,24 +446,26 @@ class _ProviderProfileMobilePageState
                 builder: (context, snapshot) {
                   final me = snapshot.data;
                   final status = me?['account_status']?.toString().trim();
-                  return _SummaryCard(rows: [
-                    _SummaryRow(
-                      'Account type',
-                      ref.read(authNotifierProvider).user?.role.label ??
-                          'Property Owner',
-                    ),
-                    _SummaryRow(
-                      'Email verification',
-                      null,
-                      badge: _emailVerifiedBadge(me),
-                    ),
-                    _SummaryRow(
-                      'Account status',
-                      status == null || status.isEmpty
-                          ? 'Unavailable'
-                          : status,
-                    ),
-                  ]);
+                  return _SummaryCard(
+                    rows: [
+                      _SummaryRow(
+                        'Account type',
+                        ref.read(authNotifierProvider).user?.role.label ??
+                            'Property Owner',
+                      ),
+                      _SummaryRow(
+                        'Email verification',
+                        null,
+                        badge: _emailVerifiedBadge(me),
+                      ),
+                      _SummaryRow(
+                        'Account status',
+                        status == null || status.isEmpty
+                            ? 'Unavailable'
+                            : status,
+                      ),
+                    ],
+                  );
                 },
               ),
               const SizedBox(height: 18),
@@ -472,18 +480,20 @@ class _ProviderProfileMobilePageState
               ),
               const _IdentityVerificationCard(),
               const SizedBox(height: 16),
-              _ActionList(rows: [
-                _ActionRow(
-                  icon: Icons.shield_outlined,
-                  title: 'Privacy & terms',
-                  subtitle: 'How your account information is used',
-                  greyIcon: true,
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    _soon('Privacy & terms');
-                  },
-                ),
-              ]),
+              _ActionList(
+                rows: [
+                  _ActionRow(
+                    icon: Icons.shield_outlined,
+                    title: 'Privacy & terms',
+                    subtitle: 'How your account information is used',
+                    greyIcon: true,
+                    onTap: () {
+                      Navigator.of(sheetContext).pop();
+                      _soon('Privacy & terms');
+                    },
+                  ),
+                ],
+              ),
             ],
           ),
         ),
@@ -1622,6 +1632,8 @@ class _IdentityVerificationCardState extends State<_IdentityVerificationCard> {
 // Account verification (real backend state, both roles)
 // ---------------------------------------------------------------------------
 
+// Legacy account verification card, currently not mounted.
+// ignore: unused_element
 class _AccountVerificationCard extends StatelessWidget {
   const _AccountVerificationCard({
     required this.verification,

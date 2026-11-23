@@ -101,6 +101,7 @@ String parentShellRoute(String route) {
 }
 
 abstract final class AppRoutes {
+  static final pageObserver = RouteObserver<PageRoute<dynamic>>();
   static const assessmentHome = '/entrepreneur/customer-assessments';
   static const assessmentQuestionnaire = '$assessmentHome/questionnaire';
   static const assessmentReview = '$assessmentHome/review';

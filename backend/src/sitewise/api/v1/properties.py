@@ -330,6 +330,25 @@ def _owner_write_only(current: AuthenticatedUser) -> None:
         raise ForbiddenError("Only a Property Owner may register or edit property details.")
 
 
+# SITEWISE_PRESERVE_AGENT_EVIDENCE_V1
+# Compare the effective write, not the mere presence of a field in a payload.
+# Decimal-normalise numeric properties so 22.0 and Decimal('22.00') agree.
+def _owner_field_changed(existing: object, new: object, column: str) -> bool:
+    from decimal import Decimal, InvalidOperation
+
+    if column in ('rental_price', 'size_sqft', 'floor_level', 'frontage_ft',
+                  'latitude', 'longitude', 'has_parking', 'is_fnb_suitable'):
+        def number(value: object):
+            if value is None or value == '':
+                return None
+            try:
+                return Decimal(str(value))
+            except (InvalidOperation, TypeError, ValueError):
+                return str(value)
+        return number(existing) != number(new)
+    return str(existing or '').strip() != str(new or '').strip()
+
+
 class OwnerDraftRequest(BaseModel):
     """Partial Add-Property payload. Drafts may omit everything except a
     name (draft creation); updates may omit any field. Final submission
@@ -351,6 +370,20 @@ class OwnerDraftRequest(BaseModel):
     frontage_ft: float | None = Field(default=None, ge=0, le=10_000)
     has_parking: bool = False
     is_fnb_suitable: bool = False
+
+    @field_validator('floor_level')
+    @classmethod
+    def _valid_floor_level(cls, value: str | None) -> str | None:
+        from math import isfinite
+        if value is None or not value.strip():
+            return None
+        try:
+            floor = float(value)
+        except ValueError as exc:
+            raise ValueError('Floor level must be a number.') from exc
+        if not isfinite(floor) or floor < 0 or floor > 10000:
+            raise ValueError('Floor level must be between 0 and 10,000.')
+        return value.strip()
 
 
 def _agent_id_for(session: Session, user_id) -> int | None:
@@ -531,12 +564,30 @@ def update_own_listing(
                 detail="Complete these property details for the active Agent request: "
                 + ", ".join(missing) + ".",
             )
-        session.execute(text("""
-            UPDATE fyp.agent_listing_assignment
-               SET inspection_data='{}'::jsonb, inspection_updated_at=NULL,
-                   panorama_tour_id=NULL, panorama_uploaded_at=NULL, updated_at=now()
-             WHERE listing_id=:pid AND workflow_status IN ('accepted','needs_correction')
-        """), {"pid": property_id})
+        # An editable property draft can still have an active Agent.
+        # A routine save must NEVER silently delete that Agent's checklist,
+        # uploaded panorama or audit timestamps. If factual values change,
+        # require an explicit correction workflow instead of discarding data.
+        active_agent = session.execute(text("""
+            SELECT workflow_status FROM fyp.agent_listing_assignment
+             WHERE listing_id=:pid
+               AND workflow_status IN ('accepted','needs_correction')
+             FOR UPDATE
+        """), {"pid": property_id}).scalar_one_or_none()
+        if active_agent is not None:
+            changed = [
+                key for key, value in fields.items()
+                if key in FypPropertyRepository._OWNER_WRITABLE
+                and _owner_field_changed(listing.get(key), value, key)
+            ]
+            if changed:
+                raise HTTPException(
+                    status_code=409,
+                    detail=("An Agent inspection is active. These property details "
+                            "must be corrected through the Agent workflow to "
+                            "preserve the saved checklist and 360° tour: "
+                            + ", ".join(changed)),
+                )
     row = repo.update_owner_listing(property_id, fields)
     if row is None:
         raise HTTPException(status_code=404, detail="Property not found.")

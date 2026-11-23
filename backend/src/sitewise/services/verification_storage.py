@@ -52,11 +52,12 @@ def max_bytes() -> int:
     return max(1, settings.verification_max_upload_mb) * 1024 * 1024
 
 
-def validate_upload(original_filename: str, content_type: str, size: int) -> str:
+def validate_upload(original_filename: str, content_type: str, data: bytes) -> str:
     """Return the storage extension for an accepted upload, or raise.
 
     ``size`` is checked first so an oversized file never touches the disk.
     """
+    size = len(data)
     limit = max_bytes()
     if size > limit:
         raise DocumentRejected(
@@ -70,7 +71,15 @@ def validate_upload(original_filename: str, content_type: str, size: int) -> str
     if size <= 0:
         raise DocumentRejected("The uploaded document is empty.")
     mime = (content_type or "").split(";")[0].strip().lower()
-    if mime and mime not in _ALLOWED[ext]:
+    signature_matches = {
+        ".pdf": data.startswith(b"%PDF-"),
+        ".png": data.startswith(b"\x89PNG\r\n\x1a\n"),
+        ".jpg": data.startswith(b"\xff\xd8\xff"),
+        ".jpeg": data.startswith(b"\xff\xd8\xff"),
+        ".webp": data.startswith(b"RIFF") and data[8:12] == b"WEBP"
+                 and data[12:16] in (b"VP8 ", b"VP8L", b"VP8X"),
+    }
+    if mime not in _ALLOWED[ext] or not signature_matches[ext]:
         raise DocumentRejected("The file content does not match its extension.")
     return ext
 

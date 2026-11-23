@@ -363,16 +363,13 @@ class _ProviderPanoramaTourSectionState
                   _syncError == null ? 'Sync 360° tour' : 'Retry sync',
                 ),
               ),
-            if (!_syncing &&
+            if (widget.requiresRecapture &&
+                !_syncing &&
                 (_draftTourId?.isNotEmpty ?? false) &&
                 widget.onOpenWorkflow != null)
               TextButton(
                 onPressed: () => widget.onOpenWorkflow!(_draftTourId!),
-                child: Text(
-                  widget.requiresRecapture
-                      ? 'Recapture 360° tour'
-                      : 'Open tour workflow',
-                ),
+                child: const Text('Recapture 360° tour'),
               ),
             if (_draftTourId == null && widget.onStartCapture != null)
               TextButton(

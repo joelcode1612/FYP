@@ -271,6 +271,34 @@ def get_session(
     return _session_json(record, svc.confirmed_frame_count(db, session_id))
 
 
+@router.get("/sessions/{session_id}/quality")
+def get_session_quality(
+    session_id: uuid.UUID,
+    db: DbSession,
+    current: ProviderUser,
+) -> dict[str, Any]:
+    """The capture-quality evidence for one session, when it exists.
+
+    Returns the panorama-level verification (coverage + seam checks run at
+    panorama confirmation) and the registration audit (pairwise geometric
+    consistency over the confirmed originals), exactly as stored inside the
+    canonical row's ``coverage_report``. An absent ``quality`` block means
+    the checks have not run yet — never a failure. Reading is authorized by
+    the same property-scoped rule as every other session route.
+    """
+    record = svc.require_capture_session(
+        db, session_id=session_id, user_id=current.user_id, role=current.role
+    )
+    panorama = svc.panorama_for_session(db, session_id)
+    quality = (panorama.coverage_report or {}).get("quality") if panorama else None
+    return {
+        "sessionId": str(session_id),
+        "sessionStatus": record.status,
+        "panoramaId": str(panorama.panorama_id) if panorama else None,
+        "quality": quality,
+    }
+
+
 @router.post("/sessions/{session_id}/frames")
 def confirm_frame(
     session_id: uuid.UUID,
@@ -339,6 +367,20 @@ def confirm_frame(
         captured_at=body.captured_at,
         append_only=append_only,
     )
+    # Once the session's manifest is complete, the registration audit runs
+    # off-thread (frames confirmed → panorama usually already canonical).
+    # Fire-and-forget and once-per-session-per-process: the audit downloads
+    # the originals and merges evidence into the panorama row; a failure is
+    # logged inside the service and never touches this response.
+    if svc.confirmed_frame_count(db, session_id) >= record.expected_frames:
+        try:
+            from sitewise.services import panorama_quality_service
+
+            panorama_quality_service.run_session_registration_audit_async(
+                session_id
+            )
+        except Exception:  # noqa: BLE001 - the audit is best-effort evidence
+            pass
     return _frame_json(frame, created)
 
 
@@ -619,13 +661,28 @@ def confirm_panorama(
             "The panorama width must be between 512 and 8192 pixels."
         )
     _validate_reported_photo_coverage(body.coverage_report, body.checksum_sha256)
+    # Panorama-level quality verification (coverage + visible-seam checks):
+    # one downscaled decode of the bytes already verified above, merged
+    # ADDITIVELY into the stored coverage report. The verification never
+    # fails the confirmation and never alters the panorama bytes — a check
+    # error simply leaves the device's report untouched.
+    merged_report = dict(body.coverage_report or {})
+    try:
+        from sitewise.services import panorama_quality_service
+
+        quality = panorama_quality_service.run_panorama_quality(data)
+        merged_report = panorama_quality_service.merge_quality_into_report(
+            merged_report, quality
+        )
+    except Exception:  # noqa: BLE001 - verification is evidence, never a gate
+        pass
     panorama = svc.confirm_device_panorama(
         db,
         session_id=session_id,
         storage_path=path,
         width=width,
         height=height,
-        coverage_report=body.coverage_report,
+        coverage_report=merged_report,
     )
     return _panorama_json(panorama)
 

@@ -34,6 +34,7 @@ from sitewise.ml.pu_expanded import expanded_display_scores
 from sitewise.repositories.catalog_repository import PROPERTY_COLUMNS, CatalogRepository
 from sitewise.repositories.fyp_property_repository import FypPropertyRepository
 from sitewise.services.catalog_listing_details_service import CatalogListingDetailsService
+from sitewise.services.business_concept_service import BusinessConceptService
 from sitewise.services.nearby_places_service import NearbyPlacesService
 from sitewise.services.property_insights_service import PropertyInsightsService
 from sitewise.services.property_management_service import resolve_management
@@ -308,3 +309,26 @@ def get_catalog_insights(
         analytics_session=session,
         cache_session=operational_session,
     ).insights(property_id, origin=origin, business_type=business_type)
+
+@router.get("/properties/{property_id}/business-concepts")
+def get_property_business_concepts(
+    property_id: str,
+    session: AnalyticsSession,
+    _user: CurrentUser,
+    operational_session: Session = Depends(get_db),
+    monthly_budget_myr: float | None = Query(default=None, gt=0, le=1_000_000),
+) -> dict:
+    """Experimental five-concept assessment; no writes and no success claims.
+
+    Reuses expanded64 general PU context and the existing four-class research
+    model WITHOUT folding either score into the concept compatibility index.
+    A numeric rental ID is accepted only when a verified catalogue link exists.
+    """
+    try:
+        return BusinessConceptService(session, operational_session).assess(
+            property_id, monthly_budget_myr=monthly_budget_myr
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail={
+            "code": "property_not_found_or_unlinked", "message": str(exc)
+        }) from exc

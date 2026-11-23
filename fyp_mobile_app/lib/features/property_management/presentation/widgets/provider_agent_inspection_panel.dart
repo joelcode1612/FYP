@@ -1,5 +1,6 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:fyp/core/routing/app_routes.dart';
+import 'package:fyp/features/property_management/presentation/widgets/agent_property_details_sheet.dart'; // SITEWISE_AGENT_DETAILS_COMPLETION_V1
 import 'package:shared_logic/shared_logic.dart';
 
 import 'package:fyp/core/di/service_locator.dart';
@@ -30,7 +31,9 @@ class ProviderAgentInspectionPanel extends StatefulWidget {
   State<ProviderAgentInspectionPanel> createState() => _InspectionState();
 }
 
-class _InspectionState extends State<ProviderAgentInspectionPanel> {
+class _InspectionState extends State<ProviderAgentInspectionPanel>
+    with WidgetsBindingObserver, RouteAware {
+  PageRoute<dynamic>? _route;
   String get url => '/api/v1/provider-flow/properties/${widget.propertyId}';
   String status = '';
   String? error;
@@ -38,7 +41,12 @@ class _InspectionState extends State<ProviderAgentInspectionPanel> {
   bool canCapture = false;
   String? panoramaId;
   List<String> missingPropertyDetails = const [];
-  Timer? _readinessTimer;
+  bool ownershipProofAvailable = false;
+  // SITEWISE_READINESS_V1: authoritative prerequisites from FastAPI.
+  bool serverReadinessKnown = false;
+  List<String> submissionBlockers = const [];
+  bool _loaded = false;
+  int _refreshRevision = 0;
   int tourRevision = 0;
   bool get standalone => widget.inspectionDetail != null;
   final checks = <String, bool>{
@@ -55,32 +63,62 @@ class _InspectionState extends State<ProviderAgentInspectionPanel> {
   int get confirmed => checks.values.where((value) => value).length;
   bool get allConfirmed => confirmed == checks.length;
   bool get canUseCapture => canCapture && !busy && !loading;
+  // SITEWISE_AGENT_INSPECTION_SUMMARY_V1
+  // The four backend-confirmed checks are authoritative; not an eight-item
+  // synthetic checklist. A discrepancy is recorded without erasing notes.
   static const labels = {
-    'floor_area_verified': 'Floor area verified',
-    'condition_verified': 'Physical condition inspected',
-    'parking_verified': 'Parking inspected',
-    'accessibility_verified': 'Entrance and access inspected',
+    'floor_area_verified': 'Floor area',
+    'condition_verified': 'Physical condition',
+    'parking_verified': 'Parking',
+    'accessibility_verified': 'Access & entrance',
   };
   String reference(String key) => switch (key) {
     'floor_area_verified' =>
       widget.listing?.sizeSqft == null
-          ? 'Compare with the built-up area in the property details.'
-          : 'Owner: ${widget.listing!.sizeDisplay}',
-    'condition_verified' =>
-      'On-site check: inspect the condition of the premises.',
-    'parking_verified' => 'On-site check: confirm parking availability.',
-    _ => 'On-site check: inspect the entrance and any access barriers.',
+          ? 'Check the unit size against the property information.'
+          : 'Owner stated ${widget.listing!.sizeDisplay}; verify on site.',
+    'condition_verified' => 'Inspect the space and report any differences.',
+    'parking_verified' => 'Check actual parking access and conditions.',
+    _ => 'Check entrance, visibility and physical access.',
   };
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     refresh();
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed &&
+        !loading &&
+        !busy &&
+        ModalRoute.of(context)?.isCurrent == true) {
+      refresh(loadChecklist: !_loaded || saved);
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is PageRoute && route != _route) {
+      AppRoutes.pageObserver.unsubscribe(this);
+      _route = route;
+      AppRoutes.pageObserver.subscribe(this, route);
+    }
+  }
+
+  @override
+  void didPopNext() {
+    refresh(loadChecklist: !_loaded || saved);
+  }
+
+  @override
   void dispose() {
-    _readinessTimer?.cancel();
+    AppRoutes.pageObserver.unsubscribe(this);
+    WidgetsBinding.instance.removeObserver(this);
     note.dispose();
     floorArea.dispose();
     parkingNotes.dispose();
@@ -90,6 +128,7 @@ class _InspectionState extends State<ProviderAgentInspectionPanel> {
 
   Future<void> refresh({bool loadChecklist = true}) async {
     if (!mounted) return;
+    final revision = ++_refreshRevision;
     setState(() {
       loading = true;
       error = null;
@@ -98,11 +137,13 @@ class _InspectionState extends State<ProviderAgentInspectionPanel> {
       final response = await ServiceLocator.apiClient.get('$url/inspection');
       final data = response['data'] as Map<String, dynamic>;
       final form = (data['checklist'] as Map?) ?? {};
-      if (!mounted) return;
+      if (!mounted || revision != _refreshRevision) return;
       setState(() {
+        _loaded = true;
         status = '${data['assignment_status'] ?? ''}';
         canCapture = data['can_capture'] == true;
         updateTourEligibility(data);
+        updateSubmissionReadiness(data);
         if (!loadChecklist) return;
         saved =
             data['checklist'] is Map && (data['checklist'] as Map).isNotEmpty;
@@ -115,7 +156,7 @@ class _InspectionState extends State<ProviderAgentInspectionPanel> {
         accessNotes.text = '${form['accessibility_notes'] ?? ''}';
       });
     } catch (e) {
-      if (mounted) {
+      if (mounted && revision == _refreshRevision) {
         setState(
           () => error = readableFailure(
             e,
@@ -124,7 +165,9 @@ class _InspectionState extends State<ProviderAgentInspectionPanel> {
         );
       }
     } finally {
-      if (mounted) setState(() => loading = false);
+      if (mounted && revision == _refreshRevision) {
+        setState(() => loading = false);
+      }
     }
   }
 
@@ -185,6 +228,8 @@ class _InspectionState extends State<ProviderAgentInspectionPanel> {
         ).showSnackBar(const SnackBar(content: Text('Inspection saved.')));
       }
       await widget.onSaved?.call();
+      // Re-fetch requirements now that the checklist was persisted.
+      await refresh(loadChecklist: false);
       return true;
     } catch (e) {
       if (mounted) {
@@ -298,38 +343,43 @@ class _InspectionState extends State<ProviderAgentInspectionPanel> {
     );
     if (!mounted) return;
     setState(() => tourRevision++);
-    await refresh(loadChecklist: false);
+  }
+
+  void updateSubmissionReadiness(Map<String, dynamic> data) {
+    final readiness = data['submission_readiness'];
+    if (readiness is! Map) {
+      // Compatible with an older backend. Final server-side checks still apply.
+      serverReadinessKnown = false;
+      submissionBlockers = const [];
+      return;
+    }
+    serverReadinessKnown = true;
+    submissionBlockers = [
+      for (final reason in (readiness['blockers'] as List? ?? const []))
+        if (reason is String && reason.trim().isNotEmpty) reason.trim(),
+    ];
   }
 
   void updateTourEligibility(Map<String, dynamic> data) {
     final id = data['panorama_id'];
     panoramaId = id is String && id.isNotEmpty ? id : null;
+    ownershipProofAvailable = data['ownership_proof_available'] == true;
     final missing = data['missing_required_fields'];
     if (missing is List) {
       missingPropertyDetails = missing.whereType<String>().toList();
     }
-    _readinessTimer?.cancel();
-    if (editable && panoramaId == null) {
-      _readinessTimer = Timer(const Duration(seconds: 10), _pollTour);
-    }
   }
 
-  Future<void> _pollTour() async {
-    if (!mounted || !editable || panoramaId != null) return;
-    try {
-      await refreshTourEligibility();
-    } catch (_) {
-      if (mounted && editable && panoramaId == null) {
-        _readinessTimer = Timer(const Duration(seconds: 10), _pollTour);
-      }
-    }
-  }
-
-  Future<void> refreshTourEligibility() async {
-    final response = await ServiceLocator.apiClient.get('$url/inspection');
+  Future<void> completeMissingDetails() async {
+    if (!editable || busy || loading) return;
+    final savedChanges = await AgentPropertyDetailsSheet.open(
+      context,
+      widget.propertyId,
+    );
     if (!mounted) return;
-    final data = response['data'] as Map<String, dynamic>;
-    setState(() => updateTourEligibility(data));
+    // The server calculates completeness from fresh canonical property data.
+    if (savedChanges) await refresh(loadChecklist: false);
+    if (savedChanges) await widget.onSaved?.call();
   }
 
   Future<void> submitInspection() async {
@@ -353,8 +403,18 @@ class _InspectionState extends State<ProviderAgentInspectionPanel> {
       if (!mounted) return;
       final data = response['data'] as Map<String, dynamic>;
       final id = data['panorama_id'];
-      setState(() => updateTourEligibility(data));
-      if (missingPropertyDetails.isNotEmpty) return;
+      setState(() {
+        updateTourEligibility(data);
+        updateSubmissionReadiness(data);
+      });
+      if (serverReadinessKnown && submissionBlockers.isNotEmpty) {
+        final reasons = submissionBlockers.join('\n');
+        setState(() => error = 'Before submitting:\n$reasons');
+        return;
+      }
+      if (missingPropertyDetails.isNotEmpty) {
+        return;
+      }
       if (id is! String || id.isEmpty) {
         setState(
           () => error =
@@ -396,6 +456,107 @@ class _InspectionState extends State<ProviderAgentInspectionPanel> {
     ).pushNamed('/provider/submission-success', arguments: widget.propertyId);
   }
 
+  Future<void> previewSummary() async {
+    if (!mounted) return;
+    // Read from the current form. Preview never saves or submits silently.
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: SitewiseM3.surface,
+      builder: (sheetContext) => SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text('Inspection summary', style: SitewiseM3Type.h2),
+                const SizedBox(height: 6),
+                const Text(
+                  'Review the four on-site checks and 360° tour before submission.',
+                  style: TextStyle(color: SitewiseColors.muted),
+                ),
+                const SizedBox(height: 12),
+                for (final entry in checks.entries)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      entry.value
+                          ? Icons.check_circle_rounded
+                          : Icons.radio_button_unchecked_rounded,
+                      color: entry.value
+                          ? SitewiseColors.success
+                          : SitewiseColors.muted,
+                    ),
+                    title: Text(labels[entry.key]!),
+                    subtitle: Text(
+                      entry.value
+                          ? 'Confirmed on site'
+                          : 'Not confirmed yet / discrepancy reported',
+                    ),
+                  ),
+                const Divider(),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(
+                    Icons.threesixty,
+                    color: SitewiseColors.action,
+                  ),
+                  title: const Text('360° Property Tour'),
+                  subtitle: Text(
+                    panoramaId == null
+                        ? 'Not yet synced — required before submission'
+                        : 'Panorama linked to this property',
+                  ),
+                ),
+                if (floorArea.text.trim().isNotEmpty)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Observed floor area'),
+                    subtitle: Text('${floorArea.text.trim()} sq ft'),
+                  ),
+                if (note.text.trim().isNotEmpty)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Inspection findings'),
+                    subtitle: Text(note.text.trim()),
+                  ),
+                if (parkingNotes.text.trim().isNotEmpty)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Parking notes'),
+                    subtitle: Text(parkingNotes.text.trim()),
+                  ),
+                if (accessNotes.text.trim().isNotEmpty)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Access notes'),
+                    subtitle: Text(accessNotes.text.trim()),
+                  ),
+                if (!saved)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 6),
+                    child: Text(
+                      'You have unsaved inspection changes.',
+                      style: TextStyle(color: SitewiseColors.warning),
+                    ),
+                  ),
+                const SizedBox(height: 12),
+                FilledButton(
+                  onPressed: () => Navigator.pop(sheetContext),
+                  child: const Text('Close summary'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final detail = widget.inspectionDetail;
@@ -421,7 +582,7 @@ class _InspectionState extends State<ProviderAgentInspectionPanel> {
                 ? (tourId) => openCapture(tourId: tourId)
                 : null,
             beforeSync: canUseCapture ? () async => canUseCapture : null,
-            onSynced: refreshTourEligibility,
+            onSynced: () => refresh(loadChecklist: false),
           ),
         ],
       ),
@@ -433,30 +594,47 @@ class _InspectionState extends State<ProviderAgentInspectionPanel> {
             border: Border(top: BorderSide(color: SitewiseM3.line)),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Row(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: busy || loading || !editable ? null : () => save(),
-                  child: const Text('Save draft', textAlign: TextAlign.center),
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: busy || loading || !editable
+                          ? null
+                          : () => save(),
+                      icon: const Icon(Icons.save_outlined, size: 18),
+                      label: const Text('Save draft'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: loading ? null : previewSummary,
+                      icon: const Icon(Icons.visibility_outlined, size: 18),
+                      label: const Text('Review'),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: FilledButton(
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
                   onPressed:
                       busy ||
                           loading ||
                           !editable ||
                           !allConfirmed ||
                           missingPropertyDetails.isNotEmpty ||
+                          !ownershipProofAvailable ||
+                          submissionBlockers.isNotEmpty ||
                           panoramaId == null
                       ? null
                       : submitInspection,
-                  child: const Text(
-                    'Submit inspection',
-                    textAlign: TextAlign.center,
-                  ),
+                  icon: const Icon(Icons.send_outlined, size: 18),
+                  label: const Text('Submit inspection to Admin'),
                 ),
               ),
             ],
@@ -475,7 +653,7 @@ class _InspectionState extends State<ProviderAgentInspectionPanel> {
             children: [
               Text(
                 standalone && editable
-                    ? 'On-site checks'
+                    ? 'Confirm the four physical checks'
                     : 'Request: ${status.replaceAll('_', ' ')}',
                 style: const TextStyle(
                   fontSize: 16,
@@ -488,7 +666,16 @@ class _InspectionState extends State<ProviderAgentInspectionPanel> {
                   error!,
                   style: const TextStyle(color: SitewiseColors.danger),
                 ),
-                TextButton(onPressed: refresh, child: const Text('Retry')),
+                // No manual "Check again"/"Retry" control: readiness is
+                // re-read by the existing lifecycle callbacks (screen open,
+                // checklist/details save, panorama confirmation, return to
+                // this route, and Submit). The failure message stays visible
+                // and every already-loaded inspection value is left intact.
+                const Text(
+                  'Readiness will refresh automatically the next time this '
+                  'screen opens or is updated.',
+                  style: TextStyle(fontSize: 12, color: SitewiseColors.muted),
+                ),
               ],
               if (status == 'requested') ...[
                 const SizedBox(height: 12),
@@ -503,54 +690,126 @@ class _InspectionState extends State<ProviderAgentInspectionPanel> {
                 ),
               ],
               if (editable) ...[
+                // SITEWISE_AGENT_OWNERSHIP_HINT_V4
+                if (!serverReadinessKnown && !ownershipProofAvailable) ...[
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Ownership proof is still required. Ask the Property Owner '
+                    'to upload a genuine ownership or authorisation document.',
+                    style: TextStyle(color: SitewiseColors.danger),
+                  ),
+                ],
+                if (serverReadinessKnown && submissionBlockers.isNotEmpty) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: SitewiseM3.paper,
+                      border: Border.all(color: SitewiseM3.line),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Before sending to Admin',
+                          style: TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                        const SizedBox(height: 6),
+                        for (final reason in submissionBlockers)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 5),
+                            child: Text(
+                              '• $reason',
+                              style: const TextStyle(color: SitewiseM3.muted),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
                 if (missingPropertyDetails.isNotEmpty) ...[
                   Text(
-                    'Ask the owner to update these property details before '
-                    'submitting: ${missingPropertyDetails.join(', ')}.',
+                    'Complete the missing property details before submitting: '
+                    '${missingPropertyDetails.join(', ')}.',
                     style: const TextStyle(color: SitewiseColors.danger),
                   ),
                   const SizedBox(height: 8),
-                  TextButton(
-                    onPressed: busy ? null : refresh,
-                    child: const Text('Refresh property details'),
+                  FilledButton.icon(
+                    onPressed: busy ? null : completeMissingDetails,
+                    icon: const Icon(Icons.edit_note_rounded),
+                    label: const Text('Complete property details'),
                   ),
                 ],
                 const SizedBox(height: 12),
-                Text(
-                  widget.listing?.displayTitle ?? 'On-site checklist',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  '$confirmed of ${checks.length} checks confirmed',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: allConfirmed
-                        ? SitewiseColors.success
-                        : SitewiseColors.muted,
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Inspection progress',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: SitewiseM3.ink,
+                      ),
+                    ),
+                    Text(
+                      '$confirmed / ${checks.length} verified',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: allConfirmed
+                            ? SitewiseColors.success
+                            : SitewiseM3.muted,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 8),
                 LinearProgressIndicator(
                   value: confirmed / checks.length,
                   semanticsLabel: 'Inspection checklist completion',
                 ),
+                // SITEWISE_AGENT_COMPACT_UI_V1: dense, 48dp-accessible
+                // check rows, without changing the four backend field names.
                 for (final entry in checks.entries)
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    activeColor: SitewiseColors.action,
-                    value: entry.value,
-                    onChanged: busy
-                        ? null
-                        : (value) {
-                            widget.onEdited?.call();
-                            setState(() {
-                              checks[entry.key] = value ?? false;
-                              saved = false;
-                            });
-                          },
-                    title: Text(labels[entry.key]!),
-                    subtitle: Text(reference(entry.key)),
+                  Container(
+                    decoration: const BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(color: SitewiseM3.line),
+                      ),
+                    ),
+                    child: CheckboxListTile(
+                      dense: true,
+                      visualDensity: VisualDensity.compact,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      contentPadding: EdgeInsets.zero,
+                      activeColor: SitewiseColors.action,
+                      value: entry.value,
+                      onChanged: busy
+                          ? null
+                          : (value) {
+                              widget.onEdited?.call();
+                              setState(() {
+                                checks[entry.key] = value ?? false;
+                                saved = false;
+                              });
+                            },
+                      title: Text(
+                        labels[entry.key]!,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: SitewiseM3.ink,
+                        ),
+                      ),
+                      subtitle: Text(
+                        reference(entry.key),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          height: 1.3,
+                          color: SitewiseM3.muted,
+                        ),
+                      ),
+                    ),
                   ),
                 ExpansionTile(
                   tilePadding: EdgeInsets.zero,
@@ -632,8 +891,8 @@ class _InspectionOverview extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 84,
-            height: 100,
+            width: 72,
+            height: 76,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(9),
               child: photoUrl == null || photoUrl.trim().isEmpty
@@ -650,7 +909,12 @@ class _InspectionOverview extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(listing.displayTitle, style: SitewiseM3Type.h2),
+                Text(
+                  listing.displayTitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: SitewiseM3Type.h2,
+                ),
                 if (listing.address.trim().isNotEmpty)
                   Text(
                     listing.address,

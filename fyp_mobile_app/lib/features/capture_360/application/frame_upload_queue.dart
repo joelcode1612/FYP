@@ -11,6 +11,7 @@ import 'package:fyp/core/utils/capture_log.dart';
 import 'package:fyp/features/capture_360/application/backend_capture_coordinator.dart';
 import 'package:fyp/features/capture_360/data/capture_frame_store.dart';
 import 'package:fyp/features/capture_360/data/sphere/sitewise_sphere_session_store.dart';
+import 'package:fyp/features/capture_360/domain/quality/capture_quality_models.dart';
 import 'package:fyp/features/capture_360/domain/sphere/sphere_capture_session.dart';
 
 /// How many original photographs upload at once. Two keeps the queue moving
@@ -582,6 +583,10 @@ class FrameUploadQueue {
           propertyId: propertyId,
           panoramaPath: panorama.localFilePath,
           checksum: panorama.checksumSha256,
+          // Device-side frame-quality evidence rides along with the
+          // panorama confirmation so the backend report can show what the
+          // device measured. Advisory only — it never gates the upload.
+          deviceQuality: await _deviceQualitySummary(),
         );
         panorama
           ..status = FrameUploadState.confirmed
@@ -684,6 +689,39 @@ class FrameUploadQueue {
     }
   }
 
+  /// The device's own frame-quality summary, sent with the panorama
+  /// confirmation as advisory evidence. Counts come from the session store's
+  /// persisted per-frame reports; a frame captured before quality checking
+  /// existed simply counts as "not analyzed". `null` when the session store
+  /// has no frames — the field is simply omitted from the report then.
+  Future<Map<String, Object?>?> _deviceQualitySummary() async {
+    final frames = await _safeLoadFrames();
+    if (frames.isEmpty) return null;
+    var warnings = 0;
+    var invalid = 0;
+    var analyzed = 0;
+    final warnedTargets = <int>[];
+    for (final frame in frames) {
+      final report = FrameQualityReport.tryDecode(frame.qualityJson);
+      if (report == null) continue;
+      analyzed++;
+      if (report.verdict == QualityVerdict.warning) {
+        warnings++;
+        warnedTargets.add(frame.targetId);
+      } else if (report.verdict == QualityVerdict.invalid) {
+        invalid++;
+        warnedTargets.add(frame.targetId);
+      }
+    }
+    return <String, Object?>{
+      'analyzed': analyzed,
+      'warnings': warnings,
+      'invalid': invalid,
+      'warned_targets': warnedTargets,
+      'total_frames': frames.length,
+    };
+  }
+
   Future<void> _uploadOneFrame(
     _QueueDoc doc,
     String sessionId,
@@ -722,6 +760,9 @@ class FrameUploadQueue {
           sessionId: sessionId,
           frame: frame,
           checksum: record.checksumSha256,
+          qualityReport: FrameQualityReport.tryDecode(
+            frame.qualityJson,
+          )?.toJson(),
         );
         record
           ..status = FrameUploadState.confirmed

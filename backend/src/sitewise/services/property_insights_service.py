@@ -709,10 +709,8 @@ def _layer_payloads(values: dict[str, float | None], measured: bool = True) -> l
             # Counts here depend on the radius the viewer selects and are
             # computed by the map from the catalogue itself, so the API does
             # not pretend to know them.
-            layer["note"] = (
-                "Reference properties with a known location. The map counts "
-                "those inside the radius you select."
-            )
+            # The map calculates reference-property marker counts for its
+            # selected radius; no redundant explanatory note is needed.
             layers.append(layer)
             continue
 
