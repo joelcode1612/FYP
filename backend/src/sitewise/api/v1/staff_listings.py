@@ -56,7 +56,7 @@ from sitewise.dependencies import (
     require_admin_mfa,
 )
 from sitewise.repositories.fyp_property_repository import FypPropertyRepository
-from sitewise.services import photo_storage
+from sitewise.services import photo_storage, provider_scope
 from sitewise.services.property_management_service import resolve_management
 from sitewise.services.photo_storage import (
     PhotoRejected,
@@ -397,6 +397,9 @@ def save_proposal(
     """
     service = _admin_service()
     _require_listing_access(session, service, user, listing_id)
+    provider_scope.require_mutable_listing(
+        session, listing_id=listing_id, role=user.role
+    )
     current = _operational_property(session, listing_id)
     if current is None:
         raise HTTPException(
@@ -479,6 +482,9 @@ def request_admin_review(
     """
     service = _admin_service()
     _require_listing_access(session, service, user, listing_id)
+    provider_scope.require_mutable_listing(
+        session, listing_id=listing_id, role=user.role
+    )
     pending = session.execute(
         text(
             "SELECT change_request_id FROM fyp.listing_change_request "

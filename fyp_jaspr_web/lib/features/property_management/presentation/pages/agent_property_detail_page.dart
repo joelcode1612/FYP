@@ -53,7 +53,7 @@ class _AgentPropertyDetailPageState extends State<AgentPropertyDetailPage> {
 
   // --- Draft editing ---------------------------------------------------------
   final Map<String, String> _draft = {};
-  bool _draftParking = false;
+  bool? _draftParking;
   bool _draftFnb = false;
   bool _dirty = false;
   String? _saveNotice;
@@ -199,7 +199,7 @@ class _AgentPropertyDetailPageState extends State<AgentPropertyDetailPage> {
       return '$value';
     }
 
-    bool flag(String field, bool fallback) {
+    bool? flag(String field, bool? fallback) {
       final value = proposed[field]?['to'];
       return value is bool ? value : fallback;
     }
@@ -214,14 +214,12 @@ class _AgentPropertyDetailPageState extends State<AgentPropertyDetailPage> {
           ? null
           : 'Restored unsaved edits from this session — save the draft to '
                 'persist them.';
-      _draftParking = unsaved?.parking ?? flag(
-        'has_parking',
-        facts?.hasParking ?? false,
-      );
-      _draftFnb = unsaved?.fnb ?? flag(
-        'is_fnb_suitable',
-        facts?.isFnbSuitable ?? false,
-      );
+      _draftParking =
+          unsaved?.parking ?? flag('has_parking', facts?.hasParking);
+      _draftFnb =
+          unsaved?.fnb ??
+          flag('is_fnb_suitable', facts?.isFnbSuitable ?? false) ??
+          false;
       _draft
         ..clear()
         ..addAll(
@@ -237,18 +235,9 @@ class _AgentPropertyDetailPageState extends State<AgentPropertyDetailPage> {
                   'property_type',
                   facts?.propertyType ?? '',
                 ),
-                'floor_level': text(
-                  'floor_level',
-                  _numText(facts?.floorLevel),
-                ),
-                'availability': text(
-                  'availability',
-                  facts?.availability ?? '',
-                ),
-                'description': text(
-                  'description',
-                  facts?.description ?? '',
-                ),
+                'floor_level': text('floor_level', _numText(facts?.floorLevel)),
+                'availability': text('availability', facts?.availability ?? ''),
+                'description': text('description', facts?.description ?? ''),
               },
         );
     });
@@ -933,7 +922,8 @@ class _AgentPropertyDetailPageState extends State<AgentPropertyDetailPage> {
       if (_latestNegativeDecision != null)
         Callout(
           _negativeDecisionText(_latestNegativeDecision!),
-          tone: _latestNegativeDecision!.status ==
+          tone:
+              _latestNegativeDecision!.status ==
                   AgentChangeRequest.statusRejected
               ? 'danger'
               : 'warning',
@@ -1111,7 +1101,11 @@ class _AgentPropertyDetailPageState extends State<AgentPropertyDetailPage> {
         ),
         _tile(
           'Parking',
-          facts.hasParking ? 'Parking available' : 'No parking recorded',
+          facts.hasParking == null
+              ? 'Not reported'
+              : facts.hasParking!
+              ? 'Parking available'
+              : 'Owner reports unavailable',
         ),
         _tile(
           'F&B suitability flag',
@@ -1231,23 +1225,46 @@ class _AgentPropertyDetailPageState extends State<AgentPropertyDetailPage> {
             ),
           ),
           div(classes: 'swpm-checkgrid', [
-            label(classes: 'swpm-check', [
-              input(
-                type: InputType.checkbox,
-                checked: _draftParking,
-                events: events(
-                  onClick: () {
+            Field(
+              labelText: 'Owner-declared parking',
+              child: select(
+                attributes: {'aria-label': 'Owner-declared parking'},
+                events: events<List<String>>(
+                  onInput: (values) {
+                    final selected = values.isEmpty ? '' : values.first;
                     setState(() {
-                      _draftParking = !_draftParking;
+                      _draftParking = switch (selected) {
+                        'Available' => true,
+                        'Not available' => false,
+                        _ => null,
+                      };
                       _dirty = true;
                       _saveNotice = null;
                     });
                     _rememberUnsaved();
                   },
                 ),
+                [
+                  option(
+                    value: 'Not sure',
+                    attributes: _draftParking == null ? {'selected': ''} : null,
+                    [Component.text('Not sure')],
+                  ),
+                  option(
+                    value: 'Available',
+                    attributes: _draftParking == true ? {'selected': ''} : null,
+                    [Component.text('Available')],
+                  ),
+                  option(
+                    value: 'Not available',
+                    attributes: _draftParking == false
+                        ? {'selected': ''}
+                        : null,
+                    [Component.text('Not available')],
+                  ),
+                ],
               ),
-              span([Component.text('Parking available')]),
-            ]),
+            ),
             label(classes: 'swpm-check', [
               input(
                 type: InputType.checkbox,
@@ -1560,7 +1577,8 @@ class _AgentPropertyDetailPageState extends State<AgentPropertyDetailPage> {
       if (_latestNegativeDecision != null)
         Callout(
           _negativeDecisionText(_latestNegativeDecision!),
-          tone: _latestNegativeDecision!.status ==
+          tone:
+              _latestNegativeDecision!.status ==
                   AgentChangeRequest.statusRejected
               ? 'danger'
               : 'warning',
@@ -1941,7 +1959,7 @@ final class _UnsavedDraft {
   });
 
   final Map<String, String> fields;
-  final bool parking;
+  final bool? parking;
   final bool fnb;
 }
 

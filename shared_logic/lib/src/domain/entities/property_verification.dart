@@ -335,8 +335,18 @@ class VerificationProperty {
   final double? longitude;
   final String? availability;
   final String? floorLevel;
+  final String? floorDescription;
   final double? frontageFt;
   final bool? hasParking;
+  final String? furnishing;
+  final String? tenure;
+  final String? unitPosition;
+  final int? leaseDurationMonths;
+  final bool? leaseDurationNegotiable;
+  final String? availableFrom;
+  final double? rentalDepositMyr;
+  final String? titleType;
+  final String? landlordFnbPermission;
   final bool? isFnbSuitable;
   final bool? isPublished;
   final String? addressFormatted;
@@ -361,8 +371,18 @@ class VerificationProperty {
     this.longitude,
     this.availability,
     this.floorLevel,
+    this.floorDescription,
     this.frontageFt,
     this.hasParking,
+    this.furnishing,
+    this.tenure,
+    this.unitPosition,
+    this.leaseDurationMonths,
+    this.leaseDurationNegotiable,
+    this.availableFrom,
+    this.rentalDepositMyr,
+    this.titleType,
+    this.landlordFnbPermission,
     this.isFnbSuitable,
     this.isPublished,
     this.addressFormatted,
@@ -397,10 +417,24 @@ class VerificationProperty {
         floorLevel: row['floor_level'] == null
             ? null
             : '${row['floor_level']}',
+        floorDescription: row['floor_description']?.toString(),
         frontageFt: _wireDouble(row['frontage_ft']),
+        furnishing: row['furnishing']?.toString(),
+        tenure: row['tenure']?.toString(),
+        unitPosition: row['unit_position']?.toString(),
         hasParking: row['has_parking'] is bool
             ? row['has_parking'] as bool
+            : row['has_parking'] == null
+                ? null
+                : _wireInt(row['has_parking']) == 1,
+        leaseDurationMonths: _wireInt(row['lease_duration_months']),
+        leaseDurationNegotiable: row['lease_duration_negotiable'] is bool
+            ? row['lease_duration_negotiable'] as bool
             : null,
+        availableFrom: row['available_from']?.toString(),
+        rentalDepositMyr: _wireDouble(row['rental_deposit_myr']),
+        titleType: row['title_type']?.toString(),
+        landlordFnbPermission: row['landlord_fnb_permission']?.toString(),
         isFnbSuitable: row['is_fnb_suitable'] is bool
             ? row['is_fnb_suitable'] as bool
             : null,

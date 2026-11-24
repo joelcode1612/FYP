@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -75,6 +76,17 @@ class _SitewiseAddPropertyMobilePageState
     'Retail Space',
   ];
 
+  static String _newDraftRequestId() {
+    final bytes = List<int>.generate(16, (_) => Random.secure().nextInt(256));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    final hex = bytes
+        .map((value) => value.toRadixString(16).padLeft(2, '0'))
+        .join();
+    return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-'
+        '${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
+  }
+
   // Cache the theme. Keyboard opening/closing should not allocate and
   // propagate an entirely new ThemeData through the input-heavy wizard.
   late final ThemeData _formTheme = ThemeData(
@@ -101,9 +113,22 @@ class _SitewiseAddPropertyMobilePageState
   final TextEditingController _availabilityController = TextEditingController();
   final TextEditingController _floorLevelController = TextEditingController();
   final TextEditingController _frontageController = TextEditingController();
+  final TextEditingController _leaseMonthsController = TextEditingController();
+  final TextEditingController _depositController = TextEditingController();
 
   int _step = 1;
   String _propertyType = 'Shoplot';
+  String? _floorDescription;
+  String? _unitPosition;
+  String? _furnishing;
+  String? _parkingChoice;
+  String? _leaseChoice;
+  String? _tenure;
+  String? _titleType;
+  String? _landlordPermission;
+  String? _legacyAvailability;
+  DateTime? _availableFrom;
+  final String _draftRequestId = _newDraftRequestId();
   String? _validationMessage;
 
   /// Field-specific errors, rendered under the relevant control. The shared
@@ -128,6 +153,31 @@ class _SitewiseAddPropertyMobilePageState
   String get _availability => _availabilityController.text.trim();
   String get _floorLevel => _floorLevelController.text.trim();
   String get _frontage => _frontageController.text.trim();
+  String get _leaseMonths => _leaseMonthsController.text.trim();
+  String get _deposit => _depositController.text.trim();
+  String? get _numericFloor => switch (_floorDescription) {
+    'Basement' => '-1',
+    'Ground floor' => '0',
+    'First floor' => '1',
+    'Second floor' => '2',
+    'Third floor or above' => _floorLevel.isEmpty ? null : _floorLevel,
+    _ => null,
+  };
+  int? get _leaseMonthsForRequest => switch (_leaseChoice) {
+    '6 months' => 6,
+    '1 year' => 12,
+    '2 years' => 24,
+    '3 years' => 36,
+    'Other duration' => int.tryParse(_leaseMonths),
+    _ => null,
+  };
+  bool? get _parkingValue => switch (_parkingChoice) {
+    'Available' => true,
+    'Not available' => false,
+    _ => null,
+  };
+  bool? get _leaseNegotiable =>
+      _leaseChoice == null ? null : _leaseChoice == 'Negotiable';
 
   /// The record can only be edited while the backend policy allows it
   /// (draft, rejected or corrections-requested). The backend enforces the
@@ -162,6 +212,8 @@ class _SitewiseAddPropertyMobilePageState
     _availabilityController.dispose();
     _floorLevelController.dispose();
     _frontageController.dispose();
+    _leaseMonthsController.dispose();
+    _depositController.dispose();
     super.dispose();
   }
 
@@ -199,6 +251,7 @@ class _SitewiseAddPropertyMobilePageState
       c.text = v ?? '';
       return c.text;
     }
+
     // Never round persisted values before returning them to an editable form:
     // editing an unrelated field must not change rent or area implicitly.
     String originalNumber(double? value) {
@@ -216,9 +269,53 @@ class _SitewiseAddPropertyMobilePageState
     text(_districtController, listing.city);
     text(_postcodeController, listing.postcode);
     text(_descriptionController, listing.description);
-    text(_availabilityController, listing.availability);
+    final availabilityOptions = propertyAvailabilityOptions;
+    _legacyAvailability =
+        listing.availability != null &&
+            !availabilityOptions.contains(listing.availability)
+        ? listing.availability
+        : null;
+    text(
+      _availabilityController,
+      availabilityOptions.contains(listing.availability)
+          ? listing.availability
+          : null,
+    );
     text(_floorLevelController, originalNumber(listing.floorLevel));
     text(_frontageController, originalNumber(listing.frontageFt));
+    text(_leaseMonthsController, listing.leaseDurationMonths?.toString());
+    text(_depositController, originalNumber(listing.rentalDepositMyr));
+    _floorDescription =
+        listing.floorDescription ??
+        switch (listing.floorLevel) {
+          -1 => 'Basement',
+          0 => 'Ground floor',
+          1 => 'First floor',
+          2 => 'Second floor',
+          final value? when value >= 3 => 'Third floor or above',
+          _ => null,
+        };
+    _unitPosition = listing.unitPosition;
+    _furnishing = listing.furnishing;
+    _parkingChoice = listing.hasParking == null
+        ? null
+        : listing.hasParking!
+        ? 'Available'
+        : 'Not available';
+    _leaseChoice = listing.leaseDurationNegotiable == true
+        ? 'Negotiable'
+        : switch (listing.leaseDurationMonths) {
+            6 => '6 months',
+            12 => '1 year',
+            24 => '2 years',
+            36 => '3 years',
+            _? => 'Other duration',
+            _ => null,
+          };
+    _tenure = listing.tenure;
+    _titleType = listing.titleType;
+    _landlordPermission = listing.landlordFnbPermission;
+    _availableFrom = DateTime.tryParse(listing.availableFrom ?? '');
     final normalizedType = normalizeCommercialPropertyType(
       listing.propertyType,
     );
@@ -280,19 +377,30 @@ class _SitewiseAddPropertyMobilePageState
           rentalPrice: double.tryParse(_monthlyRent),
           sizeSqft: double.tryParse(_builtUpArea),
           availability: _availability.isEmpty ? null : _availability,
-          floorLevel: _floorLevel.isEmpty ? null : _floorLevel,
+          floorLevel: _numericFloor,
+          floorDescription: _floorDescription,
           frontageFt: _frontage.isEmpty ? null : double.tryParse(_frontage),
+          furnishing: _furnishing,
+          tenure: _tenure,
+          unitPosition: _unitPosition,
+          hasParking: _parkingValue,
+          leaseDurationMonths: _leaseMonthsForRequest,
+          leaseDurationNegotiable: _leaseNegotiable,
+          availableFrom: _availableFrom == null
+              ? null
+              : '${_availableFrom!.year.toString().padLeft(4, '0')}-'
+                    '${_availableFrom!.month.toString().padLeft(2, '0')}-'
+                    '${_availableFrom!.day.toString().padLeft(2, '0')}',
+          rentalDepositMyr: _deposit.isEmpty ? null : double.tryParse(_deposit),
+          titleType: _titleType,
+          landlordFnbPermission: _landlordPermission,
+          draftRequestId: _draftRequestId,
         )
-        // toDraftJson would otherwise send null coordinates on EVERY save and
-        // accidentally erase server-enriched geospatial data. These are not
-        // owner-entered fields. Keep both flags outside this form as well.
         ..removeWhere(
-          (key, _) => const {
-            'latitude',
-            'longitude',
-            'has_parking',
-            'is_fnb_suitable',
-          }.contains(key),
+          (key, _) =>
+              key == 'availability' &&
+              _availability.isEmpty &&
+              _legacyAvailability != null,
         );
 
   /// Save Draft: create the row once, then update the SAME row. The backend
@@ -316,7 +424,9 @@ class _SitewiseAddPropertyMobilePageState
     _collectOptionalDetailsErrors();
     if (_fieldErrors.containsKey('availability') ||
         _fieldErrors.containsKey('floor_level') ||
-        _fieldErrors.containsKey('frontage_ft')) {
+        _fieldErrors.containsKey('frontage_ft') ||
+        _fieldErrors.containsKey('rental_deposit_myr') ||
+        _fieldErrors.containsKey('lease_duration')) {
       setState(() {
         _step = 2;
         _validationMessage = 'Correct the optional details before saving.';
@@ -403,11 +513,31 @@ class _SitewiseAddPropertyMobilePageState
           ? PropertyFormRules.propertyTypeError(_propertyType)
           : 'Choose Shoplot or Retail Space.',
     );
-    _putField('rent', PropertyFormRules.rentError(_monthlyRent));
     _putField('area', PropertyFormRules.areaError(_builtUpArea));
+    _putField(
+      'floor_description',
+      PropertyFormRules.optionError(
+        _floorDescription,
+        propertyFloorOptions,
+        'the floor level',
+      ),
+    );
+    _putField(
+      'floor_level',
+      PropertyFormRules.floorNumberError(_floorDescription, _floorLevel),
+    );
+    _putField(
+      'furnishing',
+      PropertyFormRules.optionError(
+        _furnishing,
+        propertyFurnishingOptions,
+        'the furnishing condition',
+      ),
+    );
   }
 
   void _collectLocationErrors() {
+    _putField('rent', PropertyFormRules.rentError(_monthlyRent));
     _putField('address', PropertyFormRules.addressError(_address));
     _putField('state', PropertyFormRules.stateError(_stateName));
     _putField('city', PropertyFormRules.cityError(_stateName, _district));
@@ -419,24 +549,94 @@ class _SitewiseAddPropertyMobilePageState
         city: _district,
       ),
     );
+    _putField(
+      'availability',
+      PropertyFormRules.optionError(
+        _availability,
+        propertyAvailabilityOptions,
+        'availability',
+      ),
+    );
+    _putField(
+      'available_from',
+      PropertyFormRules.availableDateError(
+        _availability,
+        _availableFrom == null ? null : 'set',
+      ),
+    );
+    _putField(
+      'lease_duration',
+      PropertyFormRules.leaseDurationError(_leaseChoice, _leaseMonths),
+    );
+    _putField(
+      'landlord_fnb_permission',
+      PropertyFormRules.optionError(
+        _landlordPermission,
+        landlordFnbPermissionOptions,
+        'landlord permission for F&B use',
+      ),
+    );
     _collectOptionalDetailsErrors();
   }
 
   void _collectOptionalDetailsErrors() {
-    if (_availability.length > 60) {
-      _putField('availability', 'Use 60 characters or fewer.');
-    }
-    final floor = _floorLevel.isEmpty ? null : double.tryParse(_floorLevel);
-    if (_floorLevel.isNotEmpty &&
-        (floor == null || !floor.isFinite || floor < 0 || floor > 10000)) {
-      _putField('floor_level', 'Enter a valid floor number (0 = ground floor).');
-    }
     final frontage = _frontage.isEmpty ? null : double.tryParse(_frontage);
     if (_frontage.isNotEmpty &&
-        (frontage == null || !frontage.isFinite ||
-            frontage < 0 || frontage > 10000)) {
+        (frontage == null ||
+            !frontage.isFinite ||
+            frontage < 0 ||
+            frontage > 10000)) {
       _putField('frontage_ft', 'Enter a valid frontage in feet.');
     }
+    final deposit = _deposit.isEmpty ? null : double.tryParse(_deposit);
+    if (_deposit.isNotEmpty &&
+        (deposit == null ||
+            !deposit.isFinite ||
+            deposit < 0 ||
+            deposit > 10000000)) {
+      _putField('rental_deposit_myr', 'Enter a non-negative rental deposit.');
+    }
+    if (_leaseChoice == 'Other duration' &&
+        PropertyFormRules.leaseDurationError(_leaseChoice, _leaseMonths) !=
+            null) {
+      _putField('lease_duration', 'Enter a duration between 1 and 360 months.');
+    }
+    _putField(
+      'unit_position',
+      PropertyFormRules.optionError(
+        _unitPosition,
+        propertyUnitPositions,
+        'the unit position',
+        required: false,
+      ),
+    );
+    _putField(
+      'tenure',
+      PropertyFormRules.optionError(
+        _tenure,
+        propertyTenureOptions,
+        'the land tenure',
+        required: false,
+      ),
+    );
+    _putField(
+      'title_type',
+      PropertyFormRules.optionError(
+        _titleType,
+        propertyTitleTypeOptions,
+        'the property title type',
+        required: false,
+      ),
+    );
+    _putField(
+      'parking',
+      PropertyFormRules.optionError(
+        _parkingChoice,
+        propertyParkingOptions,
+        'parking availability',
+        required: false,
+      ),
+    );
   }
 
   void _putField(String key, String? message) {
@@ -854,25 +1054,89 @@ class _SitewiseAddPropertyMobilePageState
         ),
         const SizedBox(height: 17),
         _buildTextField(
-          label: 'Monthly rental (MYR)',
-          controller: _rentController,
-          requiredField: true,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          error: _fieldErrors['rent'],
-        ),
-        const SizedBox(height: 17),
-        _buildTextField(
           label: 'Built-up area (sq ft)',
           controller: _areaController,
           requiredField: true,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           error: _fieldErrors['area'],
+          onChanged: (_) => setState(() {}),
+        ),
+        const SizedBox(height: 17),
+        _buildSelectField(
+          label: 'Floor level',
+          value: _floorDescription ?? '',
+          hint: 'Select the floor level',
+          options: propertyFloorOptions,
+          requiredField: true,
+          searchable: false,
+          error: _fieldErrors['floor_description'],
+          onSelected: (value) => setState(() {
+            _floorDescription = value;
+            if (value != 'Third floor or above') _floorLevelController.clear();
+            _fieldErrors.remove('floor_description');
+            _fieldErrors.remove('floor_level');
+          }),
+        ),
+        if (_floorDescription == 'Third floor or above') ...[
+          const SizedBox(height: 14),
+          _buildTextField(
+            label: 'Floor number',
+            controller: _floorLevelController,
+            requiredField: true,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            hint: 'For example, 4',
+            error: _fieldErrors['floor_level'],
+          ),
+        ],
+        const SizedBox(height: 17),
+        _buildSelectField(
+          label: 'Unit position',
+          value: _unitPosition ?? '',
+          hint: 'Optional',
+          options: propertyUnitPositions,
+          searchable: false,
+          error: _fieldErrors['unit_position'],
+          onSelected: (value) => setState(() => _unitPosition = value),
+        ),
+        const SizedBox(height: 17),
+        _buildTextField(
+          label: 'Shop frontage (ft)',
+          controller: _frontageController,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          hint: 'Optional',
+          error: _fieldErrors['frontage_ft'],
+        ),
+        const SizedBox(height: 17),
+        _buildSelectField(
+          label: 'Furnishing condition',
+          value: _furnishing ?? '',
+          hint: 'Select a condition',
+          options: propertyFurnishingOptions,
+          requiredField: true,
+          searchable: false,
+          error: _fieldErrors['furnishing'],
+          onSelected: (value) => setState(() {
+            _furnishing = value;
+            _fieldErrors.remove('furnishing');
+          }),
+        ),
+        const SizedBox(height: 17),
+        _buildSelectField(
+          label: 'Parking availability',
+          value: _parkingChoice ?? '',
+          hint: 'Optional — choose Not sure if unknown',
+          options: propertyParkingOptions,
+          searchable: false,
+          error: _fieldErrors['parking'],
+          onSelected: (value) => setState(() => _parkingChoice = value),
         ),
         const SizedBox(height: 17),
         _buildTextField(
           label: 'Description (optional)',
           controller: _descriptionController,
-          hint: 'Condition, frontage, power supply, tenancy notes.',
+          hint:
+              'Describe the property condition, layout, facilities and other relevant information.',
+          maxLines: 4,
         ),
         const SizedBox(height: 19),
         const Divider(height: 1, color: Color(0xFFEEF1F5)),
@@ -970,6 +1234,119 @@ class _SitewiseAddPropertyMobilePageState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
+        _sectionTitle('Rental information'),
+        _buildTextField(
+          label: 'Monthly rental (RM)',
+          controller: _rentController,
+          requiredField: true,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          error: _fieldErrors['rent'],
+          onChanged: (_) => setState(() {}),
+        ),
+        const SizedBox(height: 15),
+        _buildSelectField(
+          label: 'Minimum rental period',
+          value: _leaseChoice ?? '',
+          hint: 'Select a minimum period',
+          options: propertyLeaseOptions,
+          requiredField: true,
+          searchable: false,
+          error: _fieldErrors['lease_duration'],
+          onSelected: (value) => setState(() {
+            _leaseChoice = value;
+            if (value != 'Other duration') _leaseMonthsController.clear();
+            _fieldErrors.remove('lease_duration');
+          }),
+        ),
+        if (_leaseChoice == 'Other duration') ...[
+          const SizedBox(height: 14),
+          _buildTextField(
+            label: 'Rental period (months)',
+            controller: _leaseMonthsController,
+            requiredField: true,
+            keyboardType: TextInputType.number,
+            hint: '1 to 360 months',
+            error: _fieldErrors['lease_duration'],
+          ),
+        ],
+        const SizedBox(height: 15),
+        _buildSelectField(
+          label: 'Availability',
+          value: _availability,
+          hint: 'Select availability',
+          options: propertyAvailabilityOptions,
+          requiredField: true,
+          searchable: false,
+          helper: _legacyAvailability == null
+              ? null
+              : 'Existing value: $_legacyAvailability. Select an option to update it.',
+          error: _fieldErrors['availability'],
+          onSelected: (value) => setState(() {
+            _availabilityController.text = value;
+            _legacyAvailability = null;
+            if (value != 'Available from a specific date') {
+              _availableFrom = null;
+            }
+            _fieldErrors.remove('availability');
+          }),
+        ),
+        if (_availability == 'Available from a specific date') ...[
+          const SizedBox(height: 14),
+          _dateField(),
+        ],
+        const SizedBox(height: 15),
+        _buildTextField(
+          label: 'Rental deposit (RM)',
+          controller: _depositController,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          hint: 'Optional',
+          error: _fieldErrors['rental_deposit_myr'],
+        ),
+        const SizedBox(height: 15),
+        _buildSelectField(
+          label: 'Landlord permission for F&B use',
+          value: _landlordPermission ?? '',
+          hint: 'Select the owner-declared status',
+          options: landlordFnbPermissionOptions,
+          requiredField: true,
+          searchable: false,
+          helper:
+              'This is an owner declaration, not licensing approval or a suitability result.',
+          error: _fieldErrors['landlord_fnb_permission'],
+          onSelected: (value) => setState(() {
+            _landlordPermission = value;
+            _fieldErrors.remove('landlord_fnb_permission');
+          }),
+        ),
+        const SizedBox(height: 14),
+        _rentalRateSummary(),
+        const SizedBox(height: 22),
+        _sectionTitle('Ownership information'),
+        _buildSelectField(
+          label: 'Land tenure',
+          value: _tenure ?? '',
+          hint: 'Optional',
+          options: propertyTenureOptions,
+          searchable: false,
+          error: _fieldErrors['tenure'],
+          onSelected: (value) => setState(() => _tenure = value),
+        ),
+        const SizedBox(height: 15),
+        _buildSelectField(
+          label: 'Property title type',
+          value: _titleType ?? '',
+          hint: 'Optional',
+          options: propertyTitleTypeOptions,
+          searchable: false,
+          error: _fieldErrors['title_type'],
+          onSelected: (value) => setState(() => _titleType = value),
+        ),
+        const SizedBox(height: 10),
+        _buildInfoNotice(
+          'Freehold or title-type selections are owner-provided information, not legal ownership verification.',
+        ),
+        const SizedBox(height: 22),
+        _sectionTitle('Property address'),
         _buildTextField(
           label: 'Street address',
           controller: _addressController,
@@ -1021,76 +1398,97 @@ class _SitewiseAddPropertyMobilePageState
           error: _fieldErrors['postcode'],
           onSelected: _onPostcodeChanged,
         ),
-        const SizedBox(height: 12),
-        // Optional factual fields. Existing saved values stay visible when
-        // resuming drafts, and omissions never turn into synthetic defaults.
-        // SITEWISE_OWNER_OPTIONALS_VISIBLE_V1
-        const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: SitewiseM3.surface,
-            border: Border.all(color: _border),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              const Row(
-                children: <Widget>[
-                  Icon(Icons.tune_rounded, color: _brand, size: 20),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Optional details',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: _ink,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 5),
-              const Text(
-                'Leave unknown details blank. You can update them while the property is a draft.',
-                style: TextStyle(fontSize: 13, height: 1.4, color: _muted),
-              ),
-              const SizedBox(height: 14),
-              _buildTextField(
-                label: 'Availability',
-                controller: _availabilityController,
-                hint: 'e.g. Available now or by arrangement',
-                error: _fieldErrors['availability'],
-              ),
-              const SizedBox(height: 13),
-              _buildTextField(
-                label: 'Floor level',
-                controller: _floorLevelController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                hint: '0 = ground floor, 1 = first floor',
-                error: _fieldErrors['floor_level'],
-              ),
-              const SizedBox(height: 13),
-              _buildTextField(
-                label: 'Shop frontage (ft)',
-                controller: _frontageController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                hint: 'e.g. 20',
-                error: _fieldErrors['frontage_ft'],
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
         _buildInfoNotice(
-          'SiteWise administrators separately verify the listing and '
-          'ownership evidence after submission. Ownership evidence is '
-          'uploaded separately from My listings.',
+          'Your address is checked through the existing server workflow. Saving rental terms never overwrites verified coordinates.',
         ),
       ],
     );
+  }
+
+  Widget _sectionTitle(String title) => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: Text(
+      title,
+      style: const TextStyle(
+        color: _ink,
+        fontSize: 16,
+        fontWeight: FontWeight.w800,
+      ),
+    ),
+  );
+
+  Widget _rentalRateSummary() {
+    final rent = double.tryParse(_monthlyRent);
+    final area = double.tryParse(_builtUpArea);
+    final psf = rent != null && area != null && area > 0 ? rent / area : null;
+    return Container(
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F8FC),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _border),
+      ),
+      child: Text(
+        psf == null
+            ? 'Rental per square foot will be calculated from monthly rent and built-up area.'
+            : 'Rental per square foot: RM ${psf.toStringAsFixed(2)} / sq ft',
+        style: const TextStyle(
+          color: _ink,
+          fontSize: 14,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  Widget _dateField() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _fieldLabel('Available-from date', requiredField: true),
+      const SizedBox(height: 7),
+      SizedBox(
+        height: 50,
+        child: OutlinedButton.icon(
+          onPressed: _editable ? _pickAvailableDate : null,
+          icon: const Icon(Icons.calendar_today_outlined, size: 18),
+          label: Text(
+            _availableFrom == null
+                ? 'Choose a date'
+                : MaterialLocalizations.of(
+                    context,
+                  ).formatMediumDate(_availableFrom!),
+          ),
+          style: OutlinedButton.styleFrom(
+            alignment: Alignment.centerLeft,
+            foregroundColor: _ink,
+            side: BorderSide(
+              color: _fieldErrors['available_from'] == null
+                  ? _border
+                  : _errorBorder,
+            ),
+          ),
+        ),
+      ),
+      if (_fieldErrors['available_from'] != null) ...[
+        const SizedBox(height: 6),
+        _buildFieldError(_fieldErrors['available_from']!),
+      ],
+    ],
+  );
+
+  Future<void> _pickAvailableDate() async {
+    final today = DateUtils.dateOnly(DateTime.now());
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _availableFrom ?? today,
+      firstDate: today,
+      lastDate: DateTime(today.year + 5),
+    );
+    if (!mounted || picked == null) return;
+    setState(() {
+      _availableFrom = picked;
+      _fieldErrors.remove('available_from');
+    });
   }
 
   void _onAddressChanged(String value) {
@@ -1217,16 +1615,56 @@ class _SitewiseAddPropertyMobilePageState
       ),
       const SizedBox(height: 12),
       const Text(
-        'Independent Agent inspection',
+        'How verification works',
         style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
       ),
-      const SizedBox(height: 8),
-      const Text(
-        'Save this property, attach ownership evidence, then open Requests '
-        'to select an authorized Property Agent. Only that Agent can verify '
-        'physical details and capture or upload a 360° panorama.',
+      const SizedBox(height: 14),
+      _handoffRole(
+        'Property owner',
+        'Provides property information, submits ownership or authorization proof, and requests an authorized Agent inspection.',
+      ),
+      const SizedBox(height: 12),
+      _handoffRole(
+        'Assigned Agent',
+        'Reviews your details, checks observable physical characteristics, records discrepancies, completes the existing 38-target 360° capture, previews its generated panorama, and submits the inspection to Admin.',
+      ),
+      const SizedBox(height: 12),
+      _handoffRole(
+        'Administrator',
+        'Reviews the listing, ownership evidence, Agent findings and panorama, then makes the final verification decision.',
+      ),
+      const SizedBox(height: 12),
+      _buildInfoNotice(
+        'Owners do not perform 360° capture. Uploading ownership evidence does not itself complete verification.',
       ),
     ],
+  );
+
+  Widget _handoffRole(String heading, String details) => Container(
+    padding: const EdgeInsets.all(13),
+    decoration: BoxDecoration(
+      color: const Color(0xFFF8FAFD),
+      border: Border.all(color: _border),
+      borderRadius: BorderRadius.circular(11),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          heading,
+          style: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+            color: _ink,
+          ),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          details,
+          style: const TextStyle(fontSize: 14, height: 1.45, color: _muted),
+        ),
+      ],
+    ),
   );
 
   Widget _buildReview() {
@@ -1234,41 +1672,128 @@ class _SitewiseAddPropertyMobilePageState
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         _buildReviewSection(
-          title: 'Property details',
+          title: 'Property characteristics',
           step: 1,
           rows: <_ReviewRow>[
             _ReviewRow('Property title', _display(_propertyName)),
-            _ReviewRow('Commercial property type', _propertyType),
-            _ReviewRow('Monthly rental', 'RM $_monthlyRent'),
-            _ReviewRow('Built-up area', '$_builtUpArea sq ft'),
+            _ReviewRow('Commercial property type', _display(_propertyType)),
+            _ReviewRow(
+              'Built-up area',
+              _builtUpArea.isEmpty ? 'Not provided' : '$_builtUpArea sq ft',
+            ),
+            _ReviewRow('Floor level', _display(_floorDescription ?? '')),
+            _ReviewRow(
+              'Floor number',
+              _floorLevel.isEmpty ? 'Not applicable' : _floorLevel,
+            ),
+            _ReviewRow('Unit position', _display(_unitPosition ?? '')),
+            _ReviewRow(
+              'Shop frontage',
+              _frontage.isEmpty ? 'Not provided' : '$_frontage ft',
+            ),
+            _ReviewRow('Furnishing condition', _display(_furnishing ?? '')),
+            _ReviewRow('Parking availability', _display(_parkingChoice ?? '')),
+            _ReviewRow(
+              'Description',
+              _display(_descriptionController.text.trim()),
+            ),
           ],
         ),
         const SizedBox(height: 18),
         _buildReviewSection(
-          title: 'Location & address',
+          title: 'Rental terms',
+          step: 2,
+          rows: <_ReviewRow>[
+            _ReviewRow(
+              'Monthly rental',
+              _monthlyRent.isEmpty ? 'Not provided' : 'RM $_monthlyRent',
+            ),
+            _ReviewRow(
+              'Built-up area',
+              _builtUpArea.isEmpty ? 'Not provided' : '$_builtUpArea sq ft',
+            ),
+            _ReviewRow('Rental per square foot', _rentalPerSqftLabel),
+            _ReviewRow(
+              'Minimum rental period',
+              _leaseChoice == 'Other duration' && _leaseMonths.isNotEmpty
+                  ? 'Other duration — $_leaseMonths months'
+                  : _display(_leaseChoice ?? ''),
+            ),
+            _ReviewRow(
+              'Availability',
+              _display(
+                _availability.isEmpty
+                    ? (_legacyAvailability ?? '')
+                    : _availability,
+              ),
+            ),
+            _ReviewRow(
+              'Available from',
+              _availableFrom == null
+                  ? 'Not applicable'
+                  : MaterialLocalizations.of(
+                      context,
+                    ).formatMediumDate(_availableFrom!),
+            ),
+            _ReviewRow(
+              'Rental deposit',
+              _deposit.isEmpty ? 'Not provided' : 'RM $_deposit',
+            ),
+            _ReviewRow(
+              'Landlord permission for F&B use',
+              _display(_landlordPermission ?? ''),
+            ),
+          ],
+        ),
+        const SizedBox(height: 18),
+        _buildReviewSection(
+          title: 'Ownership information',
+          step: 2,
+          rows: <_ReviewRow>[
+            _ReviewRow('Land tenure', _display(_tenure ?? '')),
+            _ReviewRow('Property title type', _display(_titleType ?? '')),
+          ],
+        ),
+        const SizedBox(height: 18),
+        _buildReviewSection(
+          title: 'Address',
           step: 2,
           rows: <_ReviewRow>[
             _ReviewRow('Street address', _display(_address)),
-            _ReviewRow('State', _display(_stateName)),
+            _ReviewRow('State / federal territory', _display(_stateName)),
             _ReviewRow('City / township', _display(_district)),
             _ReviewRow('Postcode', _display(_postcode)),
-            if (_availability.isNotEmpty)
-              _ReviewRow('Availability', _availability),
-            if (_floorLevel.isNotEmpty)
-              _ReviewRow('Floor level', _floorLevel == '0'
-                  ? 'Ground floor' : 'Floor $_floorLevel'),
-            if (_frontage.isNotEmpty)
-              _ReviewRow('Shop frontage', '$_frontage ft'),
+          ],
+        ),
+        const SizedBox(height: 18),
+        _buildReviewSection(
+          title: 'Agent verification requirements',
+          step: 3,
+          rows: const <_ReviewRow>[
+            _ReviewRow(
+              'Owner action',
+              'Submit ownership or authorization proof and request an Agent',
+            ),
+            _ReviewRow(
+              'Agent action',
+              'Inspect physical facts, capture and preview a 360° panorama, then submit to Admin',
+            ),
+            _ReviewRow('Final decision', 'Administrator review'),
           ],
         ),
         const SizedBox(height: 16),
         _buildInfoNotice(
-          'Review & finish saves the record to Sitewise. Submission for '
-          'verification additionally requires complete details and, for full '
-          'verification, at least one ownership document.',
+          'Review all required details before saving. The property remains an unpublished draft until the existing verification workflow is completed.',
         ),
       ],
     );
+  }
+
+  String get _rentalPerSqftLabel {
+    final rent = double.tryParse(_monthlyRent);
+    final area = double.tryParse(_builtUpArea);
+    if (rent == null || area == null || area <= 0) return 'Not derivable';
+    return 'RM ${(rent / area).toStringAsFixed(2)} / sq ft';
   }
 
   Widget _buildReviewSection({
@@ -1319,17 +1844,23 @@ class _SitewiseAddPropertyMobilePageState
       _serverError = null;
     });
     try {
-      final status = await ServiceLocator.ownerListings.validateSavedAddress(id);
+      final status = await ServiceLocator.ownerListings.validateSavedAddress(
+        id,
+      );
       if (mounted) {
-        setState(() => _serverMessage =
-            'Address verification: ${status.replaceAll('_', ' ')}.');
+        setState(
+          () => _serverMessage =
+              'Address verification: ${status.replaceAll('_', ' ')}.',
+        );
       }
     } on Object catch (error) {
       if (mounted) {
-        setState(() => _serverError = _readableError(
-          error,
-          fallback: 'Could not verify the saved address.',
-        ));
+        setState(
+          () => _serverError = _readableError(
+            error,
+            fallback: 'Could not verify the saved address.',
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -1362,7 +1893,7 @@ class _SitewiseAddPropertyMobilePageState
           Text(
             saved
                 ? 'Your listing is now in My listings. Ownership proof and '
-                    'Agent requests are separate next steps.'
+                      'Agent requests are separate next steps.'
                 : 'Please save the property before leaving this page.',
             textAlign: TextAlign.center,
             style: const TextStyle(color: _muted, fontSize: 15, height: 1.5),
@@ -1380,19 +1911,33 @@ class _SitewiseAddPropertyMobilePageState
               children: <Widget>[
                 const Text('Property', style: TextStyle(color: _muted)),
                 const SizedBox(height: 4),
-                Text(_display(_propertyName),
-                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+                Text(
+                  _display(_propertyName),
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
                 const SizedBox(height: 12),
                 const Divider(height: 1),
                 const SizedBox(height: 12),
-                const Text('Database property ID',
-                    style: TextStyle(color: _muted)),
+                const Text(
+                  'Database property ID',
+                  style: TextStyle(color: _muted),
+                ),
                 const SizedBox(height: 4),
-                Text(_draftId ?? 'Not assigned',
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                Text(
+                  _draftId ?? 'Not assigned',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
                 const SizedBox(height: 10),
-                Text('Status: ${_serverStatus.replaceAll('_', ' ')} · Not published',
-                    style: const TextStyle(color: _muted, fontSize: 14)),
+                Text(
+                  'Status: ${_serverStatus.replaceAll('_', ' ')} · Not published',
+                  style: const TextStyle(color: _muted, fontSize: 14),
+                ),
               ],
             ),
           ),
@@ -1404,18 +1949,37 @@ class _SitewiseAddPropertyMobilePageState
               label: const Text('Verify saved address'),
             ),
           FilledButton.icon(
-            onPressed: saved && !_saving ? _goToListings : null,
-            icon: const Icon(Icons.list_alt_outlined),
-            label: const Text('View in My listings'),
+            onPressed: saved && !_saving ? _viewSavedProperty : null,
+            icon: const Icon(Icons.open_in_new_rounded),
+            label: const Text('View property details'),
             style: FilledButton.styleFrom(
               backgroundColor: _brand,
               foregroundColor: Colors.white,
               minimumSize: const Size.fromHeight(52),
             ),
           ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: saved && !_saving ? _goToListings : null,
+            icon: const Icon(Icons.list_alt_outlined),
+            label: const Text(
+              'Go to My Listings to add proof or request an Agent',
+            ),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(52),
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  void _viewSavedProperty() {
+    final propertyId = int.tryParse(_draftId ?? '');
+    if (propertyId == null) return;
+    Navigator.of(
+      context,
+    ).pushNamed('/provider/property-detail', arguments: propertyId);
   }
 
   Widget _buildServerBanner(String message, {required bool success}) {

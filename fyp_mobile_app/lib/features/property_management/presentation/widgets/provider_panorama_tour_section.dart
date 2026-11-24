@@ -44,9 +44,11 @@ class ProviderPanoramaTourSection extends StatefulWidget {
     this.onSynced,
     this.requiresRecapture = false,
     this.captureHint,
+    this.readOnly = false,
   });
 
   final int propertyId;
+  final bool readOnly;
 
   /// Opens the capture flow (the page's own navigation concern). The capture
   /// host resumes the previous session, so this is also how an existing
@@ -379,6 +381,15 @@ class _ProviderPanoramaTourSectionState
           ] else if (_lookupFailed) ...[
             const Text('Could not check whether this property has a tour.'),
             TextButton(onPressed: _load, child: const Text('Try again')),
+          ] else if (widget.readOnly) ...[
+            const Text(
+              'No 360° panorama is available for this approved listing.',
+              style: TextStyle(
+                fontFamily: kFontFamily,
+                fontSize: 13,
+                color: SitewiseM3.muted,
+              ),
+            ),
           ] else ...[
             Text(
               'Capture the 38-point 360° tour for this property. The '

@@ -101,15 +101,9 @@ async def lifespan(app: FastAPI):
         logger.info("Panorama worker: %s", stitcher_status)
     except Exception:  # noqa: BLE001 - the API must start even if the worker cannot
         logger.exception("Panorama worker could not start; queued jobs wait for the next start")
-    from sitewise.services import assignment_sync_worker
-    try:
-        logger.info("Agent assignment mirror: %s", assignment_sync_worker.startup())
-    except Exception as exc:
-        logger.error("Agent assignment mirror unavailable: %s", type(exc).__name__)
-    try:
-        yield
-    finally:
-        assignment_sync_worker.shutdown()
+    # Assignments are consolidated into local fyp.agent_listing_assignment.
+    # The Supabase mirror/outbox worker has been retired; no runtime replication.
+    yield
 
 
 app = FastAPI(title="SiteWise API", version="0.1.0", lifespan=lifespan)

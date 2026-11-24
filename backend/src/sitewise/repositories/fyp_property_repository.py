@@ -1031,20 +1031,33 @@ class FypPropertyRepository:
                     owner_user_id, name, property_type, description, address,
                     city, state, postcode, latitude, longitude, rental_price,
                     size_sqft, psf, availability, has_parking, is_fnb_suitable,
-                    floor_level, frontage_ft, verification_status, is_published,
+                    floor_level, floor_description, frontage_ft, furnishing,
+                    tenure, unit_position, lease_duration_months,
+                    lease_duration_negotiable, available_from,
+                    rental_deposit_myr, title_type, landlord_fnb_permission,
+                    parking_owner_declared,
+                    verification_status, is_published,
                     address_validation_status, address_formatted,
                     address_validated_at
                 ) VALUES (
                     :owner_user_id, :name, :property_type, :description, :address,
                     :city, :state, :postcode, :latitude, :longitude,
                     :rental_price, :size_sqft, :psf, :availability, :has_parking,
-                    :is_fnb_suitable, :floor_level, :frontage_ft,
+                    :is_fnb_suitable, :floor_level, :floor_description,
+                    :frontage_ft, :furnishing, :tenure, :unit_position,
+                    :lease_duration_months, :lease_duration_negotiable,
+                    :available_from, :rental_deposit_myr, :title_type,
+                    :landlord_fnb_permission, :parking_owner_declared,
                     'pending', false, :address_validation_status,
                     :address_formatted, :address_validated_at
                 )
-                RETURNING id, name, address, city, state, postcode, latitude,
-                          longitude, rental_price, size_sqft, property_type,
-                          availability, verification_status, is_published,
+                    RETURNING id, name, address, city, state, postcode, latitude,
+                          longitude, rental_price, size_sqft, psf, property_type,
+                          availability, floor_level, floor_description, frontage_ft,
+                          furnishing, tenure, unit_position, has_parking,
+                          lease_duration_months, lease_duration_negotiable,
+                          available_from, rental_deposit_myr, title_type,
+                          landlord_fnb_permission, verification_status, is_published,
                           address_validation_status, address_formatted, created_at
                 """
             ),
@@ -1069,10 +1082,24 @@ class FypPropertyRepository:
                 "size_sqft": size,
                 "psf": psf,
                 "availability": payload.get("availability"),
-                "has_parking": 1 if payload.get("has_parking") else 0,
+                "has_parking": (
+                    None if payload.get("has_parking") is None
+                    else 1 if payload.get("has_parking") else 0
+                ),
+                "parking_owner_declared": payload.get("has_parking") is not None,
                 "is_fnb_suitable": 1 if payload.get("is_fnb_suitable") else 0,
                 "floor_level": payload.get("floor_level"),
+                "floor_description": payload.get("floor_description"),
                 "frontage_ft": payload.get("frontage_ft"),
+                "furnishing": payload.get("furnishing"),
+                "tenure": payload.get("tenure"),
+                "unit_position": payload.get("unit_position"),
+                "lease_duration_months": payload.get("lease_duration_months"),
+                "lease_duration_negotiable": payload.get("lease_duration_negotiable"),
+                "available_from": payload.get("available_from"),
+                "rental_deposit_myr": payload.get("rental_deposit_myr"),
+                "title_type": payload.get("title_type"),
+                "landlord_fnb_permission": payload.get("landlord_fnb_permission"),
                 "address_validation_status": payload.get(
                     "address_validation_status"
                 ),
@@ -1113,21 +1140,35 @@ class FypPropertyRepository:
         "city",
         "state",
         "postcode",
-        "latitude",
-        "longitude",
         "rental_price",
         "size_sqft",
         "availability",
         "floor_level",
+        "floor_description",
         "frontage_ft",
+        "furnishing",
+        "tenure",
+        "unit_position",
         "has_parking",
-        "is_fnb_suitable",
+        "lease_duration_months",
+        "lease_duration_negotiable",
+        "available_from",
+        "rental_deposit_myr",
+        "title_type",
+        "landlord_fnb_permission",
     )
 
     _LISTING_SELECT = (
         "SELECT id, owner_user_id, name, property_type, description, address, "
         "city, state, postcode, latitude, longitude, rental_price, size_sqft, psf, "
-        "availability, floor_level, frontage_ft, has_parking, is_fnb_suitable, "
+        "availability, floor_level, floor_description, frontage_ft, furnishing, "
+        "tenure, unit_position, "
+        "CASE WHEN parking_owner_declared IS TRUE THEN has_parking "
+        "WHEN parking_owner_declared IS FALSE THEN NULL "
+        "WHEN has_parking = 1 THEN 1 ELSE NULL END AS has_parking, "
+        "is_fnb_suitable, "
+        "lease_duration_months, lease_duration_negotiable, available_from, "
+        "rental_deposit_myr, title_type, landlord_fnb_permission, "
         "verification_status, rejection_reason, is_published, "
         "address_validation_status, address_formatted, address_validated_at, "
         "created_at, updated_at "
@@ -1181,8 +1222,13 @@ class FypPropertyRepository:
                 INSERT INTO fyp.rental_properties (
                     owner_user_id, name, property_type, description, address,
                     city, state, postcode, latitude, longitude, rental_price,
-                    size_sqft, availability, floor_level, frontage_ft,
+                    size_sqft, psf, availability, floor_level, floor_description,
+                    frontage_ft, furnishing, tenure, unit_position,
+                    lease_duration_months, lease_duration_negotiable,
+                    available_from, rental_deposit_myr, title_type,
+                    landlord_fnb_permission,
                     has_parking, is_fnb_suitable,
+                    parking_owner_declared,
                     verification_status, is_published
                 ) VALUES (
                     :owner_user_id, :name,
@@ -1190,8 +1236,20 @@ class FypPropertyRepository:
                     NULLIF(:description, ''),
                     NULLIF(:address, ''), NULLIF(:city, ''), NULLIF(:state, ''),
                     NULLIF(:postcode, ''), :latitude, :longitude, :rental_price,
-                    :size_sqft, NULLIF(:availability, ''), :floor_level,
-                    :frontage_ft, :has_parking, :is_fnb_suitable,
+                    :size_sqft,
+                    CASE WHEN :rental_price IS NOT NULL AND :rental_price > 0
+                           AND :size_sqft IS NOT NULL AND :size_sqft > 0
+                         THEN ROUND(:rental_price::numeric / :size_sqft::numeric, 2)
+                         ELSE NULL END,
+                    NULLIF(:availability, ''), :floor_level,
+                    NULLIF(:floor_description, ''), :frontage_ft,
+                    NULLIF(:furnishing, ''), NULLIF(:tenure, ''),
+                    NULLIF(:unit_position, ''), :lease_duration_months,
+                    :lease_duration_negotiable, :available_from,
+                    :rental_deposit_myr, NULLIF(:title_type, ''),
+                    NULLIF(:landlord_fnb_permission, ''),
+                    :has_parking, :is_fnb_suitable,
+                    :parking_owner_declared,
                     'draft', false
                 )
                 RETURNING id
@@ -1214,8 +1272,22 @@ class FypPropertyRepository:
                 "size_sqft": payload.get("size_sqft"),
                 "availability": (payload.get("availability") or "").strip()[:60],
                 "floor_level": self._numeric(payload.get("floor_level")),
+                "floor_description": (payload.get("floor_description") or "").strip(),
                 "frontage_ft": self._numeric(payload.get("frontage_ft")),
-                "has_parking": 1 if payload.get("has_parking") else 0,
+                "furnishing": payload.get("furnishing"),
+                "tenure": payload.get("tenure"),
+                "unit_position": payload.get("unit_position"),
+                "lease_duration_months": payload.get("lease_duration_months"),
+                "lease_duration_negotiable": payload.get("lease_duration_negotiable"),
+                "available_from": payload.get("available_from"),
+                "rental_deposit_myr": payload.get("rental_deposit_myr"),
+                "title_type": payload.get("title_type"),
+                "landlord_fnb_permission": payload.get("landlord_fnb_permission"),
+                "has_parking": (
+                    None if payload.get("has_parking") is None
+                    else 1 if payload.get("has_parking") else 0
+                ),
+                "parking_owner_declared": payload.get("has_parking") is not None,
                 "is_fnb_suitable": 1 if payload.get("is_fnb_suitable") else 0,
             },
         )
@@ -1250,19 +1322,29 @@ class FypPropertyRepository:
             if column in ("address", "city", "state", "postcode", "availability",
                           "property_type", "description", "name"):
                 sets.append(f"{column} = NULLIF(:{column}, '')")
-            elif column in ("floor_level", "frontage_ft"):
+            elif column in ("floor_level", "frontage_ft", "rental_deposit_myr"):
                 # Numeric columns fed by free-text wizard fields.
                 sets.append(f"{column} = :{column}")
                 params[column] = self._numeric(value)
             else:
                 sets.append(f"{column} = :{column}")
+        if "has_parking" in fields:
+            # The marker distinguishes an explicit owner declaration (including
+            # false) from historic 0 defaults. The marker itself is server-set.
+            sets.append("parking_owner_declared = :parking_owner_declared")
+            params["parking_owner_declared"] = fields["has_parking"] is not None
         if "rental_price" in fields or "size_sqft" in fields:
             current = self.owner_listing(property_id) or {}
             price = fields.get("rental_price", current.get("rental_price"))
             size = fields.get("size_sqft", current.get("size_sqft"))
-            if price and size and float(size) > 0:
-                sets.append("psf = :psf")
-                params["psf"] = round(float(price) / float(size), 2)
+            sets.append(
+                "psf = CASE WHEN :psf_price IS NOT NULL AND :psf_price > 0 "
+                "AND :psf_size IS NOT NULL AND :psf_size > 0 "
+                "THEN ROUND(:psf_price::numeric / :psf_size::numeric, 2) "
+                "ELSE NULL END"
+            )
+            params["psf_price"] = price
+            params["psf_size"] = size
         if not sets:
             return self.owner_listing(property_id)
         address_fields = ("address", "city", "state", "postcode", "latitude", "longitude")

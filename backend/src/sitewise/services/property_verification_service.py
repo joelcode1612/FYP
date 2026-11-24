@@ -65,6 +65,12 @@ REQUIRED_FOR_SUBMISSION = (
     "availability",
 )
 
+REQUIRED_COMMERCIAL_TERMS = (
+    "floor_description",
+    "furnishing",
+    "landlord_fnb_permission",
+)
+
 
 def _now() -> datetime:
     return datetime.now(UTC)
@@ -80,8 +86,14 @@ def rental_listing(session: Session, property_id: int) -> dict[str, Any] | None:
         text(
             "SELECT id, owner_user_id, name, property_type, description, "
             "address, city, state, postcode, latitude, longitude, rental_price, "
-            "size_sqft, psf, availability, floor_level, frontage_ft, "
-            "has_parking, is_fnb_suitable, verification_status, "
+            "size_sqft, psf, availability, floor_level, floor_description, "
+            "frontage_ft, furnishing, tenure, unit_position, "
+            "CASE WHEN parking_owner_declared IS TRUE THEN has_parking "
+            "WHEN parking_owner_declared IS FALSE THEN NULL "
+            "WHEN has_parking = 1 THEN 1 ELSE NULL END AS has_parking, "
+            "lease_duration_months, lease_duration_negotiable, available_from, "
+            "rental_deposit_myr, title_type, landlord_fnb_permission, "
+            "is_fnb_suitable, verification_status, "
             "rejection_reason, is_published, address_validation_status, "
             "address_formatted, address_validated_at, created_at, updated_at "
             f"FROM {_LISTING_TABLE} WHERE id = :pid"
@@ -121,8 +133,28 @@ def listing_payload(listing: dict[str, Any]) -> dict[str, Any]:
         else float(listing["longitude"]),
         "availability": listing.get("availability"),
         "floor_level": listing.get("floor_level"),
+        "floor_description": listing.get("floor_description"),
         "frontage_ft": None if frontage is None else float(frontage),
-        "has_parking": bool(listing.get("has_parking")),
+        "furnishing": listing.get("furnishing"),
+        "tenure": listing.get("tenure"),
+        "unit_position": listing.get("unit_position"),
+        "has_parking": (
+            None if listing.get("has_parking") is None
+            else bool(listing.get("has_parking"))
+        ),
+        "lease_duration_months": listing.get("lease_duration_months"),
+        "lease_duration_negotiable": listing.get("lease_duration_negotiable"),
+        "available_from": (
+            listing.get("available_from").isoformat()
+            if listing.get("available_from") is not None
+            else None
+        ),
+        "rental_deposit_myr": (
+            None if listing.get("rental_deposit_myr") is None
+            else float(listing["rental_deposit_myr"])
+        ),
+        "title_type": listing.get("title_type"),
+        "landlord_fnb_permission": listing.get("landlord_fnb_permission"),
         "is_fnb_suitable": bool(listing.get("is_fnb_suitable")),
         "is_published": bool(listing.get("is_published")),
         "address_formatted": listing.get("address_formatted"),
@@ -137,6 +169,7 @@ def listing_payload(listing: dict[str, Any]) -> dict[str, Any]:
 
 def listing_completeness_errors(
     listing: dict[str, Any], *, require_availability: bool = True,
+    require_commercial_terms: bool = False,
 ) -> list[str]:
     """Human-readable list of missing required fields for final submission."""
     errors: list[str] = []
@@ -146,6 +179,33 @@ def listing_completeness_errors(
         value = listing.get(field)
         if value is None or (isinstance(value, str) and not value.strip()):
             errors.append(field.replace("_", " "))
+    if require_commercial_terms:
+        for field in REQUIRED_COMMERCIAL_TERMS:
+            value = listing.get(field)
+            if value is None or (isinstance(value, str) and not value.strip()):
+                errors.append(field.replace("_", " "))
+        months = listing.get("lease_duration_months")
+        negotiable = listing.get("lease_duration_negotiable")
+        if months is None and negotiable is not True:
+            errors.append("minimum rental period")
+        if listing.get("availability") == "Available from a specific date" and not listing.get("available_from"):
+            errors.append("available-from date")
+        floor_description = listing.get("floor_description")
+        floor_level = listing.get("floor_level")
+        expected_floor = {
+            "Basement": -1,
+            "Ground floor": 0,
+            "First floor": 1,
+            "Second floor": 2,
+        }.get(floor_description)
+        if expected_floor is not None and floor_level is not None:
+            if float(floor_level) != expected_floor:
+                errors.append("floor level consistent with floor description")
+        elif floor_description == "Third floor or above":
+            if floor_level is None or float(floor_level) < 3:
+                errors.append("specific floor number (3 or above)")
+        elif floor_description != "Multiple floors" and floor_level is None:
+            errors.append("numeric floor level")
     if listing.get("latitude") is not None:
         lat = float(listing["latitude"])
         if not -90 <= lat <= 90:
@@ -346,6 +406,7 @@ class PropertyVerificationService:
         # can remain unreported on the listing sent to Admin for review.
         missing = listing_completeness_errors(
             listing, require_availability=not provider_scope.is_agent_role(role),
+            require_commercial_terms=listing_scope,
         )
         if listing_scope and missing:
             raise ConflictError(

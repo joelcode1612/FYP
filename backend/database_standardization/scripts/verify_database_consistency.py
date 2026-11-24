@@ -115,9 +115,12 @@ def local_schema_summary() -> dict:
                        "public.property_photo", "public.property_feature"):
             if c.execute(text("SELECT to_regclass(:t)"), {"t": legacy}).scalar():
                 out["legacy_remaining"].append(legacy)
-        out["outbox_seeded"] = c.execute(
-            text("SELECT COUNT(*) FROM sitewise_sync.assignment_outbox")
-        ).scalar() if c.execute(text("SELECT to_regclass('sitewise_sync.assignment_outbox')")).scalar() else None
+        # Assignment synchronization is retired. Legacy outbox rows are retained
+        # only until the retirement migration is applied; they are not a parity
+        # requirement for the canonical local assignment table.
+        out["outbox_retired"] = c.execute(
+            text("SELECT to_regclass('sitewise_sync.assignment_outbox') IS NULL")
+        ).scalar()
     return out
 
 
@@ -275,7 +278,7 @@ def main(argv: list[str] | None = None) -> int:
             for v in local["tables"].values()),
         "no_legacy_duplicates_local": not local["legacy_remaining"],
         "rental_contract_60_columns": local["rental_columns"] == 60,
-        "outbox_installed": bool(local["outbox_seeded"]),
+        "assignment_sync_retired": bool(local["outbox_retired"]),
         "remote_property_parity": report.get("data_parity", {}).get("status") == "VERIFIED"
         and not report["data_parity"].get("value_mismatch_count")
         and not report["data_parity"].get("missing_on_remote"),

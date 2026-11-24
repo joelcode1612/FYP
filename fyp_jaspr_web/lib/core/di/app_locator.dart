@@ -107,6 +107,10 @@ abstract final class AppLocator {
   static final PropertyVerificationRepository propertyVerificationRepo =
       ApiPropertyVerificationRepository(const WebApiClient());
 
+  /// Owner listing drafts and edits use the authenticated property API.
+  static final OwnerListingRepository ownerListings =
+      ApiOwnerListingRepository(const WebApiClient());
+
   /// Staff/audit/properties reads and writes for the five administrator
   /// operations pages (Ownership, Agents, Campaigns, Activity, Surveys).
   /// Stateless: one shared const instance. Campaigns and Surveys deliberately

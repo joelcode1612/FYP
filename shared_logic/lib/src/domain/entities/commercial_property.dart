@@ -59,6 +59,15 @@ class CommercialProperty {
   /// (`availability` — e.g. "Available now", "Tenanted").
   final String? availability;
 
+  /// Owner-declared contractual terms from an approved operational listing.
+  final int? leaseDurationMonths;
+  final bool? leaseDurationNegotiable;
+  final String? availableFrom;
+  final double? rentalDepositMyr;
+  final String? titleType;
+  final String? landlordFnbPermission;
+  final String? floorDescription;
+
   /// Land tenure (`tenure` — Freehold / Leasehold), null when unrecorded.
   final String? tenure;
 
@@ -192,6 +201,13 @@ class CommercialProperty {
     this.tags = const [],
     this.description,
     this.availability,
+    this.leaseDurationMonths,
+    this.leaseDurationNegotiable,
+    this.availableFrom,
+    this.rentalDepositMyr,
+    this.titleType,
+    this.landlordFnbPermission,
+    this.floorDescription,
     this.tenure,
     this.furnishing,
     this.floorLevel,

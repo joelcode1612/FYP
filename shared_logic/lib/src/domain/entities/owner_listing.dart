@@ -1,4 +1,3 @@
-
 // ## Wire-decoding compatibility boundary
 //
 // The `fromJson` factories in this library are retained for public API
@@ -53,8 +52,10 @@ class OwnerListing {
   final String? address;
   final String? city;
   final String? state;
+
   /// Five-digit Malaysian postcode (string so leading zeros survive).
   final String? postcode;
+
   /// Server-attested Google Address Validation verdict: `validated`,
   /// `partially_validated`, `unconfirmed` or null when never validated.
   final String? addressValidationStatus;
@@ -65,8 +66,18 @@ class OwnerListing {
   final double? psf;
   final String? availability;
   final double? floorLevel;
+  final String? floorDescription;
   final double? frontageFt;
-  final bool hasParking;
+  final String? furnishing;
+  final String? tenure;
+  final String? unitPosition;
+  final bool? hasParking;
+  final int? leaseDurationMonths;
+  final bool? leaseDurationNegotiable;
+  final String? availableFrom;
+  final double? rentalDepositMyr;
+  final String? titleType;
+  final String? landlordFnbPermission;
   final bool isFnbSuitable;
   final String verificationStatus;
   final String? rejectionReason;
@@ -99,8 +110,18 @@ class OwnerListing {
     this.psf,
     this.availability,
     this.floorLevel,
+    this.floorDescription,
     this.frontageFt,
-    this.hasParking = false,
+    this.furnishing,
+    this.tenure,
+    this.unitPosition,
+    this.hasParking,
+    this.leaseDurationMonths,
+    this.leaseDurationNegotiable,
+    this.availableFrom,
+    this.rentalDepositMyr,
+    this.titleType,
+    this.landlordFnbPermission,
     this.isFnbSuitable = false,
     this.rejectionReason,
     this.isPublished = false,
@@ -113,49 +134,62 @@ class OwnerListing {
   static double? _d(Object? v) => (v is num) ? v.toDouble() : null;
 
   factory OwnerListing.fromJson(Map<String, dynamic> row) => OwnerListing(
-        id: '${row['id'] ?? row['property_id'] ?? ''}',
-        ownerUserId: row['owner_user_id']?.toString(),
-        name: '${row['name'] ?? ''}',
-        propertyType: row['property_type']?.toString(),
-        description: row['description']?.toString(),
-        address: row['address']?.toString(),
-        city: row['city']?.toString(),
-        state: row['state']?.toString(),
-        postcode: row['postcode']?.toString(),
-        addressValidationStatus: row['address_validation_status']?.toString(),
-        latitude: _d(row['latitude']),
-        longitude: _d(row['longitude']),
-        rentalPrice: _d(row['rental_price']),
-        sizeSqft: _d(row['size_sqft']),
-        psf: _d(row['psf']),
-        availability: row['availability']?.toString(),
-        floorLevel: _d(row['floor_level']),
-        frontageFt: _d(row['frontage_ft']),
-        hasParking: (row['has_parking'] as num?)?.toInt() == 1 ||
-            row['has_parking'] == true,
-        isFnbSuitable: (row['is_fnb_suitable'] as num?)?.toInt() == 1 ||
-            row['is_fnb_suitable'] == true,
-        verificationStatus: '${row['verification_status'] ?? 'draft'}',
-        rejectionReason: row['rejection_reason']?.toString(),
-        isPublished: row['is_published'] == true,
-        createdAt: row['created_at']?.toString(),
-        updatedAt: row['updated_at']?.toString(),
-        photos: (row['photos'] as List? ?? const [])
-            .whereType<Map<String, dynamic>>()
-            .map(OwnerListingPhoto.fromJson)
-            .toList(),
-        management: row['management'] is Map<String, dynamic>
-            ? ListingManagement.fromJson(row['management'] as Map<String, dynamic>)
-            : null,
-      );
+    id: '${row['id'] ?? row['property_id'] ?? ''}',
+    ownerUserId: row['owner_user_id']?.toString(),
+    name: '${row['name'] ?? ''}',
+    propertyType: row['property_type']?.toString(),
+    description: row['description']?.toString(),
+    address: row['address']?.toString(),
+    city: row['city']?.toString(),
+    state: row['state']?.toString(),
+    postcode: row['postcode']?.toString(),
+    addressValidationStatus: row['address_validation_status']?.toString(),
+    latitude: _d(row['latitude']),
+    longitude: _d(row['longitude']),
+    rentalPrice: _d(row['rental_price']),
+    sizeSqft: _d(row['size_sqft']),
+    psf: _d(row['psf']),
+    availability: row['availability']?.toString(),
+    floorLevel: _d(row['floor_level']),
+    floorDescription: row['floor_description']?.toString(),
+    frontageFt: _d(row['frontage_ft']),
+    furnishing: row['furnishing']?.toString(),
+    tenure: row['tenure']?.toString(),
+    unitPosition: row['unit_position']?.toString(),
+    hasParking: row['has_parking'] == null
+        ? null
+        : (row['has_parking'] as num?)?.toInt() == 1 ||
+              row['has_parking'] == true,
+    leaseDurationMonths: (row['lease_duration_months'] as num?)?.toInt(),
+    leaseDurationNegotiable: row['lease_duration_negotiable'] as bool?,
+    availableFrom: row['available_from']?.toString(),
+    rentalDepositMyr: _d(row['rental_deposit_myr']),
+    titleType: row['title_type']?.toString(),
+    landlordFnbPermission: row['landlord_fnb_permission']?.toString(),
+    isFnbSuitable:
+        (row['is_fnb_suitable'] as num?)?.toInt() == 1 ||
+        row['is_fnb_suitable'] == true,
+    verificationStatus: '${row['verification_status'] ?? 'draft'}',
+    rejectionReason: row['rejection_reason']?.toString(),
+    isPublished: row['is_published'] == true,
+    createdAt: row['created_at']?.toString(),
+    updatedAt: row['updated_at']?.toString(),
+    photos: (row['photos'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(OwnerListingPhoto.fromJson)
+        .toList(),
+    management: row['management'] is Map<String, dynamic>
+        ? ListingManagement.fromJson(row['management'] as Map<String, dynamic>)
+        : null,
+  );
 
   /// The shared status vocabulary used by badges across the app.
   VerificationStatus get status => switch (verificationStatus) {
-        'approved' => VerificationStatus.verified,
-        'rejected' => VerificationStatus.rejected,
-        'pending' => VerificationStatus.pending,
-        _ => VerificationStatus.draft,
-      };
+    'approved' => VerificationStatus.verified,
+    'rejected' => VerificationStatus.rejected,
+    'pending' => VerificationStatus.pending,
+    _ => VerificationStatus.draft,
+  };
 
   /// Editing is a backend policy (pending/under-review records are locked);
   /// this mirrors it for honest UI hints only — the backend decides.
@@ -172,32 +206,47 @@ class OwnerListing {
     String? city,
     String? state,
     String? postcode,
-    double? latitude,
-    double? longitude,
     double? rentalPrice,
     double? sizeSqft,
     String? availability,
     String? floorLevel,
+    String? floorDescription,
     double? frontageFt,
     bool? hasParking,
-    bool? isFnbSuitable,
-  }) =>
-      {
-        if (name != null) 'name': name,
-        'property_type': propertyType,
-        'description': description,
-        'address': address,
-        'city': city,
-        'state': state,
-        'postcode': postcode,
-        'latitude': latitude,
-        'longitude': longitude,
-        'rental_price': rentalPrice,
-        'size_sqft': sizeSqft,
-        'availability': availability,
-        'floor_level': floorLevel,
-        'frontage_ft': frontageFt,
-        'has_parking': hasParking ?? false,
-        'is_fnb_suitable': isFnbSuitable ?? false,
-      };
+    String? furnishing,
+    String? tenure,
+    String? unitPosition,
+    int? leaseDurationMonths,
+    bool? leaseDurationNegotiable,
+    String? availableFrom,
+    double? rentalDepositMyr,
+    String? titleType,
+    String? landlordFnbPermission,
+    String? draftRequestId,
+  }) => {
+    if (name != null) 'name': name,
+    'property_type': propertyType,
+    'description': description,
+    'address': address,
+    'city': city,
+    'state': state,
+    'postcode': postcode,
+    'rental_price': rentalPrice,
+    'size_sqft': sizeSqft,
+    'availability': availability,
+    'floor_level': floorLevel,
+    'floor_description': floorDescription,
+    'frontage_ft': frontageFt,
+    'furnishing': furnishing,
+    'tenure': tenure,
+    'unit_position': unitPosition,
+    'has_parking': hasParking,
+    'lease_duration_months': leaseDurationMonths,
+    'lease_duration_negotiable': leaseDurationNegotiable,
+    'available_from': availableFrom,
+    'rental_deposit_myr': rentalDepositMyr,
+    'title_type': titleType,
+    'landlord_fnb_permission': landlordFnbPermission,
+    if (draftRequestId != null) 'draft_request_id': draftRequestId,
+  };
 }

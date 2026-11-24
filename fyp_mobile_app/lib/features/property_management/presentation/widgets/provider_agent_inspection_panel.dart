@@ -21,12 +21,14 @@ class ProviderAgentInspectionPanel extends StatefulWidget {
     this.onSaved,
     this.onEdited,
     this.inspectionDetail,
+    this.readOnly = false,
   });
   final ProviderListing? listing;
   final int propertyId;
   final Future<void> Function()? onSaved;
   final VoidCallback? onEdited;
   final AgentListingDetail? inspectionDetail;
+  final bool readOnly;
   @override
   State<ProviderAgentInspectionPanel> createState() => _InspectionState();
 }
@@ -57,10 +59,13 @@ class _InspectionState extends State<ProviderAgentInspectionPanel>
   final floorArea = TextEditingController();
   final parkingNotes = TextEditingController();
   final accessNotes = TextEditingController();
-  bool get editable => status == 'accepted' || status == 'needs_correction';
+  bool get propertyLocked =>
+      widget.readOnly || (widget.listing?.lockedForEditing ?? false);
+  bool get editable =>
+      !propertyLocked && (status == 'accepted' || status == 'needs_correction');
   int get confirmed => checks.values.where((value) => value).length;
   bool get allConfirmed => confirmed == checks.length;
-  bool get canUseCapture => canCapture && !busy && !loading;
+  bool get canUseCapture => !propertyLocked && canCapture && !busy && !loading;
   // SITEWISE_AGENT_INSPECTION_SUMMARY_V1
   // The four backend-confirmed checks are authoritative; not an eight-item
   // synthetic checklist. A discrepancy is recorded without erasing notes.
@@ -175,7 +180,11 @@ class _InspectionState extends State<ProviderAgentInspectionPanel>
       error = null;
     });
     try {
-      await ProviderWorkspaceService.inspectionCommand(widget.propertyId, action, body ?? {});
+      await ProviderWorkspaceService.inspectionCommand(
+        widget.propertyId,
+        action,
+        body ?? {},
+      );
       await refresh();
     } catch (e) {
       if (mounted) {
@@ -283,7 +292,7 @@ class _InspectionState extends State<ProviderAgentInspectionPanel>
     padding: const EdgeInsets.only(bottom: 10),
     child: TextField(
       controller: controller,
-      enabled: !busy,
+      enabled: !busy && editable,
       maxLines: numeric ? 1 : 2,
       maxLength: numeric ? null : 2000,
       keyboardType: numeric
@@ -371,6 +380,7 @@ class _InspectionState extends State<ProviderAgentInspectionPanel>
     final savedChanges = await AgentPropertyDetailsSheet.open(
       context,
       widget.propertyId,
+      readOnly: propertyLocked,
     );
     if (!mounted) return;
     // The server calculates completeness from fresh canonical property data.
@@ -577,11 +587,16 @@ class _InspectionState extends State<ProviderAgentInspectionPanel>
                 ? (tourId) => openCapture(tourId: tourId)
                 : null,
             beforeSync: canUseCapture ? () async => canUseCapture : null,
-            onSynced: () => refresh(loadChecklist: false),
+            onSynced: propertyLocked
+                ? null
+                : () => refresh(loadChecklist: false),
+            readOnly: propertyLocked,
           ),
         ],
       ),
-      bottomNavigationBar: SafeArea(
+      bottomNavigationBar: propertyLocked
+          ? null
+          : SafeArea(
         top: false,
         child: Container(
           decoration: const BoxDecoration(
@@ -770,7 +785,7 @@ class _InspectionState extends State<ProviderAgentInspectionPanel>
                       contentPadding: EdgeInsets.zero,
                       activeColor: SitewiseColors.action,
                       value: entry.value,
-                      onChanged: busy
+                      onChanged: busy || !editable
                           ? null
                           : (value) {
                               widget.onEdited?.call();
@@ -856,6 +871,7 @@ class _InspectionOverview extends StatelessWidget {
         listing.imageUrl ??
         photos.firstOrNull?.url;
     final assignment = detail.assignment.raw;
+    final facts = detail.facts;
     final assignedAt = DateTime.tryParse(
       '${assignment['requested_at'] ?? assignment['created_at'] ?? ''}',
     );
@@ -914,6 +930,48 @@ class _InspectionOverview extends StatelessWidget {
                     _fact('Type', listing.propertyType ?? 'Not provided'),
                     _fact('Size', listing.sizeDisplay),
                     _fact('Monthly rent', listing.rentDisplay),
+                    _fact('Floor', facts?.floorDescription ?? 'Not provided'),
+                    _fact(
+                      'Unit position',
+                      facts?.unitPosition ?? 'Not provided',
+                    ),
+                    _fact(
+                      'Frontage',
+                      facts?.frontageFt == null
+                          ? 'Not provided'
+                          : '${facts!.frontageFt!.toStringAsFixed(1)} ft',
+                    ),
+                    _fact('Furnishing', facts?.furnishing ?? 'Not provided'),
+                    _fact(
+                      'Owner-declared parking',
+                      facts?.hasParking == null
+                          ? 'Not sure'
+                          : facts!.hasParking!
+                          ? 'Available'
+                          : 'Not available',
+                    ),
+                    _fact(
+                      'Availability (owner-provided)',
+                      facts?.availability ?? 'Not provided',
+                    ),
+                    _fact(
+                      'Minimum rental period (owner-provided)',
+                      facts?.leaseDurationNegotiable == true
+                          ? 'Negotiable'
+                          : facts?.leaseDurationMonths == null
+                          ? 'Not provided'
+                          : '${facts!.leaseDurationMonths} months',
+                    ),
+                    _fact(
+                      'Rental deposit (owner-provided)',
+                      facts?.rentalDepositMyr == null
+                          ? 'Not provided'
+                          : 'RM ${facts!.rentalDepositMyr!.toStringAsFixed(2)}',
+                    ),
+                    _fact(
+                      'Landlord F&B permission (owner-provided)',
+                      facts?.landlordFnbPermission ?? 'Not provided',
+                    ),
                   ],
                 ),
                 const Divider(height: 20),

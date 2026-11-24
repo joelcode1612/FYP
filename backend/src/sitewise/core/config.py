@@ -28,9 +28,6 @@ class Settings(BaseSettings):
     # convention; the ORM never runs create_all or migrations against it.
     analytics_database_url: str
 
-    # Agent assignments: local DB is authoritative; remote mirror is opt-in.
-    assignment_sync_enabled: bool = False
-
     # --- Application -------------------------------------------------------
     log_level: str = "INFO"
     secret_key: str = ""

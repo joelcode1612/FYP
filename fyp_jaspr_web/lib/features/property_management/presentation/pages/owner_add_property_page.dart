@@ -1,351 +1,872 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import 'package:shared_logic/shared_logic.dart';
-
-import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart';
 import 'package:sitewise_jaspr_web/core/di/app_locator.dart';
 import 'package:sitewise_jaspr_web/shared/presentation/layouts/app_layout.dart';
 
-/// Web add/edit property: multi-column desktop form.
-///
-/// Ported from `owner_add_property_web_page.dart` in the Flutter web tree.
-/// The Flutter page keeps `TextEditingController`s and validates on save;
-/// this version holds field values in local state and renders the same
-/// required-field validation ('Required') inline under each input. The
-/// Flutter `_save` only validated and popped — no service call — so to make
-/// the web flow actually persist (and match the detail page's draft →
-/// submit lifecycle) the save goes through
-/// `PropertyService.create` / `PropertyService.update`.
-///
-/// `editingId` arrives as the `?id=` query param (nullable — the add route
-/// omits it). When set, the existing property is loaded and the form is
-/// prefilled, mirroring the Flutter edit flow's argument-driven prefill.
+/// Live owner listing wizard. All values use the shared form vocabulary and
+/// are persisted through the authenticated owner-listing repository.
 @client
 class AddPropertyPage extends StatefulComponent {
   final String? editingId;
-
   const AddPropertyPage({super.key, this.editingId});
-
   @override
   State<AddPropertyPage> createState() => _AddPropertyPageState();
 }
 
 class _AddPropertyPageState extends State<AddPropertyPage> {
-  String _title = '';
-  String _address = '';
-  String _city = 'Subang Jaya';
-  String _rental = '';
-  String _size = '';
-
-  /// Set once the edit-mode property has been loaded and fields prefilled.
-  bool _prefilled = false;
-
-  /// Set once a save succeeded — replaces the Flutter SnackBar + pop with an
-  /// inline success card (the page stays put; the list route is a link).
+  final Map<String, String> _v = <String, String>{'property_type': 'Shoplot'};
+  final Map<String, String> _fieldErrors = <String, String>{};
+  late final String _requestId = _uuid();
+  int _step = 0;
+  bool _loading = false;
+  bool _loadedExisting = false;
+  bool _saving = false;
   bool _saved = false;
+  bool _draftSaved = false;
+  bool _locked = false;
+  bool _checkingAddress = false;
+  String? _error;
+  String? _savedId;
+  String? _status;
+  String? _addressStatus;
 
-  /// Whether the Flutter validator results should be shown. Flutter only ran
-  /// validators on save, never per-keystroke.
-  bool _showErrors = false;
+  static String _uuid() {
+    final r = Random.secure();
+    final b = List<int>.generate(16, (_) => r.nextInt(256));
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    final h = b.map((e) => e.toRadixString(16).padLeft(2, '0')).join();
+    return '${h.substring(0, 8)}-${h.substring(8, 12)}-${h.substring(12, 16)}-${h.substring(16, 20)}-${h.substring(20)}';
+  }
 
   @override
   void initState() {
     super.initState();
-    final editingId = component.editingId;
-    if (editingId != null) unawaited(_loadExisting(editingId));
+    final id = component.editingId;
+    if (id != null) unawaited(_load(id));
   }
 
-  Future<void> _loadExisting(String editingId) async {
-    final existing = await AppLocator.properties.detail(editingId);
-    if (existing == null || !mounted) return;
+  Future<void> _load(String id) async {
+    setState(() => _loading = true);
+    try {
+      final p = await AppLocator.ownerListings.getListing(id);
+      if (!mounted) return;
+      setState(() {
+        _v.addAll({
+          'name': p.name,
+          'property_type': p.propertyType ?? '',
+          'description': p.description ?? '',
+          'address': p.address ?? '',
+          'city': p.city ?? '',
+          'state': p.state ?? '',
+          'postcode': p.postcode ?? '',
+          'rental_price': _num(p.rentalPrice),
+          'size_sqft': _num(p.sizeSqft),
+          'floor_level': p.floorLevel?.toString() ?? '',
+          'floor_description': p.floorDescription ?? '',
+          'unit_position': p.unitPosition ?? '',
+          'frontage_ft': _num(p.frontageFt),
+          'furnishing': p.furnishing ?? '',
+          'has_parking': p.hasParking == null
+              ? ''
+              : (p.hasParking! ? 'Available' : 'Not available'),
+          'availability': _availabilityLabel(p.availability),
+          'lease_duration_months': p.leaseDurationMonths?.toString() ?? '',
+          'rental_deposit_myr': _num(p.rentalDepositMyr),
+          'available_from': p.availableFrom ?? '',
+          'lease_duration_negotiable': p.leaseDurationNegotiable == true
+              ? 'yes'
+              : 'no',
+          'landlord_fnb_permission': p.landlordFnbPermission ?? '',
+          'tenure': p.tenure ?? '',
+          'title_type': p.titleType ?? '',
+        });
+        _savedId = id;
+        _loadedExisting = true;
+        _locked = !p.locallyEditable;
+        _status = p.verificationStatus;
+        _loading = false;
+      });
+    } on Object {
+      if (mounted) {
+        setState(() {
+          _error = 'Could not load this listing. Please retry.';
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  static String _num(num? n) => n == null ? '' : n.toString();
+  static String _availabilityLabel(String? v) => switch (v) {
+    'Available now' || 'Ready to move in' => 'Ready to move in',
+    'Available from a specific date' => 'Available from a specific date',
+    'By arrangement' => 'By arrangement',
+    _ => v ?? '',
+  };
+
+  void _set(String key, String value) => setState(() {
+    _v[key] = value;
+    _fieldErrors.remove(key);
+    _error = null;
+    _draftSaved = false;
+  });
+  String? _validateStep(int step) {
+    _fieldErrors.clear();
+    if (step == 0) {
+      _putError('name', PropertyFormRules.titleError(_v['name']));
+      _putError(
+        'property_type',
+        PropertyFormRules.propertyTypeError(_v['property_type']),
+      );
+      _putError('size_sqft', PropertyFormRules.areaError(_v['size_sqft']));
+      _putError(
+        'floor_description',
+        PropertyFormRules.optionError(
+          _v['floor_description'],
+          propertyFloorOptions,
+          'floor level',
+        ),
+      );
+      _putError(
+        'floor_level',
+        PropertyFormRules.floorNumberError(
+          _v['floor_description'],
+          _v['floor_level'],
+        ),
+      );
+      _putError(
+        'furnishing',
+        PropertyFormRules.optionError(
+          _v['furnishing'],
+          propertyFurnishingOptions,
+          'furnishing',
+        ),
+      );
+    }
+    if (step == 1) {
+      _putError(
+        'rental_price',
+        PropertyFormRules.rentError(_v['rental_price']),
+      );
+      _putError(
+        'availability',
+        PropertyFormRules.optionError(
+          _v['availability'],
+          propertyAvailabilityOptions,
+          'availability',
+        ),
+      );
+      _putError(
+        'available_from',
+        PropertyFormRules.availableDateError(
+          _v['availability'],
+          _v['available_from'],
+        ),
+      );
+      _putError(
+        'lease_choice',
+        PropertyFormRules.leaseDurationError(
+          _leaseChoice,
+          _v['lease_duration_months'],
+        ),
+      );
+      _putError(
+        'landlord_fnb_permission',
+        PropertyFormRules.optionError(
+          _v['landlord_fnb_permission'],
+          landlordFnbPermissionOptions,
+          'landlord permission',
+        ),
+      );
+      _putError(
+        'tenure',
+        PropertyFormRules.optionError(
+          _v['tenure'],
+          propertyTenureOptions,
+          'land tenure',
+          required: false,
+        ),
+      );
+      _putError(
+        'title_type',
+        PropertyFormRules.optionError(
+          _v['title_type'],
+          propertyTitleTypeOptions,
+          'title type',
+          required: false,
+        ),
+      );
+    }
+    if (step == 2) {
+      final cityOk = MalaysiaLocations.citiesFor(
+        _v['state'],
+      ).contains(_v['city']);
+      final postcodeOk = MalaysiaLocations.postcodesFor(
+        _v['state'],
+        _v['city'],
+      ).contains(_v['postcode']);
+      if ((_v['address'] ?? '').trim().isEmpty ||
+          !MalaysiaLocations.stateNames.contains(_v['state']) ||
+          !cityOk ||
+          !postcodeOk) {
+        const message =
+            'Enter a street address and select a valid Malaysian state, city and postcode.';
+        if ((_v['address'] ?? '').trim().isEmpty) {
+          _fieldErrors['address'] = 'Enter the street address.';
+        }
+        if (!MalaysiaLocations.stateNames.contains(_v['state'])) {
+          _fieldErrors['state'] = 'Select a valid state.';
+        }
+        if (!cityOk) {
+          _fieldErrors['city'] = 'Select a city for the chosen state.';
+        }
+        if (!postcodeOk) {
+          _fieldErrors['postcode'] = 'Select a postcode for the chosen city.';
+        }
+        return message;
+      }
+    }
+    return _fieldErrors.isEmpty ? null : _fieldErrors.values.first;
+  }
+
+  void _putError(String key, String? error) {
+    if (error != null) _fieldErrors[key] = error;
+  }
+
+  String? get _leaseChoice {
+    final selected = _v['lease_choice'];
+    if (propertyLeaseOptions.contains(selected)) return selected;
+    if (_v['lease_duration_negotiable'] == 'yes') return 'Negotiable';
+    final m = int.tryParse(_v['lease_duration_months'] ?? '');
+    return switch (m) {
+      6 => '6 months',
+      12 => '1 year',
+      24 => '2 years',
+      36 => '3 years',
+      null => null,
+      _ => 'Other duration',
+    };
+  }
+
+  void _continue() {
+    final error = _validateStep(_step);
+    if (error != null) {
+      setState(() => _error = error);
+      return;
+    }
     setState(() {
-      _title = existing.title;
-      _address = existing.address;
-      _city = existing.city;
-      _rental = existing.rentalRm.toStringAsFixed(0);
-      _size = existing.sizeSqft.toStringAsFixed(0);
-      _prefilled = true;
+      _error = null;
+      _draftSaved = false;
+      if (_step < 4) _step++;
     });
   }
 
-  bool get _titleMissing => _title.isEmpty;
-  bool get _addressMissing => _address.isEmpty;
-  bool get _rentalMissing => _rental.isEmpty;
-  bool get _sizeMissing => _size.isEmpty;
-
-  void _save() {
-    setState(() => _showErrors = true);
-    if (_titleMissing || _addressMissing || _rentalMissing || _sizeMissing) {
-      return;
+  Future<void> _save({bool partial = false}) async {
+    if (partial) {
+      final titleError = PropertyFormRules.titleError(_v['name']);
+      if (titleError != null) {
+        setState(() {
+          _fieldErrors['name'] = titleError;
+          _error = 'Enter a property title before saving this draft.';
+        });
+        return;
+      }
+    } else {
+      for (var i = 0; i < 3; i++) {
+        final error = _validateStep(i);
+        if (error != null) {
+          setState(() {
+            _step = i;
+            _error = error;
+          });
+          return;
+        }
+      }
     }
-    final editingId = component.editingId;
-    unawaited(
-      (editingId == null ? _create() : _updateExisting(editingId)).then((_) {
-        if (mounted) setState(() => _saved = true);
-      }),
-    );
+    setState(() {
+      _saving = true;
+      _error = null;
+      _draftSaved = false;
+    });
+    final lease = _v['lease_duration_negotiable'] == 'yes'
+        ? null
+        : int.tryParse(_v['lease_duration_months'] ?? '');
+    final payload = <String, dynamic>{
+      'draft_request_id': _requestId,
+      'name': (_v['name'] ?? '').trim(), 'property_type': _v['property_type'],
+      'description': _v['description'], 'address': (_v['address'] ?? '').trim(),
+      'city': _v['city'], 'state': _v['state'], 'postcode': _v['postcode'],
+      'rental_price': double.tryParse(_v['rental_price'] ?? ''),
+      'size_sqft': double.tryParse(_v['size_sqft'] ?? ''),
+      // Coordinates remain server-owned and are deliberately omitted.
+      'floor_level':
+          double.tryParse(_v['floor_level'] ?? '') ??
+          switch (_v['floor_description']) {
+            'Basement' => -1.0,
+            'Ground floor' => 0.0,
+            'First floor' => 1.0,
+            'Second floor' => 2.0,
+            _ => null,
+          },
+      'floor_description': _v['floor_description'],
+      'unit_position': _v['unit_position'],
+      'frontage_ft': double.tryParse(_v['frontage_ft'] ?? ''),
+      'furnishing': _v['furnishing'],
+      'has_parking': switch (_v['has_parking']) {
+        'Available' => true,
+        'Not available' => false,
+        _ => null,
+      },
+      'availability': _availabilityWire(_v['availability']),
+      'available_from': _v['availability'] == 'Available from a specific date'
+          ? _v['available_from']
+          : null,
+      'lease_duration_months': lease,
+      'lease_duration_negotiable': _v['lease_duration_negotiable'] == 'yes',
+      'rental_deposit_myr': double.tryParse(_v['rental_deposit_myr'] ?? ''),
+      'landlord_fnb_permission': _v['landlord_fnb_permission'],
+      'tenure': _v['tenure'], 'title_type': _v['title_type'],
+    };
+    try {
+      final editingId = component.editingId ?? _savedId;
+      final result = editingId == null
+          ? await AppLocator.ownerListings.createDraft(payload)
+          : await AppLocator.ownerListings.updateDraft(editingId, payload);
+      if (!mounted) return;
+      setState(() {
+        _savedId = result.id;
+        _loadedExisting = true;
+        _draftSaved = partial;
+        _saved = !partial;
+        _saving = false;
+        _status = result.verificationStatus;
+      });
+    } on Object {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _error =
+              'The draft could not be saved. Your entries are still here; try again.';
+        });
+      }
+    }
   }
 
-  Future<void> _create() {
-    return AppLocator.properties.create(
-      CommercialProperty(
-        id: 'prop-web-${DateTime.now().millisecondsSinceEpoch}',
-        title: _title,
-        address: _address,
-        city: _city,
-        state: 'Selangor',
-        postcode: '',
-        rentalRm: double.tryParse(_rental) ?? 0,
-        sizeSqft: double.tryParse(_size) ?? 0,
-        latitude: 3.0738,
-        longitude: 101.5870,
-        propertyType: 'Shop lot',
-        verification: VerificationStatus.draft,
-        suitabilityScore: 0,
-        ownerId: DemoData.demoOwnerId,
-        hasTour: false,
-      ),
-    );
+  Future<void> _validateAddress() async {
+    final id = _savedId;
+    if (id == null || _checkingAddress) return;
+    setState(() {
+      _checkingAddress = true;
+      _error = null;
+    });
+    try {
+      final status = await AppLocator.ownerListings.validateSavedAddress(id);
+      if (mounted) {
+        setState(() {
+          _addressStatus = status;
+          _checkingAddress = false;
+        });
+      }
+    } on Object {
+      if (mounted) {
+        setState(() {
+          _error =
+              'Address validation could not be completed. Your saved draft is unchanged.';
+          _checkingAddress = false;
+        });
+      }
+    }
   }
 
-  Future<void> _updateExisting(String editingId) async {
-    final existing = await AppLocator.properties.detail(editingId);
-    if (existing == null) return;
-    // `copyWith` does not cover address/city, so the record is rebuilt with
-    // the edited basics layered onto the untouched fields.
-    await AppLocator.properties.update(
-      CommercialProperty(
-        id: existing.id,
-        title: _title,
-        address: _address,
-        city: _city,
-        state: existing.state,
-        postcode: existing.postcode,
-        rentalRm: double.tryParse(_rental) ?? existing.rentalRm,
-        rentalMaxRm: existing.rentalMaxRm,
-        sizeSqft: double.tryParse(_size) ?? existing.sizeSqft,
-        latitude: existing.latitude,
-        longitude: existing.longitude,
-        propertyType: existing.propertyType,
-        verification: existing.verification,
-        suitabilityScore: existing.suitabilityScore,
-        ownerId: existing.ownerId,
-        hasTour: existing.hasTour,
-        requirements: existing.requirements,
-        tags: existing.tags,
-      ),
-    );
-  }
+  static String? _availabilityWire(String? v) => switch (v) {
+    'Ready to move in' => 'Ready to move in',
+    'Available from a specific date' => 'Available from a specific date',
+    'By arrangement' => 'By arrangement',
+    _ => null,
+  };
 
   @override
-  Component build(BuildContext context) {
-    final editingId = component.editingId;
-    final body = _saved
-        ? const _SavedCard()
-        : (editingId != null && !_prefilled)
-        ? const _Loading()
-        : _FormBody(
-            title: _title,
-            address: _address,
-            city: _city,
-            rental: _rental,
-            size: _size,
-            saveLabel: editingId == null ? 'Save as draft' : 'Save changes',
-            showErrors: _showErrors,
-            titleMissing: _titleMissing,
-            addressMissing: _addressMissing,
-            rentalMissing: _rentalMissing,
-            sizeMissing: _sizeMissing,
-            onTitle: (v) => _title = v,
-            onAddress: (v) => _address = v,
-            onCity: (v) => _city = v,
-            onRental: (v) => _rental = v,
-            onSize: (v) => _size = v,
-            onSave: _save,
-          );
-    return AppLayout(
-      role: AppRole.owner,
-      currentRoute: '/owner/add-property',
-      title: editingId == null ? 'Add Property' : 'Edit Property',
-      eyebrow: editingId == null ? 'New listing' : 'Edit listing',
-      subtitle: 'Add a commercial space, or edit one you have already listed.',
-      child: body,
-    );
-  }
-}
-
-class _FormBody extends StatelessComponent {
-  final String title;
-  final String address;
-  final String city;
-  final String rental;
-  final String size;
-  final String saveLabel;
-
-  final bool showErrors;
-  final bool titleMissing;
-  final bool addressMissing;
-  final bool rentalMissing;
-  final bool sizeMissing;
-
-  final ValueChanged<String> onTitle;
-  final ValueChanged<String> onAddress;
-  final ValueChanged<String> onCity;
-  final ValueChanged<String> onRental;
-  final ValueChanged<String> onSize;
-  final void Function() onSave;
-
-  const _FormBody({
-    required this.title,
-    required this.address,
-    required this.city,
-    required this.rental,
-    required this.size,
-    required this.saveLabel,
-    required this.showErrors,
-    required this.titleMissing,
-    required this.addressMissing,
-    required this.rentalMissing,
-    required this.sizeMissing,
-    required this.onTitle,
-    required this.onAddress,
-    required this.onCity,
-    required this.onRental,
-    required this.onSize,
-    required this.onSave,
-  });
-
-  @override
-  Component build(BuildContext context) {
-    return div(classes: 'stack form-standalone', [
-      div(classes: 'grid-2', [
-        _Section('Basics', [
-          _field(
-            labelText: 'Listing title',
-            field: input(
-              type: InputType.text,
-              classes: 'input',
-              value: title,
-              attributes: {'id': 'field-title'},
-              events: events<String>(onInput: onTitle),
+  Component build(BuildContext context) => AppLayout(
+    role: AppRole.owner,
+    currentRoute: '/owner/add-property',
+    title: component.editingId == null ? 'Add Property' : 'Edit Property',
+    eyebrow: 'Owner listing',
+    subtitle:
+        'Property details are saved as a private draft until the existing verification process is completed.',
+    child: _loading
+        ? div(classes: 'loading', [
+            span(classes: 'spinner', []),
+            Component.text('Loading property…'),
+          ])
+        : (component.editingId != null && !_loadedExisting && !_locked)
+        ? div(classes: 'card stack', [
+            p([
+              Component.text(_error ?? 'Property details could not be loaded.'),
+            ]),
+            button(
+              classes: 'btn btn--secondary',
+              events: events(
+                onClick: () => unawaited(_load(component.editingId!)),
+              ),
+              [Component.text('Retry')],
             ),
-            error: showErrors && titleMissing ? 'Required' : null,
-          ),
-          _field(
-            labelText: 'Street address',
-            field: input(
-              type: InputType.text,
-              classes: 'input',
-              value: address,
-              attributes: {'id': 'field-address'},
-              events: events<String>(onInput: onAddress),
+          ])
+        : _saved
+        ? _confirmation()
+        : _locked
+        ? _readOnly()
+        : _wizard(),
+  );
+
+  Component _wizard() => div(classes: 'stack stack--md', [
+    div(classes: 'sw-reg-stepper', [
+      for (var i = 0; i < 5; i++)
+        div(
+          classes:
+              'sw-reg-step ${i == _step
+                  ? 'is-active'
+                  : i < _step
+                  ? 'is-done'
+                  : ''}',
+          [
+            Component.text(
+              '${i + 1}. ${const ['Property details', 'Rental & location', 'Agent verification', 'Review information', 'Confirmation'][i]}',
             ),
-            error: showErrors && addressMissing ? 'Required' : null,
-          ),
-          _field(
-            labelText: 'City',
-            field: input(
-              type: InputType.text,
-              classes: 'input',
-              value: city,
-              attributes: {'id': 'field-city'},
-              events: events<String>(onInput: onCity),
-            ),
-          ),
-        ]),
-        _Section('Commercials', [
-          _field(
-            labelText: 'Monthly rental (RM)',
-            field: input(
-              // Flutter used `TextInputType.number`; jaspr's typed input
-              // events deliver `num` (NaN when empty) for InputType.number,
-              // so the numeric keyboard is requested via inputmode instead
-              // and the raw text stays available for parsing.
-              type: InputType.text,
-              classes: 'input',
-              value: rental,
-              attributes: {'id': 'field-rental', 'inputmode': 'numeric'},
-              events: events<String>(onInput: onRental),
-            ),
-            error: showErrors && rentalMissing ? 'Required' : null,
-          ),
-          _field(
-            labelText: 'Floor area (sq ft)',
-            field: input(
-              type: InputType.text,
-              classes: 'input',
-              value: size,
-              attributes: {'id': 'field-size', 'inputmode': 'numeric'},
-              events: events<String>(onInput: onSize),
-            ),
-            error: showErrors && sizeMissing ? 'Required' : null,
-          ),
-        ]),
-      ]),
-      ActionButton(saveLabel, onClick: onSave, icon: 'save'),
-    ]);
-  }
-}
-
-class _Section extends StatelessComponent {
-  final String heading;
-  final List<Component> children;
-
-  const _Section(this.heading, this.children);
-
-  @override
-  Component build(BuildContext context) {
-    // The source groups the form into `.form-section` blocks (a titled card
-    // with a hint line), not a generic `.card`.
-    return div(classes: 'form-section', [
-      h2([Component.text(heading)]),
-      ...children,
-    ]);
-  }
-}
-
-Component _field({
-  required String labelText,
-  required Component field,
-  String? error,
-}) {
-  return div(classes: error != null ? 'field invalid' : 'field', [
-    span(classes: 'field__label', [Component.text(labelText)]),
-    field,
-    if (error != null) span(classes: 'err', [Component.text(error)]),
-  ]);
-}
-
-class _SavedCard extends StatelessComponent {
-  const _SavedCard();
-
-  @override
-  Component build(BuildContext context) {
-    return div(classes: 'card stack', [
-      span(classes: 'overline', [Component.text('Saved')]),
-      p(classes: 'body text-success', [
+          ],
+        ),
+    ]),
+    if (_error != null)
+      div(classes: 'alert alert--error', [Component.text(_error!)]),
+    if (_draftSaved)
+      div(classes: 'alert alert--success', [
         Component.text(
-          'Draft saved. Submit for verification from the detail page.',
+          'Draft saved. Reference: ${_savedId ?? '—'}. Your entries remain open for editing.',
         ),
       ]),
-      const ActionLink(
-        'Back to my properties',
-        href: '/owner/properties',
-        variant: 'secondary',
+    if (_status != null && _error != null)
+      div(classes: 'alert', [
+        Component.text('Current property status: $_status'),
+      ]),
+    if (_step == 0) _detailsStep(),
+    if (_step == 1) _rentalStep(),
+    if (_step == 2) _agentStep(),
+    if (_step == 3) _reviewStep(),
+    if (_step == 4) _confirmStep(),
+    div(classes: 'row row--between', [
+      button(
+        classes: 'btn btn--secondary',
+        disabled: _saving,
+        events: events(onClick: () => _save(partial: true)),
+        [Component.text(_saving ? 'Saving…' : 'Save progress')],
       ),
+      button(
+        classes: 'btn btn--secondary',
+        disabled: _step == 0 || _saving,
+        events: events(onClick: () => setState(() => _step--)),
+        [Component.text('Back')],
+      ),
+      button(
+        classes: 'btn btn--primary',
+        disabled: _saving,
+        events: events(onClick: _step == 4 ? _save : _continue),
+        [
+          Component.text(
+            _saving
+                ? 'Saving…'
+                : _step == 3
+                ? 'Continue to confirmation'
+                : _step == 4
+                ? 'Save as draft'
+                : 'Continue',
+          ),
+        ],
+      ),
+    ]),
+  ]);
+
+  Component _detailsStep() => _section('Tell us about your property', [
+    _field('name', 'Property title', required: true),
+    _typeCards(),
+    _field(
+      'size_sqft',
+      'Built-up area (sq ft)',
+      type: 'number',
+      required: true,
+    ),
+    _select(
+      'floor_description',
+      'Floor level',
+      propertyFloorOptions,
+      required: true,
+      onChanged: (v) => setState(() {
+        _v['floor_description'] = v;
+        _draftSaved = false;
+        _v['floor_level'] = switch (v) {
+          'Basement' => '-1',
+          'Ground floor' => '0',
+          'First floor' => '1',
+          'Second floor' => '2',
+          _ => '',
+        };
+      }),
+    ),
+    if (_v['floor_description'] == 'Third floor or above')
+      _field(
+        'floor_level',
+        'Specific floor number',
+        type: 'number',
+        required: true,
+      ),
+    _select(
+      'unit_position',
+      'Unit position',
+      propertyUnitPositions,
+      required: false,
+    ),
+    _field('frontage_ft', 'Shop frontage (ft)', type: 'number'),
+    _select(
+      'furnishing',
+      'Furnishing condition',
+      propertyFurnishingOptions,
+      required: true,
+    ),
+    _select(
+      'has_parking',
+      'Owner-declared parking',
+      propertyParkingOptions,
+      required: false,
+    ),
+    _field(
+      'description',
+      'Description',
+      textareaField: true,
+      hint:
+          'Describe the property condition, layout, facilities and other relevant information.',
+    ),
+  ]);
+
+  Component _rentalStep() => _section('Rental terms and location', [
+    _field(
+      'rental_price',
+      'Monthly rental (RM)',
+      type: 'number',
+      required: true,
+    ),
+    _select(
+      'lease_choice',
+      'Minimum rental period',
+      propertyLeaseOptions,
+      required: true,
+      value: _leaseChoice ?? '',
+      onChanged: (v) => setState(() {
+        _draftSaved = false;
+        _v['lease_choice'] = v;
+        _v['lease_duration_negotiable'] = v == 'Negotiable' ? 'yes' : 'no';
+        _v['lease_duration_months'] = switch (v) {
+          '6 months' => '6',
+          '1 year' => '12',
+          '2 years' => '24',
+          '3 years' => '36',
+          _ => _v['lease_duration_months'] ?? '',
+        };
+      }),
+    ),
+    if (_leaseChoice == 'Other duration')
+      _field(
+        'lease_duration_months',
+        'Minimum rental period (months)',
+        type: 'number',
+        required: true,
+      ),
+    _select(
+      'availability',
+      'Availability',
+      propertyAvailabilityOptions,
+      required: true,
+    ),
+    if (_v['availability'] == 'Available from a specific date')
+      _field(
+        'available_from',
+        'Available-from date',
+        type: 'date',
+        required: true,
+      ),
+    _field('rental_deposit_myr', 'Rental deposit (RM)', type: 'number'),
+    _select(
+      'landlord_fnb_permission',
+      'Landlord permission for F&B use',
+      landlordFnbPermissionOptions,
+      required: true,
+    ),
+    _pair('Rental per square foot', _psfLabel),
+    _select(
+      'tenure',
+      'Land tenure (optional)',
+      propertyTenureOptions,
+      required: false,
+    ),
+    _select(
+      'title_type',
+      'Property title type (optional)',
+      propertyTitleTypeOptions,
+      required: false,
+    ),
+    _field('address', 'Street address', required: true),
+    _select(
+      'state',
+      'State / federal territory',
+      MalaysiaLocations.stateNames,
+      required: true,
+      onChanged: (value) => setState(() {
+        _draftSaved = false;
+        _v['state'] = value;
+        _v['city'] = '';
+        _v['postcode'] = '';
+        _fieldErrors.remove('state');
+        _fieldErrors.remove('city');
+        _fieldErrors.remove('postcode');
+      }),
+    ),
+    _select(
+      'city',
+      'City / township',
+      MalaysiaLocations.citiesFor(_v['state']),
+      required: true,
+      onChanged: (value) => setState(() {
+        _draftSaved = false;
+        _v['city'] = value;
+        _v['postcode'] = '';
+        _fieldErrors.remove('city');
+        _fieldErrors.remove('postcode');
+      }),
+    ),
+    _select(
+      'postcode',
+      'Postcode',
+      MalaysiaLocations.postcodesFor(_v['state'], _v['city']),
+      required: true,
+    ),
+  ]);
+
+  Component _agentStep() => _section('Agent verification', [
+    _pair(
+      'Property owner',
+      'Provides property information, ownership or authorization proof, and requests an authorized agent inspection.',
+    ),
+    _pair(
+      'Assigned agent',
+      'Reviews the information, inspects observable facts, completes the existing 38-target 360° capture, previews the generated panorama and submits the inspection.',
+    ),
+    _pair(
+      'Administrator',
+      'Reviews the property, ownership evidence, agent inspection and panorama, then makes the final verification decision.',
+    ),
+  ]);
+
+  Component _reviewStep() => _section('Review information', [
+    _pair(
+      'Property characteristics',
+      '${_v['name'] ?? 'Not provided'} · ${_v['property_type'] ?? 'Not provided'} · ${_v['size_sqft'] ?? 'Not provided'} sq ft · ${_v['floor_description'] ?? 'Not provided'} · ${_v['unit_position'] ?? 'Not provided'} · frontage ${_v['frontage_ft']?.isNotEmpty == true ? '${_v['frontage_ft']} ft' : 'Not provided'} · ${_v['furnishing'] ?? 'Not provided'} · parking ${_v['has_parking'] ?? 'Not sure'} · ${_v['description']?.isNotEmpty == true ? _v['description'] : 'Not provided'}',
+    ),
+    _pair(
+      'Rental terms',
+      'RM ${_v['rental_price'] ?? '—'} / month · ${_v['size_sqft'] ?? '—'} sq ft · $_psfLabel · ${_leaseChoice ?? 'Not provided'} · ${_v['availability'] ?? 'Not provided'} · available from ${_v['available_from']?.isNotEmpty == true ? _v['available_from'] : 'Not applicable'} · deposit RM ${_v['rental_deposit_myr']?.isNotEmpty == true ? _v['rental_deposit_myr'] : 'Not provided'} · F&B permission ${_v['landlord_fnb_permission'] ?? 'Not provided'}',
+    ),
+    _pair(
+      'Ownership information',
+      '${_v['tenure'] ?? 'Not provided'} · ${_v['title_type'] ?? 'Not provided'} (owner declaration; legal ownership is verified from submitted evidence)',
+    ),
+    _pair(
+      'Address',
+      '${_v['address'] ?? 'Not provided'}, ${_v['city'] ?? 'Not provided'}, ${_v['state'] ?? 'Not provided'} ${_v['postcode'] ?? ''}',
+    ),
+    _pair(
+      'Agent verification',
+      'An assigned agent completes the physical inspection and panorama. This form does not submit or publish the listing.',
+    ),
+  ]);
+
+  Component _confirmStep() => _section('Save your property draft', [
+    _pair(
+      'Next step',
+      'Saving creates or updates the property draft. Ownership proof and agent requests continue through the existing Owner workflow in the SiteWise mobile app.',
+    ),
+    _pair(
+      'Rental summary',
+      'RM ${_v['rental_price'] ?? '—'} monthly · ${_v['size_sqft'] ?? '—'} sq ft · $_psfLabel',
+    ),
+  ]);
+
+  String get _psfLabel {
+    final rent = double.tryParse(_v['rental_price'] ?? '');
+    final area = double.tryParse(_v['size_sqft'] ?? '');
+    return rent != null && area != null && area > 0
+        ? 'RM ${(rent / area).toStringAsFixed(2)} / sq ft'
+        : 'Not available';
+  }
+
+  Component _section(String title, List<Component> children) =>
+      div(classes: 'card stack stack--md', [
+        h2([Component.text(title)]),
+        div(classes: 'grid grid--2', children),
+      ]);
+  Component _field(
+    String key,
+    String labelText, {
+    bool required = false,
+    String type = 'text',
+    bool textareaField = false,
+    String? hint,
+  }) {
+    final val = _v[key] ?? '';
+    final event = events<String>(onInput: (v) => _set(key, v));
+    final control = textareaField
+        ? textarea(
+            attributes: {'id': key, 'rows': '4', 'placeholder': hint ?? ''},
+            events: event,
+            [Component.text(val)],
+          )
+        : input(
+            type: switch (type) {
+              'number' => InputType.number,
+              'date' => InputType.date,
+              _ => InputType.text,
+            },
+            attributes: {
+              'id': key,
+              'value': val,
+              'placeholder': hint ?? '',
+              if (type == 'number') 'step': 'any',
+              if (required) 'required': '',
+            },
+            events: event,
+          );
+    return div(classes: 'stack stack--xs', [
+      label(htmlFor: key, [
+        Component.text(labelText),
+        if (required) Component.text(' *'),
+      ]),
+      control,
+      if (_fieldErrors[key] != null)
+        p(classes: 'text-danger small', [Component.text(_fieldErrors[key]!)]),
     ]);
   }
-}
 
-class _Loading extends StatelessComponent {
-  const _Loading();
+  Component _select(
+    String key,
+    String labelText,
+    List<String> options, {
+    bool required = false,
+    String? value,
+    void Function(String)? onChanged,
+  }) => div(classes: 'stack stack--xs', [
+    label(htmlFor: key, [
+      Component.text(labelText),
+      if (required) Component.text(' *'),
+    ]),
+    select(
+      attributes: {'id': key, if (required) 'required': ''},
+      events: events<List<String>>(
+        onInput: (v) {
+          final selected = v.isEmpty ? '' : v.first;
+          (onChanged ?? (x) => _set(key, x))(selected);
+        },
+      ),
+      [
+        option(value: '', [Component.text('Select…')]),
+        for (final opt in options)
+          option(
+            value: opt,
+            attributes: (value ?? _v[key]) == opt ? {'selected': ''} : null,
+            [Component.text(opt)],
+          ),
+      ],
+    ),
+    if (_fieldErrors[key] != null)
+      p(classes: 'text-danger small', [Component.text(_fieldErrors[key]!)]),
+  ]);
+  Component _pair(String k, String v) => div(classes: 'stack stack--xs', [
+    span(classes: 'text-muted', [Component.text(k)]),
+    span([Component.text(v)]),
+  ]);
 
-  @override
-  Component build(BuildContext context) {
-    return div(classes: 'card', [
-      p(classes: 'body muted', [Component.text('Loading…')]),
-    ]);
-  }
+  Component _typeCards() => div(classes: 'stack stack--xs', [
+    label([Component.text('Commercial property type *')]),
+    div(classes: 'grid grid--2', [
+      for (final type in commercialPropertyTypeLabels)
+        button(
+          classes: 'card card--interactive',
+          attributes: {
+            'type': 'button',
+            'aria-pressed': '${_v['property_type'] == type}',
+          },
+          events: events(onClick: () => _set('property_type', type)),
+          [Component.text(type)],
+        ),
+    ]),
+    if (_fieldErrors['property_type'] != null)
+      p(classes: 'text-danger small', [
+        Component.text(_fieldErrors['property_type']!),
+      ]),
+  ]);
+
+  Component _confirmation() => div(classes: 'card stack stack--md', [
+    h2([Component.text('Property draft saved')]),
+    p([
+      Component.text(
+        'Reference: ${_savedId ?? 'Unavailable'} · Status: ${_status ?? 'draft'}',
+      ),
+    ]),
+    p([
+      Component.text(
+        'The property has not been published. Continue to the existing ownership proof and agent request workflow in the SiteWise mobile app.',
+      ),
+    ]),
+    if (_addressStatus != null)
+      p(classes: 'small', [
+        Component.text(
+          'Address check: ${_addressStatus!.replaceAll('_', ' ')}',
+        ),
+      ]),
+    button(
+      classes: 'btn btn--secondary',
+      disabled: _checkingAddress,
+      events: events(onClick: _validateAddress),
+      [
+        Component.text(
+          _checkingAddress ? 'Checking address…' : 'Validate saved address',
+        ),
+      ],
+    ),
+    div(classes: 'row', [
+      a(
+        href: '/owner/property-detail?id=${_savedId ?? ''}',
+        classes: 'btn btn--primary',
+        [Component.text('View property details')],
+      ),
+      a(href: '/owner/properties', classes: 'btn btn--secondary', [
+        Component.text('Go to My Listings'),
+      ]),
+    ]),
+  ]);
+
+  Component _readOnly() => div(classes: 'card stack stack--md', [
+    h2([Component.text('Property details are read-only')]),
+    p([
+      Component.text(
+        'Current status: ${_status ?? 'under review'}. An administrator must reopen this listing through the authorized correction workflow before its submitted details can change.',
+      ),
+    ]),
+    _reviewStep(),
+    a(
+      href: '/owner/property-detail?id=${component.editingId ?? ''}',
+      classes: 'btn btn--secondary',
+      [Component.text('View property details')],
+    ),
+  ]);
 }

@@ -227,10 +227,7 @@ _AGENT_MISSING_FIELDS = {
     'size sqft': 'size_sqft',
     'a built-up area greater than zero': 'size_sqft',
 }
-_AGENT_ALLOWED_TYPES = {
-    'Shoplot', 'Retail Space', 'Ground Floor Shop', 'Corner Shoplot',
-    'Retail Unit', 'Kiosk', 'Commercial F&B Premise',
-}
+_AGENT_ALLOWED_TYPES = {'Shoplot', 'Retail Space'}
 
 
 def _agent_missing_detail_view(session: Session, property_id: int, agent) -> dict:

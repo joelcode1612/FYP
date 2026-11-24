@@ -190,11 +190,13 @@ class _Content extends StatelessComponent {
         href: '/owner/property-detail?id=${prop.id}',
         variant: 'secondary',
       ),
-      ActionLink(
+      if (prop.verification == VerificationStatus.draft ||
+          prop.verification == VerificationStatus.rejected)
+        ActionLink(
         'Edit',
         href: '/owner/add-property?id=${prop.id}',
         variant: 'secondary',
-      ),
+        ),
       if (prop.hasTour)
         ActionLink(
           '360° tour',

@@ -93,15 +93,33 @@ class ProviderListing {
   /// live. An approved-but-unpublished row is not shown as active.
   bool get isActive => stage == ProviderStage.approved && isPublished;
 
+  /// Statuses that lock an operational property for both Owner and Agent.
+  /// Approved is read-only even before publication; pending/under review are
+  /// locked while the administrator decides. `needs_correction` is carried as
+  /// `rejected`/`changes_requested` on the wire and remains editable.
+  bool get lockedForEditing =>
+      isPublished ||
+      status.toLowerCase() == 'approved' ||
+      status.toLowerCase() == 'pending' ||
+      status.toLowerCase() == 'under_review' ||
+      status.toLowerCase() == 'verified' ||
+      taskState?.toLowerCase() == 'awaiting_review' ||
+      taskState?.toLowerCase() == 'approved';
+
   /// Editing is a backend policy (records under review are locked); this
   /// mirrors it for honest UI hints only — the backend decides.
   bool get locallyEditable =>
-      stage == ProviderStage.draft || stage == ProviderStage.rejected;
+      !lockedForEditing &&
+      (stage == ProviderStage.draft ||
+          stage == ProviderStage.rejected ||
+          status.toLowerCase() == 'changes_requested' ||
+          taskState?.toLowerCase() == 'corrections');
 
-  /// Whether an edit action may be offered at all. An assigned row carries the
-  /// server's answer; a row without it (an owner listing, or an older payload)
-  /// falls back to the mirrored stage policy.
-  bool get canEdit => backendEditable ?? locallyEditable;
+  /// Single gate used by every screen, route and callback. A stale or
+  /// permissive `editable=true` can never override the terminal states above.
+  /// The server's denial also wins when it is explicitly returned.
+  bool get canEdit =>
+      !lockedForEditing && (backendEditable ?? true) && locallyEditable;
 
   String get displayTitle => title.trim().isNotEmpty ? title.trim() : 'Listing L-$id';
 

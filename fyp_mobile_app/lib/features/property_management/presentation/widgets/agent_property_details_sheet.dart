@@ -7,18 +7,30 @@ import 'package:fyp/core/theme/sitewise_theme.dart';
 /// Collects only the information still absent from an authorized Agent's draft.
 /// The backend owns the required-field list and validates every mutation.
 class AgentPropertyDetailsSheet extends StatefulWidget {
-  const AgentPropertyDetailsSheet({super.key, required this.propertyId});
+  const AgentPropertyDetailsSheet({
+    super.key,
+    required this.propertyId,
+    this.readOnly = false,
+  });
 
   final int propertyId;
+  final bool readOnly;
 
-  static Future<bool> open(BuildContext context, int propertyId) async {
+  static Future<bool> open(
+    BuildContext context,
+    int propertyId, {
+    bool readOnly = false,
+  }) async {
     return (await showModalBottomSheet<bool>(
           context: context,
           isScrollControlled: true,
           showDragHandle: true,
           useSafeArea: true,
           backgroundColor: Colors.white,
-          builder: (_) => AgentPropertyDetailsSheet(propertyId: propertyId),
+          builder: (_) => AgentPropertyDetailsSheet(
+            propertyId: propertyId,
+            readOnly: readOnly,
+          ),
         )) ??
         false;
   }
@@ -42,11 +54,6 @@ class _AgentPropertyDetailsSheetState extends State<AgentPropertyDetailsSheet> {
   static const _typeChoices = <String>[
     'Shoplot',
     'Retail Space',
-    'Ground Floor Shop',
-    'Corner Shoplot',
-    'Retail Unit',
-    'Kiosk',
-    'Commercial F&B Premise',
   ];
 
   final Map<String, TextEditingController> _values = {
@@ -91,7 +98,7 @@ class _AgentPropertyDetailsSheetState extends State<AgentPropertyDetailsSheet> {
       if (!mounted) return;
       setState(() {
         _missing = missing is List ? missing.whereType<String>().toList() : [];
-        _editable = raw['editable'] == true;
+        _editable = !widget.readOnly && raw['editable'] == true;
         if (fields is Map) {
           for (final entry in _values.entries) {
             final value = fields[entry.key];

@@ -67,8 +67,8 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
           // during server rendering (same pattern as the entrepreneur
           // detail pages).
           ? _NotFound(id: component.id)
-          : FutureBuilder<CommercialProperty?>(
-              future: AppLocator.properties.detail(component.id),
+          : FutureBuilder<OwnerListing>(
+              future: AppLocator.ownerListings.getListing(component.id),
               builder: (ctx, snap) {
                 if (snap.connectionState != ConnectionState.done) {
                   return const _Loading();
@@ -113,7 +113,7 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
 }
 
 class _DetailBody extends StatelessComponent {
-  final CommercialProperty property;
+  final OwnerListing property;
   final void Function() onSubmit;
 
   const _DetailBody({required this.property, required this.onSubmit});
@@ -126,21 +126,81 @@ class _DetailBody extends StatelessComponent {
     return div(classes: 'detail-grid', [
       div(classes: 'analysis', [
         section(classes: 'panel', [
-          h2([Component.text(prop.title)]),
+          h2([Component.text(prop.name)]),
           div(classes: 'chips', [
             StatusBadge(
-              prop.verification.label,
-              tone: toneForVerification(prop.verification),
+              prop.status.label,
+              tone: toneForVerification(prop.status),
               dot: true,
             ),
-            if (prop.hasTour) const StatusBadge('360° tour', tone: 'action'),
           ]),
           dl(classes: 'kv', [
-            _row('Address', '${prop.address}, ${prop.postcode} ${prop.city}'),
-            _row('State', prop.state),
-            _row('Monthly rent', prop.rentalDisplay),
-            _row('Floor area', '${prop.sizeSqft.toStringAsFixed(0)} sq ft'),
-            _row('Property type', prop.propertyType),
+            _row(
+              'Address',
+              [prop.address, prop.city, prop.state, prop.postcode]
+                  .whereType<String>()
+                  .where((v) => v.trim().isNotEmpty)
+                  .join(', '),
+            ),
+            _row('State', prop.state ?? 'Not provided'),
+            _row(
+              'Monthly rent',
+              prop.rentalPrice == null
+                  ? 'Not provided'
+                  : 'RM ${prop.rentalPrice!.toStringAsFixed(2)}',
+            ),
+            _row(
+              'Built-up area',
+              prop.sizeSqft == null
+                  ? 'Not provided'
+                  : '${prop.sizeSqft!.toStringAsFixed(0)} sq ft',
+            ),
+            _row(
+              'Rental per sq ft',
+              prop.psf == null
+                  ? 'Not available'
+                  : 'RM ${prop.psf!.toStringAsFixed(2)} / sq ft',
+            ),
+            _row('Property type', prop.propertyType ?? 'Not provided'),
+            _row('Floor level', prop.floorDescription ?? 'Not provided'),
+            _row('Unit position', prop.unitPosition ?? 'Not provided'),
+            _row(
+              'Shop frontage',
+              prop.frontageFt == null
+                  ? 'Not provided'
+                  : '${prop.frontageFt!.toStringAsFixed(1)} ft',
+            ),
+            _row('Furnishing', prop.furnishing ?? 'Not provided'),
+            _row(
+              'Owner-declared parking',
+              prop.hasParking == null
+                  ? 'Not sure'
+                  : prop.hasParking!
+                  ? 'Available'
+                  : 'Not available',
+            ),
+            _row(
+              'Minimum rental period',
+              prop.leaseDurationNegotiable == true
+                  ? 'Negotiable'
+                  : prop.leaseDurationMonths == null
+                  ? 'Not provided'
+                  : '${prop.leaseDurationMonths} months',
+            ),
+            _row('Availability', prop.availability ?? 'Not provided'),
+            _row('Available from', prop.availableFrom ?? 'Not applicable'),
+            _row(
+              'Rental deposit',
+              prop.rentalDepositMyr == null
+                  ? 'Not provided'
+                  : 'RM ${prop.rentalDepositMyr!.toStringAsFixed(2)}',
+            ),
+            _row('Land tenure', prop.tenure ?? 'Not provided'),
+            _row('Title type', prop.titleType ?? 'Not provided'),
+            _row(
+              'Landlord F&B permission (owner-declared)',
+              prop.landlordFnbPermission ?? 'Not provided',
+            ),
           ]),
         ]),
         section(classes: 'panel', [
@@ -148,7 +208,7 @@ class _DetailBody extends StatelessComponent {
           _MapPanel(
             latitude: prop.latitude,
             longitude: prop.longitude,
-            label: prop.title,
+            label: prop.name,
           ),
         ]),
       ]),
@@ -156,31 +216,25 @@ class _DetailBody extends StatelessComponent {
         section(classes: 'panel', [
           h2([Component.text('Manage listing')]),
           div(classes: 'actions-row', [
-            ActionLink(
-              'Edit listing',
-              href: '/owner/add-property?id=${prop.id}',
-              variant: 'secondary',
-              icon: 'edit',
-            ),
-            if (prop.hasTour)
+            if (prop.locallyEditable)
               ActionLink(
-                'Preview 360° tour',
-                href: '/owner/tour-preview?id=${prop.id}',
+                'Edit listing',
+                href: '/owner/add-property?id=${prop.id}',
                 variant: 'secondary',
-                icon: '360',
+                icon: 'edit',
               ),
           ]),
           // Draft AND rejected listings can (re)submit: the backend refuses
           // transitions that are not open with its own 409 sentence, which
           // renders verbatim in the notice above.
-          if (prop.verification == VerificationStatus.draft ||
-              prop.verification == VerificationStatus.rejected)
+          if (prop.status == VerificationStatus.draft ||
+              prop.status == VerificationStatus.rejected)
             ActionButton(
               'Submit for verification',
               onClick: onSubmit,
               icon: 'send',
             ),
-          if (prop.verification != VerificationStatus.draft)
+          if (prop.status != VerificationStatus.draft)
             p(classes: 'small', [
               Component.text(
                 'This listing is already in the verification process. An '
@@ -204,8 +258,8 @@ class _DetailBody extends StatelessComponent {
 /// through a plugin that has no web build. The pin coordinates stay visible
 /// so the panel still communicates what the map would show.
 class _MapPanel extends StatelessComponent {
-  final double latitude;
-  final double longitude;
+  final double? latitude;
+  final double? longitude;
   final String label;
 
   const _MapPanel({
@@ -223,8 +277,9 @@ class _MapPanel extends StatelessComponent {
       ]),
       p(classes: 'small', [
         Component.text(
-          '$label · ${latitude.toStringAsFixed(4)}, '
-          '${longitude.toStringAsFixed(4)}',
+          latitude == null || longitude == null
+              ? '$label · Coordinates not available'
+              : '$label · ${latitude!.toStringAsFixed(4)}, ${longitude!.toStringAsFixed(4)}',
         ),
       ]),
     ]);

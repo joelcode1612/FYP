@@ -307,7 +307,7 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
             h3([Component.text('Property overview')]),
             p(classes: 'small muted', [
               Component.text(
-                'Property-detail information submitted by the entrepreneur.',
+                'Owner-declared listing information alongside evidence reviewed for verification.',
               ),
             ]),
           ]),
@@ -323,6 +323,8 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
               _infoRow('Property ID', '${property.propertyId}'),
               _infoRow('Property type', _orNotProvided(property.propertyType)),
               _infoRow('Floor level', _orNotProvided(property.floorLevel)),
+              _infoRow('Unit position', _orNotProvided(property.unitPosition)),
+              _infoRow('Furnishing', _orNotProvided(property.furnishing)),
               _infoRow(
                 'Frontage',
                 property.frontageFt == null
@@ -332,6 +334,27 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
               _infoRow('Parking', _parkingLabel(property.hasParking)),
               _infoRow('F&B suitability', _fnbLabel(property.isFnbSuitable)),
               _infoRow('Availability', _orNotProvided(property.availability)),
+              _infoRow('Available from', _orNotProvided(property.availableFrom)),
+              _infoRow(
+                'Minimum rental period',
+                property.leaseDurationNegotiable == true
+                    ? 'Negotiable'
+                    : property.leaseDurationMonths == null
+                        ? 'Not provided'
+                        : '${property.leaseDurationMonths} months',
+              ),
+              _infoRow(
+                'Rental deposit',
+                property.rentalDepositMyr == null
+                    ? 'Not provided'
+                    : 'RM ${_num(property.rentalDepositMyr)}',
+              ),
+              _infoRow('Tenure', _orNotProvided(property.tenure)),
+              _infoRow('Title type', _orNotProvided(property.titleType)),
+              _infoRow(
+                'Landlord F&B permission (owner-declared)',
+                _orNotProvided(property.landlordFnbPermission),
+              ),
             ]),
           ]),
         ]),

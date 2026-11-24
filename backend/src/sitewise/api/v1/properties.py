@@ -1,11 +1,12 @@
 
 
 import logging
+from datetime import date
 from typing import Literal
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import text
 from sqlmodel import Session
 
@@ -39,11 +40,6 @@ logger = logging.getLogger("sitewise.properties")
 COMMERCIAL_PROPERTY_TYPES = (
     "Shoplot",
     "Retail Space",
-    "Ground Floor Shop",
-    "Corner Shoplot",
-    "Retail Unit",
-    "Kiosk",
-    "Commercial F&B Premise",
 )
 
 #: Legacy spellings still present in existing rows / older clients. They are
@@ -53,11 +49,11 @@ _LEGACY_PROPERTY_TYPES = {
     "shop lot": "Shoplot",
     "shophouse": "Shoplot",
     "shoplot / shophouse": "Shoplot",
-    "ground floor retail": "Ground Floor Shop",
-    "corner retail unit": "Corner Shoplot",
-    "shopping mall unit": "Retail Unit",
-    "commercial kiosk": "Kiosk",
-    "standalone commercial": "Retail Unit",
+    "ground floor retail": "Shoplot",
+    "corner retail unit": "Shoplot",
+    "shopping mall unit": "Retail Space",
+    "commercial kiosk": "Retail Space",
+    "standalone commercial": "Retail Space",
 }
 
 
@@ -102,19 +98,26 @@ class OwnerListingRequest(BaseModel):
     city: str = Field(min_length=2, max_length=80)
     state: str = Field(min_length=2, max_length=80)
     postcode: str = Field(pattern=r"^\d{5}$")
-    # Coordinates are optional: the wizard no longer geocodes, and the
-    # backend's enrichment/admin review resolves the location afterwards.
-    latitude: float | None = Field(default=None, ge=-90, le=90)
-    longitude: float | None = Field(default=None, ge=-180, le=180)
+    # Coordinates are deliberately server-owned; draft forms cannot replace
+    # the geocoded location when changing rental/property information.
     rental_price: float = Field(gt=0, le=10_000_000)
     size_sqft: float = Field(gt=0, le=10_000_000)
     property_type: str = Field(default="Shoplot", max_length=60)
     description: str | None = Field(default=None, max_length=4000)
     availability: str | None = Field(default=None, max_length=60)
-    floor_level: str | None = Field(default=None, max_length=60)
+    floor_level: float | None = Field(default=None, ge=-1, le=10000)
+    floor_description: str | None = Field(default=None, max_length=40)
     frontage_ft: float | None = Field(default=None, ge=0, le=10_000)
-    has_parking: bool = False
-    is_fnb_suitable: bool = False
+    furnishing: str | None = Field(default=None, max_length=40)
+    tenure: str | None = Field(default=None, max_length=20)
+    unit_position: str | None = Field(default=None, max_length=40)
+    has_parking: bool | None = None
+    lease_duration_months: int | None = Field(default=None, ge=1, le=360)
+    lease_duration_negotiable: bool | None = None
+    available_from: date | None = None
+    rental_deposit_myr: float | None = Field(default=None, ge=0, le=10_000_000)
+    title_type: str | None = Field(default=None, max_length=30)
+    landlord_fnb_permission: str | None = Field(default=None, max_length=30)
 
     @field_validator("name", "address", "city", "state")
     @classmethod
@@ -128,6 +131,41 @@ class OwnerListingRequest(BaseModel):
     @classmethod
     def _commercial_type(cls, value: str) -> str:
         return normalize_property_type(value)
+
+    @field_validator("availability")
+    @classmethod
+    def _valid_availability(cls, value: str | None) -> str | None:
+        return _choice(value, {"Ready to move in", "Available from a specific date", "By arrangement"}, "availability")
+
+    @field_validator("floor_description")
+    @classmethod
+    def _valid_floor_description(cls, value: str | None) -> str | None:
+        return _choice(value, {"Basement", "Ground floor", "First floor", "Second floor", "Third floor or above", "Multiple floors"}, "floor level")
+
+    @field_validator("furnishing")
+    @classmethod
+    def _valid_furnishing(cls, value: str | None) -> str | None:
+        return _choice(value, {"Bare unit", "Partially fitted", "Fully fitted", "Existing F&B fit-out", "Not sure"}, "furnishing condition")
+
+    @field_validator("tenure")
+    @classmethod
+    def _valid_tenure(cls, value: str | None) -> str | None:
+        return _choice(value, {"Freehold", "Leasehold", "Not sure"}, "land tenure")
+
+    @field_validator("unit_position")
+    @classmethod
+    def _valid_unit_position(cls, value: str | None) -> str | None:
+        return _choice(value, {"Intermediate unit", "Corner unit", "End lot", "Standalone unit", "Not sure"}, "unit position")
+
+    @field_validator("title_type")
+    @classmethod
+    def _valid_title_type(cls, value: str | None) -> str | None:
+        return _choice(value, {"Individual title", "Strata title", "Master title", "Not sure"}, "property title type")
+
+    @field_validator("landlord_fnb_permission")
+    @classmethod
+    def _valid_fnb_permission(cls, value: str | None) -> str | None:
+        return _choice(value, {"Yes", "No", "Subject to approval", "Not sure"}, "landlord F&B permission")
 
 
 def _run_enrichment(repo: FypPropertyRepository, property_row: dict) -> dict:
@@ -350,6 +388,15 @@ def _owner_field_changed(existing: object, new: object, column: str) -> bool:
     return str(existing or '').strip() != str(new or '').strip()
 
 
+def _choice(value: str | None, allowed: set[str], label: str) -> str | None:
+    if value is None or not value.strip():
+        return None
+    normalized = value.strip()
+    if normalized not in allowed:
+        raise ValueError(f"Choose a valid {label} option.")
+    return normalized
+
+
 class OwnerDraftRequest(BaseModel):
     """Partial Add-Property payload. Drafts may omit everything except a
     name (draft creation); updates may omit any field. Final submission
@@ -363,29 +410,79 @@ class OwnerDraftRequest(BaseModel):
     city: str | None = Field(default=None, max_length=80)
     state: str | None = Field(default=None, max_length=80)
     postcode: str | None = Field(default=None, pattern=r"^\d{5}$")
-    latitude: float | None = Field(default=None, ge=-90, le=90)
-    longitude: float | None = Field(default=None, ge=-180, le=180)
+    # Coordinates are server-generated and are not writable through drafts.
     rental_price: float | None = Field(default=None, gt=0, le=10_000_000)
     size_sqft: float | None = Field(default=None, gt=0, le=10_000_000)
     availability: str | None = Field(default=None, max_length=60)
-    floor_level: str | None = Field(default=None, max_length=60)
+    floor_level: float | None = Field(default=None, ge=-1, le=10000)
+    floor_description: str | None = Field(default=None, max_length=40)
     frontage_ft: float | None = Field(default=None, ge=0, le=10_000)
-    has_parking: bool = False
-    is_fnb_suitable: bool = False
+    furnishing: str | None = Field(default=None, max_length=40)
+    tenure: str | None = Field(default=None, max_length=20)
+    unit_position: str | None = Field(default=None, max_length=40)
+    has_parking: bool | None = None
+    lease_duration_months: int | None = Field(default=None, ge=1, le=360)
+    lease_duration_negotiable: bool | None = None
+    available_from: date | None = None
+    rental_deposit_myr: float | None = Field(default=None, ge=0, le=10_000_000)
+    title_type: str | None = Field(default=None, max_length=30)
+    landlord_fnb_permission: str | None = Field(default=None, max_length=30)
+
+    @field_validator("property_type")
+    @classmethod
+    def _commercial_type(cls, value: str | None) -> str | None:
+        return normalize_property_type(value) if value is not None else None
 
     @field_validator('floor_level')
     @classmethod
-    def _valid_floor_level(cls, value: str | None) -> str | None:
+    def _valid_floor_level(cls, value: float | None) -> float | None:
         from math import isfinite
-        if value is None or not value.strip():
+        if value is None:
             return None
-        try:
-            floor = float(value)
-        except ValueError as exc:
-            raise ValueError('Floor level must be a number.') from exc
-        if not isfinite(floor) or floor < 0 or floor > 10000:
-            raise ValueError('Floor level must be between 0 and 10,000.')
-        return value.strip()
+        if not isfinite(value) or value < -1 or value > 10000:
+            raise ValueError('Floor level must be between basement (-1) and 10,000.')
+        return value
+
+    @field_validator("availability")
+    @classmethod
+    def _valid_availability(cls, value: str | None) -> str | None:
+        return _choice(value, {"Ready to move in", "Available from a specific date", "By arrangement"}, "availability")
+
+    @field_validator("floor_description")
+    @classmethod
+    def _valid_floor_description(cls, value: str | None) -> str | None:
+        return _choice(value, {"Basement", "Ground floor", "First floor", "Second floor", "Third floor or above", "Multiple floors"}, "floor level")
+
+    @field_validator("furnishing")
+    @classmethod
+    def _valid_furnishing(cls, value: str | None) -> str | None:
+        return _choice(value, {"Bare unit", "Partially fitted", "Fully fitted", "Existing F&B fit-out", "Not sure"}, "furnishing condition")
+
+    @field_validator("tenure")
+    @classmethod
+    def _valid_tenure(cls, value: str | None) -> str | None:
+        return _choice(value, {"Freehold", "Leasehold", "Not sure"}, "land tenure")
+
+    @field_validator("unit_position")
+    @classmethod
+    def _valid_unit_position(cls, value: str | None) -> str | None:
+        return _choice(value, {"Intermediate unit", "Corner unit", "End lot", "Standalone unit", "Not sure"}, "unit position")
+
+    @field_validator("title_type")
+    @classmethod
+    def _valid_title_type(cls, value: str | None) -> str | None:
+        return _choice(value, {"Individual title", "Strata title", "Master title", "Not sure"}, "property title type")
+
+    @field_validator("landlord_fnb_permission")
+    @classmethod
+    def _valid_fnb_permission(cls, value: str | None) -> str | None:
+        return _choice(value, {"Yes", "No", "Subject to approval", "Not sure"}, "landlord F&B permission")
+
+    @model_validator(mode="after")
+    def _validate_rental_term_pair(self) -> "OwnerDraftRequest":
+        if self.lease_duration_negotiable is True and self.lease_duration_months is not None:
+            raise ValueError("A negotiable rental period cannot also set a fixed month count.")
+        return self
 
 
 def _agent_id_for(session: Session, user_id) -> int | None:
@@ -559,7 +656,6 @@ def update_own_listing(
         verification_row,
     )
 
-    _owner_write_only(current)
     repo = FypPropertyRepository(session)
     _owned_listing_or_error(repo, property_id, current)
     listing = _owned_listing_or_error(repo, property_id, current, for_update=True)
