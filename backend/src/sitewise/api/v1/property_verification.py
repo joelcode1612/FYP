@@ -32,6 +32,7 @@ from sitewise.services.agent_inspection_policy import (
     guard_enrichment_before_submit as _guard_enrichment_before_submit,
     require_ready_for_admin,
 )
+from sitewise.services import provider_scope
 from sitewise.services.property_enrichment_service import PropertyEnrichmentService
 from sitewise.services.property_verification_service import (
     AdminPropertyReviewService,
@@ -136,6 +137,9 @@ def submit_for_verification(
       unavailable rather than estimated, so the reviewer needs to know it is
       missing instead of assuming a low number.
     """
+    provider_scope.require_mutable_listing(
+        session, listing_id=property_id, role=current.role
+    )
     role = rbac.canonical_role(current.role)
     scope = payload.scope if payload is not None else "full"
     if role == rbac.ROLE_OWNER and scope == "ownership":
@@ -180,6 +184,9 @@ async def upload_document(
 ) -> dict:
     """Upload listing or ownership evidence. The storage key is generated
     server-side; the file never touches a public URL."""
+    provider_scope.require_mutable_listing(
+        session, listing_id=property_id, role=current.role
+    )
     if verification_type not in ("listing", "ownership"):
         raise HTTPException(
             status_code=422, detail="verification_type must be listing or ownership."

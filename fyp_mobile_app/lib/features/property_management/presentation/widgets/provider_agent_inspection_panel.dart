@@ -21,8 +21,10 @@ class ProviderAgentInspectionPanel extends StatefulWidget {
     this.onSaved,
     this.onEdited,
     this.inspectionDetail,
+    this.readOnly = false,
   });
   final ProviderListing? listing;
+  final bool readOnly;
   final int propertyId;
   final Future<void> Function()? onSaved;
   final VoidCallback? onEdited;
@@ -57,10 +59,13 @@ class _InspectionState extends State<ProviderAgentInspectionPanel>
   final floorArea = TextEditingController();
   final parkingNotes = TextEditingController();
   final accessNotes = TextEditingController();
-  bool get editable => status == 'accepted' || status == 'needs_correction';
+  bool get propertyLocked =>
+      widget.readOnly || (widget.listing?.lockedForEditing ?? false);
+  bool get editable =>
+      !propertyLocked && (status == 'accepted' || status == 'needs_correction');
   int get confirmed => checks.values.where((value) => value).length;
   bool get allConfirmed => confirmed == checks.length;
-  bool get canUseCapture => canCapture && !busy && !loading;
+  bool get canUseCapture => !propertyLocked && canCapture && !busy && !loading;
   // SITEWISE_AGENT_INSPECTION_SUMMARY_V1
   // The four backend-confirmed checks are authoritative; not an eight-item
   // synthetic checklist. A discrepancy is recorded without erasing notes.
@@ -175,7 +180,11 @@ class _InspectionState extends State<ProviderAgentInspectionPanel>
       error = null;
     });
     try {
-      await ProviderWorkspaceService.inspectionCommand(widget.propertyId, action, body ?? {});
+      await ProviderWorkspaceService.inspectionCommand(
+        widget.propertyId,
+        action,
+        body ?? {},
+      );
       await refresh();
     } catch (e) {
       if (mounted) {
@@ -283,7 +292,7 @@ class _InspectionState extends State<ProviderAgentInspectionPanel>
     padding: const EdgeInsets.only(bottom: 10),
     child: TextField(
       controller: controller,
-      enabled: !busy,
+      enabled: !busy && editable,
       maxLines: numeric ? 1 : 2,
       maxLength: numeric ? null : 2000,
       keyboardType: numeric
@@ -371,6 +380,7 @@ class _InspectionState extends State<ProviderAgentInspectionPanel>
     final savedChanges = await AgentPropertyDetailsSheet.open(
       context,
       widget.propertyId,
+      readOnly: propertyLocked,
     );
     if (!mounted) return;
     // The server calculates completeness from fresh canonical property data.
@@ -577,64 +587,76 @@ class _InspectionState extends State<ProviderAgentInspectionPanel>
                 ? (tourId) => openCapture(tourId: tourId)
                 : null,
             beforeSync: canUseCapture ? () async => canUseCapture : null,
-            onSynced: () => refresh(loadChecklist: false),
+            onSynced: propertyLocked
+                ? null
+                : () => refresh(loadChecklist: false),
+            readOnly: propertyLocked,
           ),
         ],
       ),
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: Container(
-          decoration: const BoxDecoration(
-            color: SitewiseM3.surface,
-            border: Border(top: BorderSide(color: SitewiseM3.line)),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: busy || loading || !editable
-                          ? null
-                          : () => save(),
-                      icon: const Icon(Icons.save_outlined, size: 18),
-                      label: const Text('Save draft'),
+      // A locked property has no save, submit or other mutation controls.
+      bottomNavigationBar: propertyLocked
+          ? null
+          : SafeArea(
+              top: false,
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: SitewiseM3.surface,
+                  border: Border(top: BorderSide(color: SitewiseM3.line)),
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: busy || loading || !editable
+                                ? null
+                                : () => save(),
+                            icon: const Icon(Icons.save_outlined, size: 18),
+                            label: const Text('Save draft'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: loading ? null : previewSummary,
+                            icon: const Icon(
+                              Icons.visibility_outlined,
+                              size: 18,
+                            ),
+                            label: const Text('Review'),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: loading ? null : previewSummary,
-                      icon: const Icon(Icons.visibility_outlined, size: 18),
-                      label: const Text('Review'),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed:
+                            busy ||
+                                loading ||
+                                !editable ||
+                                !allConfirmed ||
+                                missingPropertyDetails.isNotEmpty ||
+                                submissionBlockers.isNotEmpty ||
+                                panoramaId == null
+                            ? null
+                            : submitInspection,
+                        icon: const Icon(Icons.send_outlined, size: 18),
+                        label: const Text('Submit inspection to Admin'),
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed:
-                      busy ||
-                          loading ||
-                          !editable ||
-                          !allConfirmed ||
-                          missingPropertyDetails.isNotEmpty ||
-                          submissionBlockers.isNotEmpty ||
-                          panoramaId == null
-                      ? null
-                      : submitInspection,
-                  icon: const Icon(Icons.send_outlined, size: 18),
-                  label: const Text('Submit inspection to Admin'),
+                  ],
                 ),
               ),
-            ],
-          ),
-        ),
-      ),
+            ),
     );
   }
 
@@ -770,7 +792,7 @@ class _InspectionState extends State<ProviderAgentInspectionPanel>
                       contentPadding: EdgeInsets.zero,
                       activeColor: SitewiseColors.action,
                       value: entry.value,
-                      onChanged: busy
+                      onChanged: busy || !editable
                           ? null
                           : (value) {
                               widget.onEdited?.call();

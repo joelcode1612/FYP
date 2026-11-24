@@ -1,6 +1,5 @@
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
-import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import 'package:sitewise_jaspr_web/features/assessment/presentation/components/assessment_journey_stepper.dart';
@@ -55,10 +54,7 @@ class AssessmentWorkspacePage extends StatefulComponent {
   final String stage;
 
   /// Optional `?businessType=` selection carried from Recommendations.
-  ///
-  /// Used ONLY to seed a draft when the assessment has no saved requirements
-  /// yet. An existing saved requirement is never overwritten: the entrepreneur's
-  /// recorded answer stays authoritative.
+  /// Retained for route compatibility; the active M2 workflow owns declarations.
   final String businessType;
 
   const AssessmentWorkspacePage({
@@ -75,10 +71,6 @@ class AssessmentWorkspacePage extends StatefulComponent {
 class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   static const _api = AssessmentApi();
 
-  /// The two stages whose body lives inside the workspace. The other three
-  /// hand over to pages that already exist.
-  static const _inlineStages = {'business_requirements', 'location_evidence'};
-
   /// All five checkpoint keys — every stage opens its own independent
   /// checkpoint view (the mockup's step1…step5 sections), navigated by the
   /// journey stepper.
@@ -92,10 +84,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
 
   late Future<_Load> _future = _open(component.propertyId);
 
-  /// Which in-page stage panel is expanded. Seeded from `?stage=` in
-  /// [initState] so a shared link lands on the panel it names.
-  String? _openStage;
-
   /// Which checkpoint view is on screen — one of [_stageKeys]. Null falls
   /// back to the record's own current stage. Each checkpoint is independent:
   /// the workspace renders exactly one at a time.
@@ -103,48 +91,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
 
   /// Step 1's saved-property search query.
   String _propSearch = '';
-
-  /// Step 3's findings filter: `all` | `selected` | `unselected`.
-  String _evidenceFilter = 'all';
-
-  /// Step 3's findings search query.
-  String _evidenceSearch = '';
-
-  /// Step 3's findings the user marked for research (metric keys). Component
-  /// state only — the backend has no endpoint for these, so nothing here is
-  /// presented as persisted.
-  final Set<String> _bdjSelected = <String>{};
-
-  /// Step 3's expanded finding cards (metric keys).
-  final Set<String> _bdjExpanded = <String>{};
-
-  /// Step 3's objective decision: `confirm` | `refine` | `add`.
-  String _bdjDecision = 'confirm';
-
-  /// Step 3's follow-up note for refine / add decisions.
-  String _bdjDetails = '';
-
-  /// Step 3's decision-save status line; error renders in the warning tone.
-  String? _bdjStatus;
-  bool _bdjStatusError = false;
-
-  /// Step 4's approve / reject decision per candidate id (`approve` | `reject`).
-  final Map<String, String> _reviewDecisions = <String, String>{};
-
-  /// Step 4's reasoning-panel state per candidate id. Absent means "the group
-  /// default": high-relevance candidates open, the rest collapsed.
-  final Map<String, bool> _reviewExpanded = <String, bool>{};
-
-  /// Step 4's tab filter: `all` | `decided`.
-  String _reviewFilter = 'all';
-
-  /// Step 4's inline "add a question" form.
-  bool _reviewAddOpen = false;
-  String _reviewDraftQuestion = '';
-  String _reviewDraftContext = '';
-  String? _reviewAddError;
-  final List<({String question, String context})> _reviewCustom =
-      <({String question, String context})>[];
 
   /// The property whose assessment is open as an in-place detail view. Set by
   /// the listing's row actions so the workspace content swaps in WITHOUT a
@@ -166,10 +112,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   bool _busy = false;
   String? _notice;
   AssessmentFailure? _writeError;
-
-  /// The record the last successful read or write returned. Kept so the
-  /// requirements form can seed itself from what is actually persisted.
-  AssessmentRecord? _record;
 
   String? _readinessAssessmentId;
   Map<String, dynamic>? _workflowReadiness;
@@ -240,10 +182,11 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
       }
       setState(() {
         _workflowReadiness = result.value;
-        if (!result.ok)
+        if (!result.ok) {
           _readinessError =
               result.failure?.message ??
               'Assessment progress could not be verified.';
+        }
       });
       if (!result.ok) return;
       if (!afterWrite) return;
@@ -258,8 +201,9 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     await _refreshWorkflowReadiness(assessmentId, afterWrite: true);
     if (!mounted ||
         _readinessAssessmentId != assessmentId ||
-        _declarationEditing)
+        _declarationEditing) {
       return;
+    }
     final readinessM2 =
         (_workflowReadiness?['stage_2'] as Map?)?['m2_assessment_id'];
     if ((_workflowReadiness?['stage_3'] as Map?)?['enterable'] != true ||
@@ -326,17 +270,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   String? _m2LinkError;
   String _m2LinkFor = '';
   int _m2LinkRequest = 0;
-
-  /// Whether the collapsed location-scoring inputs are expanded.
-  bool _showScoringForm = false;
-
-  /// Stage 2 form values. Numbers stay as text so an emptied field is visibly
-  /// empty and invalid — never silently coerced to zero.
-  _RequirementsDraft? _draft;
-  Map<String, String> _draftErrors = const {};
-
-  Future<List<String>>? _typesFuture;
-  Future<ApiResult<EvidencePayload>>? _evidenceFuture;
 
   /// Step 5's assembled report read, loaded the first time the report
   /// checkpoint is opened, so browsing another stage never calls the report
@@ -427,7 +360,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   @override
   void initState() {
     super.initState();
-    if (_inlineStages.contains(component.stage)) _openStage = component.stage;
     if (_stageKeys.contains(component.stage)) _checkpoint = component.stage;
   }
 
@@ -449,20 +381,9 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
       return;
     }
     _invalidateWorkflowReadiness();
-    _openStage = _inlineStages.contains(component.stage)
-        ? component.stage
-        : null;
     _checkpoint = _stageKeys.contains(component.stage) ? component.stage : null;
-    _record = null;
-    _draft = null;
-    _draftErrors = const {};
-    _typesFuture = null;
-    _evidenceFuture = null;
     _reportFuture = null;
-    _resetReview();
     _propSearch = '';
-    _evidenceFilter = 'all';
-    _evidenceSearch = '';
     _notice = null;
     _writeError = null;
     // Entering or leaving the listing view: its reads and dialog state are
@@ -510,7 +431,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     _invalidateWorkflowReadiness();
     _notice = null;
     _writeError = null;
-    _draft = null;
     _reportFuture = null;
     _future = _open(propertyId);
   });
@@ -524,17 +444,8 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     _openPropertyId = propertyId;
     _reportRecord = null;
     _checkpoint = _stageKeys.contains(stage) ? stage : null;
-    _openStage = _inlineStages.contains(stage) ? stage : null;
-    _record = null;
-    _draft = null;
-    _draftErrors = const {};
-    _typesFuture = null;
-    _evidenceFuture = null;
     _reportFuture = null;
-    _resetReview();
     _propSearch = '';
-    _evidenceFilter = 'all';
-    _evidenceSearch = '';
     _notice = null;
     _writeError = null;
     _busy = false;
@@ -548,18 +459,9 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     _invalidateWorkflowReadiness();
     _openPropertyId = null;
     _checkpoint = null;
-    _openStage = null;
-    _record = null;
     _reportRecord = null;
-    _draft = null;
-    _draftErrors = const {};
-    _typesFuture = null;
-    _evidenceFuture = null;
     _reportFuture = null;
-    _resetReview();
     _propSearch = '';
-    _evidenceFilter = 'all';
-    _evidenceSearch = '';
     _notice = null;
     _writeError = null;
     _busy = false;
@@ -585,37 +487,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     _notice = null;
     _writeError = null;
   });
-
-  /// Step 4's per-session review state (decisions, expanded reasoning, the
-  /// add-question draft) is dropped whenever the open record changes.
-  void _resetReview() {
-    _reviewDecisions.clear();
-    _reviewExpanded.clear();
-    _reviewFilter = 'all';
-    _reviewAddOpen = false;
-    _reviewDraftQuestion = '';
-    _reviewDraftContext = '';
-    _reviewAddError = null;
-    _reviewCustom.clear();
-  }
-
-  Future<List<String>> _types() {
-    final existing = _typesFuture;
-    if (existing != null) return existing;
-    // A failed lookup yields no options, and the form then says the list is
-    // unavailable rather than offering values that may match nothing.
-    final future = _api.propertyTypes().then(
-      (result) => result.ok ? result.value! : const <String>[],
-    );
-    _typesFuture = future;
-    return future;
-  }
-
-  Future<ApiResult<EvidencePayload>> _evidence(String propertyId) =>
-      _evidenceFuture ??= _api.evidence(propertyId);
-
-  void _retryEvidence(String propertyId) =>
-      setState(() => _evidenceFuture = _api.evidence(propertyId));
 
   /// Step 5's report read, memoised per assessment so switching checkpoints
   /// back and forth does not re-assemble the document on every tap.
@@ -741,7 +612,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     final started = result.value!;
     setState(() {
       _busy = false;
-      _record = started.assessment;
       _future = Future.value(_Started(started.assessment));
       _notice = started.created
           ? 'Assessment started. Stage 1 is recorded as complete because '
@@ -751,117 +621,8 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     });
   }
 
-  /// Asks the backend to record a stage as complete. The server refuses with
-  /// 409 when the stage's own precondition is unmet, and that refusal is
-  /// shown verbatim — progress is never marked up locally.
-  Future<void> _completeStage(AssessmentRecord record, String stageKey) async {
-    if (_busy) return;
-    setState(() {
-      _busy = true;
-      _writeError = null;
-      _notice = null;
-    });
-    final result = await _api.completeStage(record.assessmentId, stageKey);
-    if (!mounted) return;
-    if (!result.ok) {
-      setState(() {
-        _busy = false;
-        _writeError = result.failure;
-      });
-      return;
-    }
-    final updated = result.value!;
-    final stage = updated.stageByKey(stageKey);
-    setState(() {
-      _busy = false;
-      _record = updated;
-      _future = Future.value(_Started(updated));
-      _notice = stage == null
-          ? 'The assessment was updated.'
-          : 'Stage ${stage.number} — ${stage.title} is now recorded as '
-                'complete. ${updated.completedStages} of '
-                '${updated.totalStages} stages done.';
-    });
-  }
-
-  /// Validates locally (the same rules the server enforces, so the message
-  /// arrives before a round trip), then asks the backend to confirm stage 2.
-  ///
-  /// The requirements themselves are no longer written from the web workspace:
-  /// stage 2 is the M2 questionnaire preview and nothing here persists
-  /// answers. Completion is decided by the backend — the PATCH refuses with
-  /// 409 when the stage's own precondition is not met, so the client cannot
-  /// fake progress.
-  Future<void> _saveRequirements(AssessmentRecord record) async {
-    if (_busy) return;
-    final draft = _draft;
-    if (draft == null) return;
-
-    final errors = draft.validate();
-    if (errors.isNotEmpty) {
-      setState(() {
-        _draftErrors = errors;
-        _writeError = null;
-        _notice = null;
-      });
-      return;
-    }
-
-    setState(() {
-      _busy = true;
-      _draftErrors = const {};
-      _writeError = null;
-      _notice = null;
-    });
-    final result = await _api.completeStage(
-      record.assessmentId,
-      'business_requirements',
-    );
-    if (!mounted) return;
-    if (!result.ok) {
-      // Values preserved: the entrepreneur re-reads the server's objection
-      // against what they actually typed, not an emptied form.
-      setState(() {
-        _busy = false;
-        _writeError = result.failure;
-      });
-      return;
-    }
-    final updated = result.value!;
-    _applyToSharedPreferences(updated);
-    setState(() {
-      _busy = false;
-      _record = updated;
-      _future = Future.value(_Started(updated));
-      _notice =
-          'Stage 2 — Business preferences is recorded as complete. '
-          '${updated.completedStages} of ${updated.totalStages} stages done.';
-    });
-  }
-
-  /// Points the shared [BusinessPreferences] at the values just persisted, so
-  /// the recommendation engine reads the same numbers the assessment stores.
-  /// The mapping is [businessPreferencesFrom] — the same one the preferences
-  /// page uses — so the two surfaces cannot drift into separate vocabularies.
-  void _applyToSharedPreferences(AssessmentRecord record) {
-    final value = businessPreferencesFrom(record.requirements);
-    if (value == null) return;
-    context
-        .read(entrepreneurNotifierProvider.notifier)
-        .updatePreferences(value);
-    AppLocator.persistPreferences(value);
-  }
-
-  void _toggleStage(String key) => setState(() {
-    _openStage = _openStage == key ? null : key;
-    _notice = null;
-    _writeError = null;
-    if (_openStage == 'business_requirements') _seedDraft();
-  });
-
   /// Opens one independent checkpoint view. The journey stepper navigates
-  /// between the five checkpoints; the workspace renders exactly one at a
-  /// time, and an inline stage's panel expands with its checkpoint.
+  /// between the five checkpoints; the workspace renders exactly one at a time.
   void _openCheckpoint(String key) => setState(() {
     _checkpoint = key;
     if (key == 'assessment_report') {
@@ -870,64 +631,7 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     }
     _notice = null;
     _writeError = null;
-    if (_inlineStages.contains(key)) {
-      _openStage = key;
-      if (key == 'business_requirements') _seedDraft();
-    } else {
-      _openStage = null;
-    }
   });
-
-  /// Builds the form from the persisted requirements, or from the shared
-  /// preferences when the assessment has none yet — so the first save starts
-  /// from the criteria the ranking already uses.
-  void _seedDraft() {
-    if (_draft != null) return;
-    final stored = _record?.requirements;
-    if (stored != null) {
-      _draft = _RequirementsDraft(
-        businessType: stored['business_type'] as String? ?? '',
-        propertyType: stored['property_type'] as String? ?? '',
-        targetMarket: _firstText(stored['requirements']),
-        seatingModel: stored['seating_model'] as String? ?? '',
-        minBudget: _text(stored['min_budget_rm']),
-        maxBudget: _text(stored['max_budget_rm']),
-        minSize: _text(stored['min_size_sqft']),
-        maxSize: _text(stored['max_size_sqft']),
-        preferredAreas: _textList(stored['preferred_areas']),
-      );
-      return;
-    }
-    final prefs = AppLocator.preferences;
-    // The recommendation the entrepreneur arrived from carries their own
-    // business type; prefer it over the shared preference, but never over an
-    // already-saved assessment requirement (handled above).
-    final carried = component.businessType.trim();
-    _draft = _RequirementsDraft(
-      businessType: carried.isNotEmpty ? carried : prefs.businessType,
-      propertyType: prefs.propertyType,
-      targetMarket: prefs.requirements.isEmpty ? '' : prefs.requirements.first,
-      seatingModel: prefs.seatingModel,
-      minBudget: _text(prefs.minBudgetRm),
-      maxBudget: _text(prefs.maxBudgetRm),
-      minSize: _text(prefs.minSizeSqft),
-      maxSize: prefs.maxSizeSqft.isFinite ? _text(prefs.maxSizeSqft) : '',
-      preferredAreas: prefs.preferredAreas,
-    );
-  }
-
-  static String _text(Object? value) =>
-      value is num ? value.toStringAsFixed(0) : '';
-
-  static List<String> _textList(Object? value) => [
-    if (value is List)
-      for (final item in value) '$item',
-  ];
-
-  static String _firstText(Object? value) {
-    final items = _textList(value);
-    return items.isEmpty ? '' : items.first;
-  }
 
   // ----------------------------------------------------------------- listing
 
@@ -2195,9 +1899,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   // ------------------------------------------------------------- workspace UI
 
   Component _workspace(AssessmentRecord record) {
-    // Cached for the requirements form's seed. Assigning during build is safe:
-    // it is a plain field write and never schedules a rebuild.
-    _record = record;
     if (_readinessAssessmentId != record.assessmentId) {
       if (_readinessAssessmentId != null) _checkpoint = null;
       _readinessAssessmentId = record.assessmentId;
@@ -2333,43 +2034,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
       ]),
     );
   }
-
-  // ------------------------------------------------- checkpoint step layouts
-
-  /// What each step is for, keyed by the backend's stage keys so the wording
-  /// and the stages can never drift apart.
-  static String _stageDescription(String stageKey) => switch (stageKey) {
-    'select_property' =>
-      'This assessment is bound to its property. Review it, then move on to '
-          'your business preferences.',
-    'business_requirements' =>
-      'Record your M2 business declaration and research priorities. '
-          'Your answers are saved to the linked M2 assessment.',
-    'location_evidence' =>
-      'Review your M2 declaration and research goals; catalogue evidence is '
-          'not used as BDJ findings.',
-    'ai_explanation' =>
-      'Review source-linked Direct-QG candidates and recorded owner decisions. '
-          'Owner predictions are not measured customer demand.',
-    'assessment_report' =>
-      'Assemble and review the full suitability report for this assessment.',
-    _ => 'Continue this assessment to move closer to your report.',
-  };
-
-  /// The reference's per-step heading: icon tile, kicker, title, description.
-  Component _stepHeading({
-    required String kicker,
-    required String title,
-    required String description,
-    String icon = 'flag',
-  }) => div(classes: 'asw-stephead', [
-    div(classes: 'asw-stephead__icon', [Icon(icon, size: 'sm')]),
-    div(classes: 'asw-stephead__copy', [
-      p(classes: 'asw-stephead__kicker', [Component.text(kicker)]),
-      h2(classes: 'asw-stephead__title', [Component.text(title)]),
-      p(classes: 'asw-stephead__desc', [Component.text(description)]),
-    ]),
-  ]);
 
   // ------------------------------------------------------------ step 1: saved
 
@@ -2536,50 +2200,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     _m2QuestionnaireSection(record),
   ];
 
-  /// The five-question recommender, demoted from a second questionnaire to a
-  /// collapsed scoring section.
-  ///
-  /// It cannot simply be deleted: `requirements_saved_at` gates stage 2, and the
-  /// stored payload is what the stage reads back. Presenting it side by side with
-  /// the M2V1 instrument made it look like a second business declaration the
-  /// entrepreneur also had to complete. It is now closed by default, labelled for
-  /// what it is, and opened only on request.
-  Component _locationScoringSection(
-    AssessmentRecord record,
-  ) => section(classes: 'panel asw-inline', [
-    _panelHead(icon: 'tune', title: 'Location-scoring preferences'),
-    div(classes: 'panel__body stack stack--md', [
-      p(classes: 'small asw-muted', [
-        Component.text(
-          record.requirements == null
-              ? 'Not set yet. These answers feed the property recommendation '
-                    'score. They are separate from the business declaration '
-                    'above and are not M2 answers.'
-              : 'Saved. These answers feed the property recommendation score. '
-                    'They are separate from the business declaration above and '
-                    'are not M2 answers.',
-        ),
-      ]),
-      ActionButton(
-        _showScoringForm
-            ? 'Hide location preferences'
-            : 'Edit location preferences',
-        variant: 'secondary',
-        onClick: () => setState(() => _showScoringForm = !_showScoringForm),
-      ),
-      if (_showScoringForm) ...[
-        div(classes: 'asw-stepbar', [
-          h2(classes: 'asw-stepbar__title', [
-            Component.text('Property scoring inputs'),
-          ]),
-        ]),
-        record.requirementsVersion == 1
-            ? _legacyRequirementsPanel(record)
-            : _questionnairePanel(record),
-      ],
-    ]),
-  ]);
-
   /// CP-10 DEF-03 / DEF-11: the M2V1 research questionnaire (11 items) inside
   /// Step 2. This is the authoritative business-declaration instrument; every
   /// value still comes from `/api/v1/m2/...` through [M2WorkflowPanel], so no
@@ -2717,16 +2337,18 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     });
     try {
       final link = await AppLocator.m2.linkForMarketplace(assessmentId);
-      if (!mounted || _m2LinkFor != assessmentId || request != _m2LinkRequest)
+      if (!mounted || _m2LinkFor != assessmentId || request != _m2LinkRequest) {
         return;
+      }
       final id = link?['m2_assessment_id'] as String? ?? '';
       setState(() {
         _m2LinkId = id;
         _m2LinkStatus = id.isEmpty ? 'unlinked' : 'linked';
       });
     } catch (error) {
-      if (!mounted || _m2LinkFor != assessmentId || request != _m2LinkRequest)
+      if (!mounted || _m2LinkFor != assessmentId || request != _m2LinkRequest) {
         return;
+      }
       setState(() {
         _m2LinkStatus = 'error';
         _m2LinkError = _m2FailureText(error);
@@ -2743,8 +2365,9 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     });
     try {
       final link = await AppLocator.m2.initializeForMarketplace(assessmentId);
-      if (!mounted || _m2LinkFor != assessmentId || request != _m2LinkRequest)
+      if (!mounted || _m2LinkFor != assessmentId || request != _m2LinkRequest) {
         return;
+      }
       final id = link['m2_assessment_id'] as String? ?? '';
       if (id.isEmpty) {
         setState(() {
@@ -2758,8 +2381,9 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
         _m2LinkStatus = 'linked';
       });
     } catch (error) {
-      if (!mounted || _m2LinkFor != assessmentId || request != _m2LinkRequest)
+      if (!mounted || _m2LinkFor != assessmentId || request != _m2LinkRequest) {
         return;
+      }
       setState(() {
         _m2LinkStatus = 'error';
         _m2LinkError = _m2FailureText(error);
@@ -2773,1133 +2397,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
       return error.backendCode ?? error.userMessage;
     }
     return 'The M2 service could not be reached.';
-  }
-
-  // --------------------------------------------------- step 3: findings layout
-
-  /// Stage 3 remains in the persisted five-stage contract for compatibility,
-  /// but the legacy property/location-evidence questionnaire is no longer
-  /// rendered here. BDJ findings and research goals have their own governed
-  /// M2/Direct-QG workflow; this screen must not substitute catalogue metrics
-  /// for verified BDJ findings.
-  List<Component> _findingsStep(
-    AssessmentRecord record,
-    AssessmentStage stage,
-  ) => [
-    div(classes: 'asw-stage3', [
-      _stepHeading(
-        kicker: 'Step 3 of 5',
-        title: 'Business review and research goals',
-        icon: 'fact_check',
-        description:
-            'Use your saved M2 declaration and its governed business review '
-            'to decide what needs customer research.',
-      ),
-      section(classes: 'panel asw-inline', [
-        div(classes: 'panel__body stack stack--md', [
-          p(classes: 'body', [
-            Component.text(
-              'Business findings and research objectives belong to the governed '
-              'M2 workflow. Research-question candidates must be reviewed '
-              'through their authorized process.',
-            ),
-          ]),
-          ActionButton(
-            'Return to M2 questionnaire',
-            variant: 'secondary',
-            onClick: () => _openCheckpoint('business_requirements'),
-          ),
-          ActionButton(
-            'Continue to question review',
-            onClick: () => _openCheckpoint('ai_explanation'),
-          ),
-        ]),
-      ]),
-    ]),
-  ];
-
-  /// Left panel of step 3: the measured CATALOGUE evidence for the property.
-  /// UI-05: this is property evidence, NOT an M2 BDJ finding. Real BDJ findings
-  /// live in `m2_bdj_findings` and are rendered by M2WorkflowPanel.
-  /// Each card is a selectable evidence metric — a checkbox marks it for
-  /// research, the expander reveals its origin and information status. Values
-  /// are the backend's own.
-  Component _evidenceFindingsPanel(
-    AssessmentRecord record,
-  ) => FutureBuilder<ApiResult<EvidencePayload>>(
-    future: _evidence(record.propertyId),
-    builder: (context, snapshot) {
-      if (snapshot.connectionState != ConnectionState.done) {
-        return section(classes: 'panel asw-inline', [
-          _panelHead(icon: 'layers', title: 'Business findings'),
-          div(classes: 'panel__body stack stack--md', [
-            Skeleton(variant: 'row'),
-            Skeleton(variant: 'row', count: 4),
-          ]),
-        ]);
-      }
-      final result = snapshot.data;
-      final payload = result?.ok == true ? result!.value : null;
-      if (payload == null || !payload.available) {
-        return section(classes: 'panel asw-inline', [
-          _panelHead(icon: 'layers', title: 'Business findings'),
-          div(classes: 'panel__body', [
-            div(classes: 'bdj-empty', [
-              p(classes: 'bdj-empty__title', [
-                Component.text('Evidence unavailable'),
-              ]),
-              p(classes: 'bdj-empty__body', [
-                Component.text(
-                  payload?.reason ??
-                      result?.failure?.message ??
-                      'The analysis pipeline has no evidence row for this '
-                          'property yet.',
-                ),
-              ]),
-              ActionButton(
-                'Try again',
-                variant: 'secondary',
-                onClick: () => _retryEvidence(record.propertyId),
-              ),
-            ]),
-          ]),
-        ]);
-      }
-
-      final metrics = [
-        for (final group in payload.groups)
-          for (final metric in group.metrics) (group: group, metric: metric),
-      ];
-      final selectedCount = metrics
-          .where((m) => _bdjSelected.contains(m.metric.key))
-          .length;
-      final needle = _evidenceSearch.trim().toLowerCase();
-      final visible = metrics.where((entry) {
-        final matchesFilter = switch (_evidenceFilter) {
-          'selected' => _bdjSelected.contains(entry.metric.key),
-          'unselected' => !_bdjSelected.contains(entry.metric.key),
-          _ => true,
-        };
-        if (!matchesFilter) return false;
-        if (needle.isEmpty) return true;
-        return '${entry.metric.label} ${entry.metric.key} '
-                '${entry.group.label}'
-            .toLowerCase()
-            .contains(needle);
-      }).toList();
-
-      return section(classes: 'panel asw-inline', [
-        _panelHead(
-          icon: 'layers',
-          title: 'Business findings (${metrics.length})',
-        ),
-        div(classes: 'panel__body stack stack--md', [
-          p(classes: 'bdj-desc', [
-            Component.text(
-              'These are the measured business findings for this property. Select the ones you want to explore further.',
-            ),
-          ]),
-          div(classes: 'asw-findtools', [
-            div(classes: 'tabs', [
-              _evidenceFilterTab('All (${metrics.length})', 'all'),
-              _evidenceFilterTab('Selected ($selectedCount)', 'selected'),
-              _evidenceFilterTab(
-                'Not selected (${metrics.length - selectedCount})',
-                'unselected',
-              ),
-            ]),
-            div(classes: 'asw-findsearch', [
-              SearchInput(
-                label: 'Search findings',
-                placeholder: 'Search findings…',
-                ariaLabel: 'Search findings',
-                onInput: (value) => setState(() => _evidenceSearch = value),
-              ),
-            ]),
-          ]),
-          if (visible.isEmpty)
-            div(classes: 'bdj-empty', [
-              Component.text(
-                'No findings match this view. Try another filter or search.',
-              ),
-            ])
-          else
-            div(classes: 'bdj-finding-list', [
-              for (final entry in visible)
-                _bdjFindingCard(entry.group, entry.metric),
-            ]),
-        ]),
-      ]);
-    },
-  );
-
-  /// One BDJ finding card: a checkbox to mark the metric for research, the
-  /// metric key as the id chip, and an expander with the metric's origin
-  /// group, information status and any recorded note.
-  Component _bdjFindingCard(EvidenceGroup group, EvidenceMetric metric) {
-    final key = metric.key;
-    final selected = _bdjSelected.contains(key);
-    final expanded = _bdjExpanded.contains(key);
-    final detail = (metric.note != null && metric.note!.isNotEmpty)
-        ? metric.note!
-        : metric.isAvailable
-        ? 'Measured value: ${_metricValue(metric)}.'
-        : 'No measured value has been recorded for this metric yet.';
-    return div(classes: 'bdj-finding${selected ? ' is-selected' : ''}', [
-      div(classes: 'bdj-finding__top', [
-        input(
-          classes: 'bdj-find-check',
-          attributes: {
-            'type': 'checkbox',
-            'aria-label': 'Select ${metric.label} for research',
-            // Jaspr's DOM renderer reflects `checked` only from the literal
-            // 'true' — an empty string renders the control unchecked.
-            if (selected) 'checked': 'true',
-          },
-          events: events(
-            onClick: () => setState(() {
-              selected ? _bdjSelected.remove(key) : _bdjSelected.add(key);
-            }),
-          ),
-        ),
-        div(classes: 'bdj-finding__body', [
-          div(classes: 'bdj-finding__heading', [
-            span(classes: 'bdj-id', [Component.text(key)]),
-            p(classes: 'bdj-finding__title', [Component.text(metric.label)]),
-            span(classes: 'bdj-state${selected ? ' selected' : ''}', [
-              Component.text(
-                selected ? 'Selected for research' : 'Not selected',
-              ),
-            ]),
-          ]),
-          p([Component.text(detail)]),
-        ]),
-        button(
-          classes: 'bdj-expand',
-          attributes: {
-            'type': 'button',
-            'aria-expanded': expanded ? 'true' : 'false',
-            'aria-label':
-                '${expanded ? 'Hide' : 'Show'} details for ${metric.label}',
-          },
-          events: events(
-            onClick: () => setState(() {
-              expanded ? _bdjExpanded.remove(key) : _bdjExpanded.add(key);
-            }),
-          ),
-          [Icon('expand_more', size: 'sm')],
-        ),
-      ]),
-      if (expanded)
-        div(classes: 'bdj-detail', [
-          div(classes: 'bdj-meta', [
-            div(classes: 'bdj-meta-item', [
-              div(classes: 'bdj-meta-label', [Component.text('Based on')]),
-              div(classes: 'bdj-meta-value', [Component.text(group.label)]),
-            ]),
-            div(classes: 'bdj-meta-item', [
-              div(classes: 'bdj-meta-label', [
-                Component.text('Information status'),
-              ]),
-              div(classes: 'bdj-meta-value', [
-                Component.text(
-                  metric.isAvailable
-                      ? 'Measured — ${_metricValue(metric)}'
-                      : 'Not measured',
-                ),
-              ]),
-            ]),
-          ]),
-          if (metric.note != null && metric.note!.isNotEmpty)
-            div(classes: 'bdj-consideration', [
-              strong([Component.text('Worth considering')]),
-              Component.text(metric.note!),
-            ]),
-          div(classes: 'bdj-action-row', [
-            button(
-              classes: 'bdj-action primary',
-              attributes: {'type': 'button'},
-              events: events(
-                onClick: () => setState(() => _bdjSelected.add(key)),
-              ),
-              [Component.text('✓ Include in research')],
-            ),
-            button(
-              classes: 'bdj-action',
-              attributes: {'type': 'button'},
-              events: events(
-                onClick: () => setState(() => _bdjSelected.remove(key)),
-              ),
-              [Component.text('Leave out')],
-            ),
-          ]),
-        ]),
-    ]);
-  }
-
-  Component _evidenceFilterTab(String label, String value) => button(
-    classes: 'tab${_evidenceFilter == value ? ' is-active' : ''}',
-    attributes: {
-      'type': 'button',
-      'aria-pressed': _evidenceFilter == value ? 'true' : 'false',
-    },
-    events: events(onClick: () => setState(() => _evidenceFilter = value)),
-    [Component.text(label)],
-  );
-
-  /// Right panel of step 3 (BDJ design): the proposed research objective,
-  /// derived from the findings marked for research, plus the decision to
-  /// record. Confirm saves through the existing stage endpoint; refine / add
-  /// notes are kept for the session only — the backend has no endpoint for
-  /// them, so nothing here claims server persistence.
-  Component _stageDecisionPanel(
-    AssessmentRecord record,
-    AssessmentStage stage,
-  ) => FutureBuilder<ApiResult<EvidencePayload>>(
-    future: _evidence(record.propertyId),
-    builder: (context, snapshot) {
-      final result = snapshot.connectionState == ConnectionState.done
-          ? snapshot.data
-          : null;
-      final payload = result?.ok == true ? result!.value : null;
-      final canDecide = !stage.isComplete && !stage.isUnavailable && !_busy;
-      final hasFollowUp = _bdjDecision == 'refine' || _bdjDecision == 'add';
-      final statusText =
-          _bdjStatus ??
-          (stage.isComplete
-              ? 'Recorded as complete.'
-              : stage.isUnavailable
-              ? 'This stage cannot be completed right now.'
-              : '');
-      return section(classes: 'panel asw-inline', [
-        _panelHead(icon: 'target', title: 'Research objective'),
-        div(classes: 'panel__body stack stack--md', [
-          p(classes: 'bdj-desc', [
-            Component.text(
-              '${_stageDescription(stage.key)} Check whether the proposed '
-              'research objective matches what you want to find out, then '
-              'record your decision.',
-            ),
-          ]),
-          div(classes: 'bdj-objective', [
-            div(classes: 'bdj-objective-title', [
-              Icon('flag', size: 'sm'),
-              Component.text('Proposed objective'),
-            ]),
-            p([Component.text(_bdjObjectiveText(payload))]),
-          ]),
-          p(classes: 'bdj-decision-title', [
-            Component.text('What would you like to do? '),
-            span(classes: 'bdj-required', [Component.text('*')]),
-          ]),
-          div(classes: 'bdj-choices', [
-            _bdjChoice(
-              record,
-              stage,
-              'confirm',
-              'check',
-              'Yes, this objective works',
-              'Keep this objective and record the stage as complete.',
-            ),
-            _bdjChoice(
-              record,
-              stage,
-              'refine',
-              'search',
-              'Clarify the objective',
-              'Adjust the wording, customer group, or focus.',
-            ),
-            _bdjChoice(
-              record,
-              stage,
-              'add',
-              'add',
-              'Add another concern',
-              'Include something else you would like to research.',
-            ),
-          ]),
-          if (hasFollowUp)
-            div(classes: 'bdj-followup', [
-              label([
-                Component.text(
-                  _bdjDecision == 'refine'
-                      ? 'How would you change the objective?'
-                      : 'What else would you like to research?',
-                ),
-              ]),
-              textarea(
-                const [],
-                rows: 3,
-                placeholder: _bdjDecision == 'refine'
-                    ? 'Example: Focus on office workers within walking '
-                          'distance of the property…'
-                    : 'Example: Will customers use delivery services in '
-                          'this area?',
-                attributes: const {
-                  'maxlength': '600',
-                  'aria-label': 'Follow-up details',
-                },
-                onInput: (value) => _bdjDetails = value,
-              ),
-              small([
-                Component.text(
-                  'Use simple wording that describes what you want to learn.',
-                ),
-              ]),
-            ]),
-          if (stage.isUnavailable && stage.unavailableReason != null)
-            div(classes: 'notice notice-warn', [
-              Component.text(stage.unavailableReason!),
-            ]),
-          div(classes: 'bdj-decision-foot', [
-            div(classes: 'bdj-save-status${_bdjStatusError ? ' error' : ''}', [
-              Component.text(statusText),
-            ]),
-            ActionButton(
-              _busy ? 'Saving…' : 'Save decision',
-              icon: 'save',
-              onClick: canDecide ? () => _saveBdjDecision(record, stage) : null,
-            ),
-          ]),
-        ]),
-      ]);
-    },
-  );
-
-  /// One radio-style decision card. Clicking stores the decision in component
-  /// state; nothing is recorded until "Save decision" is pressed.
-  Component _bdjChoice(
-    AssessmentRecord record,
-    AssessmentStage stage,
-    String value,
-    String icon,
-    String title,
-    String detail,
-  ) {
-    final canDecide = !stage.isComplete && !stage.isUnavailable && !_busy;
-    final checked = _bdjDecision == value;
-    return label(classes: 'bdj-choice${canDecide ? '' : ' is-disabled'}', [
-      input(
-        attributes: {
-          'type': 'radio',
-          'name': 'bdj-decision',
-          'value': value,
-          // Jaspr reflects `checked` only from the literal 'true'.
-          if (checked) 'checked': 'true',
-          if (!canDecide) 'disabled': '',
-        },
-        events: events(
-          onClick: canDecide
-              ? () => setState(() {
-                  _bdjDecision = value;
-                  _bdjStatus = null;
-                  _bdjStatusError = false;
-                })
-              : null,
-        ),
-      ),
-      span(classes: 'bdj-choice-icon', [Icon(icon, size: 'sm')]),
-      span(classes: 'bdj-choice-text', [
-        Component.text(title),
-        small([Component.text(detail)]),
-      ]),
-    ]);
-  }
-
-  /// The proposed objective, composed honestly from the findings the user
-  /// marked for research — no model output and no invented claim.
-  String _bdjObjectiveText(EvidencePayload? payload) {
-    final selected = [
-      for (final group in payload?.groups ?? const <EvidenceGroup>[])
-        for (final metric in group.metrics)
-          if (_bdjSelected.contains(metric.key)) metric.label,
-    ];
-    if (selected.isEmpty) {
-      return 'Select findings on the left to shape the proposed research '
-          'objective.';
-    }
-    const maxListed = 3;
-    final listed = selected.take(maxListed).join(', ');
-    final more = selected.length > maxListed
-        ? ' and ${selected.length - maxListed} more'
-        : '';
-    return 'Assess $listed$more around the property, based on the findings '
-        'you marked for research.';
-  }
-
-  /// Validates the step-3 decision and records it. `confirm` goes through the
-  /// existing stage-completion endpoint; refine / add keep the note for the
-  /// session and say so.
-  void _saveBdjDecision(AssessmentRecord record, AssessmentStage stage) {
-    if (_bdjSelected.isEmpty) {
-      setState(() {
-        _bdjStatus = 'Select at least one finding for research.';
-        _bdjStatusError = true;
-      });
-      return;
-    }
-    final hasFollowUp = _bdjDecision == 'refine' || _bdjDecision == 'add';
-    if (hasFollowUp && _bdjDetails.trim().isEmpty) {
-      setState(() {
-        _bdjStatus = 'Please add a few details before saving.';
-        _bdjStatusError = true;
-      });
-      return;
-    }
-    if (_bdjDecision == 'confirm') {
-      setState(() {
-        _bdjStatus = null;
-        _bdjStatusError = false;
-      });
-      _completeStage(record, stage.key);
-      return;
-    }
-    setState(() {
-      _bdjStatus =
-          'Noted for this session. Continue to Step 4 to review the research '
-          'questions.';
-      _bdjStatusError = false;
-    });
-  }
-
-  // ------------------------------------ step 4: research question review
-
-  /// Step 4 in the reference's layout: customer-research question candidates,
-  /// grouped by how well Step 3's measured evidence supports them, each with an
-  /// approve / reject decision, beside the review progress, the derived
-  /// research objective and the Step 3 evidence context.
-  ///
-  /// The candidates are **derived** from the business preferences saved in
-  /// Step 2 and from the measured evidence of Step 3. The production API has no
-  /// question-generator endpoint (the M2/BDJ generator is governance-gated), so
-  /// nothing here is presented as a model output and nothing is persisted.
-  List<Component> _reviewStep(
-    AssessmentRecord record,
-    AssessmentStage stage,
-  ) => [
-    _stepHeading(
-      kicker: 'Step 4 of 5',
-      title: 'Research question review',
-      icon: 'fact_check',
-      description:
-          'Review the suggested questions, check how well they match your '
-          'research objective, and decide which to include.',
-    ),
-    FutureBuilder<ApiResult<EvidencePayload>>(
-      future: _evidence(record.propertyId),
-      builder: (context, snapshot) {
-        // Relevance is decided by which themes Step 3 measured, so the list
-        // is only rendered once the evidence read has settled — otherwise
-        // every candidate would flash as "low" while it loads.
-        if (snapshot.connectionState != ConnectionState.done) {
-          return section(classes: 'panel asw-inline', [
-            div(classes: 'panel__body stack stack--md', [
-              Skeleton(variant: 'row', count: 5),
-            ]),
-          ]);
-        }
-        final payload = snapshot.data?.ok == true ? snapshot.data!.value : null;
-        final evidence = payload != null && payload.available ? payload : null;
-        final candidates = _reviewCandidates(record, evidence);
-        final decided = candidates
-            .where((item) => _reviewDecisions.containsKey(item.id))
-            .length;
-        final approved = candidates
-            .where((item) => _reviewDecisions[item.id] == 'approve')
-            .length;
-        final rejected = candidates
-            .where((item) => _reviewDecisions[item.id] == 'reject')
-            .length;
-        final pending = candidates.length - approved - rejected;
-        final visible = _reviewFilter == 'decided'
-            ? candidates
-                  .where((item) => _reviewDecisions.containsKey(item.id))
-                  .toList()
-            : candidates;
-
-        return div(classes: 'asw-rqr', [
-          div(classes: 'asw-rqr__main', [
-            div(classes: 'asw-rqr__tabsbar', [
-              div(classes: 'asw-rqr__tabs', [
-                _reviewTab('Question candidates', candidates.length, 'all'),
-                _reviewTab('Decided', decided, 'decided'),
-              ]),
-              button(
-                classes: 'asw-rqr__add',
-                attributes: {
-                  'type': 'button',
-                  'aria-expanded': _reviewAddOpen ? 'true' : 'false',
-                  'aria-controls': 'asw-rqr-addform',
-                },
-                events: events(
-                  onClick: () => setState(() {
-                    _reviewAddOpen = !_reviewAddOpen;
-                    _reviewAddError = null;
-                  }),
-                ),
-                [Icon('add', size: 'sm'), Component.text('Add a question')],
-              ),
-            ]),
-            if (_reviewAddOpen) _reviewAddForm(),
-            if (visible.isEmpty)
-              div(classes: 'asw-rqr__empty', [
-                Component.text(
-                  _reviewFilter == 'decided'
-                      ? 'No reviewed questions yet. Choose '
-                            '“Question candidates” to make a decision.'
-                      : 'No question candidates yet. Save your business '
-                            'preferences in Step 2 to derive them.',
-                ),
-              ])
-            else
-              div(classes: 'asw-rqr__groups', [
-                for (final group in const ['high', 'low', 'custom'])
-                  ..._reviewGroup(
-                    group,
-                    visible.where((item) => item.group == group).toList(),
-                  ),
-              ]),
-            div(classes: 'asw-rqr__actions', [
-              ActionButton(
-                'Back to Step 3',
-                variant: 'secondary',
-                icon: 'arrow_back',
-                onClick: () => _openCheckpoint('location_evidence'),
-              ),
-              div(classes: 'asw-rqr__actionright', [
-                if (pending > 0)
-                  span(
-                    classes: 'asw-rqr__status',
-                    attributes: const {'aria-live': 'polite'},
-                    [Component.text('$pending still to decide')],
-                  ),
-                ActionButton(
-                  'Continue to Step 5',
-                  icon: 'arrow_forward',
-                  onClick: () => _openCheckpoint('assessment_report'),
-                ),
-              ]),
-            ]),
-            p(classes: 'asw-rqr__footnote', [
-              Component.text(
-                'Questions are derived from the business preferences you '
-                'saved in Step 2. “Relevance” marks whether Step 3 '
-                'measured evidence for the same theme — it is a coverage '
-                'hint, not a model score. Decisions stay in this session '
-                'and are not written to your assessment.',
-              ),
-            ]),
-          ]),
-          aside(classes: 'asw-rqr__aside', [
-            section(classes: 'asw-rqr__box', [
-              h3(classes: 'asw-rqr__boxhead', [
-                Icon('monitoring', size: 'sm'),
-                Component.text('Review progress'),
-              ]),
-              div(classes: 'asw-rqr__kvs', [
-                _reviewKv('Total candidates', '${candidates.length}'),
-                _reviewKv('Approved', '$approved', mark: '✓', tone: 'ok'),
-                _reviewKv('Rejected', '$rejected', mark: '×', tone: 'bad'),
-                _reviewKv(
-                  'Pending decision',
-                  '$pending',
-                  mark: '○',
-                  tone: 'wait',
-                ),
-              ]),
-              div(
-                classes: 'asw-rqr__track',
-                attributes: {
-                  'role': 'progressbar',
-                  'aria-valuemin': '0',
-                  'aria-valuemax': '100',
-                  'aria-valuenow': candidates.isEmpty
-                      ? '0'
-                      : '${(100 * decided / candidates.length).round()}',
-                  'aria-label': 'Questions reviewed',
-                },
-                [
-                  div(
-                    classes: 'asw-rqr__fill',
-                    styles: Styles(
-                      width: Unit.percent(
-                        candidates.isEmpty
-                            ? 0
-                            : 100 * decided / candidates.length,
-                      ),
-                    ),
-                    const [],
-                  ),
-                ],
-              ),
-            ]),
-            section(classes: 'asw-rqr__box', [
-              h3(classes: 'asw-rqr__boxhead', [
-                Icon('target', size: 'sm'),
-                Component.text('Research objective'),
-                span(classes: 'asw-rqr__ro', [Component.text('Read only')]),
-              ]),
-              p(classes: 'asw-rqr__objective', [
-                Component.text(_reviewObjective(record)),
-              ]),
-            ]),
-            section(classes: 'asw-rqr__box', [
-              h3(classes: 'asw-rqr__boxhead', [
-                Icon('description', size: 'sm'),
-                Component.text('Findings & context'),
-              ]),
-              p(classes: 'asw-rqr__aside-label', [
-                Component.text('From Step 3'),
-              ]),
-              ul(classes: 'asw-rqr__context', [
-                for (final line in _reviewContext(evidence))
-                  li([Component.text(line)]),
-              ]),
-              div(classes: 'asw-rqr__boxfoot', [
-                ActionLink(
-                  'Open the full analysis',
-                  href:
-                      '/entrepreneur/explanation?property=${Uri.encodeComponent(record.propertyId)}',
-                  variant: 'ghost',
-                ),
-              ]),
-            ]),
-          ]),
-        ]);
-      },
-    ),
-  ];
-
-  Component _reviewTab(String label, int count, String value) => button(
-    classes: 'asw-rqr__tab${_reviewFilter == value ? ' is-active' : ''}',
-    attributes: {
-      'type': 'button',
-      'aria-pressed': _reviewFilter == value ? 'true' : 'false',
-    },
-    events: events(onClick: () => setState(() => _reviewFilter = value)),
-    [
-      Component.text(label),
-      span(classes: 'asw-rqr__tabcount', [Component.text('$count')]),
-    ],
-  );
-
-  List<Component> _reviewGroup(String group, List<_ReviewCandidate> items) {
-    if (items.isEmpty) return const [];
-    final (icon, title, description) = switch (group) {
-      'high' => (
-        'check_circle',
-        'High relevance',
-        'Strongly aligned with the research objective and business context.',
-      ),
-      'low' => (
-        'warning',
-        'Low relevance',
-        'Partially related or useful for exploration. Decide whether to '
-            'include.',
-      ),
-      _ => (
-        'add_circle',
-        'Added by you',
-        'Your suggested questions for potential customer research.',
-      ),
-    };
-    return [
-      section(classes: 'asw-rqr__group asw-rqr__group--$group', [
-        div(classes: 'asw-rqr__grouphead', [
-          Icon(icon, size: 'sm'),
-          strong([Component.text('$title (${items.length})')]),
-          span(classes: 'asw-rqr__groupdesc', [Component.text(description)]),
-        ]),
-        for (final item in items) _reviewCandidateRow(item),
-      ]),
-    ];
-  }
-
-  Component _reviewCandidateRow(_ReviewCandidate candidate) {
-    final decision = _reviewDecisions[candidate.id];
-    final expanded =
-        _reviewExpanded[candidate.id] ?? (candidate.group == 'high');
-    final relevance = switch (candidate.group) {
-      'high' => 'High',
-      'low' => 'Low',
-      _ => 'Added',
-    };
-    return article(classes: 'asw-rqr__cand', [
-      div(classes: 'asw-rqr__candtop', [
-        div(classes: 'asw-rqr__info', [
-          div(classes: 'asw-rqr__titleline', [
-            span(classes: 'asw-rqr__id', [Component.text(candidate.id)]),
-            h4(classes: 'asw-rqr__q', [Component.text(candidate.question)]),
-          ]),
-          div(classes: 'asw-rqr__meta', [
-            span(classes: 'asw-rqr__rel asw-rqr__rel--${candidate.group}', [
-              Component.text('Relevance: $relevance'),
-            ]),
-            span(classes: 'asw-rqr__metaitem', [
-              Component.text('Source: ${candidate.source}'),
-            ]),
-            span(classes: 'asw-rqr__metaitem', [
-              Component.text('Version: ${candidate.version}'),
-            ]),
-          ]),
-          if (expanded)
-            div(classes: 'asw-rqr__notes', [
-              div(classes: 'asw-rqr__note asw-rqr__note--good', [
-                h5([
-                  Icon('verified', size: 'sm'),
-                  Component.text(
-                    candidate.group == 'custom'
-                        ? 'Why this question matters'
-                        : 'Key strengths',
-                  ),
-                ]),
-                ul([
-                  for (final line in candidate.strengths)
-                    li([Component.text(line)]),
-                ]),
-              ]),
-              div(classes: 'asw-rqr__note', [
-                h5([
-                  Icon('info', size: 'sm'),
-                  Component.text('Evidence / context'),
-                ]),
-                ul([
-                  for (final line in candidate.evidence)
-                    li([Component.text(line)]),
-                ]),
-              ]),
-            ]),
-          button(
-            classes: 'asw-rqr__toggle',
-            attributes: {
-              'type': 'button',
-              'aria-expanded': expanded ? 'true' : 'false',
-            },
-            events: events(
-              onClick: () =>
-                  setState(() => _reviewExpanded[candidate.id] = !expanded),
-            ),
-            [
-              Component.text(expanded ? 'Hide reasoning' : 'View reasoning'),
-              Icon(expanded ? 'expand_less' : 'expand_more', size: 'sm'),
-            ],
-          ),
-        ]),
-        div(
-          classes: 'asw-rqr__decision',
-          attributes: {'role': 'group', 'aria-label': 'Decision'},
-          [
-            span(classes: 'asw-rqr__decisiontitle', [
-              Component.text('Your decision '),
-              span([Component.text('*')]),
-            ]),
-            _reviewDecision(candidate, 'approve', 'Approve', 'check_circle'),
-            _reviewDecision(candidate, 'reject', 'Reject', 'cancel'),
-            if (decision != null)
-              button(
-                classes: 'asw-rqr__undo',
-                attributes: const {'type': 'button'},
-                events: events(
-                  onClick: () =>
-                      setState(() => _reviewDecisions.remove(candidate.id)),
-                ),
-                [Component.text('Undo decision')],
-              ),
-          ],
-        ),
-      ]),
-    ]);
-  }
-
-  Component _reviewDecision(
-    _ReviewCandidate candidate,
-    String value,
-    String caption,
-    String icon,
-  ) {
-    final on = _reviewDecisions[candidate.id] == value;
-    return label(classes: 'asw-rqr__decopt is-$value${on ? ' is-on' : ''}', [
-      input(
-        type: InputType.radio,
-        name: 'aswReview${candidate.id}',
-        checked: on,
-        events: events(
-          onChange: (_) =>
-              setState(() => _reviewDecisions[candidate.id] = value),
-        ),
-      ),
-      Icon(icon, size: 'sm'),
-      Component.text(caption),
-    ]);
-  }
-
-  Component _reviewKv(
-    String label,
-    String value, {
-    String? mark,
-    String tone = '',
-  }) => div(classes: 'asw-rqr__kv', [
-    span(classes: 'asw-rqr__kvlabel', [
-      if (mark != null)
-        span(classes: 'asw-rqr__mark asw-rqr__mark--$tone', [
-          Component.text(mark),
-        ]),
-      Component.text(label),
-    ]),
-    strong([Component.text(value)]),
-  ]);
-
-  Component _reviewAddForm() => div(
-    classes: 'asw-rqr__addform',
-    attributes: const {'id': 'asw-rqr-addform'},
-    [
-      h3([Component.text('Add your own question')]),
-      p([
-        Component.text(
-          'Include something you would like to ask potential customers.',
-        ),
-      ]),
-      label([
-        Component.text('Research question '),
-        span(classes: 'asw-rqr__req', [Component.text('*')]),
-      ]),
-      textarea(
-        const [],
-        rows: 3,
-        placeholder:
-            'e.g. How often would you visit a café near this location?',
-        attributes: const {
-          'maxlength': '240',
-          'aria-label': 'Research question',
-        },
-        onInput: (value) => _reviewDraftQuestion = value,
-      ),
-      label([
-        Component.text('Reason for asking '),
-        span(classes: 'asw-rqr__optional', [Component.text('(optional)')]),
-      ]),
-      textarea(
-        const [],
-        rows: 2,
-        placeholder: 'What do you hope to learn from the answers?',
-        attributes: const {
-          'maxlength': '400',
-          'aria-label': 'Reason for asking',
-        },
-        onInput: (value) => _reviewDraftContext = value,
-      ),
-      if (_reviewAddError != null)
-        p(classes: 'asw-rqr__adderror', [Component.text(_reviewAddError!)]),
-      div(classes: 'asw-rqr__addactions', [
-        ActionButton(
-          'Cancel',
-          variant: 'secondary',
-          onClick: () => setState(() {
-            _reviewAddOpen = false;
-            _reviewDraftQuestion = '';
-            _reviewDraftContext = '';
-            _reviewAddError = null;
-          }),
-        ),
-        ActionButton('Add question', onClick: _addReviewQuestion),
-      ]),
-    ],
-  );
-
-  void _addReviewQuestion() {
-    final question = _reviewDraftQuestion.trim();
-    if (question.length < 8) {
-      setState(() => _reviewAddError = 'Please enter a complete question.');
-      return;
-    }
-    setState(() {
-      _reviewCustom.add((
-        question: question,
-        context: _reviewDraftContext.trim(),
-      ));
-      _reviewAddOpen = false;
-      _reviewDraftQuestion = '';
-      _reviewDraftContext = '';
-      _reviewAddError = null;
-      _reviewFilter = 'all';
-    });
-  }
-
-  /// The candidates shown in step 4, derived deterministically from the saved
-  /// requirements and the measured evidence. Order follows the questionnaire so
-  /// an id stays attached to the same question across rebuilds.
-  List<_ReviewCandidate> _reviewCandidates(
-    AssessmentRecord record,
-    EvidencePayload? evidence,
-  ) {
-    final stored = record.requirements ?? const <String, dynamic>{};
-    final backed = <String>{
-      if (evidence != null)
-        for (final group in evidence.groups)
-          if (group.availableCount > 0) group.key,
-    };
-    final stamp = _reviewVersionStamp(record);
-    final concept = _answerText(stored, 'fnb_concept');
-    final customers = _answerText(stored, 'target_customers');
-    final service = _answerText(stored, 'service_model');
-    final priority = _answerText(stored, 'recommendation_priority');
-    final space = _answerText(stored, 'space_size_preference');
-    final conceptName = (concept ?? 'business').toLowerCase();
-    var counter = 0;
-    String nextId() => 'Q-${(++counter).toString().padLeft(2, '0')}';
-
-    final candidates = <_ReviewCandidate>[];
-
-    if (concept != null) {
-      final competitors = _reviewMetric(evidence, 'fnb_competitors_1000m');
-      candidates.add(
-        _ReviewCandidate(
-          id: nextId(),
-          group: backed.contains('competitor_pressure') ? 'high' : 'low',
-          question:
-              'How interested would you be in a $conceptName near this '
-              'location?',
-          source: 'Your answers',
-          version: stamp,
-          strengths: [
-            'Asks directly about the $conceptName you plan to open.',
-            'Simple wording that a customer can answer without explanation.',
-          ],
-          evidence: [
-            'From Step 2: business type is ${concept.toLowerCase()}.',
-            if (competitors != null)
-              'From Step 3: ${competitors.label} — '
-                  '${_metricValue(competitors)}.',
-          ],
-        ),
-      );
-    }
-
-    if (customers != null) {
-      final population = _reviewMetric(evidence, 'pop_total_1km');
-      candidates.add(
-        _ReviewCandidate(
-          id: nextId(),
-          group: backed.contains('catchment_demand') ? 'high' : 'low',
-          question:
-              'How often would ${customers.toLowerCase()} visit a '
-              '$conceptName within walking distance?',
-          source: 'Your answers',
-          version: stamp,
-          strengths: [
-            'Checks whether the customer groups you named actually visit this '
-                'area.',
-            'Matches your stated target customers '
-                '(${customers.toLowerCase()}).',
-          ],
-          evidence: [
-            'From Step 2: target customers are ${customers.toLowerCase()}.',
-            if (population != null)
-              'From Step 3: ${population.label} — '
-                  '${_metricValue(population)}.',
-          ],
-        ),
-      );
-    }
-
-    if (priority != null) {
-      final theme = switch (stored['recommendation_priority']) {
-        'high_nearby_population' => 'catchment_demand',
-        'easy_customer_accessibility' => 'accessibility',
-        'active_commercial_surroundings' => 'competitor_pressure',
-        _ => null,
-      };
-      final support = theme == null
-          ? null
-          : _reviewGroupMetric(evidence, theme);
-      candidates.add(
-        _ReviewCandidate(
-          id: nextId(),
-          group: theme != null && backed.contains(theme) ? 'high' : 'low',
-          question:
-              'What matters most to you when choosing a $conceptName nearby?',
-          source: 'Your answers',
-          version: stamp,
-          strengths: [
-            'Tests whether customers share the priority you set '
-                '(${priority.toLowerCase()}).',
-          ],
-          evidence: [
-            'From Step 2: choosing priority is ${priority.toLowerCase()}.',
-            if (support != null)
-              'From Step 3: ${support.label} — ${_metricValue(support)}.'
-            else
-              'No Step 3 metric covers this priority, so the answer stays '
-                  'qualitative.',
-          ],
-        ),
-      );
-    }
-
-    if (service != null) {
-      candidates.add(
-        _ReviewCandidate(
-          id: nextId(),
-          group: 'low',
-          question:
-              'How would you prefer to buy from a $conceptName — dine in, '
-              'takeaway or delivery?',
-          source: 'Your answers',
-          version: stamp,
-          strengths: [
-            'Shows whether your planned ${service.toLowerCase()} format '
-                'matches how customers actually buy.',
-          ],
-          evidence: [
-            'From Step 2: service model is ${service.toLowerCase()}.',
-            'Step 3 measures catchment and access, not service format, so '
-                'treat the answer as qualitative.',
-          ],
-        ),
-      );
-    }
-
-    if (space != null) {
-      candidates.add(
-        _ReviewCandidate(
-          id: nextId(),
-          group: 'low',
-          question:
-              'What size of seating area would you expect in a '
-              '$conceptName?',
-          source: 'Your answers',
-          version: stamp,
-          strengths: [
-            'Keeps the question about comfort rather than floor area.',
-          ],
-          evidence: [
-            'From Step 2: space size preference is ${space.toLowerCase()}.',
-            'Customers rarely judge floor area in square feet, so this is '
-                'exploratory.',
-          ],
-        ),
-      );
-    }
-
-    for (final custom in _reviewCustom) {
-      candidates.add(
-        _ReviewCandidate(
-          id: nextId(),
-          group: 'custom',
-          question: custom.question,
-          source: 'You',
-          version: 'Added in this session',
-          strengths: [
-            custom.context.isEmpty
-                ? 'A question you want to explore with potential customers.'
-                : custom.context,
-          ],
-          evidence: ['Added by you for customer research.'],
-        ),
-      );
-    }
-
-    return candidates;
   }
 
   /// The one-sentence objective shown in the aside, derived from the answers.
@@ -3918,57 +2415,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     }
     return 'Assess interest in the ${concept.toLowerCase()} you plan to open '
         'at this location.';
-  }
-
-  /// The measured evidence Step 3 established, as context bullets.
-  List<String> _reviewContext(EvidencePayload? evidence) {
-    if (evidence == null) {
-      return ['Step 3 has no measured evidence for this property yet.'];
-    }
-    final metrics = [
-      for (final group in evidence.groups)
-        for (final metric in group.metrics)
-          if (metric.isAvailable) metric,
-    ].take(4).toList();
-    if (metrics.isEmpty) {
-      return ['Step 3 has no measured evidence for this property yet.'];
-    }
-    return [
-      for (final (index, metric) in metrics.indexed)
-        'F${(index + 1).toString().padLeft(2, '0')} — ${metric.label}: '
-            '${_metricValue(metric)}',
-    ];
-  }
-
-  static String _reviewVersionStamp(AssessmentRecord record) {
-    final iso = record.updatedAt ?? '';
-    final date = iso.length >= 10 ? iso.substring(0, 10) : '';
-    final version = 'v${record.requirementsVersion}';
-    return date.isEmpty ? version : '$version ($date)';
-  }
-
-  static EvidenceMetric? _reviewMetric(EvidencePayload? payload, String key) {
-    if (payload == null) return null;
-    for (final group in payload.groups) {
-      for (final metric in group.metrics) {
-        if (metric.key == key && metric.isAvailable) return metric;
-      }
-    }
-    return null;
-  }
-
-  static EvidenceMetric? _reviewGroupMetric(
-    EvidencePayload? payload,
-    String groupKey,
-  ) {
-    if (payload == null) return null;
-    for (final group in payload.groups) {
-      if (group.key != groupKey) continue;
-      for (final metric in group.metrics) {
-        if (metric.isAvailable) return metric;
-      }
-    }
-    return null;
   }
 
   /// A stored requirement rendered with the questionnaire's own option labels.
@@ -4195,60 +2641,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     return rows;
   }
 
-  // --------------------------------------------------------------- step footer
-
-  /// The reference's step footer: back to the previous checkpoint, forward to
-  /// the next. Navigation only — completion is always an explicit decision.
-  Component _stepFooter(AssessmentRecord record, AssessmentStage selected) {
-    final index = record.stages.indexWhere(
-      (stage) => stage.key == selected.key,
-    );
-    final previous = index > 0 ? record.stages[index - 1] : null;
-    final next = index >= 0 && index < record.stages.length - 1
-        ? record.stages[index + 1]
-        : null;
-    return div(classes: 'asw-stepactions', [
-      if (previous != null)
-        ActionButton(
-          'Back to '
-          '${AssessmentJourneyStepper.displayLabel(previous.key, previous.title)}',
-          variant: 'secondary',
-          onClick: () => _openCheckpoint(previous.key),
-        ),
-      if (next != null)
-        ActionButton(
-          'Continue to '
-          '${AssessmentJourneyStepper.displayLabel(next.key, next.title)}',
-          icon: 'arrow_forward',
-          onClick: () => _openCheckpoint(next.key),
-        ),
-    ]);
-  }
-
-  /// A measured metric rendered with its unit, e.g. "31,366 people".
-  static String _metricValue(EvidenceMetric metric) {
-    final value = metric.value;
-    if (value == null) return 'Not measured';
-    final text = value == value.roundToDouble()
-        ? value.toStringAsFixed(0)
-        : value.toStringAsFixed(1);
-    final grouped = text.replaceAllMapped(
-      RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-      (match) => '${match[1]},',
-    );
-    final unit = metric.unit.trim();
-    if (unit.isEmpty) return grouped;
-    if (unit == 'count') return grouped;
-    if (unit == 'RM/month') return 'RM $grouped/month';
-    if (unit == 'm') {
-      final metres = value;
-      return metres >= 995
-          ? '${(metres / 1000).toStringAsFixed(1)} km'
-          : '$grouped m';
-    }
-    return '$grouped $unit';
-  }
-
   Component _crumbs({String? leaf}) {
     // The listing is the trail's end: Home › Assessments. The workspace adds
     // the checkpoint leaf, and its "Assessments" hop returns in place (no
@@ -4312,8 +2704,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
           ]),
         ]),
       ]);
-
-  // ------------------------------------------ stage 2: five-question flow (V3)
 
   /// One business-preference question (five-question Recommender V3,
   /// requirements schema v3, 2026-11-11).
@@ -4403,133 +2793,7 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     ),
   ];
 
-  /// Answers keyed by question id. Numbers are stored as text while typing and
-  /// parsed only when the step is validated.
-  final Map<String, dynamic> _answers = <String, dynamic>{};
-  int _answerStep = 0;
-  String? _answerError;
-  bool _answersSeeded = false;
-
-  void _seedAnswers() {
-    if (_answersSeeded) return;
-    _answersSeeded = true;
-    final stored = _record?.requirements;
-    for (final q in _questions) {
-      final value = stored?[q.id];
-      if (value == null) continue;
-      if (q.kind == 'multi' && value is List) {
-        _answers[q.id] = [for (final item in value) '$item'];
-      } else if (q.kind == 'number' && value is num) {
-        _answers[q.id] = value == value.roundToDouble()
-            ? value.toStringAsFixed(0)
-            : '$value';
-      } else if (value is String) {
-        _answers[q.id] = value;
-      }
-    }
-  }
-
-  bool _stepValid(String kind, Object? value) {
-    switch (kind) {
-      case 'multi':
-        return value is List && value.isNotEmpty;
-      case 'number':
-        final parsed = double.tryParse('${value ?? ''}');
-        return parsed != null && parsed.isFinite && parsed > 0;
-      default:
-        return value is String && value.isNotEmpty;
-    }
-  }
-
-  /// Builds the requirements payload the backend's `validate_requirements()`
-  /// accepts (v3 schema, five questions). Tokens are the option codes already
-  /// rendered above, so nothing is inferred or translated here.
-  Map<String, dynamic> _requirementsPayload() {
-    final payload = <String, dynamic>{};
-    for (final q in _questions) {
-      final value = _answers[q.id];
-      if (value == null) continue;
-      if (q.kind == 'multi') {
-        payload[q.id] = [for (final item in (value as List)) '$item'];
-      } else if (q.kind == 'number') {
-        final parsed = double.tryParse('$value');
-        if (parsed != null) payload[q.id] = parsed;
-      } else {
-        payload[q.id] = '$value';
-      }
-    }
-    return payload;
-  }
-
-  /// Persists the five Stage-2 answers, then asks the backend to confirm the
-  /// stage. Both steps are real API calls: the answers are written by
-  /// `PATCH /api/v1/assessments/{id}` (`requirements`) and stage completion is
-  /// decided server-side. A requirements failure stops the flow — the stage is
-  /// never marked complete on top of unsaved answers.
-  Future<void> _saveAnswers(AssessmentRecord record) async {
-    if (_busy) return;
-    final firstInvalid = _questions.indexWhere(
-      (q) => !_stepValid(q.kind, _answers[q.id]),
-    );
-    if (firstInvalid >= 0) {
-      setState(() {
-        _answerStep = firstInvalid;
-        _answerError = 'Answer this question before saving.';
-      });
-      return;
-    }
-    setState(() {
-      _busy = true;
-      _answerError = null;
-      _writeError = null;
-      _notice = null;
-    });
-    final saved = await _api.saveRequirements(
-      record.assessmentId,
-      _requirementsPayload(),
-    );
-    if (!mounted) return;
-    if (!saved.ok) {
-      setState(() {
-        _busy = false;
-        _writeError = AssessmentFailure(
-          status: saved.failure?.status,
-          code: saved.failure?.code,
-          message:
-              'Your answers were not saved. ${saved.failure?.message ?? 'The server rejected the requirements.'}',
-        );
-      });
-      return;
-    }
-    final result = await _api.completeStage(
-      record.assessmentId,
-      'business_requirements',
-    );
-    if (!mounted) return;
-    if (!result.ok) {
-      setState(() {
-        _busy = false;
-        _writeError = result.failure;
-      });
-      return;
-    }
-    final updated = result.value!;
-    setState(() {
-      _busy = false;
-      _record = updated;
-      _future = Future.value(_Started(updated));
-      _notice =
-          'Stage 2 is recorded as complete. '
-          '${updated.completedStages} of '
-          '${updated.totalStages} stages done.';
-    });
-  }
-
-  /// Stage 2, in the mockup's two-pane question layout: a navigator column
-  /// (answered state per question, progress rail) beside the current question
-  /// card (code/position header, prompt, helper, option rows, footer actions).
-  /// The flow and validation are the same five-question V3 contract as before
-  /// — only the presentation changed.
+  /// Human-readable labels for saved V3 answers shown in the report.
   static const Map<String, String> _questionNavLabels = {
     'fnb_concept': 'Business type',
     'service_model': 'Service model',
@@ -4538,428 +2802,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     'space_size_preference': 'Space size',
   };
 
-  Component _questionnairePanel(AssessmentRecord record) {
-    _seedAnswers();
-    final index = _answerStep.clamp(0, _questions.length - 1);
-    final q = _questions[index];
-    final isLast = index == _questions.length - 1;
-    final answered = _questions
-        .where((question) => _stepValid(question.kind, _answers[question.id]))
-        .length;
-    final progress = (answered / _questions.length * 100).round();
-
-    // The reference puts the question navigator and the question card straight
-    // on the page (each with its own border), so the step bar above already
-    // names the step — no second panel head repeating "Business preferences".
-    return div(classes: 'asw-qlayout', [
-      // Left: question navigator.
-      aside(classes: 'asw-qnav', [
-        div(classes: 'asw-qnav__head', [
-          h3(classes: 'asw-qnav__title', [
-            Component.text('Questions (${_questions.length})'),
-          ]),
-          p(
-            classes: 'small asw-muted',
-            attributes: const {'aria-live': 'polite'},
-            [Component.text('$answered of ${_questions.length} answered')],
-          ),
-          div(
-            classes: 'asw-qnav__rail',
-            attributes: const {'aria-hidden': 'true'},
-            [
-              div(
-                classes: 'asw-qnav__fill',
-                styles: Styles(width: Unit.percent(progress.toDouble())),
-                const [],
-              ),
-            ],
-          ),
-        ]),
-        nav(
-          classes: 'asw-qnav__list',
-          attributes: const {'aria-label': 'Choose an assessment question'},
-          [
-            for (final (i, question) in _questions.indexed)
-              button(
-                classes: 'asw-qnav__item${i == index ? ' is-current' : ''}',
-                attributes: {'type': 'button'},
-                events: events(
-                  onClick: () => setState(() {
-                    _answerStep = i;
-                    _answerError = null;
-                  }),
-                ),
-                [
-                  span(classes: 'asw-qnav__label', [
-                    Component.text(
-                      _questionNavLabels[question.id] ?? question.id,
-                    ),
-                  ]),
-                  span(classes: 'asw-qnav__state', [
-                    Component.text(
-                      _stepValid(question.kind, _answers[question.id])
-                          ? '✓'
-                          : '',
-                    ),
-                  ]),
-                ],
-              ),
-          ],
-        ),
-        div(classes: 'asw-qnav__foot', [
-          Component.text(
-            'You can return to any question and change your answer.',
-          ),
-        ]),
-      ]),
-
-      // Right: the current question card.
-      div(classes: 'asw-qcard', [
-        div(classes: 'asw-qcard__header', [
-          span(classes: 'asw-qcard__code', [
-            Component.text('V3-Q${index + 1}'),
-          ]),
-          span(classes: 'asw-qcard__position', [
-            Component.text('Question ${index + 1} of ${_questions.length}'),
-          ]),
-        ]),
-        h2(classes: 'asw-qcard__prompt', [Component.text(q.prompt)]),
-        p(classes: 'asw-qcard__help', [Component.text(q.help)]),
-        div(classes: 'asw-qcard__meta', [
-          span(classes: 'asw-qcard__required', [
-            Component.text('Required to complete this step'),
-          ]),
-          span(classes: 'small asw-muted', [
-            Component.text(
-              q.kind == 'multi'
-                  ? 'Select every answer that applies'
-                  : 'One answer per question',
-            ),
-          ]),
-        ]),
-        div(classes: 'asw-qcard__answers', [
-          for (final (token, caption) in q.options)
-            label(classes: 'asw-answer${_isPicked(q, token) ? ' is-on' : ''}', [
-              input(
-                type: q.kind == 'multi' ? InputType.checkbox : InputType.radio,
-                name: 'aswQ${q.id}',
-                checked: _isPicked(q, token),
-                events: events(
-                  onChange: (_) => setState(() {
-                    _toggleAnswer(q, token);
-                    _answerError = null;
-                  }),
-                ),
-              ),
-              span(classes: 'asw-answer__label', [Component.text(caption)]),
-            ]),
-        ]),
-        if (_answerError != null)
-          div(classes: 'notice notice-warn', [Component.text(_answerError!)]),
-        // Footer split like the reference: Previous on the left, the forward
-        // action (next question, or save-and-complete on the last one) on
-        // the right.
-        div(classes: 'asw-qcard__footer', [
-          div(classes: 'asw-qcard__group', [
-            ActionButton(
-              'Previous',
-              variant: 'secondary',
-              onClick: index == 0
-                  ? null
-                  : () => setState(() {
-                      _answerStep = index - 1;
-                      _answerError = null;
-                    }),
-            ),
-          ]),
-          div(classes: 'asw-qcard__group', [
-            if (isLast)
-              ActionButton(
-                _busy ? 'Saving…' : 'Save and complete stage 2',
-                onClick: _busy ? null : () => _saveAnswers(record),
-              )
-            else
-              ActionButton(
-                'Next question',
-                icon: 'arrow_forward',
-                onClick: () {
-                  if (!_stepValid(q.kind, _answers[q.id])) {
-                    setState(
-                      () => _answerError = 'Answer this question to continue.',
-                    );
-                    return;
-                  }
-                  setState(() {
-                    _answerStep = index + 1;
-                    _answerError = null;
-                  });
-                },
-              ),
-          ]),
-        ]),
-      ]),
-    ]);
-  }
-
-  bool _isPicked(
-    ({
-      String id,
-      String prompt,
-      String help,
-      String kind,
-      List<(String, String)> options,
-    })
-    q,
-    String token,
-  ) {
-    final value = _answers[q.id];
-    if (q.kind == 'multi') {
-      return value is List && value.contains(token);
-    }
-    return value == token;
-  }
-
-  void _toggleAnswer(
-    ({
-      String id,
-      String prompt,
-      String help,
-      String kind,
-      List<(String, String)> options,
-    })
-    q,
-    String token,
-  ) {
-    if (q.kind == 'multi') {
-      final current = [
-        for (final item in (_answers[q.id] as List? ?? const [])) '$item',
-      ];
-      if (current.contains(token)) {
-        current.remove(token);
-      } else {
-        current.add(token);
-      }
-      _answers[q.id] = current;
-      return;
-    }
-    _answers[q.id] = token;
-  }
-
-  // ------------------------------------------------------------- stage 2 body
-
-  Component _legacyRequirementsPanel(AssessmentRecord record) {
-    _seedDraft();
-    final draft = _draft;
-    if (draft == null) return const span([]);
-
-    return section(classes: 'panel asw-inline', [
-      div(classes: 'panel__head', [
-        span(classes: 'panel__title', [
-          Component.text('Business requirements'),
-        ]),
-      ]),
-      div(classes: 'panel__body stack stack--md', [
-        p(classes: 'asw-note', [
-          Component.text(
-            'These are the same values your ranking preferences use. Saving '
-            'here writes them to this assessment and applies them to your '
-            'preferences, so the shortlist reflects what you just entered.',
-          ),
-        ]),
-        FutureBuilder<List<String>>(
-          future: _types(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
-              return const Skeleton(variant: 'row');
-            }
-            return _propertyTypeField(draft, snapshot.data ?? const []);
-          },
-        ),
-        div(classes: 'filters', [
-          div(classes: 'frow', [
-            _numberField(
-              'Minimum monthly rent (RM)',
-              value: draft.minBudget,
-              error: _draftErrors['min_budget_rm'],
-              hint: 'Optional. Below 0 is rejected; empty means no floor.',
-              onChanged: (v) => setState(() => draft.minBudget = v),
-            ),
-            _numberField(
-              'Maximum monthly rent (RM)',
-              value: draft.maxBudget,
-              error: _draftErrors['max_budget_rm'],
-              hint: 'Required, and must be above zero.',
-              onChanged: (v) => setState(() => draft.maxBudget = v),
-            ),
-            _numberField(
-              'Minimum floor area (sq ft)',
-              value: draft.minSize,
-              error: _draftErrors['min_size_sqft'],
-              hint: 'Optional. Empty means no floor.',
-              onChanged: (v) => setState(() => draft.minSize = v),
-            ),
-            _numberField(
-              'Maximum floor area (sq ft)',
-              value: draft.maxSize,
-              error: _draftErrors['max_size_sqft'],
-              hint: 'Required, and must be above zero.',
-              onChanged: (v) => setState(() => draft.maxSize = v),
-            ),
-          ]),
-          div(classes: 'frow', [
-            Field(
-              labelText: 'Business category',
-              error: _draftErrors['business_type'],
-              hint:
-                  'Your concept, e.g. "Specialty coffee". Describes the '
-                  'business, not the building.',
-              child: input(
-                attributes: {
-                  'type': 'text',
-                  'value': draft.businessType,
-                  'maxlength': '120',
-                  'placeholder': 'e.g. Specialty coffee',
-                },
-                events: events<String>(
-                  onInput: (v) => setState(() => draft.businessType = v),
-                ),
-              ),
-            ),
-            Field(
-              labelText: 'Target market',
-              error: _draftErrors['target_market'],
-              hint: 'Stored with the assessment as a requirement note.',
-              child: input(
-                attributes: {
-                  'type': 'text',
-                  'value': draft.targetMarket,
-                  'maxlength': '240',
-                  'placeholder': 'e.g. Office workers, students',
-                },
-                events: events<String>(
-                  onInput: (v) => setState(() => draft.targetMarket = v),
-                ),
-              ),
-            ),
-            Field(
-              labelText: 'Seating model',
-              error: _draftErrors['seating_model'],
-              hint: 'Optional. How the space will be used, e.g. "Dine-in".',
-              child: input(
-                attributes: {
-                  'type': 'text',
-                  'value': draft.seatingModel,
-                  'maxlength': '60',
-                  'placeholder': 'e.g. Dine-in with takeaway',
-                },
-                events: events<String>(
-                  onInput: (v) => setState(() => draft.seatingModel = v),
-                ),
-              ),
-            ),
-          ]),
-        ]),
-        if (_draftErrors.isNotEmpty)
-          div(classes: 'notice notice-warn', [
-            Component.text(
-              'Fix the highlighted fields. Nothing has been saved.',
-            ),
-          ]),
-        div(classes: 'actions-row', [
-          ActionButton(
-            _busy ? 'Saving…' : 'Save and complete stage 2',
-            onClick: _busy ? null : () => _saveRequirements(record),
-          ),
-          ActionButton(
-            'Close',
-            variant: 'ghost',
-            onClick: _busy ? null : () => _toggleStage('business_requirements'),
-          ),
-        ]),
-        p(classes: 'disclaimer', [
-          Component.text(
-            'The property type above is the building category the eligibility '
-            'filter matches against the catalogue. The business category is '
-            'your concept. They are separate fields: setting one never '
-            'overwrites the other.',
-          ),
-        ]),
-      ]),
-    ]);
-  }
-
-  Component _propertyTypeField(_RequirementsDraft draft, List<String> types) {
-    if (types.isEmpty) {
-      return Field(
-        labelText: 'Property type',
-        error: _draftErrors['property_type'],
-        hint:
-            'The catalogue\'s property-type list could not be loaded, so this '
-            'is free text. The eligibility filter matches it exactly against '
-            'the listing\'s property type.',
-        child: input(
-          attributes: {
-            'type': 'text',
-            'value': draft.propertyType,
-            'maxlength': '60',
-            'placeholder': 'e.g. Shop lot',
-          },
-          events: events<String>(
-            onInput: (v) => setState(() => draft.propertyType = v),
-          ),
-        ),
-      );
-    }
-
-    // `Any` is the value the recommendation filter treats as no constraint.
-    final options = ['Any', ...types];
-    return Field(
-      labelText: 'Property type',
-      error: _draftErrors['property_type'],
-      hint: 'Read from the catalogue, so every option matches real listings.',
-      child: div(classes: 'chips', [
-        for (final option in options)
-          label(
-            classes: option == draft.propertyType
-                ? 'checkpill is-on'
-                : 'checkpill',
-            [
-              input(
-                type: InputType.radio,
-                name: 'aswPropertyType',
-                checked: option == draft.propertyType,
-                events: events(
-                  onChange: (_) => setState(() => draft.propertyType = option),
-                ),
-              ),
-              span([Component.text(option)]),
-            ],
-          ),
-      ]),
-    );
-  }
-
-  Component _numberField(
-    String label, {
-    required String value,
-    required String? error,
-    required String hint,
-    required void Function(String) onChanged,
-  }) => Field(
-    labelText: label,
-    error: error,
-    hint: hint,
-    child: input(
-      attributes: {
-        'type': 'number',
-        'value': value,
-        'min': '0',
-        'step': '1',
-        'inputmode': 'numeric',
-      },
-      events: events<String>(onInput: onChanged),
-    ),
-  );
 }
 
 /// The outcome of the initial read, as a value so `build` can match on it.
@@ -4990,144 +2832,6 @@ final class _NotStarted extends _Load {
 final class _Failed extends _Load {
   final AssessmentFailure failure;
   const _Failed(this.failure);
-}
-
-// ================================================================= requirements
-
-/// Stage 2 form state.
-///
-/// Numeric fields are text on purpose: an emptied field has to stay visibly
-/// empty and fail validation, rather than being silently parsed to zero and
-/// saved as a real constraint the entrepreneur never chose.
-final class _RequirementsDraft {
-  String businessType;
-  String propertyType;
-  String targetMarket;
-  String seatingModel;
-  String minBudget;
-  String maxBudget;
-  String minSize;
-  String maxSize;
-  List<String> preferredAreas;
-
-  _RequirementsDraft({
-    required this.businessType,
-    required this.propertyType,
-    required this.targetMarket,
-    required this.seatingModel,
-    required this.minBudget,
-    required this.maxBudget,
-    required this.minSize,
-    required this.maxSize,
-    required this.preferredAreas,
-  });
-
-  /// The same limits the backend enforces, so the objection arrives before a
-  /// round trip. The server still validates independently.
-  Map<String, String> validate() {
-    final errors = <String, String>{};
-
-    final business = businessType.trim();
-    if (business.isEmpty) {
-      errors['business_type'] = 'Enter your business category.';
-    } else if (business.length > 120) {
-      errors['business_type'] = 'Use 120 characters or fewer.';
-    }
-
-    final type = propertyType.trim();
-    if (type.isEmpty) {
-      errors['property_type'] = 'Choose a property type, or "Any".';
-    } else if (type.length > 60) {
-      errors['property_type'] = 'Use 60 characters or fewer.';
-    }
-
-    if (targetMarket.trim().length > 240) {
-      errors['target_market'] = 'Use 240 characters or fewer.';
-    }
-    if (seatingModel.trim().length > 60) {
-      errors['seating_model'] = 'Use 60 characters or fewer.';
-    }
-
-    final minBudgetValue = _number(
-      minBudget,
-      'min_budget_rm',
-      errors,
-      required: false,
-    );
-    final maxBudgetValue = _number(
-      maxBudget,
-      'max_budget_rm',
-      errors,
-      required: true,
-    );
-    final minSizeValue = _number(
-      minSize,
-      'min_size_sqft',
-      errors,
-      required: false,
-    );
-    final maxSizeValue = _number(
-      maxSize,
-      'max_size_sqft',
-      errors,
-      required: true,
-    );
-
-    if (minBudgetValue != null &&
-        maxBudgetValue != null &&
-        minBudgetValue > maxBudgetValue) {
-      errors['min_budget_rm'] = 'Minimum rent cannot exceed the maximum.';
-    }
-    if (minSizeValue != null &&
-        maxSizeValue != null &&
-        minSizeValue > maxSizeValue) {
-      errors['min_size_sqft'] = 'Minimum floor area cannot exceed the maximum.';
-    }
-    return errors;
-  }
-
-  static double? _number(
-    String raw,
-    String field,
-    Map<String, String> errors, {
-    required bool required,
-  }) {
-    final text = raw.trim();
-    if (text.isEmpty) {
-      if (required) errors[field] = 'This value is required.';
-      return null;
-    }
-    final parsed = double.tryParse(text);
-    if (parsed == null || !parsed.isFinite) {
-      errors[field] = 'Enter a number.';
-      return null;
-    }
-    if (parsed < 0) {
-      errors[field] = 'Enter zero or a positive number.';
-      return null;
-    }
-    if (required && parsed <= 0) {
-      errors[field] = 'Enter a value greater than zero.';
-      return null;
-    }
-    return parsed;
-  }
-
-  /// The payload the backend's `validate_requirements` expects.
-  Map<String, dynamic> toPayload() => {
-    'business_type': businessType.trim(),
-    'property_type': propertyType.trim(),
-    'target_market': targetMarket.trim(),
-    'seating_model': seatingModel.trim(),
-    'min_budget_rm': double.tryParse(minBudget.trim()) ?? 0,
-    'max_budget_rm': double.tryParse(maxBudget.trim()) ?? 0,
-    'min_size_sqft': double.tryParse(minSize.trim()) ?? 0,
-    'max_size_sqft': double.tryParse(maxSize.trim()) ?? 0,
-    'requirements': targetMarket.trim().isEmpty
-        ? const []
-        : [targetMarket.trim()],
-    'preferred_areas': preferredAreas,
-  };
 }
 
 // =================================================================== sub-views
@@ -5268,31 +2972,6 @@ class _SelectedPropertyPanel extends StatelessComponent {
     dt([Component.text(label)]),
     dd([Component.text(value)]),
   ]);
-}
-
-/// One customer-research question candidate in step 4.
-///
-/// Derived — never fetched: [strengths] and [evidence] are written from the
-/// saved requirements and the measured Step 3 evidence, so the panel can always
-/// explain where a question came from. `group` is `high`, `low` or `custom`.
-final class _ReviewCandidate {
-  final String id;
-  final String group;
-  final String question;
-  final String source;
-  final String version;
-  final List<String> strengths;
-  final List<String> evidence;
-
-  const _ReviewCandidate({
-    required this.id,
-    required this.group,
-    required this.question,
-    required this.source,
-    required this.version,
-    required this.strengths,
-    required this.evidence,
-  });
 }
 
 /// The report document and the RP-13 business description read together.

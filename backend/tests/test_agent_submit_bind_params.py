@@ -97,6 +97,9 @@ def test_agent_details_completion_binds_check_reset_json(monkeypatch):
     def execute(statement, params=None):
         captured.append((statement, params or {}))
         return SimpleNamespace(
+            mappings=lambda: SimpleNamespace(
+                first=lambda: {"verification_status": "draft", "is_published": False}
+            ),
             first=lambda: object(),
             scalar_one_or_none=lambda: "accepted",
             scalar=lambda: 1,

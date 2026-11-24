@@ -1,6 +1,5 @@
 import 'package:shared_logic/shared_logic.dart';
 
-
 /// One listing as the Owner / Agent workspace needs it.
 ///
 /// Owners and agents reach the SAME operational record (`fyp.rental_properties`)
@@ -93,17 +92,36 @@ class ProviderListing {
   /// live. An approved-but-unpublished row is not shown as active.
   bool get isActive => stage == ProviderStage.approved && isPublished;
 
+  /// Statuses that lock an operational property for both Owner and Agent.
+  /// Approved is read-only even before publication; pending/under review are
+  /// locked while the administrator decides. `needs_correction` is carried as
+  /// `rejected`/`changes_requested` on the wire and remains editable.
+  bool get lockedForEditing =>
+      isPublished ||
+      status.toLowerCase() == 'approved' ||
+      status.toLowerCase() == 'pending' ||
+      status.toLowerCase() == 'under_review' ||
+      status.toLowerCase() == 'verified' ||
+      taskState?.toLowerCase() == 'awaiting_review' ||
+      taskState?.toLowerCase() == 'approved';
+
   /// Editing is a backend policy (records under review are locked); this
   /// mirrors it for honest UI hints only — the backend decides.
   bool get locallyEditable =>
-      stage == ProviderStage.draft || stage == ProviderStage.rejected;
+      !lockedForEditing &&
+      (stage == ProviderStage.draft ||
+          stage == ProviderStage.rejected ||
+          status.toLowerCase() == 'changes_requested' ||
+          taskState?.toLowerCase() == 'corrections');
 
-  /// Whether an edit action may be offered at all. An assigned row carries the
-  /// server's answer; a row without it (an owner listing, or an older payload)
-  /// falls back to the mirrored stage policy.
-  bool get canEdit => backendEditable ?? locallyEditable;
+  /// Single gate used by every screen, route and callback. A stale or
+  /// permissive `editable=true` can never override the terminal states above.
+  /// The server's denial also wins when it is explicitly returned.
+  bool get canEdit =>
+      !lockedForEditing && (backendEditable ?? true) && locallyEditable;
 
-  String get displayTitle => title.trim().isNotEmpty ? title.trim() : 'Listing L-$id';
+  String get displayTitle =>
+      title.trim().isNotEmpty ? title.trim() : 'Listing L-$id';
 
   String get rentDisplay =>
       rent == null ? 'Rent not set' : 'RM ${rent!.round()} / month';
@@ -121,11 +139,8 @@ class ProviderListing {
 
   /// The searchable text: title, address (which already joins street, city
   /// and state) and property type — the fields the search field advertises.
-  String get searchBlob => [
-    displayTitle,
-    address,
-    propertyType ?? '',
-  ].join(' ').toLowerCase();
+  String get searchBlob =>
+      [displayTitle, address, propertyType ?? ''].join(' ').toLowerCase();
 
   static double? _num(dynamic value) {
     if (value is num) return value.toDouble();
@@ -137,10 +152,11 @@ class ProviderListing {
   factory ProviderListing.fromOwner(OwnerListing row) => ProviderListing(
     id: int.tryParse(row.id) ?? 0,
     title: row.name,
-    address: [row.address, row.city, row.state]
-        .whereType<String>()
-        .where((p) => p.trim().isNotEmpty)
-        .join(', '),
+    address: [
+      row.address,
+      row.city,
+      row.state,
+    ].whereType<String>().where((p) => p.trim().isNotEmpty).join(', '),
     rent: row.rentalPrice,
     sizeSqft: row.sizeSqft,
     propertyType: row.propertyType,
@@ -161,10 +177,11 @@ class ProviderListing {
   /// the operational property row).
   factory ProviderListing.fromAssignment(AgentAssignment row) {
     final raw = row.raw;
-    final address = [raw['address'], raw['city'], raw['state']]
-        .whereType<String>()
-        .where((p) => p.trim().isNotEmpty)
-        .join(', ');
+    final address = [
+      raw['address'],
+      raw['city'],
+      raw['state'],
+    ].whereType<String>().where((p) => p.trim().isNotEmpty).join(', ');
     return ProviderListing(
       id: row.listingId,
       title: row.displayTitle,
@@ -260,8 +277,9 @@ class ProviderWorkspace {
   /// "Published" means approved AND actually live — an approved-but-unpublished
   /// row is not a published listing. This is also the workspace's "Active"
   /// figure: the Active stat card and the Active filter chip report it.
-  int get publishedCount =>
-      listings.where((l) => l.isPublished && l.stage == ProviderStage.approved).length;
+  int get publishedCount => listings
+      .where((l) => l.isPublished && l.stage == ProviderStage.approved)
+      .length;
 
   List<ProviderListing> get recent {
     final sorted = [...listings]..sort((a, b) => b.id.compareTo(a.id));
@@ -336,9 +354,21 @@ List<(ProviderListingsFilter, String, int)> providerListingsChips(
 
   final chips = <(ProviderListingsFilter, String, int)>[
     (ProviderListingsFilter.all, 'All', searched.length),
-    (ProviderListingsFilter.active, 'Active', count(ProviderListingsFilter.active)),
-    (ProviderListingsFilter.pending, 'Pending', count(ProviderListingsFilter.pending)),
-    (ProviderListingsFilter.draft, 'Draft', count(ProviderListingsFilter.draft)),
+    (
+      ProviderListingsFilter.active,
+      'Active',
+      count(ProviderListingsFilter.active),
+    ),
+    (
+      ProviderListingsFilter.pending,
+      'Pending',
+      count(ProviderListingsFilter.pending),
+    ),
+    (
+      ProviderListingsFilter.draft,
+      'Draft',
+      count(ProviderListingsFilter.draft),
+    ),
   ];
   final rejected = count(ProviderListingsFilter.rejected);
   if (rejected > 0) {
@@ -459,8 +489,9 @@ class ProviderPerformance {
       engagementTracked: engagement['tracked'] == true,
       engagementReason: '${engagement['reason'] ?? ''}',
       untrackedMetrics: [
-        for (final row in (engagement['metrics'] as List? ?? const [])
-            .whereType<Map<String, dynamic>>())
+        for (final row
+            in (engagement['metrics'] as List? ?? const [])
+                .whereType<Map<String, dynamic>>())
           ProviderUntrackedMetric.fromJson(row),
       ],
       medianRent: _double(portfolio['median_rent']),
@@ -566,8 +597,9 @@ class ProviderVerification {
       submittedAt: json['submitted_at']?.toString(),
       reviewedAt: json['reviewed_at']?.toString(),
       requirements: [
-        for (final row in (json['requirements'] as List? ?? const [])
-            .whereType<Map<String, dynamic>>())
+        for (final row
+            in (json['requirements'] as List? ?? const [])
+                .whereType<Map<String, dynamic>>())
           ProviderVerificationRequirement.fromJson(row),
       ],
     );

@@ -36,7 +36,7 @@ from sitewise.dependencies import (
     require_property_owner,
 )
 from sitewise.services import capture_session_service as svc
-from sitewise.services import capture_storage
+from sitewise.services import capture_storage, provider_scope
 from sitewise.services.agent_inspection_policy import (
     agent_assignment,
     require_frame_backup,
@@ -217,6 +217,9 @@ def create_session(
     db: DbSession,
     current: ProviderUser,
 ) -> dict[str, Any]:
+    provider_scope.require_mutable_listing(
+        db, listing_id=body.property_id, role=current.role
+    )
     try:
         agent_assignment(db, body.property_id, current, writable=True)
     except HTTPException as exc:
@@ -306,7 +309,7 @@ def confirm_frame(
     db: DbSession,
     current: ProviderUser,
 ) -> dict[str, Any]:
-    record = svc.require_capture_session(
+    record = svc.require_mutable_capture_session(
         db, session_id=session_id, user_id=current.user_id, role=current.role
     )
     append_only = require_frame_backup(db, record, current)
@@ -433,7 +436,7 @@ def issue_upload_urls(
     of the SAME bytes answers 409 Duplicate, which IS the idempotent success
     the retry flow needs — the object is already stored.
     """
-    record = svc.require_capture_session(
+    record = svc.require_mutable_capture_session(
         db, session_id=session_id, user_id=current.user_id, role=current.role
     )
     require_frame_backup(db, record, current)
@@ -497,7 +500,7 @@ def issue_panorama_upload_url(
     Same authorization and transport as the frame upload URLs, pinned to the
     session's single deterministic panorama object.
     """
-    record = svc.require_capture_session(
+    record = svc.require_mutable_capture_session(
         db, session_id=session_id, user_id=current.user_id, role=current.role
     )
     agent_assignment(db, int(record.property_id), current, writable=True)
@@ -619,7 +622,7 @@ def confirm_panorama(
     and geometry limits (2:1 equirectangular). Only then is
     ``fyp.panoramas`` written and the session completed.
     """
-    record = svc.require_capture_session(
+    record = svc.require_mutable_capture_session(
         db, session_id=session_id, user_id=current.user_id, role=current.role
     )
     if record.capture_mode == svc.BACKEND_38_MODE:
@@ -743,7 +746,7 @@ def request_processing(
     db: DbSession,
     current: ProviderUser,
 ) -> dict[str, Any]:
-    svc.require_capture_session(
+    svc.require_mutable_capture_session(
         db, session_id=session_id, user_id=current.user_id, role=current.role
     )
     record = svc.get_capture_session(db, session_id)

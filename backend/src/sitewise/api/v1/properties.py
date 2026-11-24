@@ -563,6 +563,9 @@ def update_own_listing(
     repo = FypPropertyRepository(session)
     _owned_listing_or_error(repo, property_id, current)
     listing = _owned_listing_or_error(repo, property_id, current, for_update=True)
+    provider_scope.require_mutable_listing(
+        session, listing_id=property_id, role=current.role
+    )
     if listing.get("is_published") or listing.get("verification_status") not in ("draft", "rejected"):
         raise HTTPException(status_code=409, detail="The property is locked for review or published.")
     verification = verification_row(session, property_id)
@@ -653,6 +656,9 @@ async def upload_listing_photo(
     _owner_write_only(current)
     repo = FypPropertyRepository(session)
     listing = _owned_listing_or_error(repo, property_id, current)
+    provider_scope.require_mutable_listing(
+        session, listing_id=property_id, role=current.role
+    )
     if listing.get("is_published") or listing.get("verification_status") not in ("draft", "rejected"):
         raise HTTPException(status_code=409, detail="Photos are locked for review or publication.")
     verification = verification_row(session, property_id)
@@ -708,6 +714,9 @@ def delete_listing_photo(
     _owned_listing_or_error(repo, property_id, current)
     _owner_write_only(current)
     listing = _owned_listing_or_error(repo, property_id, current)
+    provider_scope.require_mutable_listing(
+        session, listing_id=property_id, role=current.role
+    )
     if listing.get("is_published") or listing.get("verification_status") not in ("draft", "rejected"):
         raise HTTPException(status_code=409, detail="Photos are locked for review or publication.")
     deleted = repo.delete_listing_photo(property_id, photo_id)
@@ -728,6 +737,9 @@ def set_primary_listing_photo(
     _owned_listing_or_error(repo, property_id, current)
     _owner_write_only(current)
     listing = _owned_listing_or_error(repo, property_id, current)
+    provider_scope.require_mutable_listing(
+        session, listing_id=property_id, role=current.role
+    )
     if listing.get("is_published") or listing.get("verification_status") not in ("draft", "rejected"):
         raise HTTPException(status_code=409, detail="Photos are locked for review or publication.")
     if not repo.set_primary_listing_photo(property_id, photo_id):
@@ -940,6 +952,9 @@ def validate_saved_property_address(
     _owner_write_only(current)
     repository = FypPropertyRepository(session)
     listing = _owned_listing_or_error(repository, property_id, current)
+    provider_scope.require_mutable_listing(
+        session, listing_id=property_id, role=current.role
+    )
     if listing["is_published"] or listing["verification_status"] not in ("draft", "rejected"):
         raise HTTPException(status_code=409, detail="The property is locked for address edits.")
     keys = ("address", "city", "state", "postcode", "latitude", "longitude")

@@ -217,6 +217,19 @@ def require_capture_session(
     return record
 
 
+def require_mutable_capture_session(
+    session: Session, *, session_id: uuid.UUID, user_id: Any, role: str
+) -> CaptureSession:
+    """Read a session for a write, re-checking the property's current status."""
+    record = require_capture_session(
+        session, session_id=session_id, user_id=user_id, role=role
+    )
+    provider_scope.require_mutable_listing(
+        session, listing_id=int(record.property_id), role=role
+    )
+    return record
+
+
 def confirmed_frame_count(session: Session, session_id: uuid.UUID) -> int:
     return int(
         session.execute(

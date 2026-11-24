@@ -42,7 +42,8 @@ class ProviderListingsMobilePage extends ConsumerStatefulWidget {
 }
 
 class _ProviderListingsMobilePageState
-    extends ConsumerState<ProviderListingsMobilePage> {
+    extends ConsumerState<ProviderListingsMobilePage>
+    with WidgetsBindingObserver {
   Future<ProviderWorkspace>? _future;
 
   /// The selected status chip. Kept as the enum, not a label, so renaming a
@@ -53,6 +54,7 @@ class _ProviderListingsMobilePageState
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
     // The Add Property repository bumps this only after a real draft/photo
     // mutation, so returning to an unchanged list never refetches it.
@@ -62,8 +64,15 @@ class _ProviderListingsMobilePageState
   @override
   void dispose() {
     ServiceLocator.listingsRevision.removeListener(_reloadOnMutation);
+    WidgetsBinding.instance.removeObserver(this);
     _search.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // An administrator may approve while this screen is backgrounded.
+    if (state == AppLifecycleState.resumed && mounted) _load();
   }
 
   void _reloadOnMutation() {
@@ -98,6 +107,8 @@ class _ProviderListingsMobilePageState
       _open('/provider/property-detail', arguments: listing.id);
 
   void _openEditor(ProviderListing listing) {
+    // Direct navigation (deep link, shortcut) obeys the same lock as the UI.
+    if (!listing.canEdit) return;
     if (ref.read(authNotifierProvider).user?.role == AppRole.agent) {
       _open('/provider/inspection', arguments: listing.id);
       return;
@@ -749,15 +760,17 @@ class ProviderListingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final canEditOwner = !isAgentSession && listing.locallyEditable;
-    final canEdit = isAgentSession || canEditOwner;
+    // One rule for Owner and Agent: the record's real status decides. Never
+    // restore editing from the Agent role alone.
+    final canEdit = listing.canEdit;
     final editHint = isAgentSession
         ? 'Propose a change for this assigned listing'
         : switch (listing.stage) {
             ProviderStage.pending =>
               'Editing is locked while the listing awaits review',
             ProviderStage.approved =>
-              'Published listings are locked; ask the administrator for changes',
+              'Approved listings are read-only until an administrator '
+                  'returns them for correction',
             _ => 'Edit this listing',
           };
     return Semantics(
@@ -794,6 +807,7 @@ class ProviderListingCard extends StatelessWidget {
                   _ActionsRow(
                     canEdit: canEdit,
                     editHint: editHint,
+                    showApprovedLock: listing.stage == ProviderStage.approved,
                     onOpen: onOpen,
                     onEdit: onEdit,
                   ),
@@ -1273,56 +1287,74 @@ class _ActionsRow extends StatelessWidget {
   const _ActionsRow({
     required this.canEdit,
     required this.editHint,
+    required this.showApprovedLock,
     required this.onOpen,
     required this.onEdit,
   });
 
   final bool canEdit;
   final String editHint;
+  final bool showApprovedLock;
   final VoidCallback onOpen;
   final VoidCallback onEdit;
 
   @override
   Widget build(BuildContext context) {
+    final viewDetails = FilledButton.icon(
+      onPressed: onOpen,
+      icon: const Icon(Icons.arrow_forward_rounded, size: 17),
+      label: const Text('View details'),
+      style: FilledButton.styleFrom(
+        backgroundColor: SitewiseColors.action,
+        foregroundColor: SitewiseM3.surface,
+        minimumSize: const Size.fromHeight(44),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(SitewiseM3.radiusPill),
+        ),
+        textStyle: const TextStyle(
+          fontFamily: kFontFamily,
+          fontSize: 13,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+    if (!canEdit) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(width: double.infinity, child: viewDetails),
+          if (showApprovedLock) ...[
+            const SizedBox(height: 8),
+            const Row(
+              children: [
+                Icon(Icons.lock_outline, size: 14, color: SitewiseM3.muted),
+                SizedBox(width: 6),
+                Text(
+                  'Approved listing · Read-only',
+                  style: TextStyle(fontSize: 12, color: SitewiseM3.muted),
+                ),
+              ],
+            ),
+          ],
+        ],
+      );
+    }
+    // Edit is absent entirely when the record may not be changed.
     return Row(
       children: [
-        Expanded(
-          child: FilledButton.icon(
-            onPressed: onOpen,
-            icon: const Icon(Icons.arrow_forward_rounded, size: 17),
-            label: const Text('View details'),
-            style: FilledButton.styleFrom(
-              backgroundColor: SitewiseColors.action,
-              foregroundColor: SitewiseM3.surface,
-              minimumSize: const Size.fromHeight(44),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(SitewiseM3.radiusPill),
-              ),
-              textStyle: const TextStyle(
-                fontFamily: kFontFamily,
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-        ),
+        Expanded(child: viewDetails),
         const SizedBox(width: 10),
         Expanded(
           child: Tooltip(
-            message: canEdit ? '' : editHint,
+            message: editHint,
             triggerMode: TooltipTriggerMode.longPress,
             child: OutlinedButton.icon(
-              onPressed: canEdit ? onEdit : null,
+              onPressed: onEdit,
               icon: const Icon(Icons.edit_outlined, size: 16),
               label: const Text('Edit'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: SitewiseColors.action,
-                disabledForegroundColor: SitewiseM3.muted.withValues(
-                  alpha: 0.6,
-                ),
-                side: BorderSide(
-                  color: canEdit ? SitewiseColors.action : SitewiseM3.line,
-                ),
+                side: BorderSide(color: SitewiseColors.action),
                 minimumSize: const Size.fromHeight(44),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(SitewiseM3.radiusPill),

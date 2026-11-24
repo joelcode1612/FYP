@@ -20,6 +20,7 @@ from sitewise.db.session import get_db
 from sitewise.dependencies import AuthenticatedUser, require_agent_mfa, require_property_owner
 from sitewise.domain import rbac
 from sitewise.repositories.fyp_property_repository import FypPropertyRepository
+from sitewise.services import provider_scope
 from sitewise.services.agent_inspection_policy import (
     REQUIRED_INSPECTION,
     agent_assignment,
@@ -261,11 +262,9 @@ def complete_agent_missing_details(
     property_id: int, payload: AgentMissingDetails, session: Db, agent: Agent,
 ) -> dict:
     # Lock canonical property before assignment (same lock order as owner edit).
-    listing_row = session.execute(text('''
-        SELECT id FROM fyp.rental_properties WHERE id=:pid FOR UPDATE
-    '''), {'pid': property_id}).first()
-    if listing_row is None:
-        raise HTTPException(status_code=404, detail='Property not found.')
+    provider_scope.require_mutable_listing(
+        session, listing_id=property_id, role=agent.role
+    )
     assignment = agent_assignment(session, property_id, agent, writable=True)
     current = session.execute(text('''
         SELECT workflow_status FROM fyp.agent_listing_assignment
@@ -409,6 +408,9 @@ def inspection_status(property_id: int, session: Db, agent: Agent) -> dict:
 
 @router.patch('/properties/{property_id}/inspection')
 def save_inspection(property_id: int, payload: InspectionInput, session: Db, agent: Agent) -> dict:
+    provider_scope.require_mutable_listing(
+        session, listing_id=property_id, role=agent.role
+    )
     row = agent_assignment(session, property_id, agent, writable=True)
     evidence = payload.model_dump()
     result = session.execute(text("""
@@ -427,6 +429,9 @@ def submit_verified_property(
     property_id: int, session: Db, agent: Agent, payload: AgentInspectionSubmission | None = None
 ) -> dict:
     payload = payload or AgentInspectionSubmission()
+    provider_scope.require_mutable_listing(
+        session, listing_id=property_id, role=agent.role
+    )
     # Preflight lists every actionable gap instead of failing only after capture.
     assignment = agent_assignment(session, property_id, agent)
     listing = rental_listing(session, property_id)

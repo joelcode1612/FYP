@@ -322,23 +322,30 @@ class _ProviderPropertyDetailMobilePageState
                             propertyId: listing.id,
                             listing: listing,
                             inspectionDetail: agent,
+                            readOnly: listing.lockedForEditing,
                           ),
                         ),
                       );
                       if (mounted) await _load();
                     },
                     icon: const Icon(Icons.fact_check_outlined),
-                    label: const Text('Inspect property'),
+                    label: Text(
+                      listing.lockedForEditing
+                          ? 'View inspection'
+                          : 'Inspect property',
+                    ),
                   ),
-                  const SizedBox(height: 12),
-                  OutlinedButton.icon(
-                    onPressed: _busy ? null : _requestChange,
-                    icon: const Icon(Icons.edit_note_rounded),
-                    label: const Text('Propose a change'),
-                  ),
-                ] else
+                  if (listing.canEdit) ...[
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: _busy ? null : _requestChange,
+                      icon: const Icon(Icons.edit_note_rounded),
+                      label: const Text('Propose a change'),
+                    ),
+                  ],
+                ] else if (listing.canEdit)
                   FilledButton.icon(
-                    onPressed: _busy || !listing.canEdit || listing.isPublished
+                    onPressed: _busy
                         ? null
                         : () => Navigator.of(context)
                               .pushNamed(
@@ -359,6 +366,23 @@ class _ProviderPropertyDetailMobilePageState
                       ),
                     ),
                   ),
+                if (listing.lockedForEditing) ...[
+                  const SizedBox(height: 12),
+                  const Row(
+                    children: [
+                      Icon(
+                        Icons.lock_outline,
+                        size: 14,
+                        color: SitewiseM3.muted,
+                      ),
+                      SizedBox(width: 6),
+                      Text(
+                        'Approved listing · Read-only',
+                        style: TextStyle(fontSize: 12, color: SitewiseM3.muted),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             );
           },
