@@ -42,6 +42,14 @@ def test_agent_submission_binds_required_inspection_json(monkeypatch):
         "postcode": "43200",
         "rental_price": 2500,
         "size_sqft": 1200,
+        # Commercial terms: required once the owner commercial-terms contract
+        # is enabled for listing-scope submissions.
+        "availability": "Available now",
+        "floor_description": "Ground floor",
+        "floor_level": 0,
+        "furnishing": "Fully furnished",
+        "landlord_fnb_permission": "Permitted",
+        "lease_duration_months": 12,
     }
     verification = SimpleNamespace(
         verification_id=uuid4(),
@@ -97,9 +105,6 @@ def test_agent_details_completion_binds_check_reset_json(monkeypatch):
     def execute(statement, params=None):
         captured.append((statement, params or {}))
         return SimpleNamespace(
-            mappings=lambda: SimpleNamespace(
-                first=lambda: {"verification_status": "draft", "is_published": False}
-            ),
             first=lambda: object(),
             scalar_one_or_none=lambda: "accepted",
             scalar=lambda: 1,
