@@ -306,7 +306,14 @@ def assessment_report(
         # than failing the whole request.
         property_report = None
 
-    evidence = service.evidence_for(assessment.property_id)
+    # Stage-3 evidence is the analysed location record the standalone
+    # /catalog/properties/{id}/evidence endpoint serves. An analytics failure
+    # must degrade the evidence section, never fail the whole report.
+    try:
+        evidence = CatalogRepository(analytics).get_evidence(
+            assessment.property_id)
+    except (SQLAlchemyError, KeyError, ValueError):
+        evidence = None
     explanation = ExplanationService(
         session, analytics
     ).latest_for_assessment(assessment)

@@ -430,7 +430,13 @@ def test_requirements_advance_progress_only_after_persisting(client, identity, c
     assert read.json()["assessment"]["progress_percent"] == 40
 
 
-def test_evidence_stage_completes_when_analysis_exists(client, identity, catalog_ids):
+def test_evidence_stage_does_not_advance_progress_by_button_click(client, identity, catalog_ids):
+    """The legacy PATCH still writes its timestamp; it no longer counts.
+
+    Stage 3 is "business review and research goals" and completes on a verified
+    research objective, not on a click. Keeping the two apart is the whole point
+    of the evidence model: the write succeeds, the percentage does not move.
+    """
     start = client.post(
         "/api/v1/assessments/",
         json={"property_id": catalog_ids["analysed"]},
@@ -449,9 +455,14 @@ def test_evidence_stage_completes_when_analysis_exists(client, identity, catalog
     )
     assert r.status_code == 200, r.text
     a = r.json()["assessment"]
-    assert a["completed_stages"] == 3
-    assert a["progress_percent"] == 60
-    assert a["current_stage"] == 4
+    assert a["completed_stages"] == 2
+    assert a["progress_percent"] == 40
+    assert a["remaining_stages"] == 3
+    assert a["current_stage"] == 3
+    stage_three = a["stages"][2]
+    assert stage_three["state"] == "IN_PROGRESS"
+    assert stage_three["reason"] == "NO_RESEARCH_OBJECTIVE"
+    assert stage_three["completed_at"] is None
 
 
 def test_evidence_stage_refused_when_no_analysis_exists(client, identity, catalog_ids):
@@ -543,12 +554,14 @@ def test_model_stages_are_refused_while_no_artifact_exists(client, identity, cat
 
     read = client.get(f"/api/v1/assessments/{aid}", headers=auth(identity["token"]))
     a = read.json()["assessment"]
-    assert a["completed_stages"] == 3
-    assert a["progress_percent"] == 60
+    # Stage 3 cannot advance without a verified research objective, so the
+    # record stays at two even though the legacy stage-3 stamp was written.
+    assert a["completed_stages"] == 2
+    assert a["progress_percent"] == 40
     assert a["report_available"] is False
     assert a["stages"][3]["status"] == "unavailable"
-    assert a["stages"][3]["unavailable_reason"]
-    assert a["next_action"]["kind"] == "blocked"
+    assert a["stages"][3]["unavailable_reason"] == "STAGE_3_INCOMPLETE"
+    assert a["next_action"]["kind"] == "continue"
 
 
 def test_invalid_requirements_report_every_problem(client, identity, catalog_ids):

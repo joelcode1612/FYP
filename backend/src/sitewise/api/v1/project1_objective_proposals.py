@@ -61,12 +61,14 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
 
-from sitewise.core.config import selected_bdj_contract, settings
+from sitewise.core.config import (
+    provider_timeout_seconds, selected_bdj_contract, settings)
 from sitewise.core.exceptions import ConflictError, NotFoundError
 from sitewise.dependencies import (
     AuthenticatedUser, get_persisted_business_context_service, require_entrepreneur)
 from sitewise.db.m2_session import get_bcb_engine, m2_session_for
 from sitewise.project1.contracts import WorkflowHeld, no_authority
+from sitewise.project1 import proposal_target_policy
 #: Captured at import time on purpose. The cloud-dispatch requirement is bound
 #: to the *real* adapter class; if this were resolved lazily, a substituted
 #: adapter (the offline test double) would redefine the very symbol the check
@@ -79,12 +81,20 @@ from sitewise.domain import rbac
 router = APIRouter()
 Owner = Annotated[AuthenticatedUser, Depends(require_entrepreneur)]
 
-#: The only cluster this checkpoint may execute or persist against.
-TARGET_DATABASE = 'project1_workflow_tests'
-TARGET_PORT = 5433
-TARGET_HOSTS = {'127.0.0.1', 'localhost'}
+#: Approved isolated targets and the principals allowed there.
+#:
+#: DD-006 was a single literal ``(database, port)`` pair, so the checkpoint could
+#: not run against the PG18 cluster the rest of the application uses. The
+#: allowlist lives in ``proposal_target_policy`` and is imported — never copied —
+#: so the route guard and the persistence adapter cannot drift apart again, and
+#: no environment variable can widen it.
+APPROVED_TARGETS = proposal_target_policy.APPROVED_TARGETS
+TARGET_HOSTS = proposal_target_policy.TARGET_HOSTS
+#: Never allowlisted, and checked *before* the allowlist so that a later edit
+#: which adds one of these names fails loudly instead of silently authorising it.
+PROTECTED_DATABASES = proposal_target_policy.PROTECTED_DATABASES
 #: The restricted principal that owns the proposal/decision grants.
-PROPOSAL_PRINCIPAL = 'p1_m2_runtime'
+PROPOSAL_PRINCIPAL = proposal_target_policy.PROPOSAL_PRINCIPAL
 #: Adapter label persisted in ``m2_bdj_objective_proposals.model_provider``. It
 #: names the adapter, not the model; the model ids are stored in their own
 #: columns so a reader can tell which model was requested from which answered.
@@ -306,18 +316,26 @@ def assert_proposal_storage_target(engine) -> None:
     """
     try:
         url = make_url(str(engine.url))
-        if (url.get_backend_name() != 'postgresql' or
-                url.host not in TARGET_HOSTS or
-                url.port != TARGET_PORT or
-                url.database != TARGET_DATABASE):
+        if url.get_backend_name() != 'postgresql' or url.host not in TARGET_HOSTS:
+            raise ValueError
+        # Protected names are refused before the allowlist is consulted, so the
+        # allowlist can never become a way to reach one of them.
+        permitted = proposal_target_policy.approved_principals(
+            url.database, url.port)
+        if permitted is None:
             raise ValueError
         with engine.connect() as connection:
             database, server_port, current_user, privileged = connection.execute(text(
                 'SELECT current_database(), inet_server_port(), current_user,'
                 ' (SELECT rolsuper OR rolbypassrls FROM pg_roles'
                 '  WHERE rolname = current_user)')).one()
-        if (database != TARGET_DATABASE or server_port != TARGET_PORT or
-                current_user != PROPOSAL_PRINCIPAL or privileged is not False):
+        # The server's answer must agree with the URL we were handed, and must
+        # itself not be a protected database.
+        if (database, server_port) != (url.database, url.port):
+            raise ValueError
+        if database in PROTECTED_DATABASES:
+            raise ValueError
+        if current_user not in permitted or privileged is not False:
             raise ValueError
     except Exception:
         raise _refused('PROPOSAL_DB_TARGET_REFUSED', 503,
@@ -333,15 +351,18 @@ def assert_ledger_target(engine) -> None:
     """
     try:
         url = make_url(str(engine.url))
-        if (url.get_backend_name() != 'postgresql' or
-                url.host not in TARGET_HOSTS or
-                url.port != TARGET_PORT or
-                url.database != TARGET_DATABASE):
+        if url.get_backend_name() != 'postgresql' or url.host not in TARGET_HOSTS:
+            raise ValueError
+        if url.database in PROTECTED_DATABASES:
+            raise ValueError
+        if not proposal_target_policy.is_approved(url.database, url.port):
             raise ValueError
         with engine.connect() as connection:
             database, server_port = connection.execute(text(
                 'SELECT current_database(), inet_server_port()')).one()
-        if database != TARGET_DATABASE or server_port != TARGET_PORT:
+        if (database, server_port) != (url.database, url.port):
+            raise ValueError
+        if database in PROTECTED_DATABASES:
             raise ValueError
     except Exception:
         raise _refused('LEDGER_DB_TARGET_REFUSED', 503,
@@ -580,7 +601,7 @@ def evaluate_objective_proposals(
         settings.tokenharbor_api_key,
         enabled=settings.tokenharbor_enabled,
         structured_mode=settings.tokenharbor_structured_mode,
-        timeout=max(1, min(settings.tokenharbor_timeout_seconds, 60)),
+        timeout=provider_timeout_seconds(),
         identity_exception=settings.tokenharbor_model_identity_exception)
     # Bound to the model actually configured on the adapter, so a substituted or
     # downgraded model is refused rather than inheriting this authorisation.
@@ -1203,3 +1224,79 @@ def _decision_envelope(engine, proposal_id, user, assessment_id,
         'qg_execution': False,
         **no_authority(),
     }
+
+
+# ---------------------------------------------------------------------------
+# N04-C Decision 1: versioned objective re-admission
+# ---------------------------------------------------------------------------
+class ReadmissionRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    confirmation_id: UUID
+
+
+@router.post('/assessments/{assessment_id}/objective-admissions/{admission_id}/readmit')
+def readmit_objective(assessment_id: UUID, admission_id: UUID,
+                      payload: ReadmissionRequest, user: Owner, response: Response,
+                      engine: AuthorizedProposalStorageEngine,
+                      context_service: Annotated[object, Depends(
+                          get_objective_context_service)]):
+    """Bind an already-approved objective to the workflow's current context.
+
+    This is the legitimate answer to "the snapshot moved". It creates a new
+    admission row over the same approved proposal, with an explicit supersession
+    edge; it never edits the historical admission and never authors a proposal.
+
+    Only the owner may do it, and only against the context the business-context
+    service currently calls current — not against whichever snapshot happens to
+    make an admission lookup pass.
+    """
+    response.headers['Cache-Control'] = 'no-store'
+    from sitewise.project1.objective_readmission import readmit
+
+    actor = user.user_id
+    # The business-context service takes a ContextActor, not a bare id: it needs
+    # the role to scope the read as well as the owner.
+    context_actor = ContextActor(user.user_id, rbac.canonical_role(user.role))
+    try:
+        status = context_service.status(assessment_id, payload.confirmation_id,
+                                        context_actor)
+    except ContextOperationHeld as exc:
+        raise HTTPException(503, detail={'code': exc.code,
+                                         'message': 'The business context could '
+                                                    'not be verified.'}) from None
+    if status.get('source_is_current') is not True:
+        raise HTTPException(409, detail={
+            'code': 'BCB_SOURCE_NOT_CURRENT',
+            'message': 'The confirmation has no current, reproducible context.'})
+    if status.get('context_compatible') is False:
+        raise HTTPException(409, detail={
+            'code': 'BCB_CONTEXT_NOT_REPRODUCIBLE',
+            'message': 'The current context does not reproduce under this build.'})
+    context_id = status.get('context_id')
+    if not context_id:
+        raise HTTPException(409, detail={
+            'code': 'BCB_CONTEXT_NOT_PERSISTED',
+            'message': 'No persisted business context exists to bind to.'})
+    try:
+        read = context_service.retrieve(assessment_id, context_id, context_actor)
+    except ContextOperationHeld as exc:
+        raise HTTPException(409, detail={'code': exc.code,
+                                         'message': 'The current context could '
+                                                    'not be read.'}) from None
+    packet_hash = (read.get('packet') or {}).get('packet_hash')
+    if not packet_hash:
+        raise HTTPException(409, detail={
+            'code': 'BCB_CONTEXT_HASH_UNAVAILABLE',
+            'message': 'The current context carries no packet hash.'})
+
+    try:
+        result = readmit(engine, actor_id=actor, assessment_id=assessment_id,
+                         admission_id=admission_id,
+                         confirmation_id=payload.confirmation_id,
+                         context_id=context_id,
+                         context_packet_hash=packet_hash)
+    except WorkflowHeld as exc:
+        raise _held(exc, {}, 409, 'BDJ_OBJECTIVE_READMISSION_REFUSED') from None
+    return {**result, 'confirmation_id': str(payload.confirmation_id),
+            'qg_execution_authorized': False, 'fielding_authorized': False,
+            'publication_authorized': False, 'scientifically_accepted': False}

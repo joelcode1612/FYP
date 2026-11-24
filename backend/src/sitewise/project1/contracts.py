@@ -26,7 +26,13 @@ class StrictModel(BaseModel):
 
 
 class SourceRef(StrictModel):
-    item_key: str = Field(pattern=r'^(?:M2-(?:\d{2}|O-0[12])|M2V1-(?:0[1-9]|1[01]))$')
+    # The pattern must admit every registered instrument's keys, not just the
+    # first one. It previously allowed only M2-* and M2V1-*, so an M2V2 finding
+    # failed model validation before validate_candidates() could inspect it —
+    # the model would have been asked for references it was structurally unable
+    # to return (DD-010). M2V2 registers items 01..19.
+    item_key: str = Field(
+        pattern=r'^(?:M2-(?:\d{2}|O-0[12])|M2V1-(?:0[1-9]|1[01])|M2V2-(?:0[1-9]|1[0-9]))$')
     answer_revision_id: str = Field(min_length=1, max_length=64)
     item_version_id: str = Field(min_length=1, max_length=64)
     # BDJ-QUOTE-01: the quote is the evidence span, so it must be copied from the

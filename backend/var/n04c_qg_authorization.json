@@ -1,0 +1,17 @@
+{
+  "purpose": "SYNTHETIC_QG_RESEARCH_EVALUATION",
+  "source_fingerprint": "1ec9182f3afa9dc440a704a581274bd1e5fde6d826312ff76fb6c0d62e9eef3a",
+  "operator_receipt": "N04C-OWNER-AUTHORIZED-SYNTHETIC-LIVE-TEST",
+  "assessment_id": "053b3768-145b-4d4a-a880-e98174adcd94",
+  "actor_id": "b9e62014-b7bc-426e-a950-a95b25965639",
+  "max_attempts": 1,
+  "evaluation_id": "QG-AUTHORIZATION-bdd372e8-8ce0-5b10-b7a3-ffb1f0c815e0",
+  "authorization_id": "bdd372e8-8ce0-5b10-b7a3-ffb1f0c815e0",
+  "authorization_gate": "n04c-app-path-12000-v1",
+  "max_tokens": 12000,
+  "prompt_version": "QG-FIXED-OPTION-1-CAND",
+  "prompt_sha256": "a4d21e98a819749f7a0d1f9dea8cd1977e6da0fff60a4267e1124bdc101c55cb",
+  "cost_ceiling_usd": 0.5,
+  "scope": "LIVE_PROVIDER_CANDIDATE_TEST",
+  "issued_at": "2026-11-23T12:33:38.277381+00:00"
+}

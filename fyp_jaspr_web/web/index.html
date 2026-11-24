@@ -60,8 +60,15 @@
   <!-- PROJECT1 v1.5 four-step research flow. Three scoped sheets:
        .ao-* assessment overview list, .m1-* Step 1 M2 editor, and .af-* the
        flow host + shared four-step stepper. Each is scoped to its own prefix
-       so none of them restyle the existing workspace or shell. -->
-  <link rel="stylesheet" href="/assessment_overview_page.css" />
+       so none of them restyle the existing workspace or shell.
+
+       NOTE: `assessment_overview_page.css` is intentionally absent. It was
+       referenced here but has never existed in this repository (no git history,
+       no file under web/), so every page load issued a 404 for it. The .ao-*
+       styles it was meant to hold were never written; the assessment overview
+       list is styled by `sitewise_assessment_entry.css` (.asw-*). The dead
+       reference was removed rather than a stub file created, because an empty
+       stylesheet would make a missing feature look present. -->
   <link rel="stylesheet" href="/m2_step_one_page.css" />
   <link rel="stylesheet" href="/research_assessment_flow_page.css" />
   <!-- PROJECT1 V1.5 Step 2 "Business preferences" mock UI. Scoped to

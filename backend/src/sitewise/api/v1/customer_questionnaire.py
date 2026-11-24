@@ -50,7 +50,7 @@ def get_ee01_service():
     if not raw:
         raise HTTPException(503,detail={'code':'EE01_DATABASE_TARGET_UNVERIFIED'})
     url=make_url(raw)
-    if url.drivername!='postgresql+psycopg2' or url.database!=settings.m2_expected_database or url.username!='p1_ee01_runtime':
+    if url.drivername!='postgresql+psycopg2' or url.database!=settings.ee01_expected_database or url.username!='p1_ee01_runtime':
         raise HTTPException(503,detail={'code':'EE01_DATABASE_TARGET_UNVERIFIED'})
     return Ee01Service(_ee01_engine(raw))
 

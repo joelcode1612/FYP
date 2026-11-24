@@ -88,14 +88,36 @@ class _Snapshot:
 
 
 class PersistedBusinessContextService:
-    def __init__(self, store: ContextStorePort, contract: str = CURRENT_CONTEXT_VERSION):
-        if contract not in CONTRACTS:
+    def __init__(self, store: ContextStorePort, contract: str | None = None):
+        # ``None`` means "choose per instrument at build time" (DD-017). An
+        # explicit contract still wins, so historical callers and tests that
+        # pin 1.0/1.1 keep producing byte-identical packets.
+        if contract is not None and contract not in CONTRACTS:
             raise ContextOperationHeld('BCB_CONTRACT_VERSION_UNSUPPORTED')
         self.store, self.contract = store, contract
         #: Why the last ``_reproduces`` call returned False, or None when it
         #: reproduced. Diagnostic only: it never alters the boolean or the
         #: refusal, and it carries no source data.
         self.last_reproduction_failure = None
+
+    @staticmethod
+    def _instrument_contract(unit, selection, actor) -> str:
+        """Pick the contract from the assessment's instrument (DD-017).
+
+        M2V2 assessments carry the three separable V2 outputs, so they need the
+        sections contract; every other instrument stays on the geo-excluded 1.1
+        contract it was already built with. The builder still fails closed
+        (``SECTIONS_REQUIRE_M2V2``) if an M2V1 assessment is ever pointed at a
+        sections contract, so a wrong mapping is a refusal, not an empty block.
+        """
+        assessment = unit.m2.get_assessment_for_update(selection.assessment_id, actor.user_id)
+        if assessment is None:
+            # ``_select`` runs first and raises NotFoundError; this is only a
+            # defensive default and never reaches the builder.
+            return CURRENT_CONTEXT_VERSION
+        instrument = unit.m2.get_instrument(UUID(str(assessment['instrument_id'])))
+        tag = str((instrument or {}).get('version_tag') or '')
+        return SECTIONS_CONTEXT_VERSION if tag.startswith('M2V2-') else CURRENT_CONTEXT_VERSION
 
     @staticmethod
     def _select(unit, selection, actor, *, initialize_build=True):
@@ -188,16 +210,19 @@ class PersistedBusinessContextService:
 
     def _construct_once(self, selection: ContextSelection, actor: ContextActor,
                         contract: str | None = None):
-        # An explicit contract is opt-in per call; the default stays 1.1 so
-        # every existing packet rebuilds unchanged.
+        # An explicit contract is opt-in per call; an explicit service contract
+        # pins every build. When neither is given, the instrument decides
+        # (DD-017): M2V2 -> sections, otherwise the geo-excluded 1.1 contract.
         contract = contract or self.contract
-        if contract not in CONTRACTS:
-            raise ContextOperationHeld('BCB_CONTRACT_VERSION_UNSUPPORTED')
         selected = False
         try:
             with self.store.open(actor.user_id) as unit:
                 self._select(unit, selection, actor)
                 selected = True
+                if contract is None:
+                    contract = self._instrument_contract(unit, selection, actor)
+                if contract not in CONTRACTS:
+                    raise ContextOperationHeld('BCB_CONTRACT_VERSION_UNSUPPORTED')
                 try:
                     packet = self._build(unit, selection, actor, contract)
                 except (ContextBindingUnavailable, ContextRefused) as exc:

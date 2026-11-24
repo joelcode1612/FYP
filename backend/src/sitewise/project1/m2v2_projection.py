@@ -60,6 +60,32 @@ M2V2_ITEMS = frozenset(f'M2V2-{number:02d}' for number in range(1, 20))
 SCHEMA_VERSION = 'project1-m2v2-projection/1-candidate'
 M2V1_SCHEMA_VERSION = 'project1-m2-projection/1-candidate'
 
+#: Instrument version -> the projection schema that instrument must produce.
+#: The disclosure preflight compares the packet's ``schema_version`` against the
+#: value registered here, so this map is the single place that decides which
+#: schema is acceptable for which instrument. A version that is absent is
+#: refused rather than defaulted: defaulting is how an M2V2 packet ended up being
+#: validated against the M2V1 schema and refused with
+#: ``DISCLOSURE_SOURCE_CLASS_INVALID`` (DD-009).
+PROJECTION_SCHEMA_BY_INSTRUMENT = {
+    'M2V1-20261114-1': M2V1_SCHEMA_VERSION,
+    M2V2_VERSION: SCHEMA_VERSION,
+}
+
+
+def expected_projection_schema(instrument_version) -> str:
+    """The projection schema ``instrument_version`` is required to produce.
+
+    Refuses an unregistered instrument instead of falling back to the M2V1
+    schema. Callers must compare against this server-side value, never against
+    the packet's own ``schema_version`` (which would make the check vacuous).
+    """
+    try:
+        return PROJECTION_SCHEMA_BY_INSTRUMENT[str(instrument_version)]
+    except KeyError:
+        from sitewise.project1.contracts import WorkflowHeld
+        raise WorkflowHeld('BDJ_INSTRUMENT_UNSUPPORTED') from None
+
 #: Prompt keys registered for the V2 adaptations (see ``project1.prompts``).
 FINDINGS_PROMPT_KEY = 'BDJ_M2V2'
 OBJECTIVE_PROMPT_KEY = 'BDJ_OBJECTIVE_M2V2'

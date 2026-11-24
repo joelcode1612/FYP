@@ -52,7 +52,34 @@ from sitewise.services.instrument_authorization import (
 #: ``instrument_code`` so a marketplace assessment can be bound to its M2 V2
 #: record once that instrument is legitimately usable, while the refusal stays
 #: intact when it is not (see :meth:`AssessmentLinkService._instrument_id`).
+#:
+#: The effective default is read from ``settings.m2_default_instrument_code``,
+#: whose code default is this value. That lets the isolated PG18 E2E
+#: environment build new M2 records on M2V2 without a source edit, while an
+#: environment that never sets the setting keeps resolving M2V1 exactly as
+#: before. It selects a *default* only; the audited usability gate still
+#: decides whether the named code resolves to exactly one row.
 INSTRUMENT_CODE = "M2V1"
+
+
+def default_instrument_code() -> str:
+    """The configured default instrument code, falling back to M2V1.
+
+    Purpose: one place that answers "which instrument does a *new* M2 record
+    use", so the answer can differ per environment without branching callers.
+
+    Reason: production and the isolated E2E environment must be able to
+    disagree about the default while running the same code. Hard-coding either
+    value would force the other to carry a patch.
+
+    Constraint: an empty or unset setting means M2V1, never "the newest
+    instrument". Choosing by recency would silently re-point production at a
+    candidate the first time anyone registered one.
+    """
+    from sitewise.core.config import settings
+
+    configured = (getattr(settings, "m2_default_instrument_code", "") or "").strip()
+    return configured or INSTRUMENT_CODE
 
 
 class AssessmentLinkError(Exception):
@@ -109,10 +136,11 @@ class AssessmentLinkService:
         from `Dss`, so an unauthorised caller cannot learn whether a link exists.
 
         ``instrument_code`` selects which instrument a **newly created** M2
-        record is built on, and defaults to :data:`INSTRUMENT_CODE` (M2V1), so
-        the production behaviour is unchanged. It is honoured only on creation;
-        an existing link reports the instrument its M2 record is actually bound
-        to, read from the row rather than assumed from the request.
+        record is built on, and defaults to the configured instrument code
+        (M2V1 unless the environment says otherwise), so the production
+        behaviour is unchanged. It is honoured only on creation; an existing
+        link reports the instrument its M2 record is actually bound to, read
+        from the row rather than assumed from the request.
         """
         self._require_marketplace_ownership(marketplace_assessment_id, user_id)
         self._require_m2_identity(user_id, verified_email)
@@ -449,7 +477,7 @@ class AssessmentLinkService:
         scope can never activate, so a not-yet-authorized candidate stays
         unusable and the refusal below fires.
         """
-        instrument_code = code or INSTRUMENT_CODE
+        instrument_code = code or default_instrument_code()
         with self._m2.connect() as conn:
             rows = conn.execute(
                 text(

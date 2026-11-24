@@ -118,10 +118,10 @@ def test_unadopted_rules_do_not_create_an_immutable_run(monkeypatch):
     from sitewise.project1 import model_assisted
     calls = []
     monkeypatch.setattr(model_assisted, 'validate_synthetic', lambda **kw: None)
-    def refuse(*args):
+    def refuse(*args, **kwargs):
         raise WorkflowHeld('BDJ_RULE_ADOPTION_REQUIRED')
-    monkeypatch.setattr(model_assisted, 'load_rules', refuse)
-    monkeypatch.setattr(model_assisted, 'ensure_run', lambda *args: calls.append(args))
+    monkeypatch.setattr(model_assisted, 'resolve_ruleset', refuse)
+    monkeypatch.setattr(model_assisted, 'ensure_run', lambda *args, **kw: calls.append(args))
     import pytest
     with pytest.raises(WorkflowHeld, match='BDJ_RULE_ADOPTION_REQUIRED'):
         model_assisted.run_model_assisted(
@@ -136,8 +136,14 @@ def test_m2v1_legacy_rules_cannot_dispatch_or_create_run(monkeypatch):
     import pytest
     calls = []
     monkeypatch.setattr(model_assisted, 'validate_synthetic', lambda **kw: None)
-    monkeypatch.setattr(model_assisted, 'load_rules', lambda *args: SimpleNamespace())
-    monkeypatch.setattr(model_assisted, 'ensure_run', lambda *args: calls.append(args))
+    # A resolved ruleset that declares no instrument scope must still be
+    # refused: resolution succeeding is not the same as the artefact claiming
+    # this instrument.
+    binding = SimpleNamespace(module=SimpleNamespace(), family='M2V1',
+                              version='BDJ-LEGACY', sha256='0' * 64,
+                              adoption_receipt='fixture-receipt')
+    monkeypatch.setattr(model_assisted, 'resolve_ruleset', lambda *a, **k: binding)
+    monkeypatch.setattr(model_assisted, 'ensure_run', lambda *args, **kw: calls.append(args))
     with pytest.raises(WorkflowHeld, match='BDJ_INSTRUMENT_RULESET_UNVERIFIED'):
         model_assisted.run_model_assisted(
             packet={'assessment_id': str(ASSESSMENT), 'assessment_revision': 4,

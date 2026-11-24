@@ -264,3 +264,268 @@ a.sw-assessment-journey__control:hover
   outline: 2px solid var(--action, #1d4ed8);
   outline-offset: 2px;
 }
+
+/* --- Stage 4 / Stage 5: question review and draft preview ----------------
+   Presentation only. Every string these classes wrap came from a persisted
+   server row; the styling never implies acceptance, fielding or publication. */
+.s4-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.s4-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--border-strong, #cfd8e6);
+  border-radius: var(--radius-pill, 999px);
+  padding: 3px 10px;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: .01em;
+  line-height: 1.4;
+  background: var(--surface, #fff);
+  color: var(--text, #15233b);
+  white-space: nowrap;
+}
+
+.s4-badge--objective {
+  border-color: var(--action, #1d4ed8);
+  color: var(--action, #1d4ed8);
+}
+
+.s4-badge--muted {
+  color: var(--text-muted, #5b6b85);
+  border-style: dashed;
+}
+
+.s4-question {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.5;
+  color: var(--text, #15233b);
+}
+
+.s4-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.s4-option {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  border: 1px solid var(--border, #e3e9f2);
+  border-radius: var(--radius-sm, 8px);
+  padding: 7px 11px;
+  background: var(--surface-soft, #f8fafc);
+}
+
+.s4-option__code {
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  font-size: 12px;
+  color: var(--text-muted, #5b6b85);
+  min-width: 2.2ch;
+}
+
+.s4-option__label {
+  flex: 1 1 12ch;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--text, #15233b);
+}
+
+.s4-candidate {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--border, #e3e9f2);
+  border-radius: var(--radius-md, 12px);
+  padding: 12px 14px;
+  background: var(--surface, #fff);
+}
+
+.s4-candidate__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* A blocker is a stated reason, not an error banner: it names the gate that is
+   holding the stage. Amber rather than red so it reads as "not yet". */
+.s4-blocked {
+  margin: 0;
+  border-left: 3px solid #b45309;
+  background: #fffbeb;
+  padding: 8px 12px;
+  border-radius: 0 var(--radius-sm, 8px) var(--radius-sm, 8px) 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #7c2d12;
+}
+
+.s4-review {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-top: 1px dashed var(--border-strong, #cfd8e6);
+  padding-top: 12px;
+}
+
+.s4-review__block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.s4-review__label {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-muted, #5b6b85);
+}
+
+.sr-button--quiet {
+  background: var(--surface, #fff);
+  color: var(--text, #15233b);
+  border-color: var(--border-strong, #cfd8e6);
+  height: 36px;
+  padding: 0 14px;
+  font-weight: 700;
+}
+
+.sr-button--quiet.is-selected {
+  background: var(--action, #1d4ed8);
+  border-color: var(--action, #1d4ed8);
+  color: #fff;
+}
+
+/* --- Stage 4: Direct-QG candidate provenance ------------------------------
+   The metadata grid is deliberately dense and monospaced on the value side: a
+   reviewer compares hashes and ids here, so tabular alignment matters more than
+   whitespace. Nothing in this block conveys authority. */
+.s4-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 4px 18px;
+  border: 1px solid var(--border, #e3e9f2);
+  border-radius: var(--radius-sm, 8px);
+  padding: 10px 12px;
+  background: var(--surface-soft, #f8fafc);
+}
+
+.s4-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.s4-meta__label {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--text-muted, #5b6b85);
+}
+
+.s4-meta__value {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--text, #15233b);
+  overflow-wrap: anywhere;
+}
+
+/* One eligibility requirement. Status, title and code sit on one line so the
+   reader can scan which gate failed without reading prose. */
+.s4-eligibility {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px dashed var(--border-strong, #cfd8e6);
+  border-radius: var(--radius-sm, 8px);
+  padding: 10px 12px;
+}
+
+.s4-check {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.s4-check__title {
+  flex: 1 1 18ch;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text, #15233b);
+}
+
+.s4-check__code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--text-muted, #5b6b85);
+  overflow-wrap: anywhere;
+}
+
+/* Status badges. PASS is quiet, FAIL is emphatic, UNVERIFIED is distinct from
+   both because "not established" is not "wrong". */
+.s4-badge--pass {
+  border-color: #15803d;
+  color: #15803d;
+  background: #f0fdf4;
+}
+
+.s4-badge--warn {
+  border-color: #b45309;
+  color: #92400e;
+  background: #fffbeb;
+}
+
+.s4-badge--fail {
+  border-color: #b91c1c;
+  color: #b91c1c;
+  background: #fef2f2;
+}
+
+/* --- Stage 5: four-status ladder ------------------------------------------
+   One row per claim, with the owner of that claim named on the left. The rows
+   are deliberately not merged into a single readiness badge: "generated",
+   "reviewed", "scientifically accepted" and "published" are four different
+   facts and a reader must be able to see which of them is still outstanding. */
+.s5-ladder {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--border, #e3e9f2);
+  border-radius: var(--radius-sm, 8px);
+  padding: 9px 12px;
+  background: var(--surface-soft, #f8fafc);
+}
+
+.s5-ladder__row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.s5-ladder__label {
+  flex: 1 1 14ch;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted, #5b6b85);
+}

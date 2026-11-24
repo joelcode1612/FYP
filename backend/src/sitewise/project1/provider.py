@@ -8,6 +8,7 @@ import time
 import httpx
 from pydantic import SecretStr
 
+from sitewise.core import config as core_config
 from sitewise.project1.contracts import WorkflowHeld
 
 ENDPOINT = 'https://tokenharbor.ai/v1/chat/completions'
@@ -75,13 +76,19 @@ class TokenHarbor:
         """Build the exact provider payload without opening a network connection."""
         if self.mode not in {'json_schema', 'json_object'}:
             raise WorkflowHeld('PROVIDER_STRUCTURED_MODE_UNVERIFIED')
+        max_tokens = core_config.provider_max_tokens()
+        if max_tokens is None:
+            # A deployment asking for more than the provisional evaluation cap
+            # must be corrected explicitly; clamping would hide the disagreement.
+            raise WorkflowHeld('PROVIDER_MAX_TOKENS_NOT_ADOPTED')
         schema = output_type.model_json_schema()
         response_format = {'type': self.mode}
         if self.mode == 'json_schema':
             response_format['json_schema'] = {'name': output_type.__name__,
                                              'strict': True, 'schema': schema}
         payload = {'model': self.model, 'messages': messages, 'temperature': 0,
-                   'max_tokens': 4000, 'stream': False, 'response_format': response_format}
+                   'max_tokens': max_tokens, 'stream': False,
+                   'response_format': response_format}
         if len(json.dumps(payload).encode()) > 64_000:
             raise WorkflowHeld('PROVIDER_INPUT_TOO_LARGE')
         return payload
@@ -91,7 +98,10 @@ class TokenHarbor:
         # a later one that failed before its envelope was parsed.
         self.last_identity = None
         self.last_execution = {'model_requested': self.model, 'model_returned': None,
-            'identity_verified': False, 'http_status': None, 'usage': None,
+            # Populated from prepare_payload before dispatch. Recorded so the
+            # governed receipt states the exact output cap used by this call.
+            'max_tokens': None, 'identity_verified': False,
+            'http_status': None, 'usage': None, 'finish_reason': None,
             'provider_reported_cost': None, 'cost_currency': None,
             'schema_validation': 'NOT_VALIDATED', 'dispatched': False, 'dispatch_attempted': False}
         # Socket inactivity timeouts alone allow a slow stream to run indefinitely.
@@ -116,6 +126,7 @@ class TokenHarbor:
         if not self.enabled or not self._key.get_secret_value():
             raise WorkflowHeld('PROVIDER_NOT_CONFIGURED')
         payload = self.prepare_payload(messages, output_type)
+        self.last_execution['max_tokens'] = payload['max_tokens']
         if telemetry is not None:
             telemetry['request_bytes'] = len(json.dumps(payload).encode())
             telemetry['phase'] = 'dispatch'
@@ -180,7 +191,16 @@ class TokenHarbor:
             self.last_execution['identity_verified'] = self.last_identity['identity_verified']
             choices = envelope['choices']
             if len(choices) != 1 or choices[0]['finish_reason'] != 'stop':
+                # Record the reported reason even on refusal. It is bounded
+                # metadata, not response content, and distinguishes a truncated
+                # generation from an unexpected stop reason without a retry.
+                if len(choices) == 1 and isinstance(choices[0], dict):
+                    reported = choices[0].get('finish_reason')
+                    self.last_execution['finish_reason'] = (
+                        reported if isinstance(reported, str) and len(reported) <= 64
+                        else None)
                 raise WorkflowHeld('PROVIDER_INCOMPLETE_RESPONSE')
+            self.last_execution['finish_reason'] = choices[0]['finish_reason']
             message = choices[0]['message']
             if message.get('tool_calls') or message.get('refusal'):
                 raise WorkflowHeld('PROVIDER_UNEXPECTED_ACTION')
@@ -197,9 +217,15 @@ class TokenHarbor:
             # the bytes are possibly corrupt, so they are never parsed.
             self.last_execution['failure_code']='E_PROVIDER_RESPONSE_DECODE_OUTCOME_UNKNOWN'
             raise WorkflowHeld('E_PROVIDER_RESPONSE_DECODE_OUTCOME_UNKNOWN') from None
-        except httpx.TransportError:
+        except httpx.TransportError as exc:
             # Dispatch may have completed upstream. Never repeat a POST automatically.
+            # The exception *class* is recorded because it is the only thing that
+            # distinguishes "never connected" from "connected, then the peer
+            # closed mid-response" — and those imply different answers to the
+            # question this code is named after. No message, headers or bytes:
+            # a transport error can quote request content.
             self.last_execution['failure_code']='E_PROVIDER_TIMEOUT_OUTCOME_UNKNOWN'
+            self.last_execution['failure_detail']=type(exc).__name__
             raise WorkflowHeld('E_PROVIDER_TIMEOUT_OUTCOME_UNKNOWN') from None
         except WorkflowHeld as exc:
             self.last_execution['failure_code']=str(exc)
@@ -275,7 +301,18 @@ class ModelRunner:
             self.disclosure.require_request(self.provider, prompt, messages, output_type)
         request_hash = digest({'messages': messages, 'model': self.model,
                                'schema': output_type.model_json_schema(), 'mode': self.provider.mode})
-        attempt = self.ledger.reserve(stage, prompt.version, prompt.fingerprint, request_hash)
+        # DD-005 mechanism B: a real-data BDJ attempt spends exactly one
+        # authorization, in the same transaction as the attempt reservation.
+        # The keywords are passed ONLY when there is something to spend, so the
+        # synthetic call shape stays exactly what it was and every existing
+        # ledger double keeps working unchanged.
+        _spendable = getattr(self.disclosure, 'spendable_authorization', None)
+        authorization = _spendable() if callable(_spendable) else None
+        spend_kwargs = ({'authorization_id': authorization.id,
+                         'authorization_receipt': authorization.receipt}
+                        if authorization is not None else {})
+        attempt = self.ledger.reserve(stage, prompt.version, prompt.fingerprint,
+                                      request_hash, **spend_kwargs)
         self._execution_receipt = {'stage':stage, 'attempt_no':attempt,
             'prompt_version':prompt.version, 'prompt_sha256':prompt.fingerprint,
             'request_sha256':request_hash, 'receipt_recorded':False}
@@ -296,7 +333,7 @@ class ModelRunner:
 
 def configured_runner(ledger, disclosure, prompts):
     """Server composition only; no web caller can choose a provider or credential."""
-    from sitewise.core.config import settings
+    from sitewise.core.config import provider_timeout_seconds, settings
     if settings.tokenharbor_model_identity_exception:
         # Loud on purpose: this must never be enabled silently or in production.
         logging.getLogger("sitewise").warning(
@@ -307,6 +344,6 @@ def configured_runner(ledger, disclosure, prompts):
     provider = TokenHarbor(settings.tokenharbor_api_key,
         enabled=settings.tokenharbor_enabled,
         structured_mode=settings.tokenharbor_structured_mode,
-        timeout=max(1, min(settings.tokenharbor_timeout_seconds, 60)),
+        timeout=provider_timeout_seconds(),
         identity_exception=settings.tokenharbor_model_identity_exception)
     return ModelRunner(provider, ledger, prompts, disclosure=disclosure)

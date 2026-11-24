@@ -212,6 +212,47 @@ class Ee01Service:
             boundary_run(c,'ee01_measurement_snapshots',{'id':str(snapshot_id)},self.synthetic_preview)
             return self._read(c, snapshot_id, assessment_id, campaign_id)
 
+    def explanation_binding(self, actor, assessment_id):
+        """Resolve the authoritative campaign/snapshot chain for an assessment.
+
+        The client must never guess a campaign or snapshot id. This read returns
+        only rows owned by the authenticated actor and bound to the requested
+        assessment, with the server-held context hash needed for an explanation
+        read. No finding or measurement value is disclosed here.
+        """
+        with self.connection(actor) as c:
+            campaign = c.execute(text(
+                'SELECT id,release_id FROM cq_campaigns '
+                'WHERE assessment_id=:aid AND owner_user_id=:actor'),
+                {'aid': assessment_id, 'actor': actor}).mappings().one_or_none()
+            if not campaign:
+                raise CqRefused('EXPLANATION_BINDING_NOT_FOUND', 404)
+            rows = c.execute(text(
+                'SELECT id,slot_id,question_version,fingerprint,created_at '
+                'FROM ee01_measurement_snapshots '
+                'WHERE assessment_id=:aid AND campaign_id=:cid AND owner_user_id=:actor '
+                'ORDER BY created_at DESC,id DESC'),
+                {'aid': assessment_id, 'cid': campaign['id'],
+                 'actor': actor}).mappings()
+            snapshots = []
+            for row in rows:
+                context = self._report_context(c, row['id'])
+                snapshots.append({
+                    'snapshot_id': str(row['id']),
+                    'slot_id': row['slot_id'],
+                    'question_version': row['question_version'],
+                    'fingerprint': row['fingerprint'],
+                    'context_hash': context['context_hash'],
+                    'admission_state': context['status'],
+                })
+            return plain({
+                'contract_version': 'ee01-explanation-binding/1',
+                'assessment_id': str(assessment_id),
+                'campaign_id': str(campaign['id']),
+                'release_id': str(campaign['release_id']),
+                'snapshots': snapshots,
+            })
+
     @staticmethod
     def _store_held_context(c, row):
         context = {'snapshot_id': row['id'], 'fingerprint': row['fingerprint'],

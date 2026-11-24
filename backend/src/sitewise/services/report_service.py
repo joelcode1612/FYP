@@ -14,6 +14,7 @@ workbook references (``EP-xxxxx``) are also accepted.
 """
 
 from fastapi import HTTPException
+from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session
 
 from sitewise.repositories.fyp_property_repository import FypPropertyRepository
@@ -59,10 +60,26 @@ class ReportService:
         )
         precomputed_counts = bool(geo and geo.get("competitor_count_500m") is not None)
         live_counts: dict = {}
+        live_counts_error: str | None = None
         if coords_present and not precomputed_counts:
-            live_counts = repo.competitor_counts(
-                float(resolved["latitude"]), float(resolved["longitude"])
-            )
+            # A section that cannot be answered must degrade to
+            # ``available: false`` with a reason; it must never fail the
+            # whole report. A dataset that cannot answer the spatial query
+            # (for example a deployment without the competitor geometry) is
+            # "no backing data", not a broken document. The savepoint keeps
+            # the surrounding transaction usable after the failed statement.
+            try:
+                with self.session.begin_nested():
+                    live_counts = repo.competitor_counts(
+                        float(resolved["latitude"]),
+                        float(resolved["longitude"]),
+                    )
+            except (SQLAlchemyError, KeyError, ValueError) as exc:
+                live_counts = {}
+                live_counts_error = (
+                    "Live competitor counts could not be computed from the "
+                    f"F&B dataset ({type(exc).__name__}); no count is shown."
+                )
 
         return {
             "property": {
@@ -103,7 +120,8 @@ class ReportService:
                     "Precomputed geospatial features already cover this "
                     "property; live counts were not recomputed."
                     if precomputed_counts
-                    else "Property coordinates are unavailable; live "
+                    else live_counts_error
+                    or "Property coordinates are unavailable; live "
                     "competitor counts cannot be computed."
                 ),
             ),

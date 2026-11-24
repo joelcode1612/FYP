@@ -43,11 +43,26 @@ NON_EVIDENCE_STATUSES = ('NOT_SHOWN', 'NOT_ESTIMABLE', 'WITHHELD_NOT_AUTHORIZED'
                          'HOLD_INVALID_EVIDENCE')
 # Standalone numerals only: identifiers like "A10", "V1.0", "Q05" are labels,
 # not measurements. The alternation covers decimals, thousands separators and
-# scientific notation (1e5 / 2.5E-10); identifiers stay excluded by the edges.
+# scientific notation (1e5 / 2.5E-10); identifiers stay excluded by the left edge.
+#
+# Two edge cases were found by probing rather than by reading, and both were
+# silent bypasses of the numerical check (EX-04, GATE 2):
+#
+# * **Signed numbers.** The left edge used to exclude a preceding "-", and the
+#   pattern had no sign of its own, so ``-999`` produced NO token at all. A
+#   candidate could write "the shortfall was -999 respondents" and pass V02 with
+#   a number that was never supplied. The sign is now part of the match. A hyphen
+#   still blocks a match when it follows a letter or digit ("x-999", "24-50"), so
+#   ranges and hyphenated identifiers behave exactly as before.
+# * **A decimal followed by a letter.** The right edge excluded ``[A-Za-z]``, so
+#   ``2.5x`` produced no token — a multiplier claim carried no detectable number.
+#   The right edge now excludes only digits and dots. Identifiers are still safe
+#   because their numeral is preceded by a letter ("V2", "Q10", "F1"), which the
+#   left edge rejects.
 _NUMBER_RE = re.compile(
     r'(?<![A-Za-z0-9.\-])'
-    r'(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:[eE][+-]?\d+)?'
-    r'(?![A-Za-z0-9.\-])'
+    r'-?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:[eE][+-]?\d+)?'
+    r'(?![0-9.])'
 )
 # Number words used as a quantity ("several thousand respondents") are as much
 # an invented measurement as a bare numeral under spec section 4.
@@ -61,9 +76,18 @@ _QUANTITY_WORD_RE = re.compile(
 # entirely — a fabricated price was not counted as an unsourced number. This
 # second pattern captures the digits that follow a currency marker, and
 # ``extract_numbers`` unions both so the allow-list and the check agree.
+#
+# The decimal part is INSIDE the capture group. With it outside, "RM12.50"
+# extracted as "12" and a fabricated "RM12.99" against a supplied "RM12.50" was
+# allowed: both produced the same token, so a price that differed only in its
+# cents passed numerical fidelity. Cents are the part of a price a respondent
+# actually reacts to, so this was the most consequential place to lose precision.
+#
+# The sign is captured too: "RM-50" is a negative amount, and with the sign
+# outside the group it produced no token at all (EX-04, GATE 2).
 _CURRENCY_NUMBER_RE = re.compile(
     r'(?:RM|MYR|USD|SGD|GBP|AUD|EUR|JPY|CNY|RMB|\$|€|£|¥)\s?'
-    r'(\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?'
+    r'(-?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)'
 )
 
 

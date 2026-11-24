@@ -68,15 +68,23 @@ class PostgresAttemptLedger:
         bind_m2_actor(session, self.actor_id)
 
     def reserve(self, stage, prompt_version, prompt_hash, request_hash,
-                *, attempt_slot=1):
+                *, attempt_slot=1, authorization_id=None, authorization_receipt=None):
         """Reserve one attempt in ``attempt_slot`` (1..3).
 
         Slot 1 is the legacy path and works on an un-migrated ledger. A slot
         above 1 is refused before any INSERT when the ledger schema cannot
         represent it, so an old database never silently loses a retry.
+
+        ``authorization_id`` spends one BDJ real-data authorization in the SAME
+        transaction as the attempt row (DD-005 mechanism B). Both commit
+        together or neither does, so a second dispatch cannot reuse the
+        authorization and a failed spend cannot leave a reserved attempt behind.
         """
         if stage not in _ALLOWED_STAGES:
             raise WorkflowHeld('MODEL_STAGE_UNREGISTERED')
+        if (authorization_id is None) != (authorization_receipt is None):
+            # Half a spend is a composition error, not a disclosure decision.
+            raise WorkflowHeld('BDJ_AUTHORIZATION_RECEIPT_REQUIRED')
         # bool is an int subclass; never read True as slot 1.
         if (isinstance(attempt_slot, bool) or not isinstance(attempt_slot, int)
                 or not 1 <= attempt_slot <= _MAX_ATTEMPT_SLOT):
@@ -121,6 +129,15 @@ class PostgresAttemptLedger:
                 session.execute(text(_INSERT_SLOT), {**params, 'slot': attempt_slot})
             else:
                 session.execute(text(_INSERT_LEGACY), params)
+            if authorization_id is not None:
+                # Same session, therefore same transaction. A refusal here
+                # propagates before the commit below, so the attempt row above
+                # is rolled back with it: no attempt is consumed and no
+                # dispatch can follow.
+                from sitewise.project1.real_data_authorization import record_spend
+                record_spend(session, authorization_id=authorization_id,
+                             run_id=self.run_id, owner_user_id=self.actor_id,
+                             attempt_no=number, receipt=authorization_receipt)
             session.commit()  # No provider dispatch before this succeeds.
             return number
 

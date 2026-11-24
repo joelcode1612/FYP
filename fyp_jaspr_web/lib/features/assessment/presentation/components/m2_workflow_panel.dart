@@ -9,6 +9,8 @@ import 'package:shared_logic/shared_logic.dart' show M2Draft, AppFailure, Networ
 import 'package:sitewise_jaspr_web/core/di/app_locator.dart';
 import 'bdj_objective_proposal_panel.dart' show BdjObjectiveProposalPanel;
 import 'research_workflow_panel.dart' show ResearchCandidatePanel;
+import 'stage_four_question_review.dart' show StageFourQuestionReview;
+import 'stage_five_questionnaire_preview.dart' show StageFiveQuestionnairePreview;
 import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart' show ActionButton;
 
 /// PROJECT1 M2 research workflow surface.
@@ -38,25 +40,23 @@ class M2WorkflowPanel extends StatefulComponent {
   /// DEF-11: when true the panel refuses to adopt any M2 assessment that was not
   /// named explicitly.
   ///
-  /// The standalone route (`/entrepreneur/m2-workflow`) legitimately opens the
-  /// owner's most recent assessment, because there the panel *is* the whole
-  /// page and the entrepreneur is choosing what to work on. Embedded in an
-  /// assessment-specific workspace the same fallback is wrong: it silently
-  /// shows one assessment's answers under another assessment's heading.
+  /// Embedded in an assessment-specific workspace the "most recent assessment"
+  /// fallback is wrong: it silently shows one assessment's answers under another
+  /// assessment's heading.
   ///
   /// With this flag set and no [assessmentId], the panel renders an unbound
   /// notice and no editor, so an unlinked assessment cannot save M2 answers.
   final bool requireExplicitId;
 
-  /// True when the panel is one section of the Assessment workspace rather than
-  /// a page of its own.
+  /// True when the panel is one section of the Assessment workspace.
   ///
-  /// The governed stages below the questionnaire — candidate BDJ, confirmation
-  /// and the research objective / QJ context — are developer-facing surfaces
-  /// for later workflow stages. They stay on the standalone route and are hidden
-  /// here, so the Assessment tab shows the questionnaire and nothing that looks
-  /// like a second, competing workflow. Their services, records and permissions
-  /// are untouched.
+  /// The standalone `/entrepreneur/m2-workflow` route was retired: the
+  /// Assessment workspace is the only production surface, and it always mounts
+  /// this panel embedded. The non-embedded branches below are therefore
+  /// unreachable from the application; they are retained only until the owner
+  /// decides whether their governed Stage 2/4/5 surfaces have a workspace
+  /// equivalent. Nothing was deleted, and their services, records and
+  /// permissions are untouched.
   final bool embedded;
   final String? marketplaceAssessmentId;
   final void Function()? onDeclarationChanged;
@@ -1939,23 +1939,11 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
               ],
             ),
       ]),
-      if (mode == 'answerable' && _canSkip(item))
-        p(classes: 'small asw-muted', [
-          ActionButton(
-            state == 'NOT_PROVIDED'
-                ? 'Skipped for now — tap to answer'
-                : 'Skip this question for now',
-            variant: 'secondary',
-            onClick: () {
-              setState(() {
-                _editorState[key] =
-                    state == 'NOT_PROVIDED' ? 'ANSWERED' : 'NOT_PROVIDED';
-                _touched.add(key);
-              });
-              _scheduleAutoSave();
-            },
-          ),
-        ]),
+      // No "skip for now" affordance: an optional item is either answered or
+      // left unanswered, and leaving it unanswered is already a valid state the
+      // review step reports. An explicit skip button added a second way to say
+      // the same thing, and a NOT_PROVIDED toggle that could be flipped back and
+      // forth made the saved state harder to read than the answer itself.
       div(classes: 'asw-qcard__footer', [
         div(classes: 'asw-qcard__group', [
           ActionButton(
@@ -2332,7 +2320,11 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
             classes: 'sr-button',
             [Component.text('Open Activity History for this assessment')],
           ),
-        ] else
+        ] else if (_stage == '4')
+          _stageFourBody()
+        else if (_stage == '5')
+          _stageFiveBody()
+        else
           _stageThreeBody(),
       ],
     ],
@@ -2479,6 +2471,11 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
   /// stepper reports which one is on screen and whether Stage 3 is reachable
   /// yet; it never blocks a read, because the proposal panel already refuses a
   /// proposal whose confirmation is not current.
+  ///
+  /// Stages 4 and 5 stay enterable even while they are blocked. Entering a
+  /// stage is not completing it: the Stage 4 and Stage 5 panels read the server
+  /// and name the exact gate that is holding them, which is more useful to a
+  /// reader than a disabled tab with no explanation.
   Component _stageStepper() {
     final confirmed = _m2StatusLabel() == 'Confirmed';
     Component pill(String value, String label, String hint, {bool enabled = true}) {
@@ -2513,12 +2510,34 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
                 : 'Confirm the declaration on Stage 2 first.',
             enabled: confirmed,
           ),
+          pill(
+            '4',
+            'Stage 4 · Question review',
+            'Review the question candidates prepared from an admitted objective. '
+            'A blocked stage reports the gate that is holding it.',
+          ),
+          pill(
+            '5',
+            'Stage 5 · Questionnaire preview',
+            'Preview the draft questionnaire assembled from accepted questions. '
+            'A preview is not a fielding surface.',
+          ),
         ]),
         p(classes: 'sr-muted', [
-          Component.text(confirmed
-              ? 'The declaration is confirmed. Stage 3 lists the research '
-                  'objectives proposed from it.'
-              : 'Confirm the declaration on Stage 2 to unlock Stage 3.'),
+          Component.text(switch (_stage) {
+            '3' => confirmed
+                ? 'The declaration is confirmed. Stage 3 lists the research '
+                    'objectives proposed from it.'
+                : 'Confirm the declaration on Stage 2 to unlock Stage 3.',
+            '4' => 'Stage 4 shows the question candidates for an admitted '
+                'objective, with your review decision. It prepares no question '
+                'of its own.',
+            '5' => 'Stage 5 is a draft preview of the questionnaire. It creates '
+                'no session, no customer response and no fielding campaign.',
+            _ => confirmed
+                ? 'The declaration is confirmed.'
+                : 'Confirm the declaration on Stage 2 to unlock Stage 3.',
+          }),
         ]),
       ]),
     ]);
@@ -2575,6 +2594,89 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
         if (_contextSummary() != null)
           p(classes: 'small asw-muted', [Component.text(_contextSummary()!)]),
       ]),
+    ]);
+  }
+
+  /// Stage 4 — question review.
+  ///
+  /// The revision and context passed down are the ones this page already
+  /// verified: the saved draft revision and the persisted BCB context. When
+  /// either is missing the stage says so instead of reading with a guessed
+  /// identity, because an admission lookup against a stale revision would
+  /// return nothing and read as "no proposals".
+  Component _stageFourBody() {
+    if (_selected.isEmpty) {
+      return section(classes: 'panel asw-inline', [
+        div(classes: 'panel__body', [
+          p(classes: 'body', [
+            Component.text(
+              'Select an M2 assessment on Stage 2 before reviewing questions.',
+            ),
+          ]),
+        ]),
+      ]);
+    }
+    final draft = _draft;
+    final contextId = _contextStatus?['context_id'];
+    if (draft == null || contextId is! String || contextId.isEmpty) {
+      return section(classes: 'stack stack--md', [
+        section(classes: 'panel asw-inline', [
+          div(classes: 'panel__body stack stack--sm', [
+            h2([Component.text('Question review')]),
+            p(classes: 'body', [
+              Component.text(
+                'Stage 4 reads admissions against a persisted business context. '
+                'No current context is available for this confirmation, so there '
+                'is no admission to review and no question is shown.',
+              ),
+            ]),
+          ]),
+        ]),
+      ]);
+    }
+    return section(classes: 'stack stack--md', [
+      StageFourQuestionReview(
+        // Keyed by assessment and revision: a new revision must not reuse the
+        // previous revision's admission or decision state.
+        key: ValueKey('s4-$_selected-${draft.revision}'),
+        m2AssessmentId: _selected,
+        expectedRevision: draft.revision,
+        contextId: contextId,
+      ),
+      p(classes: 'sr-muted', [
+        Component.text(
+          'A review decision records your judgement about a candidate question. '
+          'It does not accept the question scientifically and does not authorise '
+          'fielding.',
+        ),
+      ]),
+    ]);
+  }
+
+  /// Stage 5 — questionnaire preview.
+  ///
+  /// The preview is assembled by the server from accepted question rows. This
+  /// method passes only the assessment id: the server decides what is
+  /// previewable, so a stale confirmation or an absent admitted objective is
+  /// reported as the reason rather than rendered as an empty questionnaire.
+  Component _stageFiveBody() {
+    if (_selected.isEmpty) {
+      return section(classes: 'panel asw-inline', [
+        div(classes: 'panel__body', [
+          p(classes: 'body', [
+            Component.text(
+              'Select an M2 assessment on Stage 2 before previewing a '
+              'questionnaire.',
+            ),
+          ]),
+        ]),
+      ]);
+    }
+    return section(classes: 'stack stack--md', [
+      StageFiveQuestionnairePreview(
+        key: ValueKey('s5-$_selected'),
+        m2AssessmentId: _selected,
+      ),
     ]);
   }
 
@@ -2835,15 +2937,10 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     ]),
     p(classes: 'bdj-empty__body', [
       Component.text(
-        'Existing M2 assessments are untouched. To work on one directly, use '
-        'the standalone M2 research workflow; this page will show the '
-        'questionnaire once a verified link exists.',
+        'Existing M2 assessments are untouched. This page will show the '
+        'questionnaire once a verified link exists; until then no answer can '
+        'be written from here.',
       ),
     ]),
-    a(
-      href: '/entrepreneur/m2-workflow',
-      classes: 'sr-button',
-      [Component.text('Open the standalone M2 research workflow')],
-    ),
   ]);
 }

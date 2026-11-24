@@ -19,7 +19,7 @@ client = OpenAI(
 )
 
 res = client.chat.completions.create(
-    model="mimo-v2.6-flash:free",
+    model="deepseek-v4.1-flash-1017",
     messages=[
         {"role": "user", "content": "Why is the sky blue?"}
     ],

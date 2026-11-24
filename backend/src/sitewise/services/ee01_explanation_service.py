@@ -1,8 +1,13 @@
 """Candidate-only EE-01 explanations over the server-held readback context.
 
-This service does NOT dispatch a prompt. V1.0 has no disclosure adapter for the
-EXPLANATION stage (the only synthetic adapter is BDJ-scoped, and the attempt
-ledger registers BDJ/QJ/QG only), so every candidate is rendered locally:
+This service does NOT dispatch a prompt. That is a property of *this service*, not
+of the ledger: since migration ``20261122_01`` the ``EXPLANATION`` stage **is**
+registered, and ``disclosure.SyntheticExplanationDisclosure`` can authorise one
+synthetic attempt bound to ``EE01-EXPLANATION-2-CAND``. The governed dispatch path
+is ``explanation_execution.ExplanationExecutionService``, which requires that
+binding explicitly (``authorized_prompt_version``) and validates V01–V09 before a
+candidate may be used. This service injects no runner, so every candidate is
+rendered locally:
 
 * an empty authorized-claim set yields the insufficient-evidence candidate
   (prompt spec section 8);
@@ -32,10 +37,10 @@ and returns a candidate envelope whose authority markers are all false.
 from __future__ import annotations
 
 import json
-from uuid import UUID
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 from sitewise.domain.cq_runtime import CqRefused
-from sitewise.project1.contracts import canonical, no_authority
+from sitewise.project1.contracts import WorkflowHeld, canonical, digest, no_authority
 from sitewise.project1.explanation_contracts import (
     MAX_TEMPLATE_FINDINGS,
     SCHEMA_VERSION,
@@ -52,6 +57,16 @@ from sitewise.project1.explanation_registry import (
     render_question,
     resolve_question,
 )
+from sitewise.project1.explanation_execution import (
+    AI_VALIDATED,
+    DETERMINISTIC_ONLY,
+    ExecutionResult,
+    ExplanationExecutionService,
+    narrative_codes,
+    validate_authoritative,
+    result_record,
+)
+from sitewise.project1.explanation_store import build_result
 
 CONTRACT_VERSION = 'ee01-explanation-candidate/3'
 TEMPLATE_PRODUCER = 'EE01-EXPLANATION-TEMPLATE-1'
@@ -78,13 +93,22 @@ def _explanation_authorized(finding) -> bool:
 class Ee01ExplanationService:
     """Reads EE-01 readback; produces a non-authoritative candidate only."""
 
-    def __init__(self, ee01, *, candidate_source=None):
+    def __init__(self, ee01, *, candidate_source=None,
+                 execution_service=None, store=None, dispatch=None,
+                 execution_authorized: bool = False,
+                 authorized_prompt_version: str | None = None,
+                 report_sections: tuple[str, ...] = ()):
         self.ee01 = ee01
-        # Validation-only seam: receives the server-built packet and returns a
-        # candidate mapping. It is never a provider client, and no caller may
-        # wire a disclosure-bound runner here until the EXPLANATION stage has an
-        # adopted disclosure adapter.
+        # Validation-only seam retained for existing offline tests. It is not a
+        # provider client and cannot persist model prose: only `dispatch` is a
+        # governed execution seam with ledger metadata.
         self.candidate_source = candidate_source
+        self.execution_service = execution_service or ExplanationExecutionService()
+        self.store = store
+        self.dispatch = dispatch
+        self.execution_authorized = bool(execution_authorized)
+        self.authorized_prompt_version = authorized_prompt_version
+        self.report_sections = tuple(report_sections)
 
     @staticmethod
     def _counts(snapshot: dict) -> dict:
@@ -233,26 +257,166 @@ class Ee01ExplanationService:
             if not wanted or finding['claim_id'] in wanted:
                 selected.append(finding)
 
-        output, llm_execution, producer = self._render(packet, selected, permitted)
-        # Only the deterministic template may draw on the registry's own vocabulary;
-        # the model path is validated with the strict guard alone.
-        registry_literals = (load_registry().literals
-                             if producer == QUESTION_TEMPLATE_PRODUCER else None)
-        validate_candidate(output, packet=packet, allowed_claim_ids=permitted,
-                           allowed_numbers=_numbers_in(packet),
-                           registry_literals=registry_literals)
+        registry = load_registry()
+        baseline, baseline_producer = self._template(packet, selected)
+        # Only the deterministic registry renderer may draw on the pinned
+        # registry's own vocabulary. The model path stays on the strict guard.
+        registry_literals = (registry.literals
+                             if baseline_producer == QUESTION_TEMPLATE_PRODUCER else None)
+        allowed_numbers = _numbers_in(packet)
+        own_tokens = self._own_tokens(packet, question)
+        if baseline_producer == QUESTION_TEMPLATE_PRODUCER:
+            # Registry-rendered prose is authoritative vocabulary. Its response
+            # labels are not foreign item codes.
+            own_tokens |= narrative_codes(baseline)
+        effective = (question['effective_state'] if question
+                     else 'VALID_APPROVED')
+        authority_markers = no_authority()
+
+        # The baseline itself is governed even when no provider attempt occurs.
+        baseline_findings = validate_authoritative(
+            baseline, packet=packet, baseline=baseline,
+            effective_state=effective, allowed_claim_ids=permitted,
+            allowed_numbers=allowed_numbers, own_tokens=own_tokens,
+            registry_literals=registry_literals,
+            authority_markers=authority_markers)
+        self._fail_on_invalid(baseline_findings)
+
+        execution = self.execution_service.execute(
+            packet=packet, baseline=baseline, effective_state=effective,
+            allowed_claim_ids=permitted, allowed_numbers=allowed_numbers,
+            own_tokens=own_tokens, registry_literals=registry_literals,
+            rule_available=(
+                question is None or effective != 'VALID_APPROVED'
+                or question.get('template_usable_for_substantive_report') is not False),
+            execution_authorized=self.execution_authorized and self.dispatch is not None,
+            authorized_prompt_version=self.authorized_prompt_version,
+            dispatch=self.dispatch, authority_markers=authority_markers)
+        if not execution.validation:
+            execution.validation = baseline_findings
+        output = execution.candidate or baseline
+        llm_execution = self._llm_label(execution.outcome)
+        producer = (EXTERNAL_PRODUCER if execution.outcome == AI_VALIDATED
+                    else baseline_producer)
+
+        # Backward-compatible offline seam. It receives the same authoritative
+        # validation as the governed path but has no ledger metadata, so it can
+        # never be persisted as an AI result.
+        if self.candidate_source is not None and self.dispatch is None:
+            try:
+                proposed = ExplanationOutput.model_validate(self.candidate_source(packet))
+                proposed_findings = validate_authoritative(
+                    proposed, packet=packet, baseline=baseline,
+                    effective_state=effective, allowed_claim_ids=permitted,
+                    allowed_numbers=allowed_numbers, own_tokens=own_tokens,
+                    registry_literals=registry_literals,
+                    authority_markers=authority_markers)
+                self._fail_on_invalid(proposed_findings)
+                if proposed.origin == 'LLM':
+                    output, llm_execution, producer = proposed, 'RETURNED', EXTERNAL_PRODUCER
+                else:
+                    llm_execution = 'REJECTED_FELL_BACK'
+            except Exception:
+                output, llm_execution = baseline, 'REJECTED_FELL_BACK'
+                producer = baseline_producer
+
+        record = None
+        stored_result_id = None
+        # The result's ruleset_version is the snapshot's question_version: that is
+        # the measurement identity the authenticated readback binds against.
+        # measurement_ruleset_version is the broader instrument version carried in
+        # the prompt packet; it is not the per-snapshot ruleset identity.
+        stored_ruleset_version = str(packet['measurement_ruleset_id'])
+        if self.store is not None:
+            if output.origin == 'LLM' and execution.execution_kind != 'AI_ATTEMPTED':
+                raise CqRefused('EXPLANATION_LLM_WITHOUT_LEDGER', 503)
+            record = result_record(
+                result=execution, packet=packet, assessment_id=str(assessment_id),
+                campaign_id=str(campaign_id), snapshot_id=str(snapshot_id),
+                question_id=(question['question_id'] if question else None),
+                ruleset_version=stored_ruleset_version,
+                registry_version=registry.registry_version,
+                registry_sha256=registry.sha256)
+            seed = digest(canonical({'record': record, 'candidate': output.model_dump()}))
+            result_id = str(uuid5(NAMESPACE_URL,
+                                  f'ee01-explanation-result:{seed}'))
+            report_sections = (self.report_sections
+                               or tuple(question.get('report_sections', ()))
+                               if question else self.report_sections)
+            row = build_result(
+                record=record, candidate=output,
+                registry_version=registry.registry_version,
+                registry_sha256=registry.sha256, result_id=result_id,
+                owner_user_id=str(actor), report_sections=tuple(report_sections))
+            try:
+                stored_result_id = self.store.record(row)
+            except CqRefused:
+                raise
+            except WorkflowHeld:
+                raise
+            except Exception as exc:
+                raise CqRefused('EXPLANATION_PERSISTENCE_FAILED', 503) from exc
+
+        ledger = execution.ledger or {}
         return {
             'contract_version': CONTRACT_VERSION,
-            # No prompt executed, so no prompt version is attributed. The template
-            # is named instead, and the candidate carries its own origin.
+            'assessment_id': str(assessment_id),
+            'campaign_id': str(campaign_id),
+            'snapshot_id': str(snapshot_id),
+            'question_id': question['question_id'] if question else None,
+            'result_id': stored_result_id,
+            'source_fingerprint': packet.get('snapshot_hash'),
+            'registry_version': registry.registry_version,
+            'registry_sha256': registry.sha256,
+            'ruleset_version': stored_ruleset_version,
+            'validation_status': (record['validation_status'] if record else
+                                  'valid' if all(f.passed for f in baseline_findings)
+                                  else 'invalid'),
+            'validation_failures': [f.as_record() for f in execution.validation
+                                    if not f.passed],
+            'stale_reason': None,
+            'admission_state': readback['status'],
+            'admitted': False,
+            'execution_kind': execution.execution_kind,
+            'outcome': execution.outcome,
+            'retry_authorized': execution.retry_authorized,
+            'run_id': ledger.get('run_id'),
+            'attempt_no': ledger.get('attempt_no'),
             'producer': producer,
-            'prompt_version': None,
+            'prompt_version': ledger.get('prompt_version'),
             'authority': 'CANDIDATE_UNVERIFIED',
             'llm_execution': llm_execution,
             'candidate': output.model_dump(),
             'question': question,
             **no_authority(),
         }
+
+    @staticmethod
+    def _own_tokens(packet: dict, question: dict | None) -> set[str]:
+        tokens = {str(value) for value in (packet.get('reference_universe') or [])}
+        tokens |= {str(value) for value in (packet.get('report_admission_references') or [])}
+        if question:
+            for key in ('question_id', 'instrument_gate', 'evidence_state',
+                        'effective_state', 'routing_resolved'):
+                if question.get(key):
+                    tokens.add(str(question[key]))
+        return tokens
+
+    @staticmethod
+    def _fail_on_invalid(findings) -> None:
+        failed = [finding for finding in findings if not finding.passed]
+        if failed:
+            raise WorkflowHeld(failed[0].code or 'EXPLANATION_VALIDATION_FAILED')
+
+    @staticmethod
+    def _llm_label(outcome: str) -> str:
+        if outcome == DETERMINISTIC_ONLY:
+            return 'NOT_ATTEMPTED'
+        if outcome == AI_VALIDATED:
+            return 'RETURNED'
+        if outcome == 'AI_REJECTED_FELL_BACK':
+            return 'REJECTED_FELL_BACK'
+        return outcome
 
     def _render(self, packet: dict, selected: list[dict], permitted: set[str]):
         """Prefer a validated model candidate; otherwise render the template."""

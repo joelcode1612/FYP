@@ -332,6 +332,11 @@ def record_admission(engine, proposal_id, *, actor_id, request_id,
                    objective_id, policy_disposition
             FROM public.m2_bdj_objective_admissions
             WHERE proposal_id = :pid
+            -- A proposal may now carry more than one admission: a re-admission
+            -- after the business context was rebuilt adds a row rather than
+            -- rewriting the original. The newest row is the operative decision.
+            ORDER BY created_at DESC
+            LIMIT 1
         """), {'pid': str(proposal_id)}).mappings().one_or_none()
         if existing is not None:
             # Idempotent by proposal: a repeat is reported, never duplicated.
@@ -422,6 +427,10 @@ def admission_state(engine, proposal_id, *, source_fingerprint, actor_id) -> dic
                    objective_id, policy_disposition, policy_resolution
             FROM public.m2_bdj_objective_admissions
             WHERE proposal_id = :pid
+            -- Newest first: a re-admission against a rebuilt context is the
+            -- operative row, and the original remains as history behind it.
+            ORDER BY created_at DESC
+            LIMIT 1
         """), {'pid': str(proposal_id)}).mappings().one_or_none()
 
         if record is None:

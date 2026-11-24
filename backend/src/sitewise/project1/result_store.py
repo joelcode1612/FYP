@@ -76,10 +76,14 @@ FINDING_KEYS = ('rule_id', 'kind', 'observed_condition', 'counterargument',
 REFERENCE_KEYS = ('item_key', 'answer_revision_id', 'item_version_id')
 
 # Same pattern as contracts.py:27. The item key is the only prose-shaped part
-# of a locator; the version is an opaque identifier.
-_ITEM_KEY = re.compile(r'^(?:M2-(?:\d{2}|O-0[12])|M2V1-(?:0[1-9]|1[01]))$')
+# of a locator; the version is an opaque identifier. It must admit every
+# registered instrument, otherwise a persisted M2V2 finding cannot be written or
+# read back (DD-010).
+_ITEM_KEY = re.compile(
+    r'^(?:M2-(?:\d{2}|O-0[12])|M2V1-(?:0[1-9]|1[01])|M2V2-(?:0[1-9]|1[0-9]))$')
 _LOCATOR = re.compile(
-    r'^(?P<item_key>(?:M2-(?:\d{2}|O-0[12])|M2V1-(?:0[1-9]|1[01])))'
+    r'^(?P<item_key>(?:M2-(?:\d{2}|O-0[12])|M2V1-(?:0[1-9]|1[01])'
+    r'|M2V2-(?:0[1-9]|1[0-9])))'
     r'@(?P<version>[A-Za-z0-9._:-]{1,128})$')
 _DETAIL_CODE = re.compile(r'^[A-Z][A-Z0-9_]{0,63}$')
 

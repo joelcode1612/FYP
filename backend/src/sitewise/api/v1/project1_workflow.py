@@ -14,6 +14,7 @@ from sitewise.core.config import settings
 from sitewise.db.m2_session import get_m2_db, m2_session_for
 from sitewise.dependencies import AuthenticatedUser, require_entrepreneur, require_admin_mfa
 from sitewise.project1.bdj import BDJEngine, load_rules
+from sitewise.project1.ruleset_resolver import resolve_ruleset
 from sitewise.project1.contracts import WorkflowHeld, no_authority
 from sitewise.project1.model_assisted import run_model_assisted
 from sitewise.project1.projection import M2SourceProjection
@@ -69,12 +70,32 @@ def model_assisted_gate():
                 or not settings.tokenharbor_enabled):
             raise HTTPException(503, detail={'code': 'BDJ_TRIAL_DISABLED'})
         return
-    if not (settings.tokenharbor_enabled and settings.project1_rules_version
-            and settings.project1_rules_sha256
-            and settings.project1_rules_adoption_receipt):
+    if not (settings.tokenharbor_enabled and _any_ruleset_adopted()):
         raise HTTPException(503, detail={
             'code': 'MODEL_ASSISTED_NOT_CONFIGURED',
             'message': 'Model-assisted review is waiting for its required setup.'})
+
+
+def _any_ruleset_adopted() -> bool:
+    """Is *some* instrument family fully adopted?
+
+    The gate has no packet, so it cannot know which instrument is about to be
+    reviewed. It therefore answers only the coarse question; the per-instrument
+    decision is made later by ``resolve_ruleset``, which refuses an unadopted,
+    unsupported or hash-mismatched family *before* the authorization lookup and
+    before any dispatch. Requiring the global M2V1 trio here would refuse every
+    M2V2 assessment on an environment that deliberately pins only M2V2, which is
+    a configuration-shape assumption, not a safety property.
+    """
+    families = (
+        (settings.project1_rules_version, settings.project1_rules_sha256,
+         settings.project1_rules_adoption_receipt),
+        (settings.project1_rules_m2v1_version, settings.project1_rules_m2v1_sha256,
+         settings.project1_rules_m2v1_adoption_receipt),
+        (settings.project1_rules_m2v2_version, settings.project1_rules_m2v2_sha256,
+         settings.project1_rules_m2v2_adoption_receipt),
+    )
+    return any(all(part for part in family) for family in families)
 
 
 def get_packet_source():
@@ -175,8 +196,9 @@ def business_understanding(assessment_id: UUID, payload: ReviewRequest,
     response.headers['Cache-Control'] = 'no-store'
     packet = source(session, user, assessment_id, payload.expected_revision)
     try:
-        rules = load_rules(settings.project1_rules_version, settings.project1_rules_sha256,
-                           settings.project1_rules_adoption_receipt)
+        # Per instrument, not the global default: the deterministic review must
+        # never evaluate an M2V2 packet against the M2V1 catalogue.
+        rules = resolve_ruleset(packet.get('instrument_version', '')).module
     except WorkflowHeld:
         rules = None
     # Deliberately no cloud runner here until durable storage/disclosure adapters

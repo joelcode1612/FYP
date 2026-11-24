@@ -25,6 +25,25 @@ fixtures without writing anything into any database.
 The contract version is independent of ``sitewise-assessment-workflow/2`` so
 that adding this evaluator cannot silently change the readiness payload that
 the stepper already consumes.
+
+/2 — the six-objective registration extension
+---------------------------------------------
+``/1`` completed on T3-01..T3-05 plus "no unresolved blockers". That left a
+gap: nothing required the six fixed objectives (O1..O6) to be *registered*
+against the instrument, so one entrepreneur-written objective could look like a
+finished research design. ``/2`` extends T3-06 to require that all six are
+accounted for.
+
+Registration is read from the instrument, not asserted here. ``M2V2-09``'s own
+registered option codes name exactly the six fixed objectives, and
+``issue_resolution.TOPIC_TO_OBJECTIVE`` maps them one-to-one. A topic is either
+SELECTED (and then must carry a verified research objective) or NOT_SELECTED
+(a recorded, deliberate abstention). ``NONE`` is an explicit decline of all six
+and is reported as mode ``DECLINED``.
+
+Registration is a **disposition, not coverage**. It never raises
+``objective_registry.coverage()``: that number stays 0 of 6 until an approved
+measurement exists, and this module does not touch it.
 """
 
 from __future__ import annotations
@@ -32,7 +51,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-CONTRACT_VERSION = "sitewise-stage3-completion/1"
+CONTRACT_VERSION = "sitewise-stage3-completion/2"
 
 #: Ordered predicates. The order is the evaluation order and the order in
 #: which blockers are reported.
@@ -44,8 +63,17 @@ PREDICATE_TITLES = {
     "T3-03": "Business context",
     "T3-04": "BDJ execution disposition",
     "T3-05": "Objective resolution",
-    "T3-06": "No unresolved blockers",
+    # /2 extension: T3-06 was "no unresolved blockers". It now also requires the
+    # six fixed objectives to be registered from the instrument. Recovered from
+    # deliverables/m2v2/phase3a_research_objective_decision_brief.md §6 item 3
+    # ("Confirm the M2V2-09 -> O1..O6 topic mapping"), approved 2026-11-24.
+    "T3-06": "No unresolved blockers and six objectives registered",
 }
+
+#: The M2V2-09 item whose registered option codes name the six fixed objectives.
+RESEARCH_TOPIC_ITEM = "M2V2-09"
+PRIORITY_ITEM = "M2V2-10"
+DISPOSITION_ITEM = "M2V2-11"
 
 #: A BDJ result counts as an evaluation only if the engine itself said so.
 #: ``VALID_ABSTENTION`` is a valid answer (it names the missing confirmed
@@ -75,6 +103,123 @@ def _rows(cur, sql: str, params: tuple = ()) -> list[dict]:
 # ---------------------------------------------------------------------------
 # collect - all SQL lives here, and every statement is a SELECT
 # ---------------------------------------------------------------------------
+
+def _intention_answers(cur, m2_assessment_id, confirmed_revision) -> dict:
+    """The research-intention answers in force at the confirmed revision.
+
+    ``m2_answer_revisions`` stores *changes*, so the answer in force is the
+    newest row at or before the confirmed revision -- not simply the newest row.
+    Reading the newest row would let a post-confirmation edit rewrite what the
+    confirmation registered.
+    """
+    rows = _rows(
+        cur,
+        "select distinct on (iv.item_key) iv.item_key, ar.answer_state, ar.value_json "
+        "from public.m2_answer_revisions ar "
+        "join public.m2_item_versions iv on iv.id = ar.item_version_id "
+        "where ar.assessment_id = %s and iv.item_key in (%s, %s, %s) "
+        "  and ar.assessment_revision <= %s "
+        "order by iv.item_key, ar.assessment_revision desc, ar.created_at desc",
+        (m2_assessment_id, RESEARCH_TOPIC_ITEM, PRIORITY_ITEM, DISPOSITION_ITEM,
+         confirmed_revision),
+    )
+    return {row["item_key"]: {"answer_state": row["answer_state"],
+                              "value": row["value_json"]} for row in rows}
+
+
+def _verified_objectives(cur, m2_assessment_id, actor_id, confirmation) -> list[dict]:
+    """Objectives bound to this confirmation, with their provenance verdict.
+
+    The verification predicate is imported from ``assessment_progress`` rather
+    than restated: two copies would eventually disagree about what "verified"
+    means, and the progress bar would then count an objective that this
+    contract rejects.
+    """
+    from sitewise.services.assessment_progress import VERIFIED_OBJECTIVE_SQL
+
+    rows = _rows(
+        cur,
+        "with cur as (select %s::uuid as m2_id, %s::uuid as confirmation_id, "
+        "                    %s::integer as assessment_revision, "
+        "                    %s::text as snapshot_digest, %s::uuid as owner_user_id) "
+        "select u.id, s.provenance->>'priority' as priority, "
+        f"       coalesce({VERIFIED_OBJECTIVE_SQL}, false) as verified "
+        "from cur "
+        "join public.m2_confirmed_uncertainties u "
+        "  on u.confirmation_id = cur.confirmation_id "
+        "left join public.m2_research_objective_sources s on s.objective_id = u.id",
+        (m2_assessment_id, confirmation["id"],
+         confirmation["assessment_revision"], confirmation["snapshot_digest"],
+         actor_id),
+    )
+    return [{"id": str(row["id"]), "priority": row["priority"],
+             "verified": bool(row["verified"])} for row in rows]
+
+
+def _registration(records: dict) -> dict:
+    """Register the six fixed objectives from the M2V2-09 topic answer.
+
+    Pure. A topic is SELECTED when its own option code appears in the answer;
+    NOT_SELECTED otherwise, which is a recorded abstention rather than a gap.
+    Every SELECTED topic must carry a verified research objective -- writing one
+    objective for the top priority is not a finished research design.
+
+    ``NONE`` is exclusive in the instrument and is reported as mode DECLINED:
+    all six are registered out of scope, so nothing is required to resolve.
+    """
+    from sitewise.project1.issue_resolution import TOPIC_TO_OBJECTIVE
+
+    answers = records.get("research_intention") or {}
+    answer = answers.get(RESEARCH_TOPIC_ITEM)
+    if not answer or answer.get("answer_state") != "ANSWERED":
+        return {
+            "ok": False,
+            "reason": "RESEARCH_TOPIC_ANSWER_UNAVAILABLE",
+            "mode": None,
+            "blocking": list(TOPIC_TO_OBJECTIVE.values()),
+            "rows": [],
+        }
+
+    value = answer.get("value") or []
+    if isinstance(value, str):
+        value = [value]
+    codes = {str(code) for code in value}
+    declined = "NONE" in codes
+
+    # A verified objective resolves the topic named by its own ``priority``.
+    resolved: dict[str, list[str]] = {}
+    for objective in records.get("objectives") or []:
+        if not objective.get("verified"):
+            continue
+        priority = objective.get("priority")
+        if priority:
+            resolved.setdefault(str(priority), []).append(objective["id"])
+
+    rows, blocking = [], []
+    for code, objective_id in TOPIC_TO_OBJECTIVE.items():
+        selected = (code in codes) and not declined
+        carried_by = resolved.get(code, [])
+        ok = (not selected) or bool(carried_by)
+        if not ok:
+            blocking.append(objective_id)
+        rows.append({
+            "topic_code": code,
+            "objective_id": objective_id,
+            "disposition": "SELECTED" if selected else "NOT_SELECTED",
+            "verified_objectives": carried_by,
+            "satisfied": ok,
+        })
+
+    return {
+        "ok": not blocking,
+        "reason": "SIX_OBJECTIVES_REGISTERED" if not blocking else "OBJECTIVES_NOT_REGISTERED",
+        "mode": "DECLINED" if declined else "SELECTED",
+        "blocking": blocking,
+        "rows": rows,
+        "priority": answers.get(PRIORITY_ITEM, {}).get("value"),
+        "disposition": answers.get(DISPOSITION_ITEM, {}).get("value"),
+    }
+
 
 def collect(cur, *, marketplace_assessment_id: UUID, m2_assessment_id: UUID,
             actor_id: UUID, assessment: dict | None = None,
@@ -110,6 +255,13 @@ def collect(cur, *, marketplace_assessment_id: UUID, m2_assessment_id: UUID,
         "proposals": [],
         "decisions": {},
         "admissions": {},
+        # /2: the research-intention answers and the verified objectives they
+        # must resolve to. Both are read at the *confirmed* revision, because
+        # registration is about the confirmation being completed, not about
+        # whatever the draft has drifted to since.
+        "research_intention": {},
+        "objectives": [],
+        "ledger_readable": True,
         # The currently adopted ruleset/prompt, and the current projection
         # fingerprint. The fingerprint cannot be computed from these tables: it
         # is digest(project1-m2-projection/1-candidate), which only the
@@ -172,25 +324,61 @@ def collect(cur, *, marketplace_assessment_id: UUID, m2_assessment_id: UUID,
 
     if records["m2"]:
         ledger = ledger_cur if ledger_cur is not None else cur
-        records["evaluations"] = _rows(
-            ledger,
-            "select result_id, run_id, attempt_no, assessment_revision, source_fingerprint, "
-            "ruleset_version, prompt_version, execution_outcome, validation_status, "
-            "finding_authority, finding_count, execution_mode, provider_dispatched, "
-            "result_payload, created_at "
-            "from project1_ai.bdj_results "
-            "where assessment_id = %s and owner_user_id = %s and assessment_revision = %s "
-            "order by created_at desc",
-            (m2_assessment_id, actor_id, revision),
-        )
-        for row in records["evaluations"]:
-            records["authorizations"] += _rows(
+        # The attempt ledger lives in ``project1_ai``, which the M2 runtime role
+        # has no USAGE on by default. A read that is refused is reported as
+        # LEDGER_UNAVAILABLE rather than raised: T3-04 fails closed either way,
+        # and a caller must be able to tell "no evaluation exists" from "I was
+        # not allowed to look".
+        try:
+            records["evaluations"] = _rows(
                 ledger,
-                "select id, consumed_at, consumed_run_id, receipt, expires_at "
-                "from project1_ai.bdj_real_data_authorizations "
-                "where consumed_run_id = %s",
-                (row["run_id"],),
+                "select result_id, run_id, attempt_no, assessment_revision, source_fingerprint, "
+                "ruleset_version, prompt_version, execution_outcome, validation_status, "
+                "finding_authority, finding_count, execution_mode, provider_dispatched, "
+                "result_payload, created_at "
+                "from project1_ai.bdj_results "
+                "where assessment_id = %s and owner_user_id = %s and assessment_revision = %s "
+                "order by created_at desc",
+                (m2_assessment_id, actor_id, revision),
             )
+            for row in records["evaluations"]:
+                records["authorizations"] += _rows(
+                    ledger,
+                    # DD-005 mechanism B: a spend is an append-only row in
+                    # bdj_authorization_consumptions, so the legacy
+                    # consumed_run_id column is NULL for every new spend. The
+                    # LEFT JOIN reports both mechanisms under the same two
+                    # field names, so existing readers keep their meaning:
+                    # consumed_at is when the authorization was spent and
+                    # consumed_run_id is the run that spent it. For a legacy
+                    # row the coalesce falls back to the original columns. If
+                    # the caller's principal cannot see the consumption table,
+                    # the join yields NULL and legacy behaviour is unchanged
+                    # rather than the read failing.
+                    "select a.id, "
+                    "       coalesce(c.consumed_at, a.consumed_at) as consumed_at, "
+                    "       coalesce(c.run_id, a.consumed_run_id) as consumed_run_id, "
+                    "       a.receipt, a.expires_at "
+                    "from project1_ai.bdj_real_data_authorizations a "
+                    "left join project1_ai.bdj_authorization_consumptions c "
+                    "       on c.authorization_id = a.id "
+                    "where coalesce(c.run_id, a.consumed_run_id) = %s",
+                    (row["run_id"],),
+                )
+        except Exception:  # noqa: BLE001 - a refused ledger read is a blocker
+            records["ledger_readable"] = False
+            records["evaluations"] = []
+            records["authorizations"] = []
+
+    # ---- /2 registration evidence ---------------------------------------
+    # Read at the confirmation's own revision. A confirmation that is stale is
+    # already T3-02's finding; registration still reports what was confirmed.
+    if records["confirmation"]:
+        confirmed_revision = records["confirmation"]["assessment_revision"]
+        records["research_intention"] = _intention_answers(
+            cur, m2_assessment_id, confirmed_revision)
+        records["objectives"] = _verified_objectives(
+            cur, m2_assessment_id, actor_id, records["confirmation"])
 
     if records["context"]:
         records["proposals"] = _rows(
@@ -407,13 +595,27 @@ def decide(records: dict) -> dict:
             proposal_count=len(proposals), decided=decided,
             undecided=undecided, approved_without_admission=approved_not_admitted)
 
-    # ---- T3-06 no unresolved blockers -----------------------------------
+    # ---- T3-06 no unresolved blockers; six objectives registered ---------
+    #
+    # /2 splits T3-06 into two independently reported lists. Keeping them apart
+    # matters: a reader must be able to see "BDJ never ran" and "O3 was selected
+    # but never resolved" at the same time, instead of the second only becoming
+    # visible once the first is fixed.
     blockers = [code for code in ("T3-01", "T3-02", "T3-03", "T3-04", "T3-05")
                 if not preds[code]["satisfied"]]
+    registration = _registration(records)
     result["blockers"] = [{"predicate": c, "reason": preds[c]["reason"]} for c in blockers]
-    preds["T3-06"] = _pred("T3-06", not blockers,
-                           "NO_UNRESOLVED_BLOCKERS" if not blockers else "BLOCKERS_PRESENT",
-                           blocking=blockers)
+    result["registration"] = registration
+    t3_06_ok = not blockers and registration["ok"]
+    preds["T3-06"] = _pred(
+        "T3-06", t3_06_ok,
+        "BLOCKERS_PRESENT" if blockers else
+        "OBJECTIVES_NOT_REGISTERED" if not registration["ok"] else
+        "NO_UNRESOLVED_BLOCKERS",
+        blocking=blockers,
+        registration_blocking=registration["blocking"],
+        registration_mode=registration["mode"],
+    )
 
     result["complete"] = all(p["satisfied"] for p in preds.values())
     return result

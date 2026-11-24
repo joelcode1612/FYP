@@ -86,6 +86,19 @@ class _BdjObjectiveProposalPanelState
   String _contextId = '';
   int _revision = 0;
 
+  /// The confirmation this panel resolved, kept even when no context exists yet.
+  ///
+  /// Without it the "no persisted business context" state could only be re-read:
+  /// the build control needs the confirmation id, and the panel used to discard
+  /// it on the early return.
+  String _confirmationId = '';
+
+  /// True when the confirmation has no persisted context to read from. This is
+  /// the one state where a build is the remedy, so it is the only state that
+  /// offers the control.
+  bool _contextMissing = false;
+  bool _buildingContext = false;
+
   List<BdjObjectiveProposal> _proposals = const [];
   final Map<String, BdjObjectiveDecision> _decisions = {};
   BdjExecution? _execution;
@@ -178,10 +191,14 @@ class _BdjObjectiveProposalPanelState
         draft.revision,
       );
       final contextId = status['context_id'];
-      if (status['status'] != 'PERSISTED' ||
-          status['source_is_current'] != true ||
-          contextId is! String ||
-          contextId.isEmpty) {
+      // Keep the confirmation identity before the early return: the build
+      // control is offered in exactly this branch and needs all three values.
+      _m2Id = m2Id;
+      _revision = draft.revision;
+      _confirmationId = confirmationId;
+      _contextMissing =
+          status['status'] != 'PERSISTED' || contextId is! String || contextId.isEmpty;
+      if (_contextMissing || status['source_is_current'] != true) {
         _stale(
           'No persisted business context is current for this confirmation '
           '(status ${status['status'] ?? 'unknown'}). Objectives are only '
@@ -190,9 +207,7 @@ class _BdjObjectiveProposalPanelState
         return;
       }
 
-      _m2Id = m2Id;
       _contextId = contextId;
-      _revision = draft.revision;
 
       final listed = await component.api.list(
         assessmentId: m2Id,
@@ -264,6 +279,36 @@ class _BdjObjectiveProposalPanelState
       return;
     }
     _fail(failure.message);
+  }
+
+  /// Persists the business context for the confirmation this panel resolved.
+  ///
+  /// Reuses the existing `POST …/business-context` route through the same client
+  /// the rest of the panel uses — there is no second endpoint and no new
+  /// permission. `objectiveId` is deliberately omitted: a first build has no
+  /// confirmed objective to bind, and the route treats the parameter as optional.
+  ///
+  /// Nothing is built until the owner clicks, and a refused build reports the
+  /// server's reason instead of retrying by itself. The M2 confirmation is not
+  /// touched, so this cannot make a confirmed source stale.
+  Future<void> _buildContext() async {
+    setState(() {
+      _buildingContext = true;
+      _notice = null;
+    });
+    try {
+      await AppLocator.m2.buildContext(_m2Id, _confirmationId, _revision);
+      _buildingContext = false;
+      await _load();
+    } on Object catch (error) {
+      setState(() {
+        _buildingContext = false;
+        _stale(
+          'The business context could not be built for confirmation '
+          '$_confirmationId (revision $_revision): $error',
+        );
+      });
+    }
   }
 
   Future<void> _propose() async {
@@ -381,12 +426,30 @@ class _BdjObjectiveProposalPanelState
         EmptyState(
           title: 'The confirmed source is not current',
           body: _staleMessage!,
-          action: ActionButton(
-            'Re-read',
-            onClick: () {
-              _load();
-            },
-          ),
+          // A missing context is the one case the owner can fix from here, and
+          // only on an explicit click. Re-read stays available either way.
+          action: div(classes: 'row-actions', [
+            if (_contextMissing)
+              ActionButton(
+                _buildingContext
+                    ? 'Building business context…'
+                    : 'Build business context',
+                onClick: _buildingContext
+                    ? null
+                    : () {
+                        _buildContext();
+                      },
+              ),
+            ActionButton(
+              'Re-read',
+              variant: 'ghost',
+              onClick: _buildingContext
+                  ? null
+                  : () {
+                      _load();
+                    },
+            ),
+          ]),
         ),
       ]);
     }

@@ -62,7 +62,11 @@ class AssessmentJourneyStepper extends StatelessComponent {
             // workflows, which capped the count at 2 for every assessment and
             // disagreed with the dashboard the moment stage 2 completed.
             strong([Component.text('${record.completedStages} / ${record.totalStages}')]),
-            span([Component.text(' completed')]),
+            span([
+              Component.text(record.stagesRemaining == 0
+                  ? ' completed'
+                  : ' completed · ${record.stagesRemaining} remaining'),
+            ]),
           ]),
         ]),
         div(classes: 'sw-assessment-journey__scroll', [
@@ -85,16 +89,25 @@ class AssessmentJourneyStepper extends StatelessComponent {
     // only stage_1 and stage_2 were ever consulted.
     final governedComplete = stage.isComplete;
     final available = !governedWorkflow || canViewAssessmentStage(stage.key, workflowReadiness);
+    // When the server sends its finer verdict, render that. A stage held by a
+    // missing contract or a governance gate is not "not started": it is blocked,
+    // and saying so is the difference between "do the work" and "wait for a
+    // decision". Falls back to the legacy mapping when `state` is absent.
     final state = governedWorkflow
-        ? governedComplete
-            ? 'complete'
-            // The checkpoint on screen is always the current one, even when the
-            // server has not marked it enterable: its panel states the block.
-            : isSelected
-                ? 'current'
-                : !available
-                    ? 'unavailable'
-                    : 'upcoming'
+        ? stage.state == 'BLOCKED' || stage.state == 'NOT_AVAILABLE'
+            ? 'unavailable'
+            : governedComplete
+                ? 'complete'
+                : stage.state == 'IN_PROGRESS'
+                    ? 'current'
+                    // The checkpoint on screen is always the current one, even
+                    // when the server has not marked it enterable: its panel
+                    // states the block.
+                    : isSelected
+                        ? 'current'
+                        : !available
+                            ? 'unavailable'
+                            : 'upcoming'
         : stage.isComplete
         ? 'complete'
         : stage.isUnavailable
@@ -104,7 +117,7 @@ class AssessmentJourneyStepper extends StatelessComponent {
                 : 'upcoming';
     final statusLabel = switch (state) {
       'complete' => 'Completed',
-      'unavailable' => 'Unavailable',
+      'unavailable' => 'Blocked',
       'current' => 'Current stage',
       _ => 'Not started',
     };

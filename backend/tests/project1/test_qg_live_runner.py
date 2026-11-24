@@ -112,3 +112,74 @@ def test_a_second_dispatch_does_not_consume_a_global_slot(tmp_path, monkeypatch)
     assert refusal(runner) == 'MODEL_ATTEMPT_BUDGET_EXHAUSTED'
     assert not reserved
     assert provider.calls == 0
+
+
+# --------------------------------------------------------------------------
+# N04-C §4A — the fixed-option prompt is authorised, and only it may be bound
+# --------------------------------------------------------------------------
+def test_the_fixed_option_prompt_is_an_authorised_key():
+    """Owner-authorised 2026-11-23; the key gate must admit it."""
+    assert 'QG_FIXED_OPTION' in qg_live.AUTHORIZED_PROMPT_KEYS
+    assert 'QG_PROPOSAL' in qg_live.AUTHORIZED_PROMPT_KEYS
+
+
+def test_a_matching_bound_prompt_passes_the_gate(tmp_path, monkeypatch):
+    """Proves the gate admits the fixed-option key and both bindings agree.
+
+    The stop is the attempt ceiling, which is reached only after the prompt key,
+    the bound version and the bound hash have all been accepted — and still
+    before any budget slot or socket.
+    """
+    monkeypatch.setattr(qg_live, 'ensure_qg_run', lambda *a, **k: uuid4())
+    monkeypatch.setattr(qg_live, 'attempt_count', lambda *a, **k: 99)
+    prompt = qg_live.PROMPTS['QG_FIXED_OPTION']
+    runner, provider = _runner(tmp_path, prompt_version=prompt.version,
+                               prompt_sha256=prompt.fingerprint)
+    assert refusal(runner, prompt_key='QG_FIXED_OPTION') == \
+        'MODEL_ATTEMPT_BUDGET_EXHAUSTED'
+    assert provider.calls == 0
+
+
+def test_a_bound_prompt_version_that_does_not_match_is_refused(tmp_path):
+    """Authorising one prompt and dispatching another must fail closed."""
+    runner, provider = _runner(tmp_path, prompt_version='QG-PROPOSE-6-CAND')
+    assert refusal(runner, prompt_key='QG_FIXED_OPTION') == \
+        'QG_LIVE_PROMPT_VERSION_MISMATCH'
+    assert provider.calls == 0
+
+
+def test_a_bound_prompt_hash_that_does_not_match_is_refused(tmp_path):
+    runner, provider = _runner(tmp_path, prompt_sha256='0' * 64)
+    assert refusal(runner, prompt_key='QG_FIXED_OPTION') == \
+        'QG_LIVE_PROMPT_HASH_MISMATCH'
+    assert provider.calls == 0
+
+
+def test_an_absent_prompt_binding_leaves_the_key_free(tmp_path, monkeypatch):
+    """An artifact that binds no prompt does not accidentally bind one."""
+    monkeypatch.setattr(qg_live, 'ensure_qg_run', lambda *a, **k: uuid4())
+    monkeypatch.setattr(qg_live, 'attempt_count', lambda *a, **k: 99)
+    runner, _ = _runner(tmp_path)
+    assert refusal(runner, prompt_key='QG_FIXED_OPTION') == \
+        'MODEL_ATTEMPT_BUDGET_EXHAUSTED'
+
+
+def test_an_unnamed_key_still_defaults_to_the_proposal_prompt(tmp_path, monkeypatch):
+    monkeypatch.setattr(qg_live, 'ensure_qg_run', lambda *a, **k: uuid4())
+    monkeypatch.setattr(qg_live, 'attempt_count', lambda *a, **k: 99)
+    runner, _ = _runner(tmp_path)
+    assert refusal(runner, prompt_key=None) == 'MODEL_ATTEMPT_BUDGET_EXHAUSTED'
+
+
+def test_a_consumed_unknown_outcome_is_not_retried(tmp_path, monkeypatch):
+    """Run fc290198 spent its single slot and never learned the outcome.
+
+    Re-dispatching it would be a second POST for an attempt whose first POST may
+    already have reached the provider. The authorization permits one attempt, so
+    the refusal must happen before the budget is reserved or a socket is opened.
+    """
+    monkeypatch.setattr(qg_live, 'ensure_qg_run', lambda *a, **k: uuid4())
+    monkeypatch.setattr(qg_live, 'attempt_count', lambda *a, **k: 1)
+    runner, provider = _runner(tmp_path, max_attempts=1)
+    assert refusal(runner) == 'MODEL_ATTEMPT_BUDGET_EXHAUSTED'
+    assert provider.calls == 0

@@ -39,6 +39,12 @@ from sitewise.ml.model_loader import ModelLoader
 from sitewise.repositories.assessment_repository import AssessmentRepository
 from sitewise.repositories.catalog_repository import CatalogRepository
 from sitewise.repositories.favourite_repository import FavouriteRepository
+from sitewise.services import assessment_progress
+from sitewise.services.assessment_progress import (
+    BLOCKED as progress_blocked,
+    COMPLETE as progress_complete,
+    NOT_AVAILABLE as progress_not_available,
+)
 
 # (key, title, timestamp column) in workflow order.
 STAGES: tuple[tuple[str, str, str], ...] = (
@@ -575,6 +581,9 @@ class AssessmentService:
         # assessment id. Filled by _load_m2_confirmations, which the history
         # endpoint calls once for the whole page.
         self._m2_confirmations: dict[str, dict] = {}
+        # Per-request cache of progress evidence, keyed by marketplace
+        # assessment id. Filled by _load_progress once per page.
+        self._progress_evidence: dict[str, dict] = {}
 
     # -- reads --------------------------------------------------------------
 
@@ -795,6 +804,54 @@ class AssessmentService:
             self._load_m2_confirmations(assessment.user_id, [assessment.assessment_id])
         return self._m2_confirmations.get(key)
 
+    # -- progress is evidence, not timestamps -------------------------------
+    #
+    # ``assessment_progress`` owns the predicate. This service only supplies the
+    # evidence, once per page, from the same owner-scoped M2 session the M2
+    # routes use -- the marketplace session has no SELECT on the M2 tables at
+    # all. Every failure degrades to "no evidence": an unreadable M2 store must
+    # not invent progress, and must not break the list either.
+    def _load_progress(self, actor_id, assessments) -> None:
+        records = list(assessments)
+        if not records:
+            return
+        stamps = {str(r.assessment_id): getattr(r, "property_selected_at", None)
+                  for r in records}
+        requirements = {str(r.assessment_id): getattr(r, "requirements_saved_at", None)
+                        for r in records}
+        ids = [str(r.assessment_id) for r in records]
+        try:
+            from sitewise.db.m2_session import m2_session_for
+
+            with m2_session_for(actor_id) as session:
+                evidence = assessment_progress.load_evidence(
+                    session, actor_id, ids, property_selected_at=stamps,
+                    requirements_saved_at=requirements)
+        except Exception as exc:  # noqa: BLE001 - M2 storage is optional here
+            logger.warning(
+                'M2 progress evidence is not readable from the assessment '
+                'service (%s); stages 2-5 report their storage as unavailable.',
+                type(exc).__name__,
+            )
+            evidence = {
+                mid: {**assessment_progress.empty_evidence(stamps.get(mid),
+                                                           requirements.get(mid)),
+                      "store_readable": False,
+                      "declaration_reason": assessment_progress.REASON_M2_STORAGE_UNAVAILABLE}
+                for mid in ids
+            }
+        self._progress_evidence.update(evidence)
+
+    def _progress(self, assessment) -> dict:
+        key = str(assessment.assessment_id)
+        if key not in self._progress_evidence:
+            self._load_progress(assessment.user_id, [assessment])
+        evidence = self._progress_evidence.get(key)
+        if evidence is None:
+            evidence = assessment_progress.empty_evidence(
+                getattr(assessment, "property_selected_at", None))
+        return assessment_progress.evaluate(evidence)
+
     # -- serialization ------------------------------------------------------
 
     def payload(
@@ -819,49 +876,44 @@ class AssessmentService:
                     assessment.assessment_id,
                 )
 
-        # Stage 2 is complete when either the legacy requirements were saved or
-        # a current, owner-bound M2 confirmation exists. Derived per read, so an
-        # invalidated confirmation reverts the stage with no synchronisation
-        # step and no chance of a stale copy surviving in the record.
+        # Progress is evidence, not timestamps. ``assessment_progress`` reads the
+        # M2 chain once per page (see ``_load_progress``) and every surface --
+        # this payload, the history list and /workflow-readiness -- evaluates the
+        # same evidence with the same predicate, so the dashboard card and the
+        # workspace stepper cannot print different numbers.
         confirmation = self._m2_confirmation(assessment)
-        done = {column: getattr(assessment, column) for _, _, column in STAGES}
-        stage_2_basis = 'REQUIREMENTS' if done['requirements_saved_at'] else None
-        if done['requirements_saved_at'] is None and confirmation is not None:
-            done['requirements_saved_at'] = confirmation['created_at']
-            stage_2_basis = 'M2_CONFIRMATION'
+        stage_2_basis = 'M2_CONFIRMATION' if confirmation is not None else None
+        if confirmation is None and assessment.requirements_saved_at is not None:
+            # The legacy requirements form is still a supported way to reach
+            # stage 2; it is not, however, a way to skip it.
+            stage_2_basis = 'REQUIREMENTS'
 
-        completed = sum(1 for column in done.values() if column is not None)
-        current_index = next(
-            (i for i, (_, _, column) in enumerate(STAGES) if done[column] is None),
-            TOTAL_STAGES - 1,
-        )
+        progress = self._progress(assessment)
+        completed = progress["completed_stages"]
+        current_index = progress["current_stage"] - 1
 
         stages = []
-        for i, (key, title, column) in enumerate(STAGES):
-            done_at = done[column]
-            reason = None
-            if done_at is not None:
+        for stage in progress["stages"]:
+            state = stage["state"]
+            if state == progress_complete:
                 status = "complete"
+            elif state in (progress_blocked, progress_not_available):
+                status = "unavailable"
             else:
-                status = "current" if i == current_index else "incomplete"
-                if key == "location_evidence":
-                    evidence = self.catalog.get_evidence(assessment.property_id)
-                    if not evidence.get("available"):
-                        status, reason = "unavailable", evidence.get("reason")
-                elif key == "ai_explanation":
-                    if not capabilities["explanation"]["available"]:
-                        status, reason = "unavailable", capabilities["explanation"]["reason"]
-                elif key == "assessment_report":
-                    if not capabilities["report"]["available"]:
-                        status, reason = "unavailable", capabilities["report"]["reason"]
+                status = "current" if stage["number"] == progress["current_stage"] else "incomplete"
             stages.append(
                 {
-                    "key": key,
-                    "number": i + 1,
-                    "title": title,
+                    "key": stage["key"],
+                    "number": stage["number"],
+                    "title": stage["title"],
                     "status": status,
-                    "completed_at": _iso(done_at),
-                    "unavailable_reason": reason,
+                    # The finer verdict, so a reader can tell a governance block
+                    # from work in progress without parsing the reason string.
+                    "state": state,
+                    "reason": stage["reason"],
+                    "completed_at": _iso(stage["completed_at"]),
+                    "unavailable_reason": (stage["reason"]
+                                           if status == "unavailable" else None),
                 }
             )
 
@@ -870,11 +922,12 @@ class AssessmentService:
             "user_id": str(assessment.user_id),
             "property_id": assessment.property_id,
             "status": assessment.status,
-            "current_stage": current_index + 1,
-            "current_stage_key": STAGE_KEYS[current_index],
+            "current_stage": progress["current_stage"],
+            "current_stage_key": progress["current_stage_key"],
             "completed_stages": completed,
+            "remaining_stages": progress["remaining_stages"],
             "total_stages": TOTAL_STAGES,
-            "progress_percent": round(completed / TOTAL_STAGES * 100),
+            "progress_percent": progress["progress_percent"],
             # Which record made stage 2 complete. Named so a reader never has to
             # guess whether the timestamp was written by the legacy form or
             # derived from the M2 declaration.
@@ -1007,6 +1060,8 @@ class AssessmentService:
         # Same idea for the M2 confirmations that decide stage 2: one read for
         # the page, not one per row.
         self._load_m2_confirmations(user_id, [r.assessment_id for r in records])
+        # And the same once-per-page read for the evidence behind stages 3-5.
+        self._load_progress(user_id, records)
         rows = []
         for r in records:
             row = self.payload(

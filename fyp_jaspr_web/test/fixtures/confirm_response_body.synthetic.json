@@ -1,0 +1,19 @@
+{
+  "assessment_id": "11111111-2222-4333-8444-555555555555",
+  "assessment_revision": 11,
+  "id": "66666666-7777-4888-8999-000000000000",
+  "snapshot_json": {
+    "assessment_id": "11111111-2222-4333-8444-555555555555",
+    "assessment_revision": 11,
+    "qj_handoff_authorized": false,
+    "confirmed_values": {
+      "concept_interest": "INTERESTED",
+      "reference_period": "next_three_months"
+    },
+    "source_ids": [
+      "synthetic-source-1",
+      "synthetic-source-2"
+    ]
+  },
+  "snapshot_digest": "bae7283c3adacbfeedc7d7ab18b8b1c3714890a2142bfbfa0f0061578111cfe4"
+}

@@ -48,7 +48,11 @@ BEGIN
     SELECT 1 FROM pg_constraint
     WHERE conrelid = 'project1_ai.attempts'::regclass
       AND contype = 'c'
-      AND pg_get_constraintdef(oid) LIKE '%stage%IN%BDJ%'
+      -- PostgreSQL 18 normalises an inline IN list to `stage = ANY(ARRAY[...])`.
+      -- Match the semantic tokens, not one textual spelling of the CHECK.
+      AND pg_get_constraintdef(oid) LIKE '%stage%'
+      AND pg_get_constraintdef(oid) LIKE '%BDJ%'
+      AND pg_get_constraintdef(oid) LIKE '%QG%'
   ) INTO has_stage_check;
   IF NOT has_stage_check THEN
     RAISE EXCEPTION 'attempts stage CHECK not found in the expected shape: reconcile version before migrating';
@@ -65,7 +69,11 @@ BEGIN
     SELECT conname FROM pg_constraint
     WHERE conrelid = 'project1_ai.attempts'::regclass
       AND contype = 'c'
-      AND pg_get_constraintdef(oid) LIKE '%stage%IN%BDJ%'
+      -- PostgreSQL 18 normalises an inline IN list to `stage = ANY(ARRAY[...])`.
+      -- Match the semantic tokens, not one textual spelling of the CHECK.
+      AND pg_get_constraintdef(oid) LIKE '%stage%'
+      AND pg_get_constraintdef(oid) LIKE '%BDJ%'
+      AND pg_get_constraintdef(oid) LIKE '%QG%'
   LOOP
     EXECUTE format('ALTER TABLE project1_ai.attempts DROP CONSTRAINT %I', c.conname);
   END LOOP;

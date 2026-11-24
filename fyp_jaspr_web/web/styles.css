@@ -20289,8 +20289,365 @@ input[type="range"] {
   .asw-rpt__coverage { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .asw-rpt__nav { top: 4px; }
 }
+/* ==========================================================================
+   Phase 2.1 — Guided Assessment Report document (scoped to .asw-rpt)
+   --------------------------------------------------------------------------
+   This block adapts the approved Variant C reading structure while reusing
+   ONLY the Sitewise tokens declared in :root. It deliberately does not define
+   a new palette and does not touch any selector outside the report document.
+   ========================================================================== */
+.asw-rpt {
+  --arp-action: var(--action, #1d4ed8);
+  --arp-accent: var(--accent, #3b82f6);
+  --arp-ink: var(--ink, #0b0f19);
+  --arp-text: var(--text, #1e293b);
+  --arp-muted: var(--muted, #64748b);
+  --arp-overline: var(--overline-text, #6b7280);
+  --arp-canvas: var(--background, #e8eef6);
+  --arp-paper: var(--paper, #f4f7fb);
+  --arp-surface: var(--surface, #ffffff);
+  --arp-line: var(--border, #e7e8ea);
+  --arp-line-strong: var(--border-strong, #cbd5e1);
+  --arp-success: var(--success, #0d9488);
+  --arp-success-text: var(--success-text, #0f766e);
+  --arp-success-wash: var(--success-wash, #d1fae5);
+  --arp-warning: var(--warning, #b45309);
+  --arp-warning-wash: var(--warning-wash, #fef3c7);
+  --arp-danger: var(--danger, #dc2626);
+  --arp-danger-wash: var(--danger-wash, #fee2e2);
+  --arp-neutral: var(--neutral-wash, #f4f7fb);
+  --arp-geo-wash: var(--geo-wash, #dbeafe);
+  --arp-geo-border: var(--geo-border, #bfdbfe);
+  --arp-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  gap: 22px;
+}
+
+/* Sticky document chrome: back action, document identity, status and print. */
+.asw-rpt__chrome {
+  position: sticky;
+  top: 72px;
+  z-index: 16;
+}
+.asw-rpt__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 18px;
+  border-color: var(--arp-line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .97);
+  backdrop-filter: blur(8px);
+}
+.asw-rpt__backlink {
+  order: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 2px;
+  border: 0;
+  background: transparent;
+  color: var(--arp-action);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.asw-rpt__backlink:hover { text-decoration: underline; }
+.asw-rpt__docid {
+  order: 2;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  color: var(--arp-ink);
+  font-size: 14px;
+  font-weight: 700;
+}
+.asw-rpt__docmark {
+  display: grid;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  flex: none;
+  border-radius: 8px;
+  background: var(--arp-action);
+  color: var(--arp-surface);
+  font-size: 14px;
+  font-weight: 800;
+}
+.asw-rpt__docname {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.asw-rpt__barleft {
+  order: 4;
+  flex-basis: 100%;
+  justify-content: flex-start;
+  gap: 7px;
+}
+.asw-rpt__barright { order: 3; margin-left: auto; }
+
+/* Guided section navigation. Full section titles are preserved as text, with
+   the number rendered as a separate span so screen readers get both. */
+.asw-rpt__nav {
+  position: static;
+  top: auto;
+  z-index: auto;
+  gap: 4px;
+  padding: 6px;
+  border-color: var(--arp-line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .97);
+  box-shadow: 0 4px 18px rgba(15, 23, 42, .05);
+}
+.asw-rpt__navlink {
+  min-height: 34px;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  color: var(--arp-muted);
+}
+.asw-rpt__navindex {
+  color: var(--arp-action);
+  font-family: var(--arp-mono);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .02em;
+}
+.asw-rpt__navlink:hover {
+  background: var(--arp-geo-wash);
+  color: var(--arp-action);
+}
+.asw-rpt__navlink--prior { display: none; }
+.asw-rpt__navlink--current,
+.asw-rpt__navlink--current:hover {
+  background: var(--arp-action);
+  color: var(--arp-surface);
+}
+.asw-rpt__navlink--current .asw-rpt__navindex { color: var(--arp-surface); }
+
+/* Evidence section reads as a short guided page before the detail cards.
+   Jump targets clear the sticky app bar plus the report's own chrome. */
+.asw-rpt__section { scroll-margin-top: 236px; }
+.asw-rpt__section--prior { display: none; }
+.asw-rpt__section--evidence { gap: 18px; }
+.asw-rpt__heroeyebrow {
+  color: var(--arp-action);
+  font-family: var(--arp-mono);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.asw-rpt__section--evidence .asw-rpt__sechead {
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 2px;
+}
+.asw-rpt__section--evidence .asw-rpt__secindex {
+  width: 44px;
+  height: 44px;
+  border-color: var(--arp-geo-border);
+  border-radius: 12px;
+  background: var(--arp-geo-wash);
+  color: var(--arp-action);
+  font-size: 14px;
+}
+.asw-rpt__section--evidence .asw-rpt__sectitle {
+  max-width: 24ch;
+  font-size: clamp(26px, 3vw, 36px);
+  line-height: 1.15;
+  letter-spacing: -.6px;
+  color: var(--arp-ink);
+}
+.asw-rpt__section--evidence .asw-rpt__secdesc {
+  max-width: 72ch;
+  margin-top: 6px;
+  font-size: 16px;
+  line-height: 1.65;
+  color: var(--arp-muted);
+}
+
+/* Cards carry the same radius and calmer borders across the document. */
+.asw-rpt__card {
+  padding: 20px 22px;
+  border-color: var(--arp-line);
+  border-radius: 16px;
+}
+.asw-rpt__cardhead { margin-bottom: 16px; }
+.asw-rpt__cardtitle { font-size: 16px; }
+
+/* Coverage bars. A group with no measured values gets a dashed unfilled track,
+   never a zero-length bar that could be mistaken for a measured result. */
+.asw-rpt__coveragebars {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px 28px;
+}
+.asw-rpt__cm { min-width: 0; }
+.asw-rpt__cmtop {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.asw-rpt__cmlabel {
+  color: var(--arp-text);
+  font-size: 14px;
+  font-weight: 700;
+}
+.asw-rpt__cmvalue {
+  color: var(--arp-ink);
+  font-family: var(--arp-mono);
+  font-size: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.asw-rpt__cmtrack {
+  height: 9px;
+  border-radius: var(--arp-pill, 999px);
+  background: var(--arp-paper);
+  overflow: hidden;
+}
+.asw-rpt__cmfill { height: 100%; border-radius: inherit; }
+.asw-rpt__cmfill--success { background: var(--arp-success); }
+.asw-rpt__cmfill--warning { background: var(--arp-warning); }
+.asw-rpt__cmtrack--unavailable {
+  border: 1px dashed var(--arp-line-strong);
+  background: repeating-linear-gradient(
+    135deg,
+    var(--arp-paper) 0 6px,
+    var(--arp-surface) 6px 12px
+  );
+}
+.asw-rpt__cmnote {
+  margin: 7px 0 0;
+  color: var(--arp-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.asw-rpt__cmnote--warning { color: var(--arp-warning); font-weight: 700; }
+.asw-rpt__cmnote--unavailable { color: var(--arp-overline); }
+
+/* Progressive disclosure for requirement checks and contract status. */
+.asw-rpt__disclosure {
+  padding: 0 22px;
+  border: 1px solid var(--arp-line);
+  border-radius: 16px;
+  background: var(--arp-surface);
+}
+.asw-rpt__disclosuresummary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 58px;
+  padding: 14px 0;
+  list-style: none;
+  cursor: pointer;
+  color: var(--arp-action);
+  font-size: 17px;
+  font-weight: 700;
+}
+.asw-rpt__disclosuresummary::-webkit-details-marker { display: none; }
+.asw-rpt__chevron {
+  flex: none;
+  color: var(--arp-action);
+  font-size: 18px;
+  line-height: 1;
+  transition: transform .15s ease-out;
+}
+.asw-rpt__disclosure[open] .asw-rpt__chevron { transform: rotate(180deg); }
+.asw-rpt__disclosurebody {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr);
+  gap: 22px;
+  padding: 0 0 20px;
+  border-top: 1px solid var(--arp-line);
+}
+.asw-rpt__disclosurebody .asw-rpt__card {
+  margin: 0;
+  padding: 16px 0 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.asw-rpt__contract {
+  align-self: start;
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--arp-line);
+  border-radius: 12px;
+  background: var(--arp-paper);
+}
+.asw-rpt__contract h4 {
+  margin: 10px 0 6px;
+  color: var(--arp-ink);
+  font-size: 14px;
+  font-weight: 800;
+}
+.asw-rpt__contract p {
+  margin: 0;
+  color: var(--arp-muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* Bottom pager keeps the document's reading order explicit. */
+.asw-rpt__actions {
+  padding-top: 18px;
+  border-top: 1px solid var(--arp-line);
+}
+.asw-rpt__pagerlink {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 7px 14px;
+  border: 1px solid var(--arp-line-strong);
+  border-radius: 999px;
+  background: var(--arp-surface);
+  color: var(--arp-text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.asw-rpt__pagerlink:hover {
+  background: var(--arp-paper);
+  border-color: var(--arp-accent);
+}
+.asw-rpt__pagerlink--next {
+  border-color: var(--arp-action);
+  background: var(--arp-action);
+  color: var(--arp-surface);
+}
+.asw-rpt__pagerlink--next:hover { filter: brightness(1.08); }
+
+@media (max-width: 1150px) {
+  .asw-rpt__coveragebars,
+  .asw-rpt__disclosurebody { grid-template-columns: minmax(0, 1fr); }
+}
+@media print {
+  .asw-rpt__bar,
+  .asw-rpt__nav,
+  .asw-rpt__pagerlink { display: none !important; }
+  .asw-rpt__section,
+  .asw-rpt__card,
+  .asw-rpt__disclosure { break-inside: avoid; }
+  .asw-rpt__disclosure[open] .asw-rpt__chevron { display: none; }
+}
+
 @media (max-width: 700px) {
   .asw-rpt__bar { flex-direction: column; align-items: stretch; }
+  .asw-rpt__coveragebars,
+  .asw-rpt__disclosurebody { grid-template-columns: minmax(0, 1fr); }
   .asw-rpt__kpis { gap: 9px; }
   .asw-rpt__kpivalue { font-size: 22px; }
   .asw-rpt__def { grid-template-columns: minmax(0, 1fr); gap: 2px; }

@@ -31,11 +31,28 @@ from sitewise.project1.provider import MODEL
 from sitewise.project1.qg_contract import CONTRACT_VERSION
 
 
-def effective_policy_fingerprint() -> str:
-    """Hash the effective policy, so a model change is a new work identity."""
+def effective_policy_fingerprint(prompt_key: str = 'BDJ',
+                                 rules_version: str | None = None) -> str:
+    """Hash the effective policy, so a model change is a new work identity.
+
+    ``prompt_key`` defaults to the M2V1 source prompt so every historical run
+    identity is reproduced byte-identically. An M2V2 source evaluation passes
+    its own key, which is what keeps two different prompts from sharing one
+    run: otherwise the ledger's UNIQUE(run_id, stage) would treat the second
+    prompt as a re-execution of the first.
+
+    ``rules_version`` must be the ruleset that actually resolved for this
+    instrument. It used to be read from the legacy global pin only, which is
+    empty on an M2V2-only environment, so the run identity did not name the
+    ruleset at all (DD-007). That mattered for single-use: the authorization row
+    matches on (assessment, revision, fingerprint, ruleset, prompt), so once the
+    identity is a function of the same tuple, one row can only ever map to one
+    run and the ledger's reservation refuses the second attempt.
+    """
     return hashlib.sha256(canonical({
-        'rules_version': settings.project1_rules_version,
-        'prompt_version': PROMPTS['BDJ'].version,
+        'rules_version': (settings.project1_rules_version
+                          if rules_version is None else rules_version),
+        'prompt_version': PROMPTS[prompt_key].version,
         'model': MODEL,
     }).encode('utf-8')).hexdigest()
 
@@ -50,7 +67,8 @@ def work_identity_for(assessment_id: UUID, revision: int,
 
 
 def ensure_run(engine, actor_id: UUID, assessment_id: UUID, revision: int,
-               source_fingerprint: str) -> UUID:
+               source_fingerprint: str, prompt_key: str = 'BDJ',
+               rules_version: str | None = None) -> UUID:
     """Provision or reuse the run for this assessment/revision/policy.
 
     Raises ``WORKFLOW_RUN_REVISION_MISMATCH`` if the conflict resolved to a row
@@ -64,7 +82,7 @@ def ensure_run(engine, actor_id: UUID, assessment_id: UUID, revision: int,
             not re.fullmatch(r'[a-f0-9]{64}', source_fingerprint):
         raise WorkflowHeld('WORKFLOW_RUN_FINGERPRINT_INVALID')
 
-    policy = effective_policy_fingerprint()
+    policy = effective_policy_fingerprint(prompt_key, rules_version)
     work_identity = work_identity_for(assessment_id, revision, policy)
     run_id = uuid4()
     try:
@@ -108,18 +126,39 @@ def ensure_run(engine, actor_id: UUID, assessment_id: UUID, revision: int,
 # facts the entrepreneur actually supplied, so it needs its own work identity
 # while reusing the exact same ``project1_ai.runs`` + ledger infrastructure.
 
-def qg_policy_fingerprint() -> str:
+#: Prompt keys a QG run may be fingerprinted with. Deliberately the same set the
+#: live runner is allowed to dispatch: a run whose policy names a prompt the
+#: runner cannot dispatch, or a dispatch whose run names a different prompt, are
+#: the same defect seen from two sides. ``qg_live`` imports this rather than
+#: keeping a second copy that could drift.
+QG_POLICY_PROMPT_KEYS = frozenset({'QG_PROPOSAL', 'QG_FIXED_OPTION'})
+
+
+def qg_policy_fingerprint(prompt_key: str = 'QG_PROPOSAL') -> str:
     """Hash the effective QG policy, so a prompt/model/rules change is new work.
 
-    The contract version, the full QG_PROPOSAL prompt fingerprint (not just its
-    version label), the model and the rules version are all part of the terms
-    under which a candidate was drafted. Changing any of them must start a new
-    run rather than reuse one drafted under different terms.
+    The contract version, the full prompt fingerprint (not just its version
+    label), the model and the rules version are all part of the terms under
+    which a candidate was drafted. Changing any of them must start a new run
+    rather than reuse one drafted under different terms.
+
+    ``prompt_key`` names the prompt that is actually dispatched. It defaults to
+    ``QG_PROPOSAL``, which is what every historical run was fingerprinted with,
+    so this change leaves those identities — and every row already in
+    ``project1_ai.runs`` — exactly as they were. A fixed-option dispatch passes
+    its own key, so the run records the prompt it really used instead of
+    inheriting the proposal prompt's identity.
     """
+    prompt = PROMPTS.get(prompt_key)
+    if prompt is None or prompt_key not in QG_POLICY_PROMPT_KEYS:
+        # An unregistered key has no policy to hash, and a registered non-QG
+        # prompt (BDJ, QJ) would mislabel a QG run. Refusing beats silently
+        # fingerprinting the default prompt for a dispatch that used another.
+        raise WorkflowHeld('QG_POLICY_PROMPT_NOT_REGISTERED')
     return hashlib.sha256(canonical({
         'contract_version': CONTRACT_VERSION,
-        'prompt_version': PROMPTS['QG_PROPOSAL'].version,
-        'prompt_fingerprint': PROMPTS['QG_PROPOSAL'].fingerprint,
+        'prompt_version': prompt.version,
+        'prompt_fingerprint': prompt.fingerprint,
         'model': MODEL,
         'rules_version': settings.project1_rules_version,
     }).encode('utf-8')).hexdigest()
@@ -153,7 +192,8 @@ def qg_work_identity(assessment_id, source_fingerprint: str,
 
 def ensure_qg_run(engine, actor_id: UUID, assessment_id,
                   source_fingerprint: str,
-                  evaluation_id: str = '') -> UUID:
+                  evaluation_id: str = '',
+                  prompt_key: str = 'QG_PROPOSAL') -> UUID:
     """Provision or reuse the QG run for these confirmed facts.
 
     ``assessment_revision`` is written explicitly as ``0``: QG facts are bound
@@ -180,7 +220,7 @@ def ensure_qg_run(engine, actor_id: UUID, assessment_id,
     except (ValueError, TypeError, AttributeError):
         raise WorkflowHeld('WORKFLOW_RUN_ASSESSMENT_INVALID') from None
 
-    policy = qg_policy_fingerprint()
+    policy = qg_policy_fingerprint(prompt_key)
     work_identity = qg_work_identity(assessment_uuid, source_fingerprint,
                                      policy, evaluation_id)
     run_id = uuid4()

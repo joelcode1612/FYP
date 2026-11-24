@@ -69,6 +69,12 @@ class SyntheticBdjAuthorization:
     # Real-data authorisation matched by real_data_authorization.load(). None
     # keeps the synthetic path's fail-closed behaviour unchanged.
     real_authorization: object | None = None
+    #: Projection schema this run must present, resolved from the instrument by
+    #: ``m2v2_projection.expected_projection_schema``. ``None`` keeps the
+    #: historical M2V1 default so every pre-existing caller is unchanged; the BDJ
+    #: path always sets it, which is what lets an M2V2 packet pass preflight and
+    #: still be re-checked against the same value at dispatch (DD-009).
+    expected_schema: str | None = None
 
 
 @dataclass(frozen=True)
@@ -102,8 +108,36 @@ class SyntheticQgAuthorization:
 class SyntheticBdjDisclosure:
     """Implements the ModelRunner disclosure port: require_current(stage, packet, endpoint, model)."""
 
-    def __init__(self, authorization: SyntheticBdjAuthorization):
+    def __init__(self, authorization: SyntheticBdjAuthorization, *, revalidate=None):
         self.authorization = authorization
+        #: Optional callable returning the authorization as it is *now*
+        #: (``real_data_authorization.load`` partially applied). DD-005 §1.6:
+        #: ownership, expiry, source binding and spend state are re-checked
+        #: immediately before the reservation, not only at composition time.
+        #: ``None`` keeps every synthetic caller unchanged.
+        self.revalidate = revalidate
+
+    def spendable_authorization(self):
+        """The matched real-data authorization this attempt must spend, if any.
+
+        Returning ``None`` for a synthetic packet is what keeps the historical
+        no-consumption path byte for byte identical.
+        """
+        from sitewise.project1.real_data_authorization import RealDataAuthorization
+        bound = getattr(self.authorization, 'real_authorization', None)
+        return bound if isinstance(bound, RealDataAuthorization) else None
+
+    def _require_still_current(self):
+        """Refuse a stale authorization before the atomic reservation."""
+        bound = getattr(self.authorization, 'real_authorization', None)
+        if self.revalidate is None or bound is None:
+            return
+        fresh = self.revalidate()
+        # ``None`` means load() no longer matches: the row was spent by a
+        # concurrent attempt, expired, or its binding changed. An id mismatch
+        # means a different row answered, which is never acceptable here.
+        if fresh is None or str(getattr(fresh, 'id', '')) != str(bound.id):
+            raise WorkflowHeld('BDJ_AUTHORIZATION_NOT_CURRENT')
 
     def require_current(self, stage, packet, endpoint, model):
         a = self.authorization
@@ -115,13 +149,21 @@ class SyntheticBdjDisclosure:
             # authorization reaching dispatch is a composition error, not a
             # disclosure decision.
             raise WorkflowHeld('DISCLOSURE_AUTHORIZATION_INVALID')
+        # Re-check against the SAME schema the preflight used. Omitting this
+        # would silently fall back to the M2V1 default at dispatch, so an M2V2
+        # packet that passed preflight would still be refused here (or, worse,
+        # an M2V1 packet would be accepted under a looser value).
+        schema_kwargs = ({'expected_schema': a.expected_schema}
+                         if a.expected_schema else {})
         validate_synthetic(
             data_class=a.data_class, purpose=a.purpose, stage=a.stage,
             endpoint=a.endpoint, model=a.model, max_attempts=a.max_attempts,
             operator_receipt=a.operator_receipt,
             source_fingerprint=a.source_fingerprint, packet=packet,
             expected_stage=stage, expected_endpoint=endpoint, expected_model=model,
-            real_authorization=getattr(a, 'real_authorization', None))
+            real_authorization=getattr(a, 'real_authorization', None),
+            **schema_kwargs)
+        self._require_still_current()
 
 
 class RegisteredSyntheticBdjDisclosure:
@@ -136,10 +178,14 @@ class RegisteredSyntheticBdjDisclosure:
 
     def __init__(self, authorization, *, registry, current_source, owner_id,
                  assessment_id, revision, confirmation_id, rules_sha256,
-                 prompt_fingerprint, request_sha256):
+                 prompt_fingerprint, request_sha256, revalidate=None):
         self.authorization = authorization
         self.registry = registry
         self.current_source = current_source
+        #: Forwarded to the inner BDJ port so the DD-005 §1.6 re-check also runs
+        #: on the registered path. A wrapper that silently dropped it would be
+        #: the one path where a stale authorization could still reach dispatch.
+        self.revalidate = revalidate
         self.expected = {
             'run_id': authorization.run_id, 'owner_id': str(owner_id),
             'assessment_id': str(assessment_id), 'revision': revision,
@@ -152,8 +198,13 @@ class RegisteredSyntheticBdjDisclosure:
             'max_attempts': 1,
         }
 
+    def spendable_authorization(self):
+        return SyntheticBdjDisclosure(self.authorization).spendable_authorization()
+
     def require_current(self, stage, packet, endpoint, model):
-        SyntheticBdjDisclosure(self.authorization).require_current(stage, packet, endpoint, model)
+        SyntheticBdjDisclosure(self.authorization,
+                               revalidate=self.revalidate).require_current(
+                                   stage, packet, endpoint, model)
         record = self.registry.get_server_authorization(self.authorization.run_id)
         if not isinstance(record, dict) or any(record.get(k) != v for k, v in self.expected.items()):
             raise WorkflowHeld('DISCLOSURE_REGISTERED_AUTHORIZATION_REQUIRED')

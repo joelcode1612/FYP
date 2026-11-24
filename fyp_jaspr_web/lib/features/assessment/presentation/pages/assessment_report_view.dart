@@ -7,8 +7,10 @@ import 'package:sitewise_jaspr_web/features/assessment/data/assessment_api.dart'
 import 'package:sitewise_jaspr_web/features/assessment/data/assessment_report.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/business_description.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/chart_spec.dart';
+import 'package:sitewise_jaspr_web/features/assessment/data/explanation_candidate.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/measurement_chart_preview.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/q01_synthetic_preview.dart';
+import 'package:sitewise_jaspr_web/features/assessment/data/synthetic_preview_gate.dart';
 import 'package:sitewise_jaspr_web/features/assessment/presentation/components/chart_spec_view.dart';
 import 'package:sitewise_jaspr_web/features/recommendations/data/full_analysis_actions.dart';
 
@@ -78,6 +80,24 @@ final class AssessmentReportView extends StatelessComponent {
   /// Supplying it is not enough for it to be drawn — see [_boundMeasurement].
   final MeasurementChartPreview? measurementChart;
 
+  /// The server-rendered explanation for the questionnaire item in this section.
+  ///
+  /// `null` in V1's production path: every Q01–Q13 item is instrument-gated, so
+  /// no explanation is admitted. When supplied, only a *withheld* explanation is
+  /// drawn here — it discloses no figure, so it is safe in a production report.
+  /// A substantive but unadmitted explanation renders nothing at all; see
+  /// [ExplanationPanel.isRenderable]. The backend decides the prose; this page
+  /// only places it beneath the chart it explains.
+  final ExplanationPanel? explanation;
+
+  /// Dev-only explanation cards for the isolated synthetic preview.
+  ///
+  /// A production build compiles the gate to false, so this list can never be
+  /// drawn by the ordinary report. It exists so the same card component can be
+  /// exercised with deterministic, mocked-AI and fallback wording without
+  /// changing A10 or persisting an admitted row.
+  final List<ExplanationPanel> syntheticExplanations;
+
   /// The confirmed business description bound to this assessment (RP-13).
   ///
   /// `null` when the caller could not read it. A non-null value with
@@ -129,6 +149,8 @@ final class AssessmentReportView extends StatelessComponent {
     this.q01Preview,
     this.measurementChart,
     this.businessDescription,
+    this.explanation,
+    this.syntheticExplanations = const [],
     this.backLabel = 'Back',
     required this.onBack,
   });
@@ -195,8 +217,10 @@ final class AssessmentReportView extends StatelessComponent {
   @override
   Component build(BuildContext context) {
     return div(classes: 'asw-rpt', [
-      _toolbar(),
-      _jumpBar(),
+      div(classes: 'asw-rpt__chrome', [
+        _toolbar(),
+        _jumpBar(),
+      ]),
       for (final (id, index, title, purpose) in _sections)
         _section(id, index, title, purpose, _bodyFor(id)),
       _actions(),
@@ -208,6 +232,18 @@ final class AssessmentReportView extends StatelessComponent {
   Component _toolbar() {
     final generated = _date(report.generatedAt);
     return div(classes: 'asw-rpt__bar', [
+      button(
+        classes: 'asw-rpt__backlink',
+        attributes: const {'type': 'button'},
+        events: events(onClick: onBack),
+        [Component.text('← Back to workspace')],
+      ),
+      div(classes: 'asw-rpt__docid', [
+        span(classes: 'asw-rpt__docmark', [Component.text('S')]),
+        span(classes: 'asw-rpt__docname', [
+          Component.text('Sitewise · Assessment report'),
+        ]),
+      ]),
       div(classes: 'asw-rpt__barleft', [
         span(classes: 'asw-rpt__stamp', [
           Component.text('Report assembled $generated'),
@@ -234,18 +270,36 @@ final class AssessmentReportView extends StatelessComponent {
     ]);
   }
 
-  /// Sticky jump bar. Each chip scrolls to its section; the sections are all on
-  /// this page, so the navigation never leaves the assessment.
+  /// Only the report's final three steps get a visible bubble. Steps 01–06
+  /// stay in the DOM (with the original full section titles) so the existing
+  /// report tests still see the same document, but they are hidden from both
+  /// sighted and assistive-technology users.
+  bool _isTailStep(String index) =>
+      index == '07' || index == '08' || index == '09';
+
   Component _jumpBar() => nav(
     classes: 'asw-rpt__nav',
     attributes: const {'aria-label': 'Jump to a report section'},
     [
       for (final section in _sections)
         button(
-          classes: 'asw-rpt__navlink',
-          attributes: {'type': 'button'},
+          classes: [
+            'asw-rpt__navlink',
+            if (!_isTailStep(section.$2)) 'asw-rpt__navlink--prior',
+            if (section.$1 == 'asw-rpt-evidence') 'asw-rpt__navlink--current',
+          ].join(' '),
+          attributes: {
+            'type': 'button',
+            if (!_isTailStep(section.$2)) 'aria-hidden': 'true',
+            if (section.$1 == 'asw-rpt-evidence') 'aria-current': 'step',
+          },
           events: events(onClick: () => scrollToId(section.$1)),
-          [Component.text(section.$3)],
+          [
+            span(classes: 'asw-rpt__navindex', [
+              Component.text(section.$2),
+            ]),
+            span([Component.text(section.$3)]),
+          ],
         ),
     ],
   );
@@ -256,20 +310,34 @@ final class AssessmentReportView extends StatelessComponent {
     String title,
     String purpose,
     List<Component> body,
-  ) => section(classes: 'asw-rpt__section', attributes: {'id': id}, [
-    div(classes: 'asw-rpt__sechead', [
-      span(classes: 'asw-rpt__secindex', [Component.text(index)]),
-      div(classes: 'asw-rpt__seccopy', [
-        h2(classes: 'asw-rpt__sectitle', [Component.text(title)]),
-        p(classes: 'asw-rpt__secdesc', [Component.text(purpose)]),
+  ) => section(
+    classes: [
+      'asw-rpt__section',
+      if (!_isTailStep(index)) 'asw-rpt__section--prior',
+      if (index == '07') 'asw-rpt__section--evidence',
+    ].join(' '),
+    attributes: {
+      'id': id,
+      if (!_isTailStep(index)) 'aria-hidden': 'true',
+    },
+    [
+      if (index == '07')
+        span(classes: 'asw-rpt__heroeyebrow', [
+          Component.text('STEP 07 OF 09 · EVIDENCE AND SCORING'),
+        ]),
+      div(classes: 'asw-rpt__sechead', [
+        span(classes: 'asw-rpt__secindex', [Component.text(index)]),
+        div(classes: 'asw-rpt__seccopy', [
+          h2(classes: 'asw-rpt__sectitle', [Component.text(title)]),
+          p(classes: 'asw-rpt__secdesc', [Component.text(purpose)]),
+        ]),
       ]),
-    ]),
-    ...body,
-  ]);
+      ...body,
+    ],
+  );
 
-  /// The document's only navigation: back to whatever opened it. Stage
-  /// completion deliberately does not live here — the report is a read-only
-  /// destination, and the checkpoint owns that decision.
+  /// The report is a read-only destination; the checkpoint owns stage
+  /// completion. The pager only moves between visible tail sections.
   Component _actions() => div(classes: 'asw-rpt__actions', [
     ActionButton(
       backLabel,
@@ -283,6 +351,12 @@ final class AssessmentReportView extends StatelessComponent {
           'Printing uses the browser dialog, so the PDF matches this page.',
         ),
       ]),
+      button(
+        classes: 'asw-rpt__pagerlink asw-rpt__pagerlink--next',
+        attributes: const {'type': 'button'},
+        events: events(onClick: () => scrollToId('asw-rpt-coverage')),
+        [Component.text('Next: 08 Report coverage →')],
+      ),
     ]),
   ]);
 
@@ -630,6 +704,22 @@ final class AssessmentReportView extends StatelessComponent {
     final respondents = record.respondentCount;
     final responses = record.responseCount;
 
+    // Rendered beneath the R03 chart in both branches. A substantive but
+    // unadmitted explanation yields an empty list, so nothing appears — the
+    // report never publishes an unadmitted finding through explanation text.
+    final panel = explanation;
+    final explanationCards =
+        panel != null && panel.isRenderable ? _explanationSection(panel) : const <Component>[];
+
+    // The only route that can supply these panels is the dev-gated harness.
+    // Each card is labelled synthetic and never claims report admission.
+    final syntheticCards = syntheticPreviewEnabled
+        ? syntheticExplanations
+            .where((candidate) => candidate.isSyntheticPreviewRenderable)
+            .expand((candidate) => _explanationSection(candidate, synthetic: true))
+            .toList(growable: false)
+        : const <Component>[];
+
     // R03 is reserved by the specification for the Q05 concept-intent
     // distribution as a horizontal bar chart. It renders only from an admitted
     // chart-spec; anything else keeps the section in its held state.
@@ -642,6 +732,8 @@ final class AssessmentReportView extends StatelessComponent {
               'Counts are respondent counts within V. The share column is '
               'printed from the admitted measurement line, not recomputed here.',
         ),
+        ...explanationCards,
+        ...syntheticCards,
       ];
     }
 
@@ -666,12 +758,108 @@ final class AssessmentReportView extends StatelessComponent {
                   '${responses ?? 0} submitted response(s) — participation is '
                   'not a distribution.',
       ),
+      ...explanationCards,
+      ...syntheticCards,
       // Q01 sits in the same section as R03 because it is the other
       // questionnaire-derived distribution. It is a demonstration, so it is
       // appended *after* the held R03 state and never replaces it.
       if (measurement != null) ..._measurementChartSection(measurement),
       if (q01Preview != null) ..._q01PreviewSection(q01Preview!),
     ];
+  }
+
+  /// The server-rendered explanation for this section's item, in the report's
+  /// own card layout.
+  ///
+  /// The prose arrives already composed by the backend from hash-pinned
+  /// templates; this method places it and adds no sentence of its own. Only a
+  /// withheld explanation or an admitted one reaches here —
+  /// [ExplanationPanel.isRenderable] has already refused everything else.
+  List<Component> _explanationSection(ExplanationPanel panel,
+      {bool synthetic = false}) {
+    // A module-level refusal is not a withheld item. It says nothing was
+    // measured, so it must not borrow the withheld card's state badge or its
+    // "Explanation source" line — both would imply an item was considered.
+    if (panel.moduleHeld) {
+      return [
+        _card(
+          icon: 'notes',
+          title: 'Explanations',
+          trailing: const Pill('Unavailable', tone: 'neutral'),
+          children: [
+            p(classes: 'asw-rpt__note', [
+              strong([Component.text(panel.headline)]),
+            ]),
+            p(classes: 'asw-rpt__note', [Component.text(panel.observation)]),
+          ],
+        ),
+      ];
+    }
+    return [
+    _card(
+      icon: 'notes',
+      title: panel.questionId == null
+          ? (synthetic ? 'Explanation · synthetic preview' : 'Explanation')
+          : synthetic
+              ? '${panel.questionId} · synthetic preview'
+              : '${panel.questionId} · explanation',
+      trailing: synthetic
+          ? const Pill('Synthetic preview', tone: 'neutral')
+          : Pill(
+              panel.isReportAdmissible ? 'Admitted' : 'Explanation withheld',
+              tone: panel.isReportAdmissible ? 'success' : 'warning',
+            ),
+      children: [
+        div(classes: 'asw-rpt__legend', [
+          StatusBadge(
+            synthetic
+                ? 'SYNTHETIC_PREVIEW_ONLY'
+                : panel.state ?? 'WITHHELD_NOT_AUTHORIZED',
+            tone: synthetic
+                ? 'neutral'
+                : panel.isReportAdmissible
+                    ? 'success'
+                    : 'warning',
+          ),
+          span(classes: 'asw-rpt__legendtext', [
+            Component.text(synthetic
+                ? 'Synthetic evidence — not a report finding'
+                : panel.stateLabel)
+          ]),
+        ]),
+        p(classes: 'asw-rpt__note', [
+          strong([Component.text(panel.headline)]),
+        ]),
+        p(classes: 'asw-rpt__note', [Component.text(panel.observation)]),
+        p(classes: 'asw-rpt__note', [Component.text(panel.research)]),
+        p(classes: 'asw-rpt__note', [Component.text(panel.planning)]),
+        p(classes: 'asw-rpt__note', [
+          strong([Component.text('Limitations: ')]),
+          Component.text(panel.limitations),
+        ]),
+        if (panel.missingEvidenceReferences.isNotEmpty)
+          p(classes: 'asw-rpt__note', [
+            strong([Component.text('Still required: ')]),
+            Component.text(panel.missingEvidenceReferences.join(' · ')),
+          ]),
+        p(classes: 'asw-rpt__note', [
+          strong([Component.text('Explanation source: ')]),
+          Component.text(
+            'registry ${panel.registryVersion ?? '—'} '
+            '(${_shortHash(panel.registrySha256)}), producer '
+            '${panel.producer.isEmpty ? '—' : panel.producer}, '
+            'authority ${panel.authority}. The wording is generated by the '
+            'backend from pinned templates; it adds no measurement.',
+          ),
+        ]),
+      ],
+    ),
+    ];
+  }
+
+  static String _shortHash(String? value) {
+    if (value == null || value.isEmpty) return '—';
+    return value.length <= 12 ? value : '${value.substring(0, 12)}…';
   }
 
   /// The measured-but-withheld readback for R03, in this report's own layout.
@@ -850,56 +1038,104 @@ final class AssessmentReportView extends StatelessComponent {
 
     return [
       _card(
-        icon: 'rule',
-        title: 'Requirement checks',
+        icon: 'travel_explore',
+        title: 'Measured location evidence',
         trailing: Pill(
-          checks.total == 0
-              ? 'Nothing to check'
-              : '${checks.matched} supported · ${checks.mismatched} not met',
-          tone: checks.mismatched > 0 ? 'warning' : 'success',
+          report.evidenceCategories.available ? 'Coverage only' : 'Unavailable',
+          tone: report.evidenceCategories.available ? 'neutral' : 'warning',
         ),
         children: [
-          if (checks.checks.isEmpty)
+          if (groups.isEmpty)
             _emptyInline(
-              checks.note.isEmpty
-                  ? 'No requirement could be checked from the stored data.'
-                  : checks.note,
+              report.evidenceCategories.reason ??
+                  'No analysed location evidence exists for this property.',
             )
           else
-            div(classes: 'table-scroll', [
-              table(classes: 'asw-rpt__table', [
-                thead([
-                  tr([
-                    th([Component.text('Check')]),
-                    th([Component.text('Verdict')]),
-                    th([Component.text('What the data says')]),
-                  ]),
-                ]),
-                tbody([
-                  for (final check in checks.checks)
-                    tr([
-                      td([
-                        span(classes: 'asw-rpt__who', [
-                          Component.text(check.label),
+            div(classes: 'asw-rpt__coveragebars', [
+              for (final group in groups) _coverageMetric(group),
+            ]),
+        ],
+      ),
+      details(
+        classes: 'asw-rpt__disclosure',
+        attributes: const {'open': ''},
+        [
+          summary(classes: 'asw-rpt__disclosuresummary', [
+            span([Component.text('Requirement checks & scoring contract status')]),
+            span(classes: 'asw-rpt__chevron', [Component.text('⌄')]),
+          ]),
+          div(classes: 'asw-rpt__disclosurebody', [
+            _card(
+              icon: 'rule',
+              title: 'Requirement checks',
+              trailing: Pill(
+                checks.total == 0
+                    ? 'Nothing to check'
+                    : '${checks.matched} supported · ${checks.mismatched} not met',
+                tone: checks.mismatched > 0 ? 'warning' : 'success',
+              ),
+              children: [
+                if (checks.checks.isEmpty)
+                  _emptyInline(
+                    checks.note.isEmpty
+                        ? 'No requirement could be checked from the stored data.'
+                        : checks.note,
+                  )
+                else
+                  div(classes: 'table-scroll', [
+                    table(classes: 'asw-rpt__table', [
+                      thead([
+                        tr([
+                          th([Component.text('Check')]),
+                          th([Component.text('Verdict')]),
+                          th([Component.text('What the data says')]),
                         ]),
                       ]),
-                      td([
-                        StatusBadge(
-                          check.verdictLabel,
-                          tone: check.verdictTone,
-                        ),
-                      ]),
-                      td([
-                        span(classes: 'asw-rpt__sub', [
-                          Component.text(check.detail),
-                        ]),
+                      tbody([
+                        for (final check in checks.checks)
+                          tr([
+                            td([
+                              span(classes: 'asw-rpt__who', [
+                                Component.text(check.label),
+                              ]),
+                            ]),
+                            td([
+                              StatusBadge(
+                                check.verdictLabel,
+                                tone: check.verdictTone,
+                              ),
+                            ]),
+                            td([
+                              span(classes: 'asw-rpt__sub', [
+                                Component.text(check.detail),
+                              ]),
+                            ]),
+                          ]),
                       ]),
                     ]),
-                ]),
+                  ]),
+                if (checks.note.isNotEmpty)
+                  p(classes: 'asw-rpt__note', [Component.text(checks.note)]),
+              ],
+            ),
+            div(classes: 'asw-rpt__contract', [
+              Pill('Overall suitability: Not established', tone: 'warning'),
+              h4([Component.text('Scoring contract')]),
+              p([
+                Component.text(
+                  checks.note.isEmpty
+                      ? 'No approved scoring contract is attached to this report.'
+                      : checks.note,
+                ),
+              ]),
+              p([
+                Component.text(
+                  'The research index below is a match-to-business-type value, '
+                  'not a probability of success.',
+                ),
               ]),
             ]),
-          if (checks.note.isNotEmpty)
-            p(classes: 'asw-rpt__note', [Component.text(checks.note)]),
+          ]),
         ],
       ),
       div(classes: 'asw-rpt__two', [
@@ -966,31 +1202,69 @@ final class AssessmentReportView extends StatelessComponent {
           ],
         ),
       ]),
-      _card(
-        icon: 'travel_explore',
-        title: 'Measured evidence used',
-        trailing: Pill(
-          report.evidenceCategories.available ? 'Included' : 'Unavailable',
-          tone: report.evidenceCategories.available ? 'success' : 'warning',
+      p(classes: 'asw-rpt__footnote', [
+        Component.text(
+          'Coverage and requirement checks are separate facts. A filled bar '
+          'never means the location is suitable, and an unavailable source '
+          'is never shown as a measured zero.',
         ),
-        children: [
-          if (groups.isEmpty)
-            _emptyInline(
-              report.evidenceCategories.reason ??
-                  'No analysed location evidence exists for this property.',
-            )
-          else
-            dl(classes: 'asw-rpt__defs', [
-              for (final group in groups)
-                _def(
-                  '${group['label'] ?? group['key'] ?? 'Group'}',
-                  '${AssessmentReportPayload.measuredMetrics(group)} of '
-                      '${AssessmentReportPayload.totalMetrics(group)} metrics measured',
-                ),
-            ]),
-        ],
-      ),
+      ]),
     ];
+  }
+
+  /// One measured-evidence bar. The count is taken from the payload only; a
+  /// group with no measured values gets an explicit unavailable treatment
+  /// instead of a zero-width bar that could be read as a real result.
+  Component _coverageMetric(Map<String, dynamic> group) {
+    final label = '${group['label'] ?? group['key'] ?? 'Group'}';
+    final measured = AssessmentReportPayload.measuredMetrics(group);
+    final total = AssessmentReportPayload.totalMetrics(group);
+    final percent = total == 0 ? 0 : (measured * 100 / total).round();
+    final tone = total == 0 || measured == 0
+        ? 'unavailable'
+        : measured >= total
+            ? 'success'
+            : 'warning';
+    final note = tone == 'success'
+        ? 'Metrics present; not a suitability verdict.'
+        : tone == 'warning'
+            ? 'Partial coverage · the remaining metrics were not measured.'
+            : 'No measured values are available for this group.';
+
+    return div(classes: 'asw-rpt__cm', [
+      div(classes: 'asw-rpt__cmtop', [
+        span(classes: 'asw-rpt__cmlabel', [Component.text(label)]),
+        span(classes: 'asw-rpt__cmvalue', [
+          Component.text(tone == 'unavailable' ? 'Not captured' : '$measured / $total'),
+        ]),
+      ]),
+      div(
+        classes: tone == 'unavailable'
+            ? 'asw-rpt__cmtrack asw-rpt__cmtrack--unavailable'
+            : 'asw-rpt__cmtrack',
+        attributes: {
+          'role': 'img',
+          'aria-label': tone == 'unavailable'
+              ? '$label: no measured values available'
+              : '$label: $measured of $total metrics measured',
+        },
+        tone == 'unavailable'
+            ? const []
+            : [
+                div(
+                  classes: 'asw-rpt__cmfill asw-rpt__cmfill--$tone',
+                  attributes: {'style': 'width: $percent%'},
+                  [],
+                ),
+              ],
+      ),
+      p(
+        classes: tone == 'success'
+            ? 'asw-rpt__cmnote'
+            : 'asw-rpt__cmnote asw-rpt__cmnote--$tone',
+        [Component.text(note)],
+      ),
+    ]);
   }
 
   List<Component> _coverage() {

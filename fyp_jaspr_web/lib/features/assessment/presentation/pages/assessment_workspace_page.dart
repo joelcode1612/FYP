@@ -14,6 +14,7 @@ import 'package:sitewise_jaspr_web/core/di/app_locator.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/assessment_api.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/assessment_report.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/business_description.dart';
+import 'package:sitewise_jaspr_web/features/assessment/data/explanation_candidate.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/measurement_chart_preview.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/q01_synthetic_preview.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/synthetic_preview_gate.dart';
@@ -191,33 +192,70 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     _m2LinkError = null;
   }
 
-  Future<void> _refreshWorkflowReadiness(String assessmentId) async {
-    if (!mounted ||
-        _readinessAssessmentId != assessmentId ||
-        _declarationEditing) {
-      return;
+  /// Read the readiness payload, optionally retrying after a write.
+  ///
+  /// Two failure shapes used to strand this page until the user reloaded:
+  ///
+  /// 1. the refresh returned silently when [_readinessAssessmentId] had not
+  ///    caught up with the id being asked for, leaving `_workflowReadiness`
+  ///    null and therefore no "Continue to Stage 3" control;
+  /// 2. a confirmation is written by one request and read by the next, so a
+  ///    read that lands before the write is visible still answers "confirm
+  ///    first" -- and nothing re-read it.
+  ///
+  /// So the id is adopted rather than compared, and a post-write caller gets a
+  /// bounded number of retries. The retry stops the moment stage 2 is complete,
+  /// so a healthy save costs exactly one request.
+  Future<void> _refreshWorkflowReadiness(String assessmentId,
+      {bool afterWrite = false}) async {
+    if (!mounted || _declarationEditing) return;
+    if (_readinessAssessmentId != assessmentId) {
+      _readinessAssessmentId = assessmentId;
     }
-    final request = ++_readinessRequest;
-    setState(() {
-      _workflowReadiness = null;
-      _readinessError = null;
-    });
-    final result = await _api.workflowReadiness(assessmentId);
-    if (!mounted ||
-        request != _readinessRequest ||
-        _readinessAssessmentId != assessmentId)
-      return;
-    setState(() {
-      _workflowReadiness = result.value;
-      if (!result.ok)
-        _readinessError =
-            result.failure?.message ??
-            'Assessment progress could not be verified.';
-    });
+    final attempts = afterWrite ? 4 : 1;
+    for (var attempt = 0; attempt < attempts; attempt++) {
+      if (attempt > 0) {
+        await Future<void>.delayed(Duration(milliseconds: 150 * attempt));
+        if (!mounted ||
+            _declarationEditing ||
+            _readinessAssessmentId != assessmentId) {
+          return;
+        }
+      }
+      final request = ++_readinessRequest;
+      setState(() {
+        _workflowReadiness = null;
+        _readinessError = null;
+      });
+      final result = await _api.workflowReadiness(assessmentId);
+      if (!mounted ||
+          _declarationEditing ||
+          _readinessAssessmentId != assessmentId) {
+        return;
+      }
+      if (request != _readinessRequest) {
+        // Another refresh started while this one was in flight. Retrying is
+        // cheaper than leaving the page with no payload at all.
+        continue;
+      }
+      setState(() {
+        _workflowReadiness = result.value;
+        if (!result.ok)
+          _readinessError =
+              result.failure?.message ??
+              'Assessment progress could not be verified.';
+      });
+      if (!result.ok) return;
+      if (!afterWrite) return;
+      if ((result.value?['stage_2'] as Map?)?['complete'] == true) return;
+    }
   }
 
   Future<void> _continueToBusinessReview(String assessmentId) async {
-    await _refreshWorkflowReadiness(assessmentId);
+    // The click usually follows a confirmation, so allow the bounded retry: a
+    // read that lands before the write is visible must not report "confirm the
+    // declaration" for a declaration that is already confirmed.
+    await _refreshWorkflowReadiness(assessmentId, afterWrite: true);
     if (!mounted ||
         _readinessAssessmentId != assessmentId ||
         _declarationEditing)
@@ -592,10 +630,92 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     final report = await _api.report(record.assessmentId);
     if (!report.ok) return _ReportBundle(report, null);
     final business = await _api.businessDescription(record.assessmentId);
+    final explanation = await _loadExplanation(record);
     // A failed description read leaves the section in its held state rather
     // than failing the whole report; the failure is not silent, because the
     // section then says no confirmed description could be read.
-    return _ReportBundle(report, business.ok ? business.value : null);
+    return _ReportBundle(
+        report, business.ok ? business.value : null, explanation);
+  }
+
+  /// The explanation the report may show.
+  ///
+  /// EX-05 closes the three EX-04 gaps: the readback envelope carries the
+  /// assessment/campaign/snapshot identity, the backend resolves that chain
+  /// from the authenticated owner's records, and a store-backed read endpoint
+  /// returns the persisted candidate. The client still verifies every returned
+  /// identity before drawing anything.
+  ///
+  /// The module-level notice remains the honest answer when no result exists.
+  /// If a result exists but is substantive and unadmitted, no card is shown —
+  /// a warning would still confirm that a measurement exists.
+  Future<ExplanationPanel?> _loadExplanation(AssessmentRecord record) async {
+    final availability = await _api.explanationAvailability();
+    ExplanationPanel? moduleHeld;
+    if (availability.ok && availability.value?['state'] == 'held') {
+      final message = availability.value?['message'];
+      moduleHeld = ExplanationPanel.unavailable(
+        reason: message is String && message.trim().isNotEmpty ? message : null,
+      );
+    }
+
+    final m2AssessmentId = record.m2AssessmentId;
+    if (m2AssessmentId == null) return moduleHeld;
+    final bindingResult = await _api.explanationBinding(m2AssessmentId);
+    if (!bindingResult.ok || bindingResult.value == null) return moduleHeld;
+    final binding = bindingResult.value!;
+    // The binding contract is keyed by the M2 assessment, not the marketplace
+    // record: `/cq/assessments/{id}/explanations/binding` is addressed with
+    // `m2AssessmentId` and echoes that id back. Comparing it to
+    // `record.assessmentId` could never succeed, which silently disabled the
+    // whole governed readback path.
+    if (binding['assessment_id']?.toString() != m2AssessmentId) {
+      return moduleHeld;
+    }
+    final campaignId = binding['campaign_id']?.toString();
+    final snapshots = binding['snapshots'];
+    if (campaignId == null || campaignId.isEmpty || snapshots is! List) {
+      return moduleHeld;
+    }
+
+    var sawResult = false;
+    for (final entry in snapshots) {
+      if (entry is! Map) continue;
+      final snapshot = Map<String, dynamic>.from(entry);
+      final snapshotId = snapshot['snapshot_id']?.toString();
+      final questionId = snapshot['slot_id']?.toString();
+      final contextHash = snapshot['context_hash']?.toString();
+      if (snapshotId == null || questionId == null || contextHash == null) {
+        continue;
+      }
+      final read = await _api.explanationReadback(
+        assessmentId: m2AssessmentId,
+        campaignId: campaignId,
+        snapshotId: snapshotId,
+        questionId: questionId,
+        contextHash: contextHash,
+      );
+      if (!read.ok || read.value == null) continue;
+      sawResult = true;
+      ExplanationPanel panel;
+      try {
+        panel = ExplanationPanel.fromReadback(read.value!);
+      } on FormatException {
+        continue;
+      }
+      // The readback envelope carries the M2 assessment id the route was
+      // addressed with, so identity is checked against that — not the
+      // marketplace record id.
+      if (panel.assessmentId != m2AssessmentId ||
+          panel.campaignId != campaignId ||
+          panel.snapshotId != snapshotId ||
+          !panel.boundToSnapshot(snapshotId)) {
+        continue;
+      }
+      if (panel.isRenderable) return panel;
+    }
+    // A stored candidate that cannot be shown is not the same as no candidate.
+    return sawResult ? null : moduleHeld;
   }
 
   // ------------------------------------------------------------------ writes
@@ -1396,20 +1516,40 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
         ]),
         span(classes: 'asw-ecard__id', [Component.text(record.assessmentId)]),
         div(classes: 'asw-ecard__progress', [
-          div(classes: 'asw-ecard__track', [
-            span(
-              classes: 'asw-ecard__fill',
-              styles: Styles(
-                width: Unit.percent(
-                  record.progressPercent.clamp(0, 100).toDouble(),
+          // The card bar carried no semantics at all: a coloured div and a
+          // "2/5 stages" string. A screen reader announced the number but not
+          // that it was progress, and nothing exposed the percentage the fill
+          // actually encodes. The roles below make the bar and the text agree
+          // on one value, taken from the same record field that sizes the fill.
+          div(
+            [
+              span(
+                classes: 'asw-ecard__fill',
+                styles: Styles(
+                  width: Unit.percent(
+                    record.progressPercent.clamp(0, 100).toDouble(),
+                  ),
                 ),
+                [],
               ),
-              [],
-            ),
-          ]),
+            ],
+            classes: 'asw-ecard__track',
+            attributes: {
+              'role': 'progressbar',
+              'aria-valuenow':
+                  '${record.progressPercent.clamp(0, 100).toInt()}',
+              'aria-valuemin': '0',
+              'aria-valuemax': '100',
+              'aria-valuetext':
+                  '${record.completedStages} of ${record.totalStages} stages '
+                  'complete, ${record.stagesRemaining} remaining',
+              'aria-label': 'Assessment stage progress',
+            },
+          ),
           span(classes: 'asw-ecard__stages', [
             Component.text(
-              '${record.completedStages}/${record.totalStages} stages',
+              '${record.completedStages}/${record.totalStages} stages · '
+              '${record.stagesRemaining} remaining',
             ),
           ]),
           button(
@@ -1503,7 +1643,7 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
             span(classes: 'asw-eprogress__count', [
               Component.text(
                 '${record.completedStages} of ${record.totalStages} stages '
-                'completed',
+                'completed · ${record.stagesRemaining} remaining',
               ),
             ]),
           ]),
@@ -2498,12 +2638,17 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
           embedded: true,
           marketplaceAssessmentId: record.assessmentId,
           onDeclarationChanged: () {
-            if (_readinessAssessmentId != record.assessmentId) return;
-            _declarationEditing = false;
-            _refreshWorkflowReadiness(record.assessmentId);
+            // A confirmed declaration is a write followed by a read. Clear the
+            // editing hold *and* adopt this assessment id before re-reading, so
+            // the refresh cannot no-op and strand the Continue control.
+            setState(() {
+              _declarationEditing = false;
+              _readinessAssessmentId = record.assessmentId;
+              _readinessError = null;
+            });
+            _refreshWorkflowReadiness(record.assessmentId, afterWrite: true);
           },
           onDeclarationEditing: () {
-            if (_readinessAssessmentId != record.assessmentId) return;
             _readinessRequest++;
             _declarationEditing = true;
             setState(() {
@@ -2529,9 +2674,13 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
       case 'unlinked':
         return _m2Notice(
           'This assessment has no M2 research record yet',
-          'Initialize it to open the 11-question business-declaration '
-              'questionnaire for this assessment. Existing M2 records are not '
-              'reused, and no other assessment\'s answers are shown.',
+          // The item count is a property of the instrument, which is not known
+          // until the link resolves. Naming a number here was wrong the moment
+          // a second instrument version existed, so the sentence describes the
+          // questionnaire instead of counting it.
+          'Initialize it to open the business-declaration questionnaire for '
+              'this assessment. Existing M2 records are not reused, and no '
+              'other assessment\'s answers are shown.',
           action: (
             'Initialize M2 questionnaire',
             () => _initializeM2Link(record.assessmentId),
@@ -4005,6 +4154,10 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
             // bound to. `null` when the read failed, which leaves section 02 in
             // its declared/held state rather than inventing a description.
             businessDescription: bundle?.business,
+            // EX-04: the explanation the report may render. `null` when the read
+            // failed or the module is available (no per-item read exists yet), in
+            // which case the report renders no explanation card at all.
+            explanation: bundle?.explanation,
             backLabel: 'Back to assessment',
             onBack: _closeReport,
           );
@@ -5153,5 +5306,8 @@ final class _ReportBundle {
   final ApiResult<AssessmentReportPayload> report;
   final BusinessDescription? business;
 
-  const _ReportBundle(this.report, this.business);
+  /// The explanation the report may render, or `null` when none could be read.
+  final ExplanationPanel? explanation;
+
+  const _ReportBundle(this.report, this.business, [this.explanation]);
 }

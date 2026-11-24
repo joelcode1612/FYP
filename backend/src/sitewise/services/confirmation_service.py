@@ -23,6 +23,17 @@ from sitewise.services.ports.m2_repository_port import M2RepositoryPort
 # Candidate UI actions; these do not replace source-governed review states.
 CLARIFICATION_ACTIONS = frozenset({"KEEP_ORIGINAL", "REVIEW_LATER"})
 
+#: The three items that carry an entrepreneur's research intention, per
+#: instrument version: (topics, priority, decision status). M2V2 asks the same
+#: three questions as M2V1 under its own item keys, so the objective path is
+#: keyed on the instrument rather than pinned to one version. An instrument
+#: absent from this map has no adopted research intention and cannot produce an
+#: entrepreneur objective -- the refusal is explicit, never a silent default.
+RESEARCH_INTENTION_ITEMS: dict[str, tuple[str, str, str]] = {
+    "M2V1-20261114-1": ("M2V1-09", "M2V1-10", "M2V1-11"),
+    "M2V2-20261122-1": ("M2V2-09", "M2V2-10", "M2V2-11"),
+}
+
 
 def admitted_objective_refusal(row, *, confirmation_id, assessment_id, revision):
     """Why an admission may not become a research objective, or ``None``.
@@ -277,18 +288,33 @@ class ConfirmationService:
                     raise ConflictError("Finding does not belong to this confirmation.")
                 source.update(finding_id=fid, finding_decision_id=decision)
             else:
-                if finding_id or snapshot["instrument_version"] != "M2V1-20261114-1":
-                    raise ValueError("Entrepreneur objectives require a current M2V1 research intention.")
-                keys = {"M2V1-09", "M2V1-10", "M2V1-11"}
+                # The research intention is three items, not three fixed keys:
+                # M2V2 carries the same questions as M2V1 under its own item
+                # keys. Before this map existed the branch was pinned to M2V1 by
+                # instrument version, so an M2V2 declaration could not record a
+                # research objective at all and stage 3 was unreachable for every
+                # M2V2 assessment. The validation below is unchanged -- priority
+                # must be one of the selected topics, NONE is refused, and a
+                # decision status must be present.
+                keys = RESEARCH_INTENTION_ITEMS.get(snapshot.get("instrument_version"))
+                if finding_id or keys is None:
+                    raise ValueError(
+                        "Entrepreneur objectives require an adopted research intention "
+                        "for this instrument.")
+                topics_key, priority_key, decision_key = keys
                 rows = {a["item_key"]: a for a in snapshot["answer_revisions"]
-                        if a["item_key"] in keys and a["answer_state"] == "ANSWERED"
+                        if a["item_key"] in set(keys) and a["answer_state"] == "ANSWERED"
                         and a["item_key"] not in snapshot["inactive_answer_keys"]}
-                derived = [d for d in snapshot["derived_selections"] if d["item_key"] == "M2V1-10"]
-                topics = rows.get("M2V1-09", {}).get("value", [])
-                priority = derived[0]["value"] if derived else rows.get("M2V1-10", {}).get("value")
-                if priority not in topics or "NONE" in topics or "M2V1-11" not in rows:
+                derived = [d for d in snapshot["derived_selections"]
+                           if d["item_key"] == priority_key]
+                topics = rows.get(topics_key, {}).get("value", [])
+                priority = (derived[0]["value"] if derived
+                            else rows.get(priority_key, {}).get("value"))
+                if priority not in topics or "NONE" in topics or decision_key not in rows:
                     raise ConflictError("Confirm an active research priority and decision status.")
-                source.update(answer_revisions=rows, derived_selections=derived, priority=priority)
+                source.update(answer_revisions=rows, derived_selections=derived,
+                              priority=priority,
+                              research_intention_items=list(keys))
             result = self.repo.create_uncertainty(confirmation_id, actor_id, objective)
             # The ID identifies this immutable objective version. Record the
             # explicit owner action only for newly confirmed records; never

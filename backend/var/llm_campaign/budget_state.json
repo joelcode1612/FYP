@@ -79,10 +79,25 @@
       "at": "2026-11-17T19:56:53.631569+00:00",
       "n": 15,
       "scenario": "CP-08 synthetic QG research evaluation"
+    },
+    {
+      "at": "2026-11-23T08:23:43.596917+00:00",
+      "n": 16,
+      "scenario": "CP-08 synthetic QG research evaluation"
+    },
+    {
+      "at": "2026-11-23T10:13:43.314298+00:00",
+      "n": 17,
+      "scenario": "CP-08 synthetic QG research evaluation"
+    },
+    {
+      "at": "2026-11-23T12:34:11.990865+00:00",
+      "n": 18,
+      "scenario": "CP-08 synthetic QG research evaluation"
     }
   ],
   "limit": 50,
   "limit_raised_at": "2026-11-18T02:15:00+08:00",
   "limit_raised_by": "PROJECT1-DIRECT-QG-V3.0-CP-03",
-  "spent": 15
+  "spent": 18
 }

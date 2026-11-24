@@ -33,9 +33,14 @@ Cheapest and most authoritative first:
 
 What it refuses to claim
 ------------------------
-``execution_mode`` is recorded verbatim, ``fielding_authorized`` is always false,
-``scientific_acceptance`` is always false, and a candidate is never counted as
-an approved measurement. A structurally valid candidate is a *review object*.
+``execution_mode`` is copied from the generator's receipt rather than assumed,
+so a simulated run and a real provider run are distinguishable in the row
+itself. A ``LIVE`` receipt is refused unless it names the authorised provider,
+carries a run id and attempt number, records both model identities, and binds
+the same prompt version and hash the authorization bound. ``fielding_authorized``
+is always false, ``scientific_acceptance`` is always false, and a candidate is
+never counted as an approved measurement. A structurally valid candidate is a
+*review object*.
 """
 from __future__ import annotations
 
@@ -47,6 +52,7 @@ from sqlalchemy import text
 
 from sitewise.project1 import measurement_library as ml
 from sitewise.project1 import qg_authorization
+from sitewise.project1 import source_currentness
 from sitewise.project1.contracts import WorkflowHeld, digest
 from sitewise.project1.qg_contract import ConfirmedFacts, field_authority
 from sitewise.project1.qg_fixed_options import (
@@ -58,8 +64,22 @@ from sitewise.project1.qg_fixed_options import (
 ADAPTER_VERSION = 'P1-QG-FIXED-ADAPTER-1.0-CAND'
 
 #: The production hold remains in force. This adapter is reachable only through
-#: an explicit synthetic scope, and reports that it was.
+#: an explicitly named scope, and reports which one.
 SYNTHETIC_SCOPE = 'SYNTHETIC_CANDIDATE_ONLY'
+
+#: Owner-authorised candidate-only test against the real provider. It unlocks a
+#: *real* dispatch and nothing else: the candidate is still unfieldable, still
+#: not scientifically accepted, and the production hold is still in force.
+LIVE_SCOPE = 'LIVE_PROVIDER_CANDIDATE_TEST'
+
+#: Scope -> the execution mode a persisted candidate is allowed to claim. The
+#: mode is a property of the authorisation, not of whatever the generator says,
+#: so a synthetic-scoped adapter cannot record ``LIVE`` and a live-scoped
+#: adapter cannot record ``SIMULATED``.
+SCOPE_EXECUTION_MODE = {SYNTHETIC_SCOPE: 'SIMULATED', LIVE_SCOPE: 'LIVE'}
+
+#: The only provider identity a ``LIVE`` candidate may name.
+LIVE_PROVIDER = 'tokenharbor'
 
 GENERATED = 'GENERATED'
 VALIDATED = 'VALIDATED'
@@ -75,6 +95,54 @@ class AdapterGates:
     def as_dict(self) -> dict:
         return {'measurement': self.measurement, 'admission': self.admission,
                 'authorization': self.authorization}
+
+
+@dataclass(frozen=True)
+class ExecutionReceipt:
+    """What actually happened when the generator ran.
+
+    This exists because the previous ``_persist`` hardcoded
+    ``SIMULATED``/``simulated-qg-v1``/``run_id = NULL``. A genuine provider call
+    would have been recorded as a simulation, and a reader could not tell the
+    two apart. Provenance is now carried, not assumed.
+
+    ``prompt_version`` and ``prompt_sha256`` are part of the receipt so the
+    adapter can prove the prompt that was actually dispatched is the one the
+    authorization bound. Without that, a caller could authorise prompt A and
+    dispatch prompt B.
+    """
+
+    execution_mode: str
+    model_provider: str
+    model_requested: str
+    model_returned: str | None
+    run_id: str | None
+    attempt_no: int | None
+    prompt_version: str
+    prompt_sha256: str
+
+
+@dataclass(frozen=True)
+class GenerationResult:
+    """The generator's output plus the receipt that describes how it was made."""
+
+    output: dict
+    receipt: ExecutionReceipt
+
+
+#: The receipt a synthetic generator is allowed to produce. ``run_id`` and
+#: ``attempt_no`` are genuinely absent: no attempt was reserved and no provider
+#: was called, so recording an identifier would be a fabrication.
+SIMULATED_RECEIPT = ExecutionReceipt(
+    execution_mode='SIMULATED',
+    model_provider='simulated-qg-v1',
+    model_requested='simulated-qg-v1',
+    model_returned=None,
+    run_id=None,
+    attempt_no=None,
+    prompt_version='',
+    prompt_sha256='',
+)
 
 
 def facts_from_objective(packet: dict, *, objective_id: str,
@@ -169,8 +237,9 @@ class QgCandidateAdapter:
     """One governed measurement -> QG candidate attempt."""
 
     def __init__(self, *, engine, actor_id, store: ml.MeasurementStore,
-                 admission_lookup, generate, scope: str = SYNTHETIC_SCOPE):
-        if scope != SYNTHETIC_SCOPE:
+                 admission_lookup, generate, scope: str = SYNTHETIC_SCOPE,
+                 source_check=None):
+        if scope not in SCOPE_EXECUTION_MODE:
             # The production path is not enabled by this directive. Refusing an
             # unknown scope is what keeps the hold unconditional.
             raise WorkflowHeld('QG_ADAPTER_SCOPE_NOT_AUTHORIZED')
@@ -180,6 +249,13 @@ class QgCandidateAdapter:
         self.admission_lookup = admission_lookup
         self.generate = generate
         self.scope = scope
+        # A LIVE attempt must prove its source is still the workflow's current
+        # one. Required for LIVE, optional for synthetic: a synthetic candidate
+        # never claims a provider receipt, so a stale context cannot misrepresent
+        # a real call. Supplied as a callable so the authority (the persisted
+        # business-context service) stays outside the adapter.
+        self.source_check = source_check
+        self.execution_mode = SCOPE_EXECUTION_MODE[scope]
         self.dispatch_calls = 0
 
     # -- gates ------------------------------------------------------------
@@ -221,6 +297,53 @@ class QgCandidateAdapter:
         return qg_authorization.verify(
             self.engine, actor_id=self.actor_id, **binding)
 
+    # -- execution receipt ------------------------------------------------
+    def _require_receipt(self, receipt: ExecutionReceipt, *, prompt_version: str,
+                         prompt_sha256: str) -> None:
+        """Refuse a receipt that cannot describe this adapter's authorised run.
+
+        A ``LIVE`` candidate is only meaningful if every one of these holds, so
+        each is a separate refusal code rather than one opaque failure.
+        """
+        if not isinstance(receipt, ExecutionReceipt):
+            raise WorkflowHeld('QG_GENERATOR_RECEIPT_REQUIRED')
+        if receipt.execution_mode != self.execution_mode:
+            raise WorkflowHeld('QG_EXECUTION_MODE_MISMATCH')
+        if receipt.execution_mode != 'LIVE':
+            return
+        if receipt.model_provider != LIVE_PROVIDER:
+            raise WorkflowHeld('QG_LIVE_PROVIDER_NOT_AUTHORIZED')
+        if not receipt.run_id:
+            raise WorkflowHeld('QG_LIVE_RUN_ID_MISSING')
+        if not isinstance(receipt.attempt_no, int) or receipt.attempt_no < 1:
+            raise WorkflowHeld('QG_LIVE_ATTEMPT_NO_MISSING')
+        if not (receipt.model_requested or '').strip():
+            raise WorkflowHeld('QG_LIVE_MODEL_REQUESTED_MISSING')
+        if not (receipt.model_returned or '').strip():
+            raise WorkflowHeld('QG_LIVE_MODEL_RETURNED_MISSING')
+        if (receipt.prompt_version != prompt_version
+                or receipt.prompt_sha256 != prompt_sha256):
+            # The dispatched prompt must be the authorised one. Recording a
+            # different version would make the persisted row describe a run
+            # nobody approved.
+            raise WorkflowHeld('QG_LIVE_PROMPT_IDENTITY_MISMATCH')
+
+    def _unwrap(self, produced, *, prompt_version: str,
+                prompt_sha256: str) -> tuple[dict, ExecutionReceipt]:
+        """Split the generator's return value into output and receipt.
+
+        A bare dict is only admissible under the synthetic scope. Accepting one
+        on the live path would recreate the defect this change removes: a real
+        dispatch recorded as a simulation, or a simulation recorded as real.
+        """
+        if isinstance(produced, GenerationResult):
+            self._require_receipt(produced.receipt, prompt_version=prompt_version,
+                                  prompt_sha256=prompt_sha256)
+            return produced.output, produced.receipt
+        if self.execution_mode == 'SIMULATED':
+            return produced, SIMULATED_RECEIPT
+        raise WorkflowHeld('QG_GENERATOR_RECEIPT_REQUIRED')
+
     # -- main -------------------------------------------------------------
     def prepare(self, *, assessment_id, confirmation_id, assessment_revision,
                 source_fingerprint, context_id, context_packet_hash,
@@ -232,9 +355,10 @@ class QgCandidateAdapter:
             'adapter_version': ADAPTER_VERSION,
             'fixed_option_contract': FIXED_OPTION_CONTRACT,
             'scope': self.scope,
+            'execution_mode': self.execution_mode,
             'assessment_id': str(assessment_id),
             'objective_id': objective_id,
-            'synthetic_scope': True,
+            'synthetic_scope': self.scope == SYNTHETIC_SCOPE,
             'production_hold': 'QG_FIXED_OPTION_ADMISSION_UNAVAILABLE',
             'fielding_authorized': False,
             'publication_authorized': False,
@@ -281,6 +405,28 @@ class QgCandidateAdapter:
             'qg_eligible': admission.get('qg_eligible'),
         }
 
+        # The admission says the owner once decided this. It does not say the
+        # snapshot that decision cites is still the workflow's source. Checked
+        # here, before any authorization is spent, for every caller.
+        if self.source_check is None:
+            if self.scope == LIVE_SCOPE:
+                raise WorkflowHeld('QG_LIVE_SOURCE_CHECK_REQUIRED')
+        else:
+            verdict = self.source_check()
+            code = source_currentness.refusal(
+                verdict, authorized_context_packet_hash=context_packet_hash)
+            if code is not None:
+                envelope.update({
+                    'outcome': 'HELD_SOURCE_NOT_CURRENT',
+                    'source_refusal': code,
+                    'source_context_id': (verdict or {}).get('context_id'),
+                    'source_packet_hash': (verdict or {}).get('packet_hash'),
+                    'dispatched': False,
+                    'candidate_persisted': False,
+                    'authorization_consumed': False,
+                })
+                return envelope
+
         authorization = self.require_authorization(
             authorization_id=authorization_id,
             assessment_id=assessment_id,
@@ -309,7 +455,7 @@ class QgCandidateAdapter:
 
         # Dispatch happens only now, after every gate above has passed.
         self.dispatch_calls += 1
-        raw = self.generate({
+        produced = self.generate({
             'facts': facts,
             'measurement': measurement,
             'objective_id': objective_id,
@@ -317,6 +463,8 @@ class QgCandidateAdapter:
             'population': approved_population,
             'stimulus': stimulus,
         })
+        raw, receipt = self._unwrap(
+            produced, prompt_version=prompt_version, prompt_sha256=prompt_sha256)
 
         candidate = validate_fixed_candidate(
             raw, facts,
@@ -363,7 +511,8 @@ class QgCandidateAdapter:
             prompt_version=prompt_version, prompt_sha256=prompt_sha256,
             request_digest=request_digest, output_digest=output_digest,
             response_format=approved_format, state=state,
-            structural=structural, candidate_json=candidate_json)
+            structural=structural, candidate_json=candidate_json,
+            receipt=receipt)
 
         # The authorization is spent by *this attempt*, not by the row being new.
         # Persistence is idempotent (a byte-identical candidate keeps its id), so
@@ -386,6 +535,14 @@ class QgCandidateAdapter:
             'output_sha256': output_digest,
             'request_sha256': request_digest,
             'response_format': approved_format,
+            'execution': {
+                'execution_mode': receipt.execution_mode,
+                'model_provider': receipt.model_provider,
+                'model_requested': receipt.model_requested,
+                'model_returned': receipt.model_returned,
+                'run_id': receipt.run_id,
+                'attempt_no': receipt.attempt_no,
+            },
             'question': candidate.question,
             'response_codes': list(candidate.response_codes),
             'field_authority': field_authority(candidate),
@@ -402,7 +559,7 @@ class QgCandidateAdapter:
                  context_packet_hash, objective_id, admission_id, measurement,
                  authorization_id, prompt_version, prompt_sha256,
                  request_digest, output_digest, response_format, state,
-                 structural, candidate_json) -> dict:
+                 structural, candidate_json, receipt: ExecutionReceipt) -> dict:
         from sitewise.repositories.m2_context_bindings import bind_restricted_principal
         from sitewise.services.business_context_v1 import ContextRefused
         with self.engine.begin() as conn:
@@ -426,8 +583,9 @@ class QgCandidateAdapter:
                     :candidate, :assessment, :confirmation, :revision, :source,
                     :context, :context_hash, :objective, :admission,
                     :measurement, :measurement_version, :authorization,
-                    NULL, NULL, :prompt_version, :prompt_sha, :request_sha,
-                    :output_sha, :mode, :provider, :model, NULL, :format,
+                    :run_id, :attempt_no, :prompt_version, :prompt_sha, :request_sha,
+                    :output_sha, :mode, :provider, :model_requested,
+                    :model_returned, :format,
                     :state, :structural, 'UNDER_REVIEW', 'SOURCE_BOUND',
                     :contract, :adapter, CAST(:body AS jsonb), :owner)
                 ON CONFLICT (candidate_id) DO NOTHING
@@ -443,8 +601,15 @@ class QgCandidateAdapter:
                 'authorization': str(authorization_id),
                 'prompt_version': prompt_version, 'prompt_sha': prompt_sha256,
                 'request_sha': request_digest, 'output_sha': output_digest,
-                'mode': 'SIMULATED', 'provider': 'simulated-qg-v1',
-                'model': 'simulated-qg-v1', 'format': response_format,
+                # Provenance comes from the receipt, never from a literal. A
+                # simulated run and a live run are now distinguishable in the
+                # row itself.
+                'mode': receipt.execution_mode,
+                'provider': receipt.model_provider,
+                'model_requested': receipt.model_requested,
+                'model_returned': receipt.model_returned,
+                'run_id': receipt.run_id, 'attempt_no': receipt.attempt_no,
+                'format': response_format,
                 'state': state, 'structural': structural,
                 'contract': FIXED_OPTION_CONTRACT, 'adapter': ADAPTER_VERSION,
                 'body': json.dumps(candidate_json, ensure_ascii=False),
@@ -479,6 +644,8 @@ def read_candidates(engine, *, actor_id, assessment_id, limit: int = 50) -> list
     return [dict(row) for row in rows]
 
 
-__all__ = ['ADAPTER_VERSION', 'ABSTAINED', 'AdapterGates', 'GENERATED',
-           'QgCandidateAdapter', 'SYNTHETIC_SCOPE', 'VALIDATED',
-           'facts_from_objective', 'read_candidates']
+__all__ = ['ADAPTER_VERSION', 'ABSTAINED', 'AdapterGates', 'ExecutionReceipt',
+           'GENERATED', 'GenerationResult', 'LIVE_PROVIDER', 'LIVE_SCOPE',
+           'QgCandidateAdapter', 'SCOPE_EXECUTION_MODE', 'SIMULATED_RECEIPT',
+           'SYNTHETIC_SCOPE', 'VALIDATED', 'facts_from_objective',
+           'read_candidates']

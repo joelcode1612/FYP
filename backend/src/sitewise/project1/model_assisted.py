@@ -24,10 +24,11 @@ from sitewise.project1.contracts import WorkflowHeld, no_authority
 from sitewise.project1.disclosure import (SyntheticBdjAuthorization, SyntheticBdjDisclosure,
                                           validate_synthetic)
 from sitewise.project1.ledger import PostgresAttemptLedger
-from sitewise.project1.prompts import PROMPTS
+from sitewise.project1.prompts import PROMPTS, source_prompt_key
 from sitewise.project1.provider import ENDPOINT, MODEL
 from sitewise.project1.key_custody import LocalKeyCustody
 from sitewise.project1.result_store import BdjResultStore, DISCOVERY_RESULT_SCHEMA_VERSION
+from sitewise.project1.ruleset_resolver import resolve_ruleset
 from sitewise.project1.runs import attempt_count, ensure_run, latest_receipt
 
 STATUS_CONTRACT = 'UNRECONCILED_PROPOSAL'
@@ -124,34 +125,63 @@ def _sources(packet: dict) -> list[dict]:
     } for declaration in packet.get('declarations', [])]
 
 
-def _real_data_authorization(engine, assessment_id, revision, fingerprint, data_class):
+def require_supported_instrument(rules, instrument: str) -> None:
+    """Hold unless the loaded ruleset declares this instrument as supported.
+
+    Fail-closed for **every** instrument. The previous check was
+    ``instrument.startswith('M2V1-')``, so an M2V2 packet passed a guard meant
+    to protect it and was evaluated against a catalogue whose every source key
+    is ``M2V1-*``. Nothing could match, and the run returned an empty,
+    successful-looking review instead of a refusal. An unsupported instrument
+    is a hold, never an empty success.
+    """
+    supported = getattr(rules, 'SUPPORTED_INSTRUMENT_VERSIONS', ())
+    if not supported or instrument not in supported:
+        raise WorkflowHeld('BDJ_INSTRUMENT_RULESET_UNVERIFIED')
+
+
+def _real_data_authorization(engine, assessment_id, revision, fingerprint, data_class,
+                             prompt_key='BDJ', ruleset_version=None, rules_sha256=None,
+                             actor_id=None):
     """Real-data authorisation for this exact run, or None.
 
     None for synthetic data (the normal path) and None when no matching,
     unexpired, unconsumed row exists. Returning None is what keeps the guard
     fail-closed; it never substitutes a permissive default.
+
+    ``actor_id`` is the authenticated owner taken from the verified token, never
+    from the request body. It is required to read the row at all: the table's
+    ``owner_scope`` policy is actor-scoped and granted to ``p1_m2_runtime``.
     """
     if data_class == 'SYNTHETIC_NONHUMAN':
         return None
     from sitewise.core.config import settings as _settings
-    from sitewise.project1.real_data_authorization import load, prompt_sha256
-    prompt = PROMPTS.get('BDJ') if isinstance(PROMPTS, dict) else None
-    _d = prompt_sha256(prompt if isinstance(prompt, str) else '')
-    print('LOAD ARGS a=%s r=%s fp=%s ver=%s sha=%s pr=%s data_class=%r'
-          % (assessment_id, revision, str(fingerprint)[:12],
-             _settings.project1_rules_version, str(_settings.project1_rules_sha256)[:12],
-             _d[:12], data_class))
-    try:
-        return load(
-            engine=engine, assessment_id=assessment_id, revision=revision,
-            source_fingerprint=fingerprint,
-            ruleset_version=_settings.project1_rules_version,
-            rules_sha256=_settings.project1_rules_sha256,
-            prompt_digest=prompt_sha256(prompt if isinstance(prompt, str) else ''),
-            data_class=data_class)
-    except Exception as exc:
-        import traceback; traceback.print_exc()
-        raise
+    from sitewise.project1.real_data_authorization import load
+    # The row must be bound to the prompt that will actually run. This used to
+    # hash ``''`` because a Prompt object is not a str, so the prompt binding
+    # was void: a row issued for one prompt matched every prompt. The
+    # fingerprint is the same value the attempt ledger records, so the
+    # authorization and the execution receipt cannot disagree.
+    prompt_digest = PROMPTS[prompt_key].fingerprint
+    # The row must also be bound to the ruleset that actually resolved for this
+    # instrument, not to whichever global default happens to be configured.
+    #
+    # Read through the M2 engine, not the runtime engine. The authorisation table
+    # is an M2-scoped row: its ``owner_scope`` policy is granted to
+    # ``p1_m2_runtime`` and to no other role. The runtime login is a member of
+    # ``p1ai_runtime`` only, so it cannot assume that principal, and
+    # ``p1ai_runtime`` itself has neither the privilege nor a policy here. Using
+    # the M2 engine means the read happens as the principal the table was
+    # designed for, with no grant and no policy change.
+    from sitewise.db.m2_session import get_m2_engine
+    return load(
+        engine=get_m2_engine(), actor_id=actor_id,
+        assessment_id=assessment_id, revision=revision,
+        source_fingerprint=fingerprint,
+        ruleset_version=ruleset_version or _settings.project1_rules_version,
+        rules_sha256=rules_sha256 or _settings.project1_rules_sha256,
+        prompt_digest=prompt_digest,
+        data_class=data_class)
 
 
 def _validations(review_result: dict | None) -> list[dict]:
@@ -205,7 +235,24 @@ def run_model_assisted(*, packet: dict, actor_id: UUID, runtime_engine,
     data_class = packet.get('data_class')
     purpose = packet.get('purpose', SYNTHETIC_PURPOSE)
     fingerprint = packet['source_fingerprint']
-    operator_receipt = settings.project1_rules_adoption_receipt
+    instrument = packet.get('instrument_version', '')
+
+    # Rules are a precondition. Do not create an immutable run before verifying
+    # that the configured adoption receipt and on-disk digest are usable. This
+    # runs before the authorization lookup so an unadopted or mis-scoped
+    # ruleset is refused without ever touching the authorization table.
+    #
+    # The binding is per instrument: M2V1 and M2V2 carry their own version,
+    # hash and receipt, so adopting one never authorizes the other and neither
+    # can silently stand in for the other.
+    binding = resolve_ruleset(instrument)
+    rules = binding.module
+    require_supported_instrument(rules, instrument)
+    operator_receipt = binding.adoption_receipt
+    # The dispatched prompt must match the instrument. Resolving the key once,
+    # here, is what keeps provenance, the run's work identity and the actual
+    # provider call from disagreeing about which contract is running.
+    prompt_key = source_prompt_key(instrument)
 
     # The FULL disclosure predicate runs before provisioning, not just the two
     # cheap checks. Every DISCLOSURE_* condition is decidable from the packet and
@@ -213,36 +260,49 @@ def run_model_assisted(*, packet: dict, actor_id: UUID, runtime_engine,
     # after ensure_run() leaves an orphan run that no later code can delete.
     # require_current() re-runs the same predicate at dispatch, so the two cannot
     # drift apart.
+    # The projection schema this instrument must produce, resolved server-side.
+    # Passing the packet's own schema_version here would make the disclosure
+    # check vacuous, so the expected value comes from the instrument registry and
+    # an unregistered instrument is refused.
+    from sitewise.project1.m2v2_projection import expected_projection_schema
+    projection_schema = expected_projection_schema(instrument)
+    assessment_id = UUID(str(packet['assessment_id']))
+    revision = packet['assessment_revision']
+
+    def _load_authorization():
+        """Read the live authorization for exactly this run.
+
+        Used twice on purpose: once for the pre-provisioning predicate, and
+        again as the disclosure's ``revalidate`` hook so dispatch re-reads the
+        row immediately before the reservation (DD-005 §1.6). A single cached
+        object would let an authorization that expired, was spent by a
+        concurrent attempt, or was rebound in between still reach dispatch.
+        """
+        return _real_data_authorization(
+            runtime_engine, assessment_id, revision, fingerprint, data_class,
+            prompt_key, binding.version, binding.sha256, actor_id)
+
     validate_synthetic(
         data_class=data_class, purpose=purpose, stage='BDJ', endpoint=ENDPOINT,
         model=MODEL, max_attempts=1, operator_receipt=operator_receipt,
         source_fingerprint=fingerprint, packet=packet,
-        real_authorization=_real_data_authorization(
-            runtime_engine, UUID(str(packet['assessment_id'])),
-            packet['assessment_revision'], fingerprint, data_class))
+        expected_schema=projection_schema,
+        real_authorization=_load_authorization())
 
-    assessment_id = UUID(str(packet['assessment_id']))
-    revision = packet['assessment_revision']
-
-    # Rules are a precondition. Do not create an immutable run before verifying
-    # that the configured adoption receipt and on-disk digest are usable.
-    rules = load_rules(settings.project1_rules_version, settings.project1_rules_sha256,
-                       settings.project1_rules_adoption_receipt)
-    instrument = packet.get('instrument_version', '')
-    if instrument.startswith('M2V1-') and instrument not in getattr(
-            rules, 'SUPPORTED_INSTRUMENT_VERSIONS', ()):
-        # The registered legacy M2-xx detectors are not an adopted M2V1
-        # ruleset. A silent empty rule catalogue is not a valid review.
-        raise WorkflowHeld('BDJ_INSTRUMENT_RULESET_UNVERIFIED')
-    run_id = ensure_run(runtime_engine, actor_id, assessment_id, revision, fingerprint)
+    run_id = ensure_run(runtime_engine, actor_id, assessment_id, revision, fingerprint,
+                        prompt_key=prompt_key, rules_version=binding.version)
     ledger = PostgresAttemptLedger(runtime_engine, actor_id, run_id)
     disclosure = SyntheticBdjDisclosure(SyntheticBdjAuthorization(
         run_id=str(run_id), source_fingerprint=fingerprint,
         operator_receipt=operator_receipt,
         data_class=data_class, purpose=purpose,
-        real_authorization=_real_data_authorization(
-            runtime_engine, assessment_id, revision, fingerprint, data_class)))
-    runner = runner_factory(ledger, disclosure, PROMPTS)
+        expected_schema=projection_schema,
+        real_authorization=_load_authorization()), revalidate=_load_authorization)
+    # The engine looks the source prompt up under 'BDJ'. Substituting the
+    # instrument-appropriate entry keeps the engine and its callers untouched
+    # while making the prompt actually dispatched correct for this instrument.
+    prompts_for_run = {**PROMPTS, 'BDJ': PROMPTS[prompt_key]}
+    runner = runner_factory(ledger, disclosure, prompts_for_run)
     # The validated result is sealed at rest. This is wired unconditionally
     # rather than opt-in: an opt-in control is inert until someone remembers to
     # pass it, and the next person to enable the workflow flag would otherwise
@@ -252,8 +312,8 @@ def run_model_assisted(*, packet: dict, actor_id: UUID, runtime_engine,
                            payload_custody=LocalKeyCustody())
 
     provenance = {
-        'ruleset_version': settings.project1_rules_version,
-        'prompt_version': PROMPTS['BDJ'].version,
+        'ruleset_version': binding.version,
+        'prompt_version': PROMPTS[prompt_key].version,
         'model_requested': MODEL,
         'model_returned': None,
         'source_fingerprint': fingerprint,

@@ -73,17 +73,64 @@ def load_rules(version: str, expected_sha256: str, adoption_receipt: str):
     return module
 
 
+def _declared_strings(values):
+    """Every string leaf a quote may legitimately be copied from.
+
+    Scalars pass through; a dict contributes its string values (not its keys);
+    a list contributes its string elements. Structured numbers and booleans are
+    deliberately not stringified, so a quote cannot be manufactured from a
+    rendered form that was never declared.
+    """
+    for value in values:
+        if isinstance(value, str):
+            yield value
+        elif isinstance(value, dict):
+            for inner in value.values():
+                if isinstance(inner, str):
+                    yield inner
+                elif isinstance(inner, list):
+                    for leaf in inner:
+                        if isinstance(leaf, str):
+                            yield leaf
+        elif isinstance(value, list):
+            for leaf in value:
+                if isinstance(leaf, str):
+                    yield leaf
+
+
+def _instrument_key_prefix(instrument_version) -> str:
+    """The item-key prefix this instrument's references must carry.
+
+    The previous check was ``startswith("M2V1-") != (instrument == M2V1)``,
+    which only separated M2V1 from "everything else": an M2V2 packet could cite
+    a key with no recognised prefix and pass the prefix test. Requiring the
+    instrument's own prefix makes the check per-instrument.
+
+    A packet whose label is neither registered version keeps the original
+    ``M2-`` namespace. Historical packets carry legacy labels and must still be
+    re-readable; refusing them here would rewrite history rather than validate
+    it, and an unregistered instrument is already refused earlier by
+    ``require_supported_instrument`` and ``expected_projection_schema``.
+    """
+    family = str(instrument_version or '').split('-')[0]
+    if family == 'M2V1':
+        return 'M2V1-'
+    if family == 'M2V2':
+        return 'M2V2-'
+    return 'M2-'
+
+
 def validate_candidates(raw, packet: dict, allowed_rules: set[str]) -> BDJOutput:
     """Exact references and quoted source spans; existence is not semantic proof."""
     result = BDJOutput.model_validate(raw)
     sources = {d['item_key']: d for d in packet['declarations']}
+    expected_prefix = _instrument_key_prefix(packet.get('instrument_version'))
     seen = set()
     for issue in result.issues:
         if issue.rule_id not in allowed_rules:
             raise WorkflowHeld('BDJ_RULE_NOT_REGISTERED')
         for ref in issue.source_refs:
-            current = packet.get("instrument_version") == "M2V1-20261114-1"
-            if ref.item_key.startswith("M2V1-") != current:
+            if not ref.item_key.startswith(expected_prefix):
                 raise WorkflowHeld("BDJ_INSTRUMENT_REFERENCE_MISMATCH")
             source = sources.get(ref.item_key)
             if (not source or source['answer_state'] != 'ANSWERED' or
@@ -91,7 +138,12 @@ def validate_candidates(raw, packet: dict, allowed_rules: set[str]) -> BDJOutput
                     source['item_version_id'] != ref.item_version_id):
                 raise WorkflowHeld('BDJ_SOURCE_REFERENCE_INVALID')
             values = source['value'] if isinstance(source['value'], list) else [source['value']]
-            if not any(isinstance(v, str) and ref.quote in v for v in values):
+            # A COMPOSITE answer is a dict (e.g. {'decision': 'PRICE_NOT_DECIDED'}).
+            # Testing `quote in dict` compares against the KEYS, so no composite
+            # quote could ever match and every M2V2-12..19 finding was refused
+            # (DD-011). A quote must still be an exact substring of a declared
+            # string leaf — never of the question, never of a rendered label.
+            if not any(ref.quote in declared for declared in _declared_strings(values)):
                 raise WorkflowHeld('BDJ_SOURCE_QUOTE_INVALID')
         if issue.kind == 'SOURCE_CONFLICT' and len({r.item_key for r in issue.source_refs}) < 2:
             raise WorkflowHeld('BDJ_CONFLICT_REQUIRES_TWO_SOURCES')

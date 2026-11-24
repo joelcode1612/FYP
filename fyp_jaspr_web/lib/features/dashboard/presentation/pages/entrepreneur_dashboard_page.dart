@@ -696,7 +696,7 @@ class _CurrentAssessmentState extends State<_CurrentAssessment> {
             record.isCompleted
                 ? 'All ${record.totalStages} stages completed'
                 : '${record.completedStages} of ${record.totalStages} stages '
-                      'completed',
+                      'completed · ${record.stagesRemaining} remaining',
           ),
         ]),
         strong([Component.text('$pct%')]),
@@ -709,6 +709,9 @@ class _CurrentAssessmentState extends State<_CurrentAssessment> {
           'aria-valuenow': '$pct',
           'aria-valuemin': '0',
           'aria-valuemax': '100',
+          'aria-valuetext':
+              '${record.completedStages} of ${record.totalStages} stages '
+              'complete, ${record.stagesRemaining} remaining',
         },
         [
           span(

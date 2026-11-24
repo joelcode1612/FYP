@@ -8,15 +8,15 @@ Design constraints this module enforces:
   the evaluation, context, contract, prompt, status, normalised objective and
   source digest — so a duplicate request lands on the same row. There is no
   rule-level unique key: two answers may legitimately share a rule.
-* Every statement runs behind ``assert_target``. Pointing this adapter at a
-  database outside the allowlist raises before any SQL executes.
+* Every statement runs behind ``assert_target``, which reads the same policy
+  module as the HTTP guard (``proposal_target_policy``). Pointing this adapter
+  at a database outside the allowlist raises before any SQL executes.
 * Historical findings are never touched. There is no UPDATE or DELETE against
   ``m2_bdj_findings`` in this module.
 """
 from __future__ import annotations
 
 import json
-import os
 import uuid
 from pathlib import Path
 
@@ -26,8 +26,8 @@ from sitewise.project1.contracts import WorkflowHeld
 from sitewise.project1.objective_proposal import (
     BOUND_CONTRACT_VERSION, PROBLEM_TYPE_FOR_STATUS, BoundObjectiveProposal,
 )
+from sitewise.project1.proposal_target_policy import refusal
 
-DEFAULT_ALLOWLIST = "project1_workflow_tests"
 MIGRATION_FILE = (Path(__file__).resolve().parents[3] /
                   "migrations/sql/20261121_0100_m2_bdj_objective_proposals.sql")
 DECISIONS_MIGRATION_FILE = (Path(__file__).resolve().parents[3] /
@@ -55,15 +55,24 @@ SUGGESTED_LIMITATION = ("No confirmed M2 finding establishes this need; the obje
                         "exploratory and not source-backed.")
 
 
-def allowlist() -> set[str]:
-    raw = os.environ.get("PROJECT1_PROPOSAL_DB_ALLOWLIST", DEFAULT_ALLOWLIST)
-    return {name.strip() for name in raw.split(",") if name.strip()}
-
-
 def assert_target(conn) -> str:
-    """Refuse any database that is not an explicitly disposable target."""
-    current = conn.execute(text("select current_database()")).scalar_one()
-    if current not in allowlist():
+    """Refuse any database that is not an explicitly disposable target.
+
+    Reads ``proposal_target_policy`` — the same module the HTTP guard uses — so
+    the adapter and the route cannot disagree about where proposal rows live.
+    The pair is checked as ``(database, port)``: a name that is allowlisted on
+    the disposable cluster is not allowlisted on another port, because a second
+    cluster can hold a different database of the same name.
+
+    The *principal* is deliberately not checked here. ``_bind_actor`` runs
+    immediately after this and fails closed unless the transaction ends up as
+    ``p1_m2_runtime`` with neither ``rolsuper`` nor ``rolbypassrls``; checking
+    ``current_user`` at this point would instead see the login, which is a
+    superuser only inside the disposable harness.
+    """
+    current, server_port = conn.execute(text(
+        "select current_database(), inet_server_port()")).one()
+    if refusal(current, server_port) is not None:
         raise WorkflowHeld("PROPOSAL_DB_TARGET_REFUSED")
     return current
 

@@ -252,7 +252,10 @@ def test_invalid_llm_explanation_falls_back_instead_of_emitting_partial_prose():
                 'observation_interpretation': 'Demand of 999 respondents was recorded.',
                 'research_interpretation': 'The result is limited to the measured set.',
                 'planning_implication': 'Treat it as a planning input only.',
-                'limitations': 'This is a candidate and is not report-authorised.',
+                'limitations': ('The deterministic EE-01 template supplied no language-model '
+                    'prose. The finding and explanation are candidates, neither scientifically '
+                    'accepted, validated or report-authorised, and the template adds no '
+                    'measurement beyond the supplied figures.'),
                 'summary': 'The supplied figures support a cautious interpretation.',
                 'insufficient_evidence': False, 'missing_evidence_references': [],
                 'origin': 'LLM'}
@@ -275,7 +278,10 @@ def test_valid_llm_candidate_is_kept_and_marked_llm():
                 'observation_interpretation': 'The supplied measurement records the stated response.',
                 'research_interpretation': 'The result is limited to the measured response set.',
                 'planning_implication': 'Treat it as a planning input only.',
-                'limitations': 'This is a candidate and is not report-authorised.',
+                'limitations': ('The deterministic EE-01 template supplied no language-model '
+                    'prose. The finding and explanation are candidates, neither scientifically '
+                    'accepted, validated or report-authorised, and the template adds no '
+                    'measurement beyond the supplied figures.'),
                 'summary': 'The supplied figures support a cautious interpretation.',
                 'insufficient_evidence': False, 'missing_evidence_references': [],
                 'origin': 'LLM'}
@@ -383,3 +389,54 @@ def test_quantity_word_invention_is_caught():
     with pytest.raises(WorkflowHeld, match='EXPLANATION_UNSOURCED_QUANTITY'):
         validate_candidate(_valid_output(summary='Several thousand respondents took part.'),
                            packet=_packet(), allowed_claim_ids=set(), allowed_numbers=set())
+
+
+# ---------------------------------------------------------------------------
+# EX-04 GATE 4/5: the endpoint the report now calls
+# ---------------------------------------------------------------------------
+
+def test_availability_is_mounted_unconditionally_and_reports_the_hold():
+    """The report reads this on every report load, so it must never 503.
+
+    `explain` sits behind `settings.ee01_explanation_enabled`; availability is
+    mounted outside that flag precisely so a held module is discoverable rather
+    than silently absent.
+    """
+    from sitewise.dependencies import require_entrepreneur
+
+    app = FastAPI()
+    app.include_router(api.router)
+    app.dependency_overrides[require_entrepreneur] = lambda: SimpleNamespace(
+        role='entrepreneur', account_status='active', assurance_level='aal1',
+        user_id=uuid4())
+    original = settings.ee01_explanation_enabled
+    settings.ee01_explanation_enabled = False
+    try:
+        response = TestClient(app).get('/explanations/availability')
+    finally:
+        settings.ee01_explanation_enabled = original
+
+    assert response.status_code == 200, 'availability must not be flag-gated'
+    body = response.json()
+    assert body['contract_version'] == 'ee01-explanation-availability/1'
+    assert body['state'] == 'held'
+    assert body['candidate_generation_authorized'] is False
+    assert body['report_admission_authorized'] is False
+    assert response.headers['cache-control'] == 'no-store'
+
+
+def test_availability_carries_no_measurement():
+    """The notice the report renders from this must disclose nothing."""
+    from sitewise.dependencies import require_entrepreneur
+
+    app = FastAPI()
+    app.include_router(api.router)
+    app.dependency_overrides[require_entrepreneur] = lambda: SimpleNamespace(
+        role='entrepreneur', account_status='active', assurance_level='aal1',
+        user_id=uuid4())
+    body = TestClient(app).get('/explanations/availability').json()
+    assert set(body) == {'contract_version', 'state', 'code', 'message',
+                         'candidate_generation_authorized',
+                         'report_admission_authorized'}
+    for value in body.values():
+        assert not isinstance(value, (int, float)) or isinstance(value, bool)

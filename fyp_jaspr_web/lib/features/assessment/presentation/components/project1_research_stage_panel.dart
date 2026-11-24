@@ -1106,10 +1106,6 @@ class _Project1ResearchStageState extends State<Project1ResearchStagePanel> {
         ownerConfirmed ||
         (id.isNotEmpty && text.isNotEmpty && !authorityUnverified);
 
-    // Review controls appear for any objective that is not already approved and
-    // carries an identity — including the authority-unverified case. The
-    // warning above states the hold; the write path reports it honestly.
-    final reviewable = !approved && id.isNotEmpty && text.isNotEmpty;
     return section(classes: 'p1-objective', [
       div(classes: 'p1-objective__body', [
         div(classes: 'p1-card__head', [
@@ -1162,41 +1158,21 @@ class _Project1ResearchStageState extends State<Project1ResearchStagePanel> {
               [Component.text('Build business context')],
             ),
           ]),
-        if (reviewable) ...[
-          // Approve / Reject are the mandatory entrepreneur decisions for every
-          // proposal, but the decision API is not connected yet. They are shown
-          // unavailable on purpose: a button that throws is worse than one that
-          // is visibly disabled, and Phase 3 is not complete until both work
-          // end-to-end through the authenticated route.
-          div(classes: 'p1-toolbar', [
-            button(
-              attributes: const {
-                'type': 'button',
-                'title': 'Decision API not connected yet',
-                'aria-disabled': 'true',
-              },
-              classes: 'p1-btn p1-btn--approve',
-              onClick: null,
-              [Component.text('Approve objective')],
-            ),
-            button(
-              attributes: const {
-                'type': 'button',
-                'title': 'Decision API not connected yet',
-                'aria-disabled': 'true',
-              },
-              classes: 'p1-btn p1-btn--danger',
-              onClick: null,
-              [Component.text('Reject objective')],
-            ),
-          ]),
+        // Approve / Reject used to sit here, permanently disabled with the note
+        // "Decision API not connected yet". That is no longer true: the governed
+        // decision route exists, is owner-scoped, and is exercised from
+        // `BdjObjectiveProposalPanel`, which owns the review state, the stored
+        // decision readback and the admission block. A second, dead pair here
+        // would duplicate that control and misreport it as unavailable, so the
+        // review actions live in exactly one place.
+        if (!approved && id.isNotEmpty && text.isNotEmpty)
           p(classes: 'p1-muted', [
             Component.text(
-              'Approve and Reject are unavailable until the decision API is connected. '
-              'No proposal can be admitted as a research objective before then.',
+              'Review this objective in the governed research-objectives panel '
+              'below: approving or rejecting there records your decision and '
+              'keeps approval separate from admission.',
             ),
           ]),
-        ],
         if (approved)
           p(classes: 'p1-muted', [
             Component.text(

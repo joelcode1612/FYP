@@ -297,7 +297,49 @@ class Handler(BaseHTTPRequestHandler):
             return self._authorize(parsed)
         if parsed.path.endswith('/auth/v1/user'):
             return self._user()
+        if parsed.path.endswith('/rest/v1/users'):
+            return self._rest_users(parsed)
         return self._send(404, {'error': 'not_found', 'path': parsed.path})
+
+    def _rest_users(self, parsed):
+        """The authoritative identity row, served the way PostgREST serves it.
+
+        The backend reads ``public.users`` through the Supabase client at request
+        time and treats that row as the authoritative source for role, account
+        status and email verification. Without this route the lookup 404s and
+        every authenticated request fails with 503 — the app can mint a token but
+        can never resolve who it belongs to.
+
+        PostgREST semantics are reproduced exactly, because the client depends on
+        them: a filter that matches nothing is ``200 []``, never 404. A 404 here
+        means "no such table", and conflating the two is what made the failure
+        look like a missing service rather than a missing row.
+
+        Read-only and local: it serves only the synthetic identities this stub can
+        mint a token for, so it cannot disclose an identity it did not issue.
+        """
+        query = parse_qs(parsed.query)
+        wanted = None
+        for raw in query.get('user_id', []):
+            if raw.startswith('eq.'):
+                wanted = raw[3:].strip().lower()
+        rows = []
+        for email, spec in SYNTHETIC_USERS.items():
+            if wanted is not None and str(spec['id']).lower() != wanted:
+                continue
+            rows.append({
+                'user_id': spec['id'],
+                'email': email,
+                'full_name': spec.get('full_name'),
+                'phone_number': spec.get('phone_number'),
+                'role': spec.get('role', 'entrepreneur'),
+                'account_status': spec.get('account_status', 'active'),
+                'email_verified': spec.get('email_verified', True),
+            })
+        limit = (query.get('limit') or [''])[0]
+        if limit.isdigit():
+            rows = rows[:int(limit)]
+        return self._send(200, rows, 'rest_users')
 
     def do_POST(self):  # noqa: N802
         parsed = urlparse(self.path)

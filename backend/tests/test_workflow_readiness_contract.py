@@ -85,6 +85,45 @@ class ReadinessTests(unittest.TestCase):
         self.assessment.property_selected_at = None
         self.assertFalse(self.run_read()["stage_3"]["enterable"])
 
+    def test_readiness_and_record_share_one_progress_number(self):
+        """The stepper and the dashboard must not derive the count themselves."""
+        result = self.run_read()
+        self.assertEqual(result["contract_version"], "sitewise-assessment-workflow/3")
+        self.assertEqual(result["progress"]["completed_stages"], 2)
+        self.assertEqual(result["progress"]["total_stages"], 5)
+        self.assertEqual(result["progress"]["progress_percent"], 40)
+        self.assertEqual(result["progress"]["remaining_stages"], 3)
+        # The stages the progress block counts are the same stage objects.
+        completed = sum(1 for key in ("stage_1", "stage_2", "stage_3", "stage_4", "stage_5")
+                        if result[key]["complete"])
+        self.assertEqual(completed, result["progress"]["completed_stages"])
+
+    def test_blocked_stages_name_their_reason(self):
+        result = self.run_read()
+        outstanding = {entry["stage"]: entry["reason"] for entry in result["outstanding"]}
+        self.assertEqual(outstanding["location_evidence"], "NO_RESEARCH_OBJECTIVE")
+        self.assertEqual(outstanding["ai_explanation"], "STAGE_3_INCOMPLETE")
+        # Every outstanding stage is one of the "remaining" count.
+        self.assertEqual(len(result["outstanding"]),
+                         result["progress"]["remaining_stages"])
+        # "blocked" is the narrower list: governance/storage holds only.
+        blocked = {entry["stage"] for entry in result["blocked"]}
+        self.assertNotIn("location_evidence", blocked)
+        self.assertIn("ai_explanation", blocked)
+
+    def test_stage_five_rule_is_proposed_not_applied(self):
+        result = self.run_read()
+        self.assertFalse(result["stage_5"]["complete"])
+        self.assertIn("stage_5", result["proposed_completion_rules"])
+        self.assertTrue(result["proposed_completion_rules"]["stage_5"])
+
+    def test_unlinked_assessment_reports_no_progress_beyond_stage_one(self):
+        self.link.resolve = lambda **kw: (_ for _ in ()).throw(
+            AssessmentLinkError("ASSESSMENT_NOT_LINKED", "missing", 404))
+        result = self.run_read()
+        self.assertEqual(result["progress"]["completed_stages"], 1)
+        self.assertEqual(result["stage_2"]["reason"], "M2_NOT_LINKED")
+
     def test_authenticated_http_route_uses_owned_assessment(self):
         from sitewise.api.v1 import assessments
         app = FastAPI()

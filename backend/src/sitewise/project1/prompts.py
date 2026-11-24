@@ -1,7 +1,7 @@
 """Configurable, versioned templates. Ask for concise evidence, not private reasoning."""
 from dataclasses import dataclass
 
-from sitewise.project1.contracts import canonical, digest
+from sitewise.project1.contracts import WorkflowHeld, canonical, digest
 
 
 @dataclass(frozen=True)
@@ -355,8 +355,13 @@ PROMPTS = {
         'period. Do not invent prices, products, locations or respondent facts. '
         'Abstain or request clarification when necessary information is missing. '
         'Your output is a proposal, never an approval or customer observation.'),
-    # V1.0 candidate. Registered for the future admitted-claims path; V1.0's
-    # HTTP surface short-circuits on the empty claim set, so nothing is dispatched.
+    # V1.0 candidate — SUPERSEDED. Kept for its truthful version label and for
+    # the governance wording `tests/api/test_ee01_explanation.py` asserts, but it
+    # must never be dispatched. The dispatchable explanation prompt is
+    # `explanation_prompt` (`EE01-EXPLANATION-2-CAND`), which is the version
+    # `disclosure.EXPLANATION_PROMPT_VERSION` authorises and
+    # `ExplanationPromptAdapter` sends. `SUPERSEDED_PROMPT_STAGES` below records
+    # that, and `dispatchable_prompt` refuses this stage.
     'EXPLANATION': Prompt('EE01-EXPLANATION-1-CAND',
         'You are the PROJECT1 Evidence Explanation Interpreter. You are an evidence '
         'interpretation assistant. You are NOT the calculation engine, source authority, '
@@ -407,3 +412,73 @@ PROMPTS = {
         'is scientifically accepted, validated or report-authorized. Your explanation must '
         'be no stronger than the EE-01 evidence authorized for this claim.'),
 }
+
+
+# -- supersession -----------------------------------------------------------
+# A stage can be registered here and still not be the prompt the system
+# dispatches. `EXPLANATION` is that case: this module holds the V1.0 candidate
+# (`EE01-EXPLANATION-1-CAND`), while `explanation_prompt` holds the candidate
+# that is actually authorised (`EE01-EXPLANATION-2-CAND`). Two different prompt
+# *texts*, not two spellings of one version, so the registration cannot simply
+# be re-pointed: doing that would make the version string claim a text the
+# object does not contain.
+#
+# The entry is therefore kept and marked, and dispatch is refused below. The
+# single authoritative explanation version remains
+# `explanation_prompt.PROMPT_VERSION`; `disclosure.EXPLANATION_PROMPT_VERSION`
+# mirrors it under a drift guard
+# (`test_disclosure_explanation_stage.py::test_disclosure_prompt_version_matches_the_prompt_module`).
+
+#: Stages whose ``PROMPTS`` entry is a superseded prompt text.
+SUPERSEDED_PROMPT_STAGES = frozenset({'EXPLANATION'})
+
+#: The version strings those superseded registrations carry.
+SUPERSEDED_PROMPT_VERSIONS = frozenset({'EE01-EXPLANATION-1-CAND'})
+
+
+def dispatchable_prompt(stage: str) -> Prompt:
+    """Return the prompt registered for ``stage``, refusing superseded texts.
+
+    Every stage that is allowed to reach a provider must be fetched through this
+    function rather than ``PROMPTS[stage]``. The distinction matters only for
+    ``EXPLANATION`` today, but the guard is by stage rather than by call site so
+    a future supersession cannot be forgotten.
+    """
+    prompt = PROMPTS.get(stage)
+    if prompt is None:
+        raise WorkflowHeld('PROMPT_STAGE_UNKNOWN')
+    if stage in SUPERSEDED_PROMPT_STAGES:
+        raise WorkflowHeld('PROMPT_STAGE_SUPERSEDED')
+    return prompt
+
+
+# -- instrument-aware selection ----------------------------------------------
+# The M2V2 prompts were registered but never selected: the model-assisted path
+# read ``PROMPTS['BDJ']`` unconditionally, so an M2V2 packet was evaluated with
+# M2V1-worded instructions. These maps are the single place that decision is
+# made, so provenance, the run's work identity and the dispatched prompt cannot
+# disagree about which contract is running.
+SOURCE_PROMPT_KEYS = {'M2V1': 'BDJ', 'M2V2': 'BDJ_M2V2'}
+OBJECTIVE_PROMPT_KEYS = {'M2V1': 'BDJ_OBJECTIVE', 'M2V2': 'BDJ_OBJECTIVE_M2V2'}
+
+
+def instrument_family(instrument_version: str) -> str:
+    """Family label for an instrument version, or a hold.
+
+    Fail-closed on purpose: an unrecognised instrument must be refused here
+    rather than silently inheriting the M2V1 prompt.
+    """
+    for family in SOURCE_PROMPT_KEYS:
+        if instrument_version.startswith(family + '-'):
+            return family
+    raise WorkflowHeld('BDJ_INSTRUMENT_UNSUPPORTED')
+
+
+def source_prompt_key(instrument_version: str) -> str:
+    """Key of the source-evaluation prompt for this instrument."""
+    return SOURCE_PROMPT_KEYS[instrument_family(instrument_version)]
+
+
+def objective_prompt_key(instrument_version: str) -> str:
+    """Key of the objective-proposal prompt for this instrument."""
+    return OBJECTIVE_PROMPT_KEYS[instrument_family(instrument_version)]

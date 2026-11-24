@@ -149,9 +149,22 @@ if settings.m2_upstream_enabled:
     # records and persists versions into the same review tables, so a separate
     # flag would only create a state in which half the surface is mounted.
     from sitewise.api.v1 import qg_candidate
+    # Stage 4 readback for a persisted Direct-QG candidate. Mounted on the same
+    # opt-in gate because it reads the same M2 records the candidate writer
+    # produced; a separate flag would allow a state in which a candidate exists
+    # but cannot be reviewed.
+    from sitewise.api.v1 import qg_candidate_read
+    # Authenticated Direct-QG generation. Same gate as the two above: it writes
+    # the candidates the Stage 4 readback reads, so mounting it separately would
+    # allow a reviewer surface with nothing that can produce a candidate.
+    from sitewise.api.v1 import qg_candidate_live
     router.include_router(m2.router, prefix="/m2", tags=["m2_upstream"])
     router.include_router(m2_business_context.router, prefix="/m2", tags=["m2_business_context"])
     router.include_router(qg_candidate.router, prefix="/m2", tags=["m2_qg_candidate"])
+    router.include_router(qg_candidate_read.router, prefix="/m2",
+                          tags=["m2_qg_candidate_read"])
+    router.include_router(qg_candidate_live.router, prefix="/m2",
+                          tags=["m2_qg_candidate_live"])
 
 # Additive OPTIONAL selected research PU model (Layer-1 alternate). Mounted
 # BESIDE the default /ml routes — nothing existing is replaced. Same

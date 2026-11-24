@@ -68,6 +68,13 @@ class Settings(BaseSettings):
     cq_runtime_enabled: bool = False
     # No fallback to property/analytics or superuser connections for reporting.
     ee01_database_url: SecretStr = SecretStr('')
+    ee01_expected_database: str = 'Dss'
+    # Candidate explanation results live in the project1_ai ledger database.
+    # The default target is the recognised disposable cluster; no production
+    # database is reachable unless an operator explicitly changes these fields.
+    explanation_store_database_url: SecretStr = SecretStr('')
+    explanation_store_expected_database: str = 'project1_workflow_tests'
+    explanation_store_expected_port: int = 5433
     # Candidate-only explanation surface. Default-off; the route stays mounted
     # so the hold is discoverable, but generation returns 503 until an admitted
     # measurement, disclosure adapter and reviewed attempt ledger row exist.
@@ -97,17 +104,45 @@ class Settings(BaseSettings):
     project1_rules_version: str = ""
     project1_rules_sha256: str = ""
     project1_rules_adoption_receipt: str = ""
+    #: Per-instrument ruleset pins. The legacy trio above remains the M2V1
+    #: default, so every historical M2V1 run identity is reproduced exactly.
+    #: M2V2 has its own version, hash and receipt, so the two instruments are
+    #: adopted independently and neither can silently stand in for the other.
+    #: A family whose three values are not all set is simply not adopted, and
+    #: its runs are refused rather than borrowing another instrument's ruleset.
+    project1_rules_m2v1_version: str = ""
+    project1_rules_m2v1_sha256: str = ""
+    project1_rules_m2v1_adoption_receipt: str = ""
+    project1_rules_m2v2_version: str = ""
+    project1_rules_m2v2_sha256: str = ""
+    project1_rules_m2v2_adoption_receipt: str = ""
     #: Explicit synthetic instrument scope. Empty disables the mechanism.
     #: Activation additionally requires a disposable, non-5432 database target;
     #: see sitewise.services.instrument_authorization. It never changes a
     #: stored approval_state.
     m2_synthetic_instrument_scope: str = ""
+    #: Instrument code a **newly created** M2 record is built on. The code
+    #: default is M2V1 so production behaviour is unchanged; the isolated PG18
+    #: E2E environment sets M2V2 because that is the instrument its owner
+    #: authorized there. It selects a default only — the audited usability gate
+    #: in sitewise.services.instrument_authorization still decides whether the
+    #: named code resolves to exactly one usable row, and an explicit
+    #: ``instrument_code`` argument still wins.
+    m2_default_instrument_code: str = "M2V1"
     project1_runtime_database_url: SecretStr = SecretStr("")
     project1_audit_database_url: SecretStr = SecretStr("")
     tokenharbor_api_key: SecretStr = SecretStr("")
     tokenharbor_enabled: bool = False
     tokenharbor_structured_mode: str = "json_schema"
     tokenharbor_timeout_seconds: int = 30
+    #: Provisional Direct-QG evaluation cap only. The code default stays at the
+    #: historical 4,000; the isolated test environment opts into 12,000. A
+    #: value above MAX_TOKENHARBOR_MAX_TOKENS is refused, never clamped.
+    tokenharbor_max_tokens: int = 4000
+    #: The most one authorised QG attempt may be allowed to cost. Declared here
+    #: rather than left implicit in an operator artifact, because a ceiling that
+    #: no dispatch path reads is a comment, not a limit.
+    tokenharbor_cost_ceiling_usd: float = 0.50
     # Development evaluation only: tolerate the provider reporting the model
     # without its ':free' qualifier, recorded as unverified. Never production.
     tokenharbor_model_identity_exception: bool = False
@@ -265,6 +300,73 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+#: Upper bound on any single provider call, applied where a call is constructed.
+#: It exists so that a misconfigured timeout cannot hang a request thread
+#: indefinitely, but it must sit above the longest timeout an operator may
+#: legitimately need: a real QG call has been observed to take 11.5 s, and a
+#: 30 s budget produced a genuine unknown-outcome timeout on 2026-11-23. 180 s
+#: leaves room for a slow provider while still bounding the call.
+MAX_TOKENHARBOR_TIMEOUT_SECONDS = 180
+
+#: Provisional ceiling for the Direct-QG evaluation cap. 12,000 is an initial
+#: test limit adopted after a complete JSON response was observed; it is not a
+#: production default and is not an unlimited generation budget. 120,000 is
+#: deliberately not accepted in this phase.
+MAX_TOKENHARBOR_MAX_TOKENS = 12_000
+
+#: The owner-adopted ceiling for a single N04-C attempt. A configured value above
+#: this is refused rather than clamped: silently lowering someone's stated budget
+#: would hide that the deployment disagrees with the authorization.
+MAX_TOKENHARBOR_COST_CEILING_USD = 0.50
+
+
+def provider_cost_ceiling_usd() -> float:
+    """The effective per-attempt ceiling, or ``None`` when it is not adopted.
+
+    ``None`` is a refusal signal, not a default: a dispatch path that receives it
+    must hold rather than assume a number. Nothing here substitutes 0.50 for an
+    unset or over-large configuration.
+    """
+    try:
+        ceiling = float(settings.tokenharbor_cost_ceiling_usd)
+    except (TypeError, ValueError):
+        return None
+    if not 0 < ceiling <= MAX_TOKENHARBOR_COST_CEILING_USD:
+        return None
+    return ceiling
+
+
+def provider_timeout_seconds() -> int:
+    """The effective per-call timeout: configured value, clamped to the ceiling.
+
+    One function, not three literal ``min(..., 60)`` copies, so that raising the
+    ceiling is a single reviewable change and the call sites cannot drift.
+    """
+    return max(1, min(settings.tokenharbor_timeout_seconds,
+                      MAX_TOKENHARBOR_TIMEOUT_SECONDS))
+
+
+def provider_max_tokens() -> int | None:
+    """The effective provider output cap, or ``None`` when not adopted.
+
+    The default remains 4,000 so existing deployments are unchanged. The
+    isolated Direct-QG environment may opt into 12,000. A larger value is a
+    configuration disagreement, not a value to clamp silently: the provider
+    refuses the call instead of pretending the deployment adopted a smaller
+    budget.
+    """
+    raw = settings.tokenharbor_max_tokens
+    if isinstance(raw, bool):
+        return None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return None
+    if not 1 <= value <= MAX_TOKENHARBOR_MAX_TOKENS:
+        return None
+    return value
 
 
 BDJ_CONTRACTS = ("findings", "shadow", "objective")

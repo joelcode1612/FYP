@@ -100,6 +100,11 @@ final class AssessmentStage {
   /// `complete` | `current` | `incomplete` | `unavailable`.
   final String status;
 
+  /// The backend's finer verdict: `COMPLETE` | `IN_PROGRESS` | `BLOCKED` |
+  /// `NOT_AVAILABLE`. Null for a backend that predates the field, in which case
+  /// the stepper falls back to [status] alone.
+  final String? state;
+
   /// ISO timestamp, null until the stage is complete.
   final String? completedAt;
 
@@ -112,6 +117,7 @@ final class AssessmentStage {
     required this.number,
     required this.title,
     required this.status,
+    this.state,
     this.completedAt,
     this.unavailableReason,
   });
@@ -120,12 +126,16 @@ final class AssessmentStage {
   bool get isCurrent => status == 'current';
   bool get isUnavailable => status == 'unavailable';
 
+  /// Blocked by a missing contract or a governance hold, not by the user.
+  bool get isBlocked => state == 'BLOCKED' || state == 'NOT_AVAILABLE';
+
   factory AssessmentStage.fromJson(Map<String, dynamic> json) =>
       AssessmentStage(
         key: json['key'] as String,
         number: (json['number'] as num).toInt(),
         title: json['title'] as String,
         status: json['status'] as String,
+        state: json['state'] as String?,
         completedAt: json['completed_at'] as String?,
         unavailableReason: json['unavailable_reason'] as String?,
       );
@@ -213,6 +223,12 @@ final class AssessmentRecord {
   final String assessmentId;
   final String propertyId;
 
+  /// The M2 assessment this workspace record is bound to, when the backend
+  /// provided one. Explanation, campaign and EE-01 snapshot routes operate on
+  /// the M2 identity, so this field is the bridge between the workspace record
+  /// and the scientific chain.
+  final String? m2AssessmentId;
+
   /// `in_progress` | `completed`.
   final String status;
 
@@ -220,6 +236,16 @@ final class AssessmentRecord {
   final int currentStage;
   final String currentStageKey;
   final int completedStages;
+
+  /// Stages still outstanding. Supplied by the backend so the card can say
+  /// "3 remaining" instead of leaving the reader to subtract; falls back to
+  /// `totalStages - completedStages` for a backend that predates the field.
+  final int? remainingStages;
+
+  /// Always renderable: never negative, never above the total.
+  int get stagesRemaining =>
+      (remainingStages ?? (totalStages - completedStages)).clamp(0, totalStages);
+
   final int totalStages;
 
   /// Derived server-side from [completedStages] / [totalStages]; never a
@@ -269,10 +295,12 @@ final class AssessmentRecord {
   const AssessmentRecord({
     required this.assessmentId,
     required this.propertyId,
+    this.m2AssessmentId,
     required this.status,
     required this.currentStage,
     required this.currentStageKey,
     required this.completedStages,
+    this.remainingStages,
     required this.totalStages,
     required this.progressPercent,
     required this.reportAvailable,
@@ -303,10 +331,13 @@ final class AssessmentRecord {
     return AssessmentRecord(
       assessmentId: json['assessment_id'] as String,
       propertyId: json['property_id'] as String,
+      m2AssessmentId:
+          ((json['m2_confirmation'] as Map?)?['m2_assessment_id'])?.toString(),
       status: json['status'] as String,
       currentStage: (json['current_stage'] as num).toInt(),
       currentStageKey: json['current_stage_key'] as String,
       completedStages: (json['completed_stages'] as num).toInt(),
+      remainingStages: (json['remaining_stages'] as num?)?.toInt(),
       totalStages: (json['total_stages'] as num).toInt(),
       progressPercent: (json['progress_percent'] as num).toInt(),
       reportAvailable: json['report_available'] == true,
@@ -671,7 +702,7 @@ final class AssessmentApi {
     final first = json['stage_1'];
     final second = json['stage_2'];
     final third = json['stage_3'];
-    if (json['contract_version'] != 'sitewise-assessment-workflow/2' ||
+    if (json['contract_version'] != 'sitewise-assessment-workflow/3' ||
         json['assessment_id'] != assessmentId || first is! Map ||
         second is! Map || third is! Map || first['complete'] is! bool ||
         second['complete'] is! bool || third['enterable'] is! bool ||
@@ -847,6 +878,41 @@ final class AssessmentApi {
     '/api/v1/assessments/$assessmentId/business-description',
     parse: BusinessDescription.fromJson,
   );
+
+  /// Whether the EE-01 explanation module will produce explanations at all.
+  ///
+  /// A module-level answer, not a per-item one. The endpoint is mounted
+  /// unconditionally so the hold is discoverable (a 503 explains itself) rather
+  /// than silently absent behind a flag, and it carries no measurement.
+  Future<ApiResult<Map<String, dynamic>>> explanationAvailability() =>
+      _call('/api/v1/cq/explanations/availability', parse: (json) => json);
+
+  /// Server-resolved campaign → release → EE-01 snapshot chain for an
+  /// assessment. The client never supplies these IDs; the backend derives and
+  /// authorises them from the authenticated owner's records.
+  Future<ApiResult<Map<String, dynamic>>> explanationBinding(
+    String assessmentId,
+  ) => _call(
+    '/api/v1/cq/assessments/${Uri.encodeComponent(assessmentId)}/explanations/binding',
+    parse: (json) => json,
+  );
+
+  /// Authenticated, store-backed read of one question's explanation result.
+  Future<ApiResult<Map<String, dynamic>>> explanationReadback({
+    required String assessmentId,
+    required String campaignId,
+    required String snapshotId,
+    required String questionId,
+    required String contextHash,
+  }) =>
+      _call(
+        '/api/v1/cq/assessments/${Uri.encodeComponent(assessmentId)}'
+        '/campaigns/${Uri.encodeComponent(campaignId)}'
+        '/measurements/${Uri.encodeComponent(snapshotId)}'
+        '/explanations/${Uri.encodeComponent(questionId)}'
+        '?context_hash=${Uri.encodeComponent(contextHash)}',
+        parse: (json) => json,
+      );
 
   /// The catalogue's real `property_type` vocabulary.
   ///
