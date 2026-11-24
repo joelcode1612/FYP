@@ -117,7 +117,7 @@ from sitewise.services.enrichment_schema import (
     CATEGORY_PHASE,
     PHASE_POPULATION,
     PHASE_POSTGIS,
-    ensure_schema,
+    schema_gaps,
 )
 
 logger = logging.getLogger("sitewise.property_enrichment")
@@ -253,16 +253,18 @@ class PropertyEnrichmentService:
     # ------------------------------------------------------------------
 
     def ensure_schema(self) -> None:
-        """Create the additive tables once per process.
+        """Require versioned enrichment schema before querying measurements."""
+        from sitewise.core.exceptions import ModelUnavailableError
 
-        ``ensure_schema`` is idempotent, but it is 11 DDL statements and the
-        admin review payload calls it on every read. The flag keeps that to a
-        single round trip for the lifetime of the worker.
-        """
         global _SCHEMA_READY
         if _SCHEMA_READY:
             return
-        ensure_schema(self.session)
+        missing = schema_gaps(self.session)
+        if missing:
+            raise ModelUnavailableError(
+                "Property enrichment schema is incomplete. Apply the approved "
+                "enrichment schema migration: " + ", ".join(missing)
+            )
         _SCHEMA_READY = True
 
     def _property_row(self, property_id: int) -> dict[str, Any] | None:
@@ -283,11 +285,13 @@ class PropertyEnrichmentService:
         rows = self.session.execute(
             text(
                 """
-                SELECT category, phase, status, measurement, provenance,
-                       coordinate_hash, calculation_version, attempt_count,
-                       started_at, completed_at, last_error, updated_at
-                FROM fyp.property_enrichment_category
-                WHERE property_id = :pid
+                SELECT e.category, e.phase, e.status, e.measurement, e.provenance,
+                       e.coordinate_hash, e.calculation_version, e.attempt_count,
+                       e.started_at, e.completed_at, e.last_error, e.updated_at,
+                       p.latitude, p.longitude
+                FROM fyp.property_enrichment_category AS e
+                JOIN fyp.rental_properties AS p ON p.id = e.property_id
+                WHERE e.property_id = :pid
                 """
             ),
             {"pid": property_id},
@@ -310,6 +314,16 @@ class PropertyEnrichmentService:
                     "updated_at": None,
                 }
             else:
+                latitude = row.pop("latitude")
+                longitude = row.pop("longitude")
+                if row["status"] == "current" and (
+                    not _valid_coordinates(latitude, longitude)
+                    or row["coordinate_hash"] != coordinate_hash(latitude, longitude)
+                ):
+                    row["status"] = "stale"
+                    row["last_error"] = (
+                        "Listing coordinates or enrichment calculation version changed."
+                    )
                 out[category] = _serialise(row)
         return out
 

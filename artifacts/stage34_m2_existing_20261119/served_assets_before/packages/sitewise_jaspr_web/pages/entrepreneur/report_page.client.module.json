@@ -1,1 +1,0 @@
-{"name":"ReportPage","id":["sitewise_jaspr_web","lib/pages/entrepreneur/report_page.dart"],"import":"package:sitewise_jaspr_web/pages/entrepreneur/report_page.dart","params":[{"name":"id","isNamed":true,"decoder":"p['id'] as String","encoder":"c.id"}]}

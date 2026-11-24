@@ -1,1 +1,0 @@
-{"name":"MapPage","id":["sitewise_jaspr_web","lib/pages/entrepreneur/map_page.dart"],"import":"package:sitewise_jaspr_web/pages/entrepreneur/map_page.dart","params":[{"name":"initialId","isNamed":true,"decoder":"p['initialId'] as String?","encoder":"c.initialId"}]}

@@ -1,1 +1,0 @@
-{"name":"AgentPropertyDetailPage","id":["sitewise_jaspr_web","lib/pages/agent/property_detail_page.dart"],"import":"package:sitewise_jaspr_web/pages/agent/property_detail_page.dart","params":[{"name":"id","isNamed":true,"decoder":"p['id'] as String","encoder":"c.id"}]}

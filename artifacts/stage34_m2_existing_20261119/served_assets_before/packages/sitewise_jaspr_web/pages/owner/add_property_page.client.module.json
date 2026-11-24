@@ -1,1 +1,0 @@
-{"name":"AddPropertyPage","id":["sitewise_jaspr_web","lib/pages/owner/add_property_page.dart"],"import":"package:sitewise_jaspr_web/pages/owner/add_property_page.dart","params":[{"name":"editingId","isNamed":true,"decoder":"p['editingId'] as String?","encoder":"c.editingId"}]}

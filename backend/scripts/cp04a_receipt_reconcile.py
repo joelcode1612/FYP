@@ -34,7 +34,8 @@ import sys
 
 from sqlalchemy import create_engine, text
 
-DSN = "postgresql+psycopg2://postgres:123456@localhost:5432/{}"
+from sitewise.core.config import local_database_url
+
 ALLOWED = ("Dss", "project1_workflow_tests")
 
 # (label, predicate) — every predicate must return exactly true.
@@ -143,7 +144,7 @@ def main() -> int:
     if not args.target:
         raise SystemExit("--target is required (or set PROJECT1_MIGRATION_TARGET)")
 
-    engine = create_engine(DSN.format(args.target), future=True)
+    engine = create_engine(local_database_url(args.target), future=True)
     failures = 0
     with engine.connect() as conn:
         db = conn.execute(text("select current_database()")).scalar()

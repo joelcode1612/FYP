@@ -1154,7 +1154,7 @@ class FypPropertyRepository:
         except (TypeError, ValueError):
             return None
 
-    def create_owner_draft(self, *, owner_user_id, payload: dict) -> dict:
+    def create_owner_draft(self, *, owner_user_id, payload: dict, commit: bool = True) -> dict:
         """Persist a NEW draft listing (``verification_status='draft'``).
 
         Drafts are minimally validated: only ``name`` is required (the column
@@ -1220,8 +1220,12 @@ class FypPropertyRepository:
             },
         )
         new_id = row.scalar_one()
-        self.session.commit()
-        return self.owner_listing(int(new_id))  # type: ignore[return-value]
+        listing = self.owner_listing(int(new_id))
+        if listing is None:
+            raise RuntimeError("Created draft could not be read back")
+        if commit:
+            self.session.commit()
+        return listing  # type: ignore[return-value]
 
     def update_owner_listing(self, property_id: int, fields: dict) -> dict | None:
         """Whitelisted partial update of one owned listing.
@@ -1261,6 +1265,21 @@ class FypPropertyRepository:
                 params["psf"] = round(float(price) / float(size), 2)
         if not sets:
             return self.owner_listing(property_id)
+        address_fields = ("address", "city", "state", "postcode", "latitude", "longitude")
+        changed_address = [
+            f"{column} IS DISTINCT FROM " + (
+                f"NULLIF(:{column}, '')"
+                if column in ("address", "city", "state", "postcode")
+                else f":{column}"
+            )
+            for column in address_fields if column in params
+        ]
+        if changed_address:
+            changed = " OR ".join(changed_address)
+            sets.extend(
+                f"{column} = CASE WHEN {changed} THEN NULL ELSE {column} END"
+                for column in ("address_validation_status", "address_formatted", "address_validated_at")
+            )
         sets.append("updated_at = now()")
         row = self.session.execute(
             text(

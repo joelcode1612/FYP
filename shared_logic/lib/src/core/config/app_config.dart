@@ -23,9 +23,11 @@ abstract final class AppConfig {
       _mobileSupabaseUrl ??
           const String.fromEnvironment('SUPABASE_URL');
 
-  static String get supabaseAnonKey =>
-      _mobilePublishableKey ??
-          const String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY');
+  static String get supabaseAnonKey {
+    final key = _mobilePublishableKey ??
+        const String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY');
+    return RegExp(r'^sb_publishable_[A-Za-z0-9_-]+$').hasMatch(key) ? key : '';
+  }
 
   static bool get hasSupabase =>
       supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;

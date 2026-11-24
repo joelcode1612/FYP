@@ -1,9 +1,9 @@
+import 'package:fyp/features/property_management/data/provider_workspace_service.dart';
 import 'package:flutter/material.dart';
 import 'package:fyp/core/routing/app_routes.dart';
 import 'package:fyp/features/property_management/presentation/widgets/agent_property_details_sheet.dart'; // SITEWISE_AGENT_DETAILS_COMPLETION_V1
 import 'package:shared_logic/shared_logic.dart';
 
-import 'package:fyp/core/di/service_locator.dart';
 import 'package:fyp/core/theme/sitewise_theme.dart';
 import 'package:fyp/core/theme/sitewise_m3.dart';
 import 'package:fyp/features/capture_360/presentation/pages/ar_capture_mobile_page.dart';
@@ -34,14 +34,12 @@ class ProviderAgentInspectionPanel extends StatefulWidget {
 class _InspectionState extends State<ProviderAgentInspectionPanel>
     with WidgetsBindingObserver, RouteAware {
   PageRoute<dynamic>? _route;
-  String get url => '/api/v1/provider-flow/properties/${widget.propertyId}';
   String status = '';
   String? error;
   bool busy = false, loading = true, saved = false;
   bool canCapture = false;
   String? panoramaId;
   List<String> missingPropertyDetails = const [];
-  bool ownershipProofAvailable = false;
   // SITEWISE_READINESS_V1: authoritative prerequisites from FastAPI.
   bool serverReadinessKnown = false;
   List<String> submissionBlockers = const [];
@@ -134,8 +132,7 @@ class _InspectionState extends State<ProviderAgentInspectionPanel>
       error = null;
     });
     try {
-      final response = await ServiceLocator.apiClient.get('$url/inspection');
-      final data = response['data'] as Map<String, dynamic>;
+      final data = await ProviderWorkspaceService.inspection(widget.propertyId);
       final form = (data['checklist'] as Map?) ?? {};
       if (!mounted || revision != _refreshRevision) return;
       setState(() {
@@ -178,7 +175,7 @@ class _InspectionState extends State<ProviderAgentInspectionPanel>
       error = null;
     });
     try {
-      await ServiceLocator.apiClient.post('$url/$action', body ?? {});
+      await ProviderWorkspaceService.inspectionCommand(widget.propertyId, action, body ?? {});
       await refresh();
     } catch (e) {
       if (mounted) {
@@ -214,7 +211,7 @@ class _InspectionState extends State<ProviderAgentInspectionPanel>
       error = null;
     });
     try {
-      await ServiceLocator.apiClient.patch('$url/inspection', {
+      await ProviderWorkspaceService.saveInspection(widget.propertyId, {
         ...checks,
         'condition_notes': note.text.trim(),
         'observed_floor_area_sqft': observedArea,
@@ -363,7 +360,6 @@ class _InspectionState extends State<ProviderAgentInspectionPanel>
   void updateTourEligibility(Map<String, dynamic> data) {
     final id = data['panorama_id'];
     panoramaId = id is String && id.isNotEmpty ? id : null;
-    ownershipProofAvailable = data['ownership_proof_available'] == true;
     final missing = data['missing_required_fields'];
     if (missing is List) {
       missingPropertyDetails = missing.whereType<String>().toList();
@@ -399,9 +395,8 @@ class _InspectionState extends State<ProviderAgentInspectionPanel>
     late final String completedTour;
     late final bool acknowledged;
     try {
-      final response = await ServiceLocator.apiClient.get('$url/inspection');
+      final data = await ProviderWorkspaceService.inspection(widget.propertyId);
       if (!mounted) return;
-      final data = response['data'] as Map<String, dynamic>;
       final id = data['panorama_id'];
       setState(() {
         updateTourEligibility(data);
@@ -628,7 +623,6 @@ class _InspectionState extends State<ProviderAgentInspectionPanel>
                           !editable ||
                           !allConfirmed ||
                           missingPropertyDetails.isNotEmpty ||
-                          !ownershipProofAvailable ||
                           submissionBlockers.isNotEmpty ||
                           panoramaId == null
                       ? null
@@ -691,14 +685,6 @@ class _InspectionState extends State<ProviderAgentInspectionPanel>
               ],
               if (editable) ...[
                 // SITEWISE_AGENT_OWNERSHIP_HINT_V4
-                if (!serverReadinessKnown && !ownershipProofAvailable) ...[
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Ownership proof is still required. Ask the Property Owner '
-                    'to upload a genuine ownership or authorisation document.',
-                    style: TextStyle(color: SitewiseColors.danger),
-                  ),
-                ],
                 if (serverReadinessKnown && submissionBlockers.isNotEmpty) ...[
                   Container(
                     padding: const EdgeInsets.all(12),

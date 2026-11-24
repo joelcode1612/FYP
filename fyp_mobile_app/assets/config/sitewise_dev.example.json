@@ -1,0 +1,10 @@
+{
+  "SUPABASE_URL": "",
+  "SUPABASE_PUBLISHABLE_KEY": "",
+  "API_HOST_MODE": "",
+  "API_BASE_URL": "",
+  "WEB_BASE_URL": "",
+  "GOOGLE_WEB_CLIENT_ID": "",
+  "GOOGLE_IOS_CLIENT_ID": "",
+  "SITEWISE_DEV_AUTH_BYPASS": false
+}

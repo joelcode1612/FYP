@@ -313,11 +313,12 @@ def confirm_frame(
     if body.target_index > record.expected_frames:
         raise ValidationError(f"target_index must be between 1 and {record.expected_frames}.")
     path = _validated_frame_path(record, session_id, body.storage_path)
-    if append_only and (
+    require_original = append_only or record.capture_mode == svc.BACKEND_38_MODE
+    if require_original and (
         body.checksum_sha256 is None
         or path != capture_storage.frame_object_path(record.property_id, str(session_id), body.target_index)
     ):
-        raise ValidationError("A backup must identify its original target and checksum.")
+        raise ValidationError("An original frame must identify its target and checksum.")
     try:
         uploaded = capture_storage.object_exists(path)
     except capture_storage.CaptureStorageUnavailable as exc:
@@ -339,7 +340,7 @@ def confirm_frame(
             ),
             None,
         )
-        if append_only or (
+        if require_original or (
             previous is not None
             and previous.checksum_sha256
             and previous.checksum_sha256.lower() != body.checksum_sha256.lower()
@@ -352,7 +353,7 @@ def confirm_frame(
                 raise _storage_unavailable(exc) from exc
             if not capture_storage.verify_checksum(stored, body.checksum_sha256):
                 raise ConflictError(
-                    "The stored photograph does not match the corrected "
+                    "The stored photograph does not match the supplied "
                     "checksum; upload this frame again."
                 )
     frame, created = svc.confirm_frame(
@@ -621,6 +622,8 @@ def confirm_panorama(
     record = svc.require_capture_session(
         db, session_id=session_id, user_id=current.user_id, role=current.role
     )
+    if record.capture_mode == svc.BACKEND_38_MODE:
+        raise ValidationError("A backend-first session must use its worker-generated panorama.")
     agent_assignment(db, int(record.property_id), current, writable=True)
     if str(record.owner_id) != str(current.user_id):
         raise HTTPException(
@@ -770,7 +773,13 @@ def get_job(
     db: DbSession,
     current: ProviderUser,
 ) -> dict[str, Any]:
-    return _job_json(_job_with_access(db, job_id, current))
+    job = _job_with_access(db, job_id, current)
+    payload = _job_json(job)
+    if job.status == "done":
+        panorama = svc.panorama_for_session(db, job.session_id)
+        if panorama is not None and panorama.storage_path == job.output_storage_path:
+            payload["panoramaId"] = str(panorama.panorama_id)
+    return payload
 
 
 @router.post("/jobs/{job_id}/retry")

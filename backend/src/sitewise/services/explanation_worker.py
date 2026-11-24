@@ -154,6 +154,10 @@ def get_explanation_worker() -> ExplanationWorker:
     return _worker
 
 
+def is_running() -> bool:
+    return _worker._thread is not None and _worker._thread.is_alive()
+
+
 def startup() -> dict[str, Any]:
     """Start the worker thread and resume durable pending jobs."""
     _worker.start()

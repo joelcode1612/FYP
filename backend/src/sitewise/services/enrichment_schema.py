@@ -20,6 +20,8 @@ written in the same transaction that marked it current.
 
 from __future__ import annotations
 
+import re
+
 from sqlalchemy import text
 from sqlmodel import Session
 
@@ -185,6 +187,42 @@ def feature_column_ddl() -> tuple[str, ...]:
     )
 
 
+def _covers_constraint(definition: str | None, expected_fragment: str) -> bool:
+    """Allow PostgreSQL's normalized CHECK representation and explicit casts."""
+    if definition is None:
+        return False
+    expected_values = re.findall(r"'([^']+)'", expected_fragment)
+    if not expected_values:
+        expected_values = [expected_fragment]
+    actual_values = set(re.findall(r"'([^']+)'", definition))
+    return all(value in actual_values for value in expected_values)
+
+
+def schema_gaps(session: Session) -> list[str]:
+    """Check the enrichment prerequisite without taking DDL locks."""
+    columns = session.execute(text("""
+        SELECT table_name, column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'fyp'
+          AND table_name IN ('property_geospatial_features', 'property_enrichment_category')
+    """)).all()
+    wide = {column for table, column in columns if table == "property_geospatial_features"}
+    missing = [f"property_geospatial_features.{name}" for name, _ in FEATURE_COLUMNS if name not in wide]
+    if not any(table == "property_enrichment_category" for table, _ in columns):
+        missing.append("property_enrichment_category")
+    else:
+        for name, fragment, _ in CONSTRAINT_MIGRATIONS:
+            definition = session.execute(text("""
+                SELECT pg_get_constraintdef(oid)
+                FROM pg_constraint
+                WHERE conname = :name
+                  AND conrelid = to_regclass('fyp.property_enrichment_category')
+            """), {"name": name}).scalar()
+            if not _covers_constraint(definition, fragment):
+                missing.append(name)
+    return missing
+
+
 def ensure_schema(session: Session) -> None:
     """Create the enrichment state table and add the measurement columns.
 
@@ -213,9 +251,6 @@ def _migrate_constraints(session: Session) -> None:
             ),
             {"name": name},
         ).scalar()
-        if current is None or expected_fragment in (current or ""):
-            # Either the table is fresh (created above with the new list, so
-            # the constraint already exists) or the constraint is already
-            # widened: nothing to do.
+        if _covers_constraint(current, expected_fragment):
             continue
         session.execute(text(statement))

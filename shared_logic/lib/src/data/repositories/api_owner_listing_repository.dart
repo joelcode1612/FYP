@@ -56,6 +56,18 @@ class ApiOwnerListingRepository implements OwnerListingRepository {
     return listing;
   }
 
+  @override
+  Future<String> validateSavedAddress(String id) async {
+    final response = await _client.post(
+      '/api/v1/properties/listings/$id/validate-address',
+      const {},
+    );
+    final verdict = response['address_validation'];
+    final status = verdict is Map ? verdict['status'] : null;
+    _mutated();
+    return status is String ? status : 'unconfirmed';
+  }
+
   /// Updates the SAME draft row — never creates a duplicate.
   Future<OwnerListing> updateDraft(String id, Map<String, dynamic> fields) async {
     final listing = _listing(await _client.patch(

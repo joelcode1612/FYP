@@ -29,6 +29,20 @@
 /// added backend column can never break a render.
 
 import 'recommendation_search.dart' show ListingManagement;
+// PostgreSQL NUMERIC/DECIMAL may arrive in JSON as either a number or a
+// decimal string (for example "32.00"). Decode at the transport boundary;
+// do not turn missing/invalid measurements into zero.
+num? _wireNum(Object? value) {
+  if (value is num) return value.isFinite ? value : null;
+  if (value is String) {
+    final parsed = num.tryParse(value.trim());
+    return parsed != null && parsed.isFinite ? parsed : null;
+  }
+  return null;
+}
+
+double? _wireDouble(Object? value) => _wireNum(value)?.toDouble();
+int? _wireInt(Object? value) => _wireNum(value)?.toInt();
 
 /// Which review dimension an action, document or audit row belongs to.
 enum VerificationDimension { listing, ownership }
@@ -138,7 +152,7 @@ class PropertyVerification {
   factory PropertyVerification.fromJson(Map<String, dynamic> row) =>
       PropertyVerification(
         verificationId: '${row['verification_id'] ?? ''}',
-        propertyId: (row['property_id'] as num?)?.toInt() ?? 0,
+        propertyId: _wireInt(row['property_id']) ?? 0,
         listingStatus:
             verificationStatusFromWire(row['listing_status']) ??
             PropertyVerificationStatus.notSubmitted,
@@ -149,7 +163,7 @@ class PropertyVerification {
         reviewedBy: row['reviewed_by'] == null ? null : '${row['reviewed_by']}',
         publicationEligible: row['publication_eligible'] == true,
         latestNote: row['latest_note'] == null ? null : '${row['latest_note']}',
-        version: (row['version'] as num?)?.toInt() ?? 1,
+        version: _wireInt(row['version']) ?? 1,
         submittedAt: row['submitted_at'] == null ? null : '${row['submitted_at']}',
         updatedAt: row['updated_at'] == null ? null : '${row['updated_at']}',
       );
@@ -219,12 +233,12 @@ class VerificationDocument {
       VerificationDocument(
         documentId: '${row['document_id'] ?? ''}',
         verificationId: '${row['verification_id'] ?? ''}',
-        propertyId: (row['property_id'] as num?)?.toInt() ?? 0,
+        propertyId: _wireInt(row['property_id']) ?? 0,
         verificationType: dimensionFromWire(row['verification_type']),
         documentType: '${row['document_type'] ?? ''}'.trim(),
         originalFilename: '${row['original_filename'] ?? ''}'.trim(),
         mimeType: '${row['mime_type'] ?? ''}',
-        fileSize: (row['file_size'] as num?)?.toInt() ?? 0,
+        fileSize: _wireInt(row['file_size']) ?? 0,
         uploadedAt: row['uploaded_at'] == null ? null : '${row['uploaded_at']}',
         status: '${row['status'] ?? 'active'}',
       );
@@ -274,7 +288,7 @@ class VerificationReviewEvent {
   factory VerificationReviewEvent.fromJson(Map<String, dynamic> row) =>
       VerificationReviewEvent(
         auditId: '${row['audit_id'] ?? ''}',
-        propertyId: (row['property_id'] as num?)?.toInt() ?? 0,
+        propertyId: _wireInt(row['property_id']) ?? 0,
         verificationId: row['verification_id'] == null
             ? null
             : '${row['verification_id']}',
@@ -357,15 +371,15 @@ class VerificationProperty {
 
   factory VerificationProperty.fromJson(Map<String, dynamic> row) =>
       VerificationProperty(
-        propertyId: (row['property_id'] as num?)?.toInt() ?? 0,
+        propertyId: _wireInt(row['property_id']) ?? 0,
         title: '${row['title'] ?? ''}'.trim(),
         description: row['description'] == null ? null : '${row['description']}',
         propertyType: row['property_type'] == null
             ? null
             : '${row['property_type']}',
-        monthlyRent: (row['monthly_rent'] as num?)?.toDouble(),
-        builtUpAreaSqft: (row['built_up_area_sqft'] as num?)?.toDouble(),
-        landAreaSqft: (row['land_area_sqft'] as num?)?.toDouble(),
+        monthlyRent: _wireDouble(row['monthly_rent']),
+        builtUpAreaSqft: _wireDouble(row['built_up_area_sqft']),
+        landAreaSqft: _wireDouble(row['land_area_sqft']),
         address: row['address'] == null ? null : '${row['address']}',
         city: row['city'] == null ? null : '${row['city']}',
         state: row['state'] == null ? null : '${row['state']}',
@@ -375,15 +389,15 @@ class VerificationProperty {
             : '${row['company_name']}',
         userId: row['user_id'] == null ? null : '${row['user_id']}',
         postcode: row['postcode'] == null ? null : '${row['postcode']}',
-        latitude: (row['latitude'] as num?)?.toDouble(),
-        longitude: (row['longitude'] as num?)?.toDouble(),
+        latitude: _wireDouble(row['latitude']),
+        longitude: _wireDouble(row['longitude']),
         availability: row['availability'] == null
             ? null
             : '${row['availability']}',
         floorLevel: row['floor_level'] == null
             ? null
             : '${row['floor_level']}',
-        frontageFt: (row['frontage_ft'] as num?)?.toDouble(),
+        frontageFt: _wireDouble(row['frontage_ft']),
         hasParking: row['has_parking'] is bool
             ? row['has_parking'] as bool
             : null,
@@ -620,38 +634,38 @@ class VerificationGeoFeatures {
 
   factory VerificationGeoFeatures.fromJson(Map<String, dynamic> row) =>
       VerificationGeoFeatures(
-        competitorCount500m: row['competitor_count_500m'] as num?,
-        competitorCount1km: row['competitor_count_1km'] as num?,
+        competitorCount500m: _wireNum(row['competitor_count_500m']),
+        competitorCount1km: _wireNum(row['competitor_count_1km']),
         competitorStatus:
             row['competitor_status'] == null
                 ? null
                 : '${row['competitor_status']}',
         demandGeneratorCount500m:
-            row['demand_generator_count_500m'] as num?,
+            _wireNum(row['demand_generator_count_500m']),
         demandGeneratorCount1km:
-            row['demand_generator_count_1km'] as num?,
+            _wireNum(row['demand_generator_count_1km']),
         demandStatus: row['demand_status'] == null
             ? null
             : '${row['demand_status']}',
-        population500m: row['population_500m'] as num?,
-        population1km: row['population_1km'] as num?,
+        population500m: _wireNum(row['population_500m']),
+        population1km: _wireNum(row['population_1km']),
         populationStatus: row['population_status'] == null
             ? null
             : '${row['population_status']}',
         populationLevel: row['population_level'] == null
             ? null
             : '${row['population_level']}',
-        accessibilityScore: row['accessibility_score'] as num?,
+        accessibilityScore: _wireNum(row['accessibility_score']),
         accessibilityStatus: row['accessibility_status'] == null
             ? null
             : '${row['accessibility_status']}',
-        nearestMajorRoadM: row['nearest_major_road_m'] as num?,
-        roadKm1km: row['accessibility_road_km_1km'] as num?,
-        incomeMedian: row['income_median'] as num?,
+        nearestMajorRoadM: _wireNum(row['nearest_major_road_m']),
+        roadKm1km: _wireNum(row['accessibility_road_km_1km']),
+        incomeMedian: _wireNum(row['income_median']),
         marketSegment: row['market_segment'] == null
             ? null
             : '${row['market_segment']}',
-        overallLocationScore: row['overall_location_score'] as num?,
+        overallLocationScore: _wireNum(row['overall_location_score']),
         calculatedAt: row['last_calculated_at'] == null
             ? null
             : '${row['last_calculated_at']}',
@@ -685,9 +699,9 @@ class DemandGeneratorNearby {
         category: row['subject_category'] == null
             ? null
             : '${row['subject_category']}',
-        latitude: row['latitude'] as num?,
-        longitude: row['longitude'] as num?,
-        distanceM: row['distance_m'] as num?,
+        latitude: _wireNum(row['latitude']),
+        longitude: _wireNum(row['longitude']),
+        distanceM: _wireNum(row['distance_m']),
       );
 }
 
@@ -716,10 +730,10 @@ class VerificationPopulation {
 
   factory VerificationPopulation.fromJson(Map<String, dynamic> row) =>
       VerificationPopulation(
-        pop500m: (row['pop_ring_0_500m'] ?? row['pop_total_200m']) as num?,
-        pop1km: (row['pop_total_1km'] ?? row['pop_ring_500_1km']) as num?,
-        popDensityKm2: row['pop_density_km2'] as num?,
-        estimatedHouseholds1km: row['estimated_households_1km'] as num?,
+        pop500m: _wireNum(row['pop_ring_0_500m']),
+        pop1km: _wireNum(row['pop_total_1km']),
+        popDensityKm2: _wireNum(row['pop_density_km2']),
+        estimatedHouseholds1km: _wireNum(row['estimated_households_1km']),
         source: row['population_source'] == null
             ? null
             : '${row['population_source']}',
@@ -806,7 +820,7 @@ class SourceProvenance {
       SourceProvenance(
         sourceName: '${row['source_name'] ?? ''}',
         licence: row['source_licence']?.toString(),
-        snapshots: (row['snapshots'] as num?)?.toInt() ?? 0,
+        snapshots: _wireInt(row['snapshots']) ?? 0,
         latestSnapshot: row['latest_snapshot']?.toString(),
       );
 }
@@ -1001,7 +1015,7 @@ class LocationPopulationFamily {
   static const LocationPopulationFamily unavailable =
       LocationPopulationFamily(available: false);
 
-  static double? _d(dynamic v) => (v is num) ? v.toDouble() : null;
+  static double? _d(dynamic v) => _wireDouble(v);
 
   factory LocationPopulationFamily.fromJson(Map<String, dynamic> row) =>
       LocationPopulationFamily(
@@ -1051,9 +1065,7 @@ class LocationSocioeconomicFamily {
         method: row['method']?.toString() ?? '',
         source: row['source']?.toString() ?? '',
         unavailableReason: row['unavailable_reason']?.toString(),
-        incomeMedian: (row['income_median'] is num)
-            ? (row['income_median'] as num).toDouble()
-            : null,
+        incomeMedian: _wireDouble(row['income_median']),
         districtKey: row['district_key']?.toString(),
       );
 }
@@ -1094,7 +1106,7 @@ class LocationFnbFamily {
   static const LocationFnbFamily unavailable =
       LocationFnbFamily(available: false);
 
-  static double? _d(dynamic v) => (v is num) ? v.toDouble() : null;
+  static double? _d(dynamic v) => _wireDouble(v);
 
   static Map<String, double?> _numMap(dynamic raw) => {
         for (final entry
@@ -1159,7 +1171,7 @@ class LocationAccessibilityFamily {
   static const LocationAccessibilityFamily unavailable =
       LocationAccessibilityFamily(available: false);
 
-  static double? _d(dynamic v) => (v is num) ? v.toDouble() : null;
+  static double? _d(dynamic v) => _wireDouble(v);
 
   static Map<String, double?> _numMap(dynamic raw) => {
         for (final entry
@@ -1218,12 +1230,12 @@ class LocationResearchAssociation {
   factory LocationResearchAssociation.fromJson(Map<String, dynamic> row) =>
       LocationResearchAssociation(
         available: row['available'] == true,
-        score: (row['score'] is num) ? (row['score'] as num).toDouble() : null,
+        score: _wireDouble(row['score']),
         label: row['label']?.toString(),
         modelVersion: row['model_version']?.toString(),
         scoreMeaning: row['score_meaning']?.toString() ?? '',
-        featureCount: (row['feature_count'] as num?)?.toInt(),
-        availableFeatures: (row['available_features'] as num?)?.toInt(),
+        featureCount: _wireInt(row['feature_count']),
+        availableFeatures: _wireInt(row['available_features']),
         missingFeatures: [
           for (final name
               in (row['missing_features'] as List? ?? const []))
@@ -1260,8 +1272,8 @@ class LocationConfidencePart {
 
   factory LocationConfidencePart.fromJson(Map<String, dynamic> row) =>
       LocationConfidencePart(
-        familiesTotal: (row['families_total'] as num?)?.toInt() ?? 0,
-        familiesAvailable: (row['families_available'] as num?)?.toInt() ?? 0,
+        familiesTotal: _wireInt(row['families_total']) ?? 0,
+        familiesAvailable: _wireInt(row['families_available']) ?? 0,
         familiesAvailableNames: [
           for (final name
               in (row['families_available_names'] as List? ?? const []))
@@ -1654,7 +1666,7 @@ class VerificationQueueRow {
 
   factory VerificationQueueRow.fromJson(Map<String, dynamic> row) =>
       VerificationQueueRow(
-        propertyId: (row['property_id'] as num?)?.toInt() ?? 0,
+        propertyId: _wireInt(row['property_id']) ?? 0,
         title: '${row['title'] ?? ''}'.trim(),
         normalizedAddress: row['normalized_address'] == null
             ? null
@@ -1662,8 +1674,8 @@ class VerificationQueueRow {
         propertyType: row['property_type_normalized'] == null
             ? null
             : '${row['property_type_normalized']}',
-        monthlyRent: (row['price'] as num?)?.toDouble(),
-        builtUpAreaSqft: (row['built_up_area_sqft'] as num?)?.toDouble(),
+        monthlyRent: _wireDouble(row['price']),
+        builtUpAreaSqft: _wireDouble(row['built_up_area_sqft']),
         propertyStatus: row['property_status'] == null
             ? null
             : '${row['property_status']}',
@@ -1724,7 +1736,7 @@ class VerificationQueuePage {
           in (raw as Map<String, dynamic>? ?? const {}).entries)
         if (verificationStatusFromWire(entry.key) != null)
           verificationStatusFromWire(entry.key)!:
-              (entry.value as num?)?.toInt() ?? 0,
+              _wireInt(entry.value) ?? 0,
     };
     final counts = row['counts'] as Map<String, dynamic>? ?? const {};
     return VerificationQueuePage(
@@ -1734,9 +1746,9 @@ class VerificationQueuePage {
                 .whereType<Map<String, dynamic>>())
           VerificationQueueRow.fromJson(item),
       ],
-      total: (row['total'] as num?)?.toInt() ?? 0,
-      offset: (row['offset'] as num?)?.toInt() ?? 0,
-      limit: (row['limit'] as num?)?.toInt() ?? 0,
+      total: _wireInt(row['total']) ?? 0,
+      offset: _wireInt(row['offset']) ?? 0,
+      limit: _wireInt(row['limit']) ?? 0,
       counts: {
         if (counts['listing'] is Map<String, dynamic>)
           VerificationDimension.listing: dimensionCounts(counts['listing']),

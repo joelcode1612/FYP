@@ -208,6 +208,7 @@ class AgentAssignmentRepository:
         agent_id: int,
         *,
         assigned_by: uuid.UUID | None = None,
+        commit: bool = True,
     ) -> dict[str, Any]:
         """Create/reassign one listing. Raises ValueError when the operational
         property does not exist - the FK would reject it anyway, but an
@@ -243,9 +244,10 @@ class AgentAssignmentRepository:
                 "now": now,
             },
         )
-        self.session.commit()
         row = self.get(listing_id)
         assert row is not None  # just written
+        if commit:
+            self.session.commit()
         return row
 
     def unassign(self, listing_id: int) -> bool:

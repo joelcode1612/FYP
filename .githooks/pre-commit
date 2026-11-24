@@ -1,0 +1,19 @@
+#!/bin/sh
+set -eu
+
+if command -v gitleaks >/dev/null 2>&1; then
+    scanner=gitleaks
+else
+    scanner="$(git rev-parse --git-common-dir)/gitleaks.exe"
+    if [ ! -x "$scanner" ]; then
+        printf '%s\n' 'Install Gitleaks 8.30 or newer before committing.' >&2
+        exit 1
+    fi
+fi
+
+# Suppress scanner output to keep matched lines and secret values private.
+if ! "$scanner" git --pre-commit --staged --redact=100 --no-banner >/dev/null 2>&1; then
+    printf '%s\n' 'Commit blocked: Gitleaks flagged staged content or could not scan it.' >&2
+    printf '%s\n' 'Run the redacted metadata-only scan documented in docs/git-credentials.md.' >&2
+    exit 1
+fi

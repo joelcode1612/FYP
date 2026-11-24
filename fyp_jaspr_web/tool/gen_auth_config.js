@@ -28,17 +28,30 @@ function readEnvValue(name) {
   return undefined;
 }
 
-const supabaseUrl = (readEnvValue('SUPABASE_URL') || '').replace(/\/+$/, '');
-const publishable = readEnvValue('SUPABASE_PUBLISHABLE_KEY') || '';
+const supabaseUrl = (process.env.SUPABASE_URL || readEnvValue('SUPABASE_URL') || '').trim().replace(/\/+$/, '');
+const publishable = (process.env.SUPABASE_PUBLISHABLE_KEY || readEnvValue('SUPABASE_PUBLISHABLE_KEY') || '').trim();
 
 // Guard against accidentally publishing a secret key in a browser asset.
-if (publishable.startsWith('sb_secret_') || publishable.includes('service_role')) {
-  console.error('gen_auth_config: refusing to write a secret/service-role key to a public file.');
+if (publishable && !/^sb_publishable_[A-Za-z0-9_-]+$/.test(publishable)) {
+  console.error('gen_auth_config: SUPABASE_PUBLISHABLE_KEY must be a Supabase publishable key.');
   process.exit(1);
 }
 if (!supabaseUrl || !publishable) {
   console.error('gen_auth_config: SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY not found in', envPath);
   console.error('Configure FYP/backend/.env (see FYP/backend/.env.example).');
+  process.exit(1);
+}
+
+let projectUrl;
+try {
+  projectUrl = new URL(supabaseUrl);
+} catch {
+  console.error('gen_auth_config: SUPABASE_URL must be an HTTP(S) project URL.');
+  process.exit(1);
+}
+if (!['http:', 'https:'].includes(projectUrl.protocol) || projectUrl.username ||
+    projectUrl.password || projectUrl.search || projectUrl.hash) {
+  console.error('gen_auth_config: SUPABASE_URL must be a public HTTP(S) project URL.');
   process.exit(1);
 }
 
