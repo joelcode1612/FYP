@@ -10,6 +10,9 @@ import '../entities/owner_listing.dart';
 import '../entities/property_enrichment.dart';
 
 abstract class OwnerListingRepository {
+  /// Verify the saved address and persist the provider's verdict.
+  Future<String> validateSavedAddress(String id);
+
   Future<OwnerListing> createDraft(Map<String, dynamic> fields);
 
   Future<OwnerListing> updateDraft(String id, Map<String, dynamic> fields);

@@ -1,1 +1,0 @@
-{"name":"ExplanationPage","id":["sitewise_jaspr_web","lib/pages/entrepreneur/explanation_page.dart"],"import":"package:sitewise_jaspr_web/pages/entrepreneur/explanation_page.dart","params":[{"name":"propertyId","isNamed":true,"decoder":"p['propertyId'] as String","encoder":"c.propertyId"}]}

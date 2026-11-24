@@ -41,9 +41,7 @@ class _DashboardPageState extends State<DashboardPage> {
   /// Current Assessment card always render; a failed read degrades only the
   /// section that needs it (an em dash on the KPI, an inline retry on Recent).
   late Future<HistoryLoad> _history = _loadHistory();
-  // Never reassigned: a failed catalogue count degrades to the Explore KPI's
-  // em dash, and navigation to Explore (or a page reload) is the retry.
-  late final Future<int?> _catalogue = _loadCatalogueCount();
+  late Future<int?> _catalogue = _loadCatalogueCount();
 
   /// Assessment history for the Assessments/Reports KPIs and the Recent
   /// Assessments list. Failure travels as data with the backend's message.
@@ -69,9 +67,7 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   void _reloadHistory() => setState(() => _history = _loadHistory());
-  // The catalogue count has no in-page retry on purpose: its only consumer is
-  // the Explore KPI, and the Explore page re-reads the catalogue itself, so
-  // navigation is the retry. A full page reload also refreshes it.
+
 
   /// First word of the backend-verified profile name — never a hardcoded
   /// demo identity. An empty name degrades to a plain welcome.
@@ -110,6 +106,7 @@ class _DashboardPageState extends State<DashboardPage> {
           // KPI row: each counter degrades to an em dash when its own read
           // fails; the other cards keep their real values.
           _kpis(saved, savedUnavailable),
+          _catalogueRetry(),
           // Compact overview of the most recently updated saved assessment.
           // It loads on its own so a slow or failed read never holds up the
           // rest of the dashboard.
@@ -176,6 +173,21 @@ class _DashboardPageState extends State<DashboardPage> {
   /// Explore KPI value. Null (a failed catalogue read) shows an em dash — an
   /// honest "not available right now", never a fabricated zero. The read is
   /// fast, so the em dash is momentary on a healthy server.
+  Component _catalogueRetry() => FutureBuilder<int?>(
+    future: _catalogue,
+    builder: (context, snapshot) {
+      if (snapshot.connectionState == ConnectionState.done &&
+          snapshot.data == null) {
+        return ActionButton(
+          'Retry catalogue count',
+          variant: 'secondary',
+          onClick: () => setState(() => _catalogue = _loadCatalogueCount()),
+        );
+      }
+      return Component.text('');
+    },
+  );
+
   Component _catalogueKpiValue() {
     return FutureBuilder<int?>(
       future: _catalogue,

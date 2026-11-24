@@ -312,7 +312,13 @@ class PanoramaWorker:
                 time.sleep(POLL_SECONDS)
 
 
+_worker = PanoramaWorker()
+
+
+def is_running() -> bool:
+    return _worker._thread is not None and _worker._thread.is_alive()
+
+
 def startup() -> str:
-    worker = PanoramaWorker()
-    worker.start()
+    _worker.start()
     return "durable stitching worker polling every %.0fs" % POLL_SECONDS

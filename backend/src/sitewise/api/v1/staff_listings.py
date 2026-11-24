@@ -974,3 +974,58 @@ def set_primary_listing_photo(
         raise HTTPException(status_code=404, detail="Photo not found.")
     return {"data": repo.listing_photos(listing_id)}
 
+
+
+class ListingOwnerAssociation(BaseModel):
+    owner_user_id: uuid.UUID
+    reason: str = Field(min_length=3, max_length=1000)
+
+
+@router.post("/listings/{listing_id}/associate-owner")
+def associate_listing_owner(
+    listing_id: int,
+    payload: ListingOwnerAssociation,
+    admin: AuthenticatedUser = Depends(require_admin_mfa),
+    session: Session = Depends(get_db),
+) -> dict:
+    """Associate an active Owner with an unowned assigned listing."""
+    from sitewise.db.models.property_verification import VerificationAudit
+    from sitewise.domain import rbac
+
+    owner = session.execute(text("""
+        SELECT role, account_status
+        FROM public.users WHERE user_id = :owner
+    """), {"owner": payload.owner_user_id}).mappings().one_or_none()
+    if (
+        owner is None
+        or rbac.canonical_role(owner["role"]) != rbac.ROLE_OWNER
+        or owner["account_status"] != rbac.STATUS_ACTIVE
+    ):
+        raise HTTPException(status_code=422, detail="Choose an active Property Owner.")
+    listing = session.execute(text("""
+        SELECT owner_user_id, is_published
+        FROM fyp.rental_properties WHERE id = :id FOR UPDATE
+    """), {"id": listing_id}).mappings().one_or_none()
+    if listing is None:
+        raise HTTPException(status_code=404, detail="Listing not found.")
+    if listing["owner_user_id"] is not None or listing["is_published"]:
+        raise HTTPException(status_code=409, detail="Only an unowned unpublished listing can be associated.")
+    has_assignment = session.execute(text("""
+        SELECT listing_id FROM fyp.agent_listing_assignment
+        WHERE listing_id = :id FOR UPDATE
+    """), {"id": listing_id}).scalar_one_or_none()
+    if has_assignment is None:
+        raise HTTPException(status_code=409, detail="The listing must have an Agent assignment.")
+    session.execute(text("""
+        UPDATE fyp.rental_properties SET owner_user_id = :owner, updated_at = now()
+        WHERE id = :id
+    """), {"owner": payload.owner_user_id, "id": listing_id})
+    session.add(VerificationAudit(
+        property_id=listing_id,
+        verification_type="ownership",
+        action="owner_associated",
+        admin_user_id=admin.user_id,
+        reason=f"Owner {payload.owner_user_id}: {payload.reason.strip()}",
+    ))
+    session.commit()
+    return {"listing_id": listing_id, "owner_user_id": str(payload.owner_user_id)}

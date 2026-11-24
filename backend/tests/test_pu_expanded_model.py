@@ -36,6 +36,7 @@ from sitewise.ml.pu_expanded import (
     EXPANDED_MODEL_NAME,
     IMPUTABLE_FEATURES,
     expanded_policy_split,
+    expanded_rental_prediction,
     merge_expanded_bridge_features,
 )
 from sitewise.ml.property_features import PropertyFeatureBundle
@@ -44,7 +45,7 @@ from sitewise.ml.shap_explainer import ShapExplainer
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 PACKAGE_DIR = BACKEND_DIR / "ml_reference" / "expanded_pu_64_2026_11_15"
-ARTIFACT_PATH = PACKAGE_DIR / "SiteWise_PU_64_Logistic_expanded_age_residential_64_ResearchOnly.joblib"
+ARTIFACT_PATH = BACKEND_DIR / "src/sitewise/ml/sitewise_pu_64_expanded.joblib"
 DATASET_PATH = PACKAGE_DIR / "SiteWise_PU_1796_Expanded_Observed.csv"
 SHAP_BACKGROUND_PATH = BACKEND_DIR / "ml_reference" / "shap_background_64.csv"
 
@@ -273,3 +274,99 @@ def test_merge_chain_produces_the_exact_training_vector(dataset_rows):
     for name in names:
         expected = float(source[name])
         assert coverage.values[name] == pytest.approx(expected, abs=1e-12)
+
+
+def test_rental_collection_reads_current_coordinates_without_analytical_link(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    session = Mock()
+    query = session.execute.return_value
+    query.one_or_none.side_effect = [
+        SimpleNamespace(latitude=3.0, longitude=101.0),
+        SimpleNamespace(latitude=3.1, longitude=101.0),
+    ]
+    collect = Mock(side_effect=[{"available": False}, {"available": False}])
+    monkeypatch.setattr("sitewise.ml.pu_expanded.collect_expanded_coordinates", collect)
+
+    expanded_rental_prediction(session, 123)
+    expanded_rental_prediction(session, 123)
+
+    assert [call.args[1:] for call in collect.call_args_list] == [
+        (3.0, 101.0), (3.1, 101.0)
+    ]
+
+
+def test_coordinate_collection_rejects_unvalidated_and_uncovered_values(monkeypatch):
+    from unittest.mock import Mock
+
+    from sitewise.ml.coordinate_features import GroupResult, STATUS_READY, STATUS_UNAVAILABLE
+    from sitewise.ml.pu_expanded import collect_expanded_coordinates
+
+    observations = {
+        "population_rings": GroupResult(
+            "population_rings", {"pop_500m": 100.0, "pop_1000m": 200.0, "pop_2000m": 300.0},
+            {"pop_500m": "WorldPop", "pop_1000m": "WorldPop", "pop_2000m": "WorldPop"}, STATUS_READY,
+        ),
+        "transit_accessibility": GroupResult(
+            "transit_accessibility", {"transit_stops_500m_walk": 0.0},
+            {"transit_stops_500m_walk": "GTFS"}, STATUS_READY,
+        ),
+        "demand_generator_pois": GroupResult(
+            "demand_generator_pois", {"office_pois_500m": 0.0},
+            {"office_pois_500m": "POI"}, STATUS_UNAVAILABLE,
+        ),
+    }
+    monkeypatch.setattr(
+        "sitewise.ml.coordinate_features.CoordinateFeatureExtractor.extract",
+        Mock(return_value=observations),
+    )
+    age = Mock()
+    age.availability.return_value = False, "tiles unavailable"
+    monkeypatch.setattr(
+        "sitewise.services.property_enrichment_service._age_band_service", lambda: age
+    )
+    result = collect_expanded_coordinates(None, 3.0, 101.0, diagnostics=True)
+
+    assert result["feature_count"] == 64
+    assert result["available_features"] == 2
+    assert result["values"]["pop_500m"] == 100.0
+    assert result["values"]["pop_1000m"] == 200.0
+    assert result["values"]["office_pois_500m"] is None
+    assert result["unvalidated_values"] == {"pop_2000m": 300.0, "transit_stops_500m_walk": 0.0}
+    assert "pop_2000m" in result["missing_required_features"]
+    assert "transit_stops_500m_walk" in result["missing_required_features"]
+    assert len(result["imputable_features"]) == 8
+    assert result["score"] is None
+
+
+@pytest.mark.parametrize(
+    ("latitude", "longitude", "expected_status"),
+    [(3.0, 101.0, "current"), (3.1, 101.0, "stale"), (None, 101.0, "stale")],
+)
+def test_enrichment_does_not_report_old_coordinate_measurements_as_current(
+    latitude, longitude, expected_status,
+):
+    from unittest.mock import Mock
+
+    from sitewise.services.property_enrichment_service import (
+        PropertyEnrichmentService,
+        coordinate_hash,
+    )
+
+    session = Mock()
+    session.execute.return_value.mappings.return_value.all.return_value = [{
+        "category": "age_population",
+        "status": "current",
+        "coordinate_hash": coordinate_hash(3.0, 101.0),
+        "latitude": latitude,
+        "longitude": longitude,
+        "measurement": {"pop_age_0_14_500m": 99},
+    }]
+
+    measured = PropertyEnrichmentService(session).states(123)["age_population"]
+
+    assert measured["status"] == expected_status
+    assert measured["measurement"] == {"pop_age_0_14_500m": 99}
+    assert "latitude" not in measured
+    session.commit.assert_not_called()

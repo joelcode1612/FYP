@@ -1,0 +1,16 @@
+backend/.env
+backend/.env.local
+test/.env
+fyp_mobile_app/config/dev.env
+fyp_mobile_app/config/sitewise_dev.env
+backend/backups/
+backend/var/key-custody/
+backend/var/db_sync_audit_ref/
+var/checkpoints/
+out/
+artifacts/stage34_m2_existing_20261119/served_assets_before/
+artifacts/stage34_m2_existing_20261119/bcb_engine_private/
+artifacts/stage34_m2_existing_20261119/confirmation_regression_private/
+artifacts/.chrome-debug/
+artifacts/stage34_integration_20261119/isolated_build_workspace/
+fyp_mobile_app/.dart_tool/chrome-device/

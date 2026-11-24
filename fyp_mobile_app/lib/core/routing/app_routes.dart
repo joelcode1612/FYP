@@ -288,15 +288,19 @@ abstract final class AppRoutes {
       assessmentHome => (RouteAccess.workspace, () => const HomeScreen()),
       assessmentQuestionnaire => (
         RouteAccess.workspace,
-        () => QuestionnaireScreen(
-          assessmentId: settings.arguments as String? ?? '',
-        ),
+        () => switch (settings.arguments) {
+          final String id when id.trim().isNotEmpty =>
+            QuestionnaireScreen(assessmentId: id),
+          _ => const HomeScreen(),
+        },
       ),
       assessmentReview => (
         RouteAccess.workspace,
-        () => ReviewScreen(
-          assessmentId: settings.arguments as String? ?? '',
-        ),
+        () => switch (settings.arguments) {
+          final String id when id.trim().isNotEmpty =>
+            ReviewScreen(assessmentId: id),
+          _ => const HomeScreen(),
+        },
       ),
       // PROJECT1 research-question review. `arguments` is a
       // `ResearchQuestionTarget` (or a map with assessment/confirmation/

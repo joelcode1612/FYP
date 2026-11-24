@@ -41,7 +41,9 @@ from pydantic import ValidationError  # noqa: E402
 from sitewise.project1.contracts import SourceRef  # noqa: E402
 
 CLONE = "project1_workflow_tests"
-DSN = "postgresql+psycopg2://postgres:123456@localhost:5432/" + CLONE
+from sitewise.core.config import local_database_url
+
+DSN = local_database_url(CLONE)
 
 OWNER = "11111111-1111-4111-8111-111111111111"
 OTHER = "22222222-2222-4222-8222-222222222222"

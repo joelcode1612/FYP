@@ -24,6 +24,8 @@ from sitewise.services.agent_inspection_policy import (
     REQUIRED_INSPECTION,
     agent_assignment,
     require_ready_for_admin,
+    guard_enrichment_before_submit,
+    agent_submission_readiness,
     completed_agent_panorama,
 )
 from sitewise.services.property_verification_service import (
@@ -135,7 +137,14 @@ def owner_assignment(property_id: int, session: Db, user: Provider) -> dict:
          WHERE property_id=:pid AND verification_type='ownership' AND document_type='ownership_proof'
          ORDER BY uploaded_at DESC LIMIT 1
     """), {'pid': property_id}).scalar()
-    summary = {'missing_required_fields': missing, 'ownership_proof_status': proof_status}
+    ownership_status = session.execute(text("""
+        SELECT ownership_status FROM fyp.property_verification WHERE property_id=:pid
+    """), {'pid': property_id}).scalar()
+    summary = {
+        'missing_required_fields': missing,
+        'ownership_proof_status': proof_status,
+        'ownership_review_status': ownership_status or 'not_submitted',
+    }
     if row is None:
         return {'data': None, **summary}
     data = dict(row)
@@ -361,82 +370,6 @@ def decline_request(property_id: int, payload: AgentDecline, session: Db, agent:
 # SITEWISE_READINESS_V1
 # Read-only preview of the SAME requirements enforced by the final submit path.
 # Never create/modify property, assignment, verification or panorama rows here.
-def _agent_submission_readiness(
-    session: Session, property_id: int, agent: AuthenticatedUser,
-    assignment: dict, listing: dict, panorama_id: str | None,
-) -> dict:
-    inspection = assignment.get('inspection_data') or {}
-    missing_checks = [
-        key for key in REQUIRED_INSPECTION if inspection.get(key) is not True
-    ]
-    missing_fields = listing_completeness_errors(listing, require_availability=False)
-
-    # Ownership proof is separate from inspection photos and the 360 tour.
-    # Local document storage has to contain the file, not just a stale DB row.
-    keys = session.execute(text("""
-        SELECT storage_key FROM fyp.verification_document
-         WHERE property_id=:pid AND verification_type='ownership'
-           AND status='active' ORDER BY uploaded_at DESC
-    """), {'pid': property_id}).scalars().all()
-    from sitewise.services import verification_storage
-    proof_available = False
-    for key in keys:
-        try:
-            verification_storage.open_document(str(key))
-            proof_available = True
-            break
-        except Exception:
-            # Preserve evidence metadata; report missing/unreachable storage.
-            continue
-
-    enrichment = dict(session.execute(text("""
-        SELECT category, status FROM fyp.property_enrichment_category
-         WHERE property_id=:pid
-    """), {'pid': property_id}).all())
-    running = sorted(
-        key for key, status in enrichment.items() if status == 'running'
-    )
-    population_ack = enrichment.get('population') in ('unavailable', 'failed', 'stale')
-    blockers: list[str] = []
-    if assignment.get('workflow_status') not in ('accepted', 'needs_correction'):
-        blockers.append('Agent request must be accepted before submission.')
-    if missing_fields:
-        blockers.append('Complete property details: ' + ', '.join(missing_fields) + '.')
-    if missing_checks:
-        labels = {
-            'floor_area_verified': 'floor area',
-            'condition_verified': 'physical condition',
-            'parking_verified': 'parking',
-            'accessibility_verified': 'access / entrance',
-        }
-        blockers.append('Save inspection checks: ' + ', '.join(
-            labels.get(key, key) for key in missing_checks
-        ) + '.')
-    if not proof_available:
-        blockers.append(
-            'Ownership proof is registered but its file is unavailable; '
-            'ask the Owner to re-upload it.' if keys else
-            'Owner must upload ownership proof before Admin submission.'
-        )
-    if not panorama_id:
-        blockers.append(
-            'Finish 360 capture and sync the panorama to SiteWise (server confirmed).'
-        )
-    if running:
-        blockers.append('Wait for geospatial processing: ' + ', '.join(running) + '.')
-    return {
-        'ready': not blockers,
-        'blockers': blockers,
-        'missing_property_fields': missing_fields,
-        'missing_inspection_checks': missing_checks,
-        'ownership_proof_uploaded': proof_available,
-        'ownership_proof_record_count': len(keys),
-        'panorama_confirmed': bool(panorama_id),
-        'enrichment_running': running,
-        'population_acknowledgement_required': population_ack,
-    }
-
-
 @router.get('/properties/{property_id}/inspection')
 def inspection_status(property_id: int, session: Db, agent: Agent) -> dict:
     row = agent_assignment(session, property_id, agent)
@@ -448,8 +381,8 @@ def inspection_status(property_id: int, session: Db, agent: Agent) -> dict:
         "SELECT status FROM fyp.property_enrichment_category "
         "WHERE property_id=:pid AND category='population'"
     ), {"pid": property_id}).scalar()
-    readiness = _agent_submission_readiness(
-        session, property_id, agent, row, listing, panorama_id
+    readiness = agent_submission_readiness(
+        session, property_id, row, listing, panorama_id
     )
     # Read real active ownership evidence; never synthesize a verification.
     ownership_proof = bool(session.execute(text("""
@@ -503,8 +436,8 @@ def submit_verified_property(
         session, property_id, agent,
         str(payload.panorama_id) if payload.panorama_id else None,
     )
-    readiness = _agent_submission_readiness(
-        session, property_id, agent, assignment, listing, panorama_id,
+    readiness = agent_submission_readiness(
+        session, property_id, assignment, listing, panorama_id,
     )
     if not readiness['ready']:
         raise HTTPException(
@@ -515,12 +448,11 @@ def submit_verified_property(
     evidence = require_ready_for_admin(
         session, property_id, agent, str(payload.panorama_id) if payload.panorama_id else None
     )
-    from sitewise.api.v1.property_verification import _guard_enrichment_before_submit
-    _guard_enrichment_before_submit(
+    guard_enrichment_before_submit(
         session, property_id, acknowledged=payload.acknowledge_unavailable_population
     )
     result = PropertyVerificationService(session).submit(
-        property_id, agent.user_id, scope='full', role=agent.role,
+        property_id, agent.user_id, scope='listing', role=agent.role,
         panorama_id=evidence['completed_panorama_id'],
     )
     return {'data': result, 'stage': 'pending_admin_review'}

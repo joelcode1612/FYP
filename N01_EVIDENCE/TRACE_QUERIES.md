@@ -10,8 +10,8 @@ Disposable cluster only — **never** point this at port 5432.
 
 ```bash
 # psql (three least-privilege roles; use the one named per query)
-psql "postgresql://p1_m2_runtime:m2_runtime_dev_only@127.0.0.1:5433/project1_workflow_tests"
-psql "postgresql://p1ai_engine:p1ai_engine_dev_only@127.0.0.1:5433/project1_workflow_tests"
+psql "$DATABASE_URL"
+psql "$DATABASE_URL"
 ```
 
 > **Row-level security is on.** Every M2 table filters on `owner_user_id = project1_actor()`. If you forget the actor, the policy matches nothing and `count(*)` returns **0** — which looks exactly like "no data". Set it first, in the same session:

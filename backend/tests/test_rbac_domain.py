@@ -231,16 +231,18 @@ def test_unassociated_panorama_is_never_uploadable():
     for role in rbac.ALL_ROLES:
         decision = rbac.can_upload_panorama(role, rbac.PropertyRelationship.none)
         assert not decision.allowed
-        assert "not linked to a property" in decision.reason
+        assert "assigned Property Agent" in decision.reason
 
 
-def test_capture_follows_the_property_rules():
-    assert rbac.can_capture_panorama(
-        rbac.ROLE_OWNER, rbac.PropertyRelationship.owned
-    ).allowed
-    assert not rbac.can_capture_panorama(
-        rbac.ROLE_ENTREPRENEUR, rbac.PropertyRelationship.none
-    ).allowed
+def test_capture_requires_the_assigned_agent():
+    for role in rbac.ALL_ROLES:
+        for relationship in rbac.PropertyRelationship:
+            expected = (
+                role == rbac.ROLE_AGENT
+                and relationship is rbac.PropertyRelationship.assigned_agent
+            )
+            assert rbac.can_capture_panorama(role, relationship).allowed is expected
+            assert rbac.can_upload_panorama(role, relationship).allowed is expected
 
 
 def test_require_property_access_raises_with_the_reason():

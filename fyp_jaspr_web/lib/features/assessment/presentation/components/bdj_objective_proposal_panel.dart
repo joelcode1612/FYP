@@ -593,7 +593,7 @@ class _BdjObjectiveProposalPanelState
         ]),
       // Provenance of the stored row, so a reader can tell a live model result
       // from a simulated one without running anything.
-      if (provenance != null) provenance,
+      ?provenance,
       // Decision and admission are rendered as two separate facts.
       if (isDecided && admission != null)
         div(classes: 'card card--flat stack stack--xs', [

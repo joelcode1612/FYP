@@ -145,3 +145,121 @@ def require_owner_published_view(session: Session, property_id: int, user) -> No
             status_code=403,
             detail="The 360° tour is viewable after Admin approval and publication.",
         )
+
+
+def guard_enrichment_before_submit(
+    session: Session, property_id: int, acknowledged: bool
+) -> None:
+    """Refuse a premature or unacknowledged submission.
+
+    Listings that were never enriched keep their previous behaviour: the guard
+    only engages once at least one enrichment category row exists, so the
+    existing submission flows (and their tests) are untouched.
+    """
+    rows = session.execute(
+        text(
+            """
+            SELECT category, status
+            FROM fyp.property_enrichment_category
+            WHERE property_id = :pid
+            """
+        ),
+        {"pid": property_id},
+    ).all()
+    if not rows:
+        return
+
+    states = {row[0]: row[1] for row in rows}
+    running = sorted(c for c, s in states.items() if s == "running")
+    if running:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Enrichment is still running for: "
+                + ", ".join(running)
+                + ". Wait for it to finish before submitting."
+            ),
+        )
+
+    population = states.get("population")
+    if population in ("unavailable", "failed", "stale") and not acknowledged:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Population could not be measured for these coordinates "
+                f"(state: {population}). Confirm that you want to submit "
+                "without a population figure."
+            ),
+        )
+
+
+def agent_submission_readiness(
+    session: Session, property_id: int,
+    assignment: dict, listing: dict, panorama_id: str | None,
+) -> dict:
+    from sitewise.services.property_verification_service import listing_completeness_errors
+
+    inspection = assignment.get('inspection_data') or {}
+    missing_checks = [
+        key for key in REQUIRED_INSPECTION if inspection.get(key) is not True
+    ]
+    missing_fields = listing_completeness_errors(listing, require_availability=False)
+
+    # Ownership proof is separate from inspection photos and the 360 tour.
+    # Local document storage has to contain the file, not just a stale DB row.
+    keys = session.execute(text("""
+        SELECT storage_key FROM fyp.verification_document
+         WHERE property_id=:pid AND verification_type='ownership'
+           AND status='active' ORDER BY uploaded_at DESC
+    """), {'pid': property_id}).scalars().all()
+    from sitewise.services import verification_storage
+    proof_available = False
+    for key in keys:
+        try:
+            verification_storage.open_document(str(key))
+            proof_available = True
+            break
+        except Exception:
+            # Preserve evidence metadata; report missing/unreachable storage.
+            continue
+
+    enrichment = dict(session.execute(text("""
+        SELECT category, status FROM fyp.property_enrichment_category
+         WHERE property_id=:pid
+    """), {'pid': property_id}).all())
+    running = sorted(
+        key for key, status in enrichment.items() if status == 'running'
+    )
+    population_ack = enrichment.get('population') in ('unavailable', 'failed', 'stale')
+    blockers: list[str] = []
+    if assignment.get('workflow_status') not in ('accepted', 'needs_correction'):
+        blockers.append('Agent request must be accepted before submission.')
+    if missing_fields:
+        blockers.append('Complete property details: ' + ', '.join(missing_fields) + '.')
+    if missing_checks:
+        labels = {
+            'floor_area_verified': 'floor area',
+            'condition_verified': 'physical condition',
+            'parking_verified': 'parking',
+            'accessibility_verified': 'access / entrance',
+        }
+        blockers.append('Save inspection checks: ' + ', '.join(
+            labels.get(key, key) for key in missing_checks
+        ) + '.')
+    if not panorama_id:
+        blockers.append(
+            'Finish 360 capture and sync the panorama to SiteWise (server confirmed).'
+        )
+    if running:
+        blockers.append('Wait for geospatial processing: ' + ', '.join(running) + '.')
+    return {
+        'ready': not blockers,
+        'blockers': blockers,
+        'missing_property_fields': missing_fields,
+        'missing_inspection_checks': missing_checks,
+        'ownership_proof_uploaded': proof_available,
+        'ownership_proof_record_count': len(keys),
+        'panorama_confirmed': bool(panorama_id),
+        'enrichment_running': running,
+        'population_acknowledgement_required': population_ack,
+    }

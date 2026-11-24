@@ -121,8 +121,6 @@ dev_dependencies:
   # native ORB / registration symbols the panorama pipeline calls
   # (integration_test/opencv_orb_native_test.dart drives the real probe on a
   # connected Android device — a unit test cannot prove symbol availability).
-  integration_test:
-    sdk: flutter
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -138,7 +136,6 @@ flutter:
     - assets/models/ar_capture_target.glb
     - assets/models/white_frame_bezel.glb
     - assets/sitewise-mark-64.png
-    - assets/config/dev.json
     - assets/config/sitewise_dev.json
     - assets/images/capture_guide/
 

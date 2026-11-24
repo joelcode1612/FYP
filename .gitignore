@@ -100,11 +100,6 @@ backend/backups/
 # was created during CP-04A and matched none of it, so `git add -A` would have
 # staged SECRET_KEY, SUPABASE_SECRET_KEY and four database URLs. Ignore the whole
 # `.env*` family instead of enumerating suffixes, and re-permit only the examples.
-# NOTE (2026-11-22, P1/P0-R2): `backend/.env` and `test/.env` were TRACKED and
-# have now been untracked with `git rm --cached`; the files themselves are
-# untouched on disk. Ignoring a path never removes it from history, so the
-# credentials they carried are still exposed in past commits and must be
-# rotated at the provider. Rotation is the only real remediation.
 **/.env
 **/.env.*
 !**/.env.example
@@ -130,3 +125,33 @@ deliverables/
 artifacts/
 backend/tests/
 
+# Local credentials, signing material and runtime snapshots
+*.env
+*.env.*
+!*.env.example
+*.pem
+*.key
+*.p8
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.kdbx
+*.tfstate*
+credentials.json
+credentials.local.json
+service-account*.json
+local.properties
+key.properties
+.netrc
+.npmrc.local
+.pypirc
+/backend/var/key-custody/
+/var/checkpoints/
+/out/
+/fyp_mobile_app/assets/config/dev.json
+/fyp_mobile_app/assets/config/sitewise_dev.json
+/fyp_jaspr_web/web/auth-config.json
+/fyp_jaspr_web/web/map-config.js
+
+/backend/var/db_sync_audit_ref/

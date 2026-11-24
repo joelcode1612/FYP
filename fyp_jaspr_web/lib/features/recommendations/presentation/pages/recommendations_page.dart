@@ -1259,7 +1259,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
     List<FacetRangeOption> ranges,
   ) {
     if (ranges.length != 3) return _rangePairs(ranges);
-    final ordered = [...ranges]..sort((a, b) => a.min.compareTo(b.min));
+    final ordered = [...ranges]..sort((left, right) => left.min.compareTo(right.min));
     const levels = ['Lower', 'Moderate', 'Higher'];
     return [
       for (var i = 0; i < ordered.length; i++)

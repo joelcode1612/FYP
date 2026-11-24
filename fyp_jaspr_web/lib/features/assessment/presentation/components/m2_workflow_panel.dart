@@ -1,15 +1,14 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:math';
 
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
-import 'package:shared_logic/shared_logic.dart' show M2Draft, AppFailure, NetworkFailure, ResponseFormatFailure;
+import 'package:shared_logic/shared_logic.dart'
+    show M2Draft, AppFailure, NetworkFailure, ResponseFormatFailure;
 
 import 'package:sitewise_jaspr_web/core/di/app_locator.dart';
 import 'bdj_objective_proposal_panel.dart' show BdjObjectiveProposalPanel;
-import 'research_workflow_panel.dart' show ResearchCandidatePanel;
-import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart' show ActionButton;
+import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart'
+    show ActionButton;
 
 /// PROJECT1 M2 research workflow surface.
 ///
@@ -123,9 +122,6 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
   bool _autoSaveQueued = false;
   bool _pauseReady = false;
 
-  /// Kept for standalone M2 workflow's manual discard-edits action.
-  bool _discardArmed = false;
-
   /// Whether the read-only review summary is expanded.
   bool _showReview = false;
   int? _reviewedRevision;
@@ -144,10 +140,8 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
   /// many there are; this index is only the position on screen.
   int _itemIndex = 0;
 
-  Map<String, dynamic>? _worksheet;
   /// UI-01: finding decisions persisted for the current revision, by finding id.
   /// Only codes the backend accepts are ever stored here.
-  Map<String, String> _decisions = {};
   Map<String, dynamic>? _confirmation;
   Map<String, dynamic>? _contextStatus;
 
@@ -163,9 +157,6 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
   String? _conceptPreviewError;
   bool _conceptPreviewLoading = false;
   int _conceptPreviewTicket = 0;
-  Map<String, dynamic>? _objective;
-  Map<String, dynamic>? _qjContext;
-  String _objectiveText = '';
 
   int _request = 0;
 
@@ -206,7 +197,9 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
         _instruments = await AppLocator.m2.instruments();
         if (!mounted || request != _request) return;
       } else {
-        final id = _selected.isNotEmpty ? _selected : rows.first['id'] as String;
+        final id = _selected.isNotEmpty
+            ? _selected
+            : rows.first['id'] as String;
         await _openInternal(id, request);
         return;
       }
@@ -249,8 +242,6 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     setState(() {
       _selected = id;
       _draft = draft;
-      _worksheet = null;
-      _decisions = {};
       _confirmation = null;
       _contextStatus = null;
       // A preview belongs to one assessment at one revision. Opening another
@@ -258,9 +249,6 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
       // moment before its own preview arrives.
       _conceptPreview = null;
       _conceptPreviewError = null;
-      _objective = null;
-      _qjContext = null;
-      _objectiveText = '';
       _itemIndex = 0;
       _seedEditors(draft);
     });
@@ -276,9 +264,7 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
       try {
         final sheet = await AppLocator.m2.worksheet(draft);
         if (!mounted || request != _request) return;
-        if (sheet['revision'] == draft.revision) {
-          _worksheet = sheet;
-        }
+        if (sheet['revision'] == draft.revision) {}
       } catch (_) {
         // No worksheet is available; do not fabricate one.
       }
@@ -318,7 +304,7 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
         _assessments = rows;
         _draft = draft;
         _selected = draft.id;
-          _seedEditors(draft);
+        _seedEditors(draft);
         notice =
             'Created M2 assessment ${draft.id} at revision ${draft.revision}.';
       });
@@ -458,7 +444,10 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
   }
 
   /// Does a `when` clause hold for the values currently entered?
-  bool _compositeConditionMet(Map<String, dynamic> when, Map<String, dynamic> values) {
+  bool _compositeConditionMet(
+    Map<String, dynamic> when,
+    Map<String, dynamic> values,
+  ) {
     final actual = values['${when['field']}'];
     if (when.containsKey('equals')) return '$actual' == '${when['equals']}';
     if (when.containsKey('in')) {
@@ -480,12 +469,18 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
 
   /// Required either unconditionally, or because a conditional rule fires.
   /// A conditional rule must never make its field universally mandatory.
-  bool _compositeFieldRequired(Map<String, dynamic> item,
-      Map<String, dynamic> field, Map<String, dynamic> values) {
+  bool _compositeFieldRequired(
+    Map<String, dynamic> item,
+    Map<String, dynamic> field,
+    Map<String, dynamic> values,
+  ) {
     if (field['required'] == true) return true;
     final rule = _compositeRule(item, '${field['name']}');
     if (rule == null) return false;
-    return _compositeConditionMet(Map<String, dynamic>.from(rule['when'] as Map), values);
+    return _compositeConditionMet(
+      Map<String, dynamic>.from(rule['when'] as Map),
+      values,
+    );
   }
 
   /// A conditionally-gated field is shown once its rule fires, or when it
@@ -503,12 +498,17 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
   }
 
   bool _compositeFilled(String type, Object? value) {
-    if (type == 'MULTI' || type == 'LIST') return value is List && value.isNotEmpty;
+    if (type == 'MULTI' || type == 'LIST') {
+      return value is List && value.isNotEmpty;
+    }
     return value is String && value.trim().isNotEmpty;
   }
 
   /// The exact reason this composite cannot be saved yet, or null when valid.
-  String? _compositeError(Map<String, dynamic> item, Map<String, dynamic> values) {
+  String? _compositeError(
+    Map<String, dynamic> item,
+    Map<String, dynamic> values,
+  ) {
     for (final field in _compositeFields(item)) {
       final name = '${field['name']}';
       final type = '${field['type']}';
@@ -517,7 +517,9 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
       final fieldLabel = _compositeFieldLabel(field);
       final value = values[name];
       if (!_compositeFilled(type, value)) {
-        if (_compositeFieldRequired(item, field, values)) return '$fieldLabel is required.';
+        if (_compositeFieldRequired(item, field, values)) {
+          return '$fieldLabel is required.';
+        }
         continue;
       }
       if (type == 'AMOUNT_MYR') {
@@ -529,7 +531,9 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
         }
       }
       final maxLength = field['max_length'];
-      if (type == 'TEXT' && maxLength is int && value is String &&
+      if (type == 'TEXT' &&
+          maxLength is int &&
+          value is String &&
           value.length > maxLength) {
         return '$fieldLabel must be $maxLength characters or fewer.';
       }
@@ -540,7 +544,9 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
   /// Serialise exactly the declared fields, omitting blanks. An absent optional
   /// field stays absent; it is never sent as an empty string.
   Map<String, dynamic> _compositeValue(
-      Map<String, dynamic> item, Map<String, dynamic> values) {
+    Map<String, dynamic> item,
+    Map<String, dynamic> values,
+  ) {
     final out = <String, dynamic>{};
     for (final field in _compositeFields(item)) {
       final name = '${field['name']}';
@@ -584,13 +590,15 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
   String _cardMode(Map<String, dynamic> item) {
     if (_applicable(item)) {
       final kind = item['answer_kind'] as String? ?? '';
-      final hasInput = kind == 'TEXT' || kind == 'COMPOSITE' || _options(item).isNotEmpty;
+      final hasInput =
+          kind == 'TEXT' || kind == 'COMPOSITE' || _options(item).isNotEmpty;
       return hasInput ? 'answerable' : 'no_input';
     }
     final parent = _parentKey(item);
     if (parent == null) return 'inapplicable';
     final answer = _draft?.answers[parent];
-    final parentAnswered = answer != null && answer['answer_state'] == 'ANSWERED';
+    final parentAnswered =
+        answer != null && answer['answer_state'] == 'ANSWERED';
     return parentAnswered ? 'inapplicable' : 'waiting';
   }
 
@@ -631,7 +639,10 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
   List<String> _allowedStates(Map<String, dynamic> item) {
     final raw = item['allowed_states'];
     var states = raw is List
-        ? [for (final s in raw) if (s is String) s]
+        ? [
+            for (final s in raw)
+              if (s is String) s,
+          ]
         : <String>['ANSWERED', 'NOT_PROVIDED'];
     if (states.isEmpty) states = ['ANSWERED', 'NOT_PROVIDED'];
     if (!_applicable(item)) {
@@ -744,7 +755,10 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     final codes = _editorCodes[key] ?? const <String>[];
     if (kind == 'TEXT') return (_editorText[key] ?? '').trim();
     if (kind == 'COMPOSITE') {
-      return _compositeValue(item, _editorComposite[key] ?? const <String, dynamic>{});
+      return _compositeValue(
+        item,
+        _editorComposite[key] ?? const <String, dynamic>{},
+      );
     }
     if (kind == 'SINGLE' || kind == 'GEO') {
       return codes.isEmpty ? null : codes.first;
@@ -791,13 +805,15 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     if (_dirtyCount() > 0 || error != null) {
       setState(() {
         _pauseReady = false;
-        error ??= 'Some answers could not be saved. Please retry before leaving.';
+        error ??=
+            'Some answers could not be saved. Please retry before leaving.';
       });
       return;
     }
     setState(() {
       _pauseReady = true;
-      notice = 'Your draft is saved. You can return to it later; this is not '
+      notice =
+          'Your draft is saved. You can return to it later; this is not '
           'confirmation or permanent discard.';
     });
   }
@@ -810,11 +826,14 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     // Nothing the entrepreneur has not touched can be an unsaved edit.
     if (!_touched.contains(key)) return false;
     final answer = draft.answers[key];
-    final savedState =
-        answer is Map ? (answer['answer_state'] as String? ?? '') : '';
+    final savedState = answer is Map
+        ? (answer['answer_state'] as String? ?? '')
+        : '';
     final state = _editorState[key] ?? savedState;
     if (state != savedState) return true;
-    final saved = answer is Map ? (answer['value_json'] ?? answer['value']) : null;
+    final saved = answer is Map
+        ? (answer['value_json'] ?? answer['value'])
+        : null;
     return !_sameValue(_editorValue(item, state), saved);
   }
 
@@ -829,20 +848,26 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     return '${a ?? ''}' == '${b ?? ''}';
   }
 
-  Future<void> _saveAnswer(Map<String, dynamic> item, {String? overrideState}) async {
+  Future<void> _saveAnswer(
+    Map<String, dynamic> item, {
+    String? overrideState,
+  }) async {
     final draft = _draft;
     if (draft == null || busy) return;
     if (!_editable(item) && !_stateRecordable(item)) return;
     final key = item['item_key'] as String;
-    final state = overrideState ??
+    final state =
+        overrideState ??
         _editorState[key] ??
         (!_applicable(item) ? 'NOT_APPLICABLE' : 'ANSWERED');
     // A composite is validated here as well as in the button, because the
     // autosave path reaches this method without going through the button.
     if (state == 'ANSWERED' &&
         (item['answer_kind'] as String? ?? '') == 'COMPOSITE') {
-      final problem =
-          _compositeError(item, _editorComposite[key] ?? const <String, dynamic>{});
+      final problem = _compositeError(
+        item,
+        _editorComposite[key] ?? const <String, dynamic>{},
+      );
       if (problem != null) {
         setState(() {
           // The card owns field-level messages, so the key is marked as being
@@ -869,8 +894,13 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
           if ((other['item_key'] as String? ?? '') != key && _isDirty(other))
             other['item_key'] as String,
       };
-      final updated = await AppLocator.m2.save(draft, key, state, value,
-          marketplaceAssessmentId: component.marketplaceAssessmentId);
+      final updated = await AppLocator.m2.save(
+        draft,
+        key,
+        state,
+        value,
+        marketplaceAssessmentId: component.marketplaceAssessmentId,
+      );
       if (!mounted) return;
       setState(() {
         _draft = updated;
@@ -879,8 +909,6 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
         _showReview = false;
         _seedEditors(updated, preserve: preserved);
         // A new revision invalidates decisions recorded against the old one.
-        _decisions = {};
-        _worksheet = null;
         notice = preserved.isEmpty
             ? 'Saved $key. Server revision is now ${updated.revision}.'
             : 'Saved $key. ${preserved.length} other unsaved edit(s) were kept. '
@@ -906,95 +934,9 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
 
   // --- workflow ------------------------------------------------------------
 
-  Future<void> _evaluate() async {
-    final draft = _draft;
-    if (draft == null || busy) return;
-    setState(() {
-      busy = true;
-      error = null;
-      notice = '';
-      _worksheet = null;
-    });
-    try {
-      await AppLocator.m2.evaluate(draft);
-      final sheet = await AppLocator.m2.worksheet(draft);
-      if (!mounted) return;
-      setState(() {
-        _worksheet = sheet;
-        notice =
-            'Candidate BDJ evaluation recorded at revision ${draft.revision}. '
-            'These are deterministic candidate findings, not a model output and '
-            'not a scientific verdict.';
-      });
-    } catch (_) {
-      if (mounted) {
-        setState(
-          () => error =
-              'The BDJ evaluation did not return a current-revision worksheet. '
-              'Every required M2 answer must be saved first.',
-        );
-      }
-    } finally {
-      if (mounted) setState(() => busy = false);
-    }
-  }
-
   /// Findings on the current worksheet that still lack a persisted
   /// `KEEP_ORIGINAL` decision. Confirmation is refused by the backend while any
   /// remain, so the control stays disabled rather than inviting a 409.
-  List<String> get _undecidedFindingIds {
-    final sheet = _worksheet;
-    if (sheet == null) return const [];
-    return [
-      for (final f in (sheet['findings'] as List? ?? const []))
-        if (f is Map && f['id'] is String && _decisions[f['id']] != 'KEEP_ORIGINAL')
-          f['id'] as String,
-    ];
-  }
-
-  Future<void> _confirm() async {
-    final draft = _draft;
-    final sheet = _worksheet;
-    if (draft == null || sheet == null || busy) return;
-    if (_undecidedFindingIds.isNotEmpty) {
-      setState(() => error =
-          'Each current finding needs a recorded KEEP_ORIGINAL decision before '
-          'confirmation. REVIEW_LATER is not confirmation.');
-      return;
-    }
-    final findings = [
-      for (final f in (sheet['findings'] as List? ?? const []))
-        if (f is Map && f['id'] is String) f['id'] as String,
-    ];
-    setState(() {
-      busy = true;
-      error = null;
-      notice = '';
-    });
-    try {
-      await AppLocator.m2.review(draft,
-          marketplaceAssessmentId: component.marketplaceAssessmentId);
-      final result = await AppLocator.m2.confirm(draft, findings);
-      if (!mounted) return;
-      setState(() {
-        _confirmation = result;
-        notice =
-            'Confirmation recorded. The snapshot states '
-            'qj_handoff_authorized = false: confirmation is a research input, '
-            'not a QJ authorization.';
-      });
-    } catch (_) {
-      if (mounted) {
-        setState(
-          () => error =
-              'Confirmation was refused. It requires a current review and an '
-              'explicit acknowledgement of every candidate finding.',
-        );
-      }
-    } finally {
-      if (mounted) setState(() => busy = false);
-    }
-  }
 
   /// Embedded Stage 2: entrepreneur confirmation must precede BDJ.
   /// Does not run deterministic or cloud BDJ. The backend must implement the
@@ -1003,18 +945,25 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
   String _confirmationError(Object failure) {
     if (failure is AppFailure) {
       var message = switch (failure.statusCode) {
-        401 => 'Your session has expired. Sign in again, then reload saved declarations.',
-        403 || 404 => 'This assessment is unavailable to your account. Reopen an assessment you own.',
-        409 => 'The saved revision or confirmation state changed. Reload saved declarations before retrying.',
-        422 => 'A declaration does not match the current questionnaire conditions. Review and save it again.',
-        _ => failure is NetworkFailure
-            ? 'The connection failed. The save outcome is unverified; reload saved confirmation before retrying.'
-            : failure is ResponseFormatFailure
+        401 =>
+          'Your session has expired. Sign in again, then reload saved declarations.',
+        403 || 404 =>
+          'This assessment is unavailable to your account. Reopen an assessment you own.',
+        409 =>
+          'The saved revision or confirmation state changed. Reload saved declarations before retrying.',
+        422 =>
+          'A declaration does not match the current questionnaire conditions. Review and save it again.',
+        _ =>
+          failure is NetworkFailure
+              ? 'The connection failed. The save outcome is unverified; reload saved confirmation before retrying.'
+              : failure is ResponseFormatFailure
               ? 'The service response could not be verified. Reload saved confirmation before retrying.'
               : 'The confirmation service is unavailable. Your saved answers are retained; reload before retrying.',
       };
       final code = failure.backendCode;
-      if (code != null && RegExp(r'^[A-Za-z0-9_.:-]{1,100}$').hasMatch(code)) message += ' Reference: $code.';
+      if (code != null && RegExp(r'^[A-Za-z0-9_.:-]{1,100}$').hasMatch(code)) {
+        message += ' Reference: $code.';
+      }
       return message;
     }
     return 'The service response could not be verified. Reload saved confirmation before retrying.';
@@ -1024,14 +973,29 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     if (_draft == null || busy || _autoSaveInFlight) return;
     _autoSaveTicket++;
     if (_dirtyCount() > 0) await _saveAllDirty();
-    if (!mounted || _draft == null || _dirtyCount() > 0 || error != null) return;
+    if (!mounted || _draft == null || _dirtyCount() > 0 || error != null) {
+      return;
+    }
     final draft = _draft!;
-    setState(() { busy = true; error = null; _showReview = false; });
+    setState(() {
+      busy = true;
+      error = null;
+      _showReview = false;
+    });
     try {
-      await AppLocator.m2.review(draft,
-          marketplaceAssessmentId: component.marketplaceAssessmentId);
-      if (!mounted || _draft?.id != draft.id || _draft?.revision != draft.revision) return;
-      setState(() { _reviewedRevision = draft.revision; _showReview = true; });
+      await AppLocator.m2.review(
+        draft,
+        marketplaceAssessmentId: component.marketplaceAssessmentId,
+      );
+      if (!mounted ||
+          _draft?.id != draft.id ||
+          _draft?.revision != draft.revision) {
+        return;
+      }
+      setState(() {
+        _reviewedRevision = draft.revision;
+        _showReview = true;
+      });
     } catch (failure) {
       if (mounted) setState(() => error = _confirmationError(failure));
     } finally {
@@ -1043,8 +1007,10 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     final draft = _draft;
     if (draft == null || busy || _autoSaveInFlight) return;
     if (_dirtyCount() != 0 || _reviewedRevision != draft.revision) {
-      setState(() => error =
-          'Unsaved changes remain. Save and verify the current M2 revision before confirming.');
+      setState(
+        () => error =
+            'Unsaved changes remain. Save and verify the current M2 revision before confirming.',
+      );
       return;
     }
     setState(() {
@@ -1055,12 +1021,18 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     try {
       // No finding acknowledgements are required to confirm entrepreneur
       // declarations. BDJ findings belong to the NEXT stage.
-      await AppLocator.m2.confirm(draft, const <String>[],
-          marketplaceAssessmentId: component.marketplaceAssessmentId);
+      await AppLocator.m2.confirm(
+        draft,
+        const <String>[],
+        marketplaceAssessmentId: component.marketplaceAssessmentId,
+      );
       final persisted = await AppLocator.m2.currentConfirmation(draft.id);
       if (!mounted) return;
-      if (persisted == null || persisted['assessment_revision'] != draft.revision) {
-        throw StateError('The server did not return a current confirmation receipt.');
+      if (persisted == null ||
+          persisted['assessment_revision'] != draft.revision) {
+        throw StateError(
+          'The server did not return a current confirmation receipt.',
+        );
       }
       final current = await AppLocator.m2.read(draft.id);
       if (!mounted) return;
@@ -1071,7 +1043,8 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
         _draft = current;
         _confirmation = persisted;
         _showReview = false;
-        notice = 'Business declaration confirmed at revision ${draft.revision}. '
+        notice =
+            'Business declaration confirmed at revision ${draft.revision}. '
             'Confirmation did not run BDJ. Open Stage 3 to continue.';
       });
       component.onDeclarationChanged?.call();
@@ -1090,50 +1063,6 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
   /// declaration stands as written — it is NOT scientific approval, NOT proof
   /// the declaration is correct, and NOT resolution of the uncertainty.
   /// `REVIEW_LATER` is recorded but never satisfies confirmation.
-  Future<void> _decide(String findingId, String decision) async {
-    final draft = _draft;
-    if (draft == null || busy) return;
-    setState(() {
-      busy = true;
-      error = null;
-      notice = '';
-    });
-    try {
-      final result =
-          await AppLocator.m2.decide(draft, findingId, decision, _uuid4());
-      if (!mounted) return;
-      final event = result['event'];
-      final saved = event is Map && event['decision'] is String
-          ? event['decision'] as String
-          : decision;
-      setState(() {
-        _decisions = {..._decisions, findingId: saved};
-        notice = saved == 'KEEP_ORIGINAL'
-            ? 'Decision recorded: the declaration stands as written. This is not '
-                  'scientific approval and does not resolve the uncertainty.'
-            : 'Decision recorded: review deferred. REVIEW_LATER does not satisfy '
-                  'confirmation.';
-      });
-    } catch (_) {
-      if (mounted) {
-        setState(() => error =
-            'The finding decision was refused. Reload the current revision and '
-            'choose one of the two permitted decisions.');
-      }
-    } finally {
-      if (mounted) setState(() => busy = false);
-    }
-  }
-
-  String _uuid4() {
-    final rnd = Random.secure();
-    final bytes = List<int>.generate(16, (_) => rnd.nextInt(256));
-    bytes[6] = (bytes[6] & 0x0f) | 0x40;
-    bytes[8] = (bytes[8] & 0x3f) | 0x80;
-    final hex = bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
-    return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-'
-        '${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
-  }
 
   /// Restore the persisted BCB status when a confirmed assessment is reopened.
   ///
@@ -1295,110 +1224,6 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
       if (entry is String) entry,
   ];
 
-  Future<void> _readContextStatus() async {
-    final draft = _draft;
-    final confirmation = _confirmation;
-    if (draft == null || confirmation == null || busy) return;
-    setState(() {
-      busy = true;
-      error = null;
-      notice = '';
-    });
-    try {
-      final status = await AppLocator.m2.contextStatus(
-        draft.id,
-        confirmation['id'] as String,
-        draft.revision,
-      );
-      if (!mounted) return;
-      setState(() => _contextStatus = status);
-    } catch (_) {
-      if (mounted) {
-        setState(
-          () => error =
-              'The business-context status could not be read. Persisted BCB is '
-              'default-off and requires verified tenant/concept/geography/'
-              'purpose bindings.',
-        );
-      }
-    } finally {
-      if (mounted) setState(() => busy = false);
-    }
-  }
-
-  Future<void> _createObjective() async {
-    final draft = _draft;
-    final confirmation = _confirmation;
-    if (draft == null || confirmation == null || busy) return;
-    if (_objectiveText.trim().isEmpty) {
-      setState(() => error = 'Enter the research objective before submitting.');
-      return;
-    }
-    setState(() {
-      busy = true;
-      error = null;
-      notice = '';
-    });
-    try {
-      final result = await AppLocator.m2.createObjective(
-        confirmation['id'] as String,
-        draft.revision,
-        _objectiveText,
-      );
-      if (!mounted) return;
-      setState(() {
-        _objective = result;
-        _qjContext = null;
-        notice =
-            'Research objective ${result['id']} persisted against the '
-            'confirmation revision.';
-      });
-    } catch (_) {
-      if (mounted) {
-        setState(
-          () => error =
-              'The research objective was not saved. It is bound to the '
-              'confirmation revision and must be current.',
-        );
-      }
-    } finally {
-      if (mounted) setState(() => busy = false);
-    }
-  }
-
-  Future<void> _readQjContext() async {
-    final draft = _draft;
-    final objective = _objective;
-    if (draft == null || objective == null || busy) return;
-    setState(() {
-      busy = true;
-      error = null;
-      notice = '';
-    });
-    try {
-      final context = await AppLocator.m2.qjContext(
-        objective['id'] as String,
-        draft.revision,
-      );
-      if (!mounted) return;
-      setState(() {
-        _qjContext = context;
-        notice =
-            'QJ context read. This is the objective\'s judgement input, not a '
-            'QJ run: no QJ execution endpoint is registered.';
-      });
-    } catch (_) {
-      if (mounted) {
-        setState(
-          () => error =
-              'The QJ context could not be read for this objective revision.',
-        );
-      }
-    } finally {
-      if (mounted) setState(() => busy = false);
-    }
-  }
-
   // --- rendering -----------------------------------------------------------
 
   Component _statusLine() {
@@ -1426,7 +1251,8 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
         ]),
         for (final row in _assessments)
           button(
-            classes: 'sr-button${row['id'] == _selected ? ' sr-button--primary' : ''}',
+            classes:
+                'sr-button${row['id'] == _selected ? ' sr-button--primary' : ''}',
             attributes: {'type': 'button'},
             onClick: busy ? null : () => _open(row['id'] as String),
             [
@@ -1497,11 +1323,14 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     // applicable question marked effective_required by the server. Counting
     // inapplicable conditionals as "missing" made a complete draft look
     // unfinished, and counting raw saves flattered an empty one.
-    final requiredItems =
-        items.where((item) => item['effective_required'] == true).toList();
+    final requiredItems = items
+        .where((item) => item['effective_required'] == true)
+        .toList();
     final requiredAnswered = requiredItems
-        .where((item) =>
-            (draft.answers[item['item_key']]?['answer_state']) == 'ANSWERED')
+        .where(
+          (item) =>
+              (draft.answers[item['item_key']]?['answer_state']) == 'ANSWERED',
+        )
         .length;
     final requiredTotal = requiredItems.length;
     return div(classes: 'asw-qlayout m2q', [
@@ -1550,9 +1379,7 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
                   'type': 'button',
                   if (i == index) 'aria-current': 'step',
                 },
-                events: events(
-                  onClick: () => setState(() => _itemIndex = i),
-                ),
+                events: events(onClick: () => setState(() => _itemIndex = i)),
                 [
                   span(classes: 'asw-qnav__label', [
                     Component.text(item['item_key'] as String? ?? '—'),
@@ -1562,9 +1389,9 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
                       _isDirty(item)
                           ? '…'
                           : draft.answers[item['item_key']]?['answer_state'] ==
-                                  'ANSWERED'
-                              ? '✓'
-                              : '',
+                                'ANSWERED'
+                          ? '✓'
+                          : '',
                     ),
                   ]),
                 ],
@@ -1598,7 +1425,9 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     final source = field['values_from'];
     if (source is String) {
       final answer = _draft?.answers[source];
-      final value = answer is Map ? (answer['value_json'] ?? answer['value']) : null;
+      final value = answer is Map
+          ? (answer['value_json'] ?? answer['value'])
+          : null;
       if (value is List) return [for (final v in value) '$v'];
     }
     return const <String>[];
@@ -1609,7 +1438,9 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     final values = _editorComposite[key] ?? const <String, dynamic>{};
     final state = _editorState[key] ?? 'ANSWERED';
     // Only complain about what the entrepreneur has actually started editing.
-    final problem = _touched.contains(key) ? _compositeError(item, values) : null;
+    final problem = _touched.contains(key)
+        ? _compositeError(item, values)
+        : null;
     return div(classes: 'asw-composite', [
       // Every declared field is rendered. The schema has one conditional idea —
       // `conditional_required` — and it governs requiredness, not existence:
@@ -1618,9 +1449,11 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
       for (final field in _compositeFields(item))
         _compositeField(item, field, values, state),
       if (problem != null)
-        p(classes: 'small', attributes: {'role': 'alert'}, [
-          Component.text(problem),
-        ]),
+        p(
+          classes: 'small',
+          attributes: {'role': 'alert'},
+          [Component.text(problem)],
+        ),
       div(classes: 'row', [
         button(
           classes: 'sr-button sr-button--primary',
@@ -1643,8 +1476,12 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     ]);
   }
 
-  Component _compositeField(Map<String, dynamic> item, Map<String, dynamic> field,
-      Map<String, dynamic> values, String state) {
+  Component _compositeField(
+    Map<String, dynamic> item,
+    Map<String, dynamic> field,
+    Map<String, dynamic> values,
+    String state,
+  ) {
     final key = item['item_key'] as String? ?? '';
     final name = '${field['name']}';
     final type = '${field['type']}';
@@ -1653,50 +1490,52 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     final disabled = state != 'ANSWERED';
     final value = values[name];
     final id = 'm2-$key-$name';
-    final selected = value is List ? [for (final v in value) '$v'] : const <String>[];
+    final selected = value is List
+        ? [for (final v in value) '$v']
+        : const <String>[];
 
-    Component choice(String code, bool multi) => label(
-          classes: 'asw-answer${selected.contains(code) ? ' is-on' : ''}',
-          [
-            input<bool>(
-              type: multi ? InputType.checkbox : InputType.radio,
-              name: id,
-              // Each choice needs its own id: one shared id across a radio or
-              // checkbox group is invalid HTML and leaves `for` pointing at
-              // nothing, so a label click would not reliably toggle its input.
-              attributes: {'id': '$id-${code.toLowerCase()}'},
-              checked: selected.contains(code),
-              disabled: disabled,
-              events: events(
-                onChange: (_) {
-                  if (multi) {
-                    final next = [...selected];
-                    if (next.contains(code)) {
-                      next.remove(code);
-                    } else {
-                      next.add(code);
-                    }
-                    _setComposite(key, name, next);
+    Component choice(String code, bool multi) =>
+        label(classes: 'asw-answer${selected.contains(code) ? ' is-on' : ''}', [
+          input<bool>(
+            type: multi ? InputType.checkbox : InputType.radio,
+            name: id,
+            // Each choice needs its own id: one shared id across a radio or
+            // checkbox group is invalid HTML and leaves `for` pointing at
+            // nothing, so a label click would not reliably toggle its input.
+            attributes: {'id': '$id-${code.toLowerCase()}'},
+            checked: selected.contains(code),
+            disabled: disabled,
+            events: events(
+              onChange: (_) {
+                if (multi) {
+                  final next = [...selected];
+                  if (next.contains(code)) {
+                    next.remove(code);
                   } else {
-                    _setComposite(key, name, code);
+                    next.add(code);
                   }
-                },
-              ),
+                  _setComposite(key, name, next);
+                } else {
+                  _setComposite(key, name, code);
+                }
+              },
             ),
-            Component.text(_humanise(code)),
-          ],
-        );
+          ),
+          Component.text(_humanise(code)),
+        ]);
 
     // `for` is only meaningful when the field renders one input carrying that
     // id. A choice group or a list has no single target, and pointing `for` at a
     // non-existent element is worse than having no `for` at all.
     final singleInput = type != 'ENUM' && type != 'MULTI' && type != 'LIST';
     return div(classes: 'asw-composite__field', [
-      label(attributes: {if (singleInput) 'for': id}, [
-        Component.text(required ? '$fieldLabel *' : fieldLabel),
-      ]),
+      label(
+        attributes: {if (singleInput) 'for': id},
+        [Component.text(required ? '$fieldLabel *' : fieldLabel)],
+      ),
       if (type == 'ENUM' || type == 'MULTI')
-        for (final code in _compositeChoices(field)) choice(code, type == 'MULTI')
+        for (final code in _compositeChoices(field))
+          choice(code, type == 'MULTI')
       else if (type == 'LIST')
         _compositeList(item, field, values, state)
       else if (type == 'AMOUNT_MYR')
@@ -1718,7 +1557,9 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
         // so a note the entrepreneur wrote on two lines came back as one — the
         // stored value must be what was typed, not what an <input> can hold.
         textarea(
-          rows: field['max_length'] is int && (field['max_length'] as int) > 200 ? 4 : 1,
+          rows: field['max_length'] is int && (field['max_length'] as int) > 200
+              ? 4
+              : 1,
           classes: 'm1-textarea',
           attributes: {'id': id, 'aria-label': fieldLabel},
           events: events<String>(onInput: (v) => _setComposite(key, name, v)),
@@ -1727,8 +1568,12 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     ]);
   }
 
-  Component _compositeList(Map<String, dynamic> item, Map<String, dynamic> field,
-      Map<String, dynamic> values, String state) {
+  Component _compositeList(
+    Map<String, dynamic> item,
+    Map<String, dynamic> field,
+    Map<String, dynamic> values,
+    String state,
+  ) {
     final key = item['item_key'] as String? ?? '';
     final name = '${field['name']}';
     final raw = values[name];
@@ -1760,7 +1605,9 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
                 attributes: {'aria-label': '${sub['name']} $i'},
                 events: events<String>(
                   onInput: (v) {
-                    final next = [for (final row in rows) {...row}];
+                    final next = [
+                      for (final row in rows) {...row},
+                    ];
                     next[i] = {...next[i], '${sub['name']}': v};
                     _setComposite(key, name, next);
                   },
@@ -1773,8 +1620,9 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
             onClick: disabled
                 ? null
                 : () {
-                    final next = [for (final row in rows) {...row}]
-                      ..removeAt(i);
+                    final next = [
+                      for (final row in rows) {...row},
+                    ]..removeAt(i);
                     _setComposite(key, name, next);
                   },
             [Component.text('Remove')],
@@ -1808,193 +1656,202 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     final options = _options(item);
     final editable = _editable(item);
     final multi = kind == 'MULTI';
-    final state = _editorState[key] ??
+    final state =
+        _editorState[key] ??
         (!_applicable(item) ? 'NOT_APPLICABLE' : 'ANSWERED');
     final codes = _editorCodes[key] ?? const <String>[];
     final saved = draft.answers.containsKey(key) && !_isDirty(item);
     final mode = _cardMode(item);
-    return div(attributes: {'id': 'm2-item-$key'}, [
-      div(classes: 'asw-qcard__header', [
-        span(classes: 'asw-qcard__code', [Component.text(key)]),
-        span(classes: 'asw-qcard__position', [
-          Component.text('Question ${index + 1} of $total'),
-        ]),
-        if (_isDirty(item))
-          span(classes: 'small asw-muted', [
-            Component.text(component.embedded
-                ? '· saving automatically…'
-                : '· unsaved changes'),
+    return div(
+      attributes: {'id': 'm2-item-$key'},
+      [
+        div(classes: 'asw-qcard__header', [
+          span(classes: 'asw-qcard__code', [Component.text(key)]),
+          span(classes: 'asw-qcard__position', [
+            Component.text('Question ${index + 1} of $total'),
           ]),
-      ]),
-      h2(classes: 'asw-qcard__prompt', [
-        Component.text(item['question_text'] as String? ?? ''),
-      ]),
-      p(classes: 'asw-qcard__help', [
-        Component.text(
-          'Requiredness ${item['requiredness'] ?? '—'} · input '
-          '${kind.isEmpty ? '—' : kind}${saved ? ' · saved ✓' : ''}',
-        ),
-      ]),
-      div(classes: 'asw-qcard__meta', [
-        span(classes: 'asw-qcard__required', [
-          Component.text(_cardStatusLabel(item, mode)),
+          if (_isDirty(item))
+            span(classes: 'small asw-muted', [
+              Component.text(
+                component.embedded
+                    ? '· saving automatically…'
+                    : '· unsaved changes',
+              ),
+            ]),
         ]),
-        span(classes: 'small asw-muted', [
+        h2(classes: 'asw-qcard__prompt', [
+          Component.text(item['question_text'] as String? ?? ''),
+        ]),
+        p(classes: 'asw-qcard__help', [
           Component.text(
-            mode == 'answerable'
-                ? (multi
-                      ? 'Select every answer that applies'
-                      : 'Choose one answer')
-                : '',
+            'Requiredness ${item['requiredness'] ?? '—'} · input '
+            '${kind.isEmpty ? '—' : kind}${saved ? ' · saved ✓' : ''}',
           ),
         ]),
-      ]),
-      if (mode == 'waiting')
-        _infoNotice(
-          'Answer ${_parentKey(item) ?? 'the earlier question'} first',
-          'This question depends on ${_parentTitle(item)}. Its options appear '
-              'once that answer is saved.',
-        ),
-      if (mode == 'inapplicable')
-        _infoNotice(
-          'Not applicable',
-          'This question does not apply given your answer to '
-              '${_parentTitle(item)}. You can move on.',
-        ),
-      if (mode == 'no_input')
-        _infoNotice(
-          'No answer set in this instrument version',
-          'Nothing can be selected here. This is a property of the instrument, '
-              'not a problem with your answer.',
-        ),
-      if (mode == 'inapplicable' && saved)
-        _infoNotice(
-          'A previous answer no longer applies',
-          'You answered this before ${_parentTitle(item)} changed. It is not '
-              'used while the question does not apply, and it has not been '
-              'deleted.',
-          action: (
-            'Mark as not applicable',
-            () => _saveAnswer(item, overrideState: 'NOT_APPLICABLE'),
+        div(classes: 'asw-qcard__meta', [
+          span(classes: 'asw-qcard__required', [
+            Component.text(_cardStatusLabel(item, mode)),
+          ]),
+          span(classes: 'small asw-muted', [
+            Component.text(
+              mode == 'answerable'
+                  ? (multi
+                        ? 'Select every answer that applies'
+                        : 'Choose one answer')
+                  : '',
+            ),
+          ]),
+        ]),
+        if (mode == 'waiting')
+          _infoNotice(
+            'Answer ${_parentKey(item) ?? 'the earlier question'} first',
+            'This question depends on ${_parentTitle(item)}. Its options appear '
+                'once that answer is saved.',
           ),
-        ),
-      if (mode == 'answerable' && !editable)
-        _infoNotice(
-          'No answer set in this instrument version',
-          'Nothing can be selected here.',
-        ),
-      div(classes: 'asw-qcard__answers', [
-        if (mode == 'answerable' && kind == 'COMPOSITE')
-          _compositeEditor(item)
-        else if (mode == 'answerable' && kind == 'TEXT')
-          textarea(
-            rows: 5,
-            classes: 'm1-textarea',
-            attributes: {'aria-label': key},
-            onInput: (value) {
-              setState(() {
-                _editorText[key] = value;
-                _touched.add(key);
-              });
-              _scheduleAutoSave(textInput: true);
-            },
-            [Component.text(_editorText[key] ?? '')],
-          )
-        else if (mode == 'answerable')
-          for (final option in options)
-            label(
-              classes:
-                  'asw-answer${codes.contains(option['code']) ? ' is-on' : ''}',
-              [
-                input<bool>(
-                  type: multi ? InputType.checkbox : InputType.radio,
-                  name: 'm2-$key',
-                  checked: codes.contains(option['code']),
-                  disabled: state != 'ANSWERED',
-                  events: events(
-                    onChange: (_) {
-                      setState(() {
-                        final code = option['code'] as String;
-                        final current = [...(_editorCodes[key] ?? const <String>[])];
-                        if (multi) {
-                          current.contains(code)
-                              ? current.remove(code)
-                              : current.add(code);
-                        } else {
-                          current
-                            ..clear()
-                            ..add(code);
-                        }
-                        _editorCodes[key] = current;
-                        _touched.add(key);
-                        _editorState[key] = 'ANSWERED';
-                      });
-                      _scheduleAutoSave();
-                    },
+        if (mode == 'inapplicable')
+          _infoNotice(
+            'Not applicable',
+            'This question does not apply given your answer to '
+                '${_parentTitle(item)}. You can move on.',
+          ),
+        if (mode == 'no_input')
+          _infoNotice(
+            'No answer set in this instrument version',
+            'Nothing can be selected here. This is a property of the instrument, '
+                'not a problem with your answer.',
+          ),
+        if (mode == 'inapplicable' && saved)
+          _infoNotice(
+            'A previous answer no longer applies',
+            'You answered this before ${_parentTitle(item)} changed. It is not '
+                'used while the question does not apply, and it has not been '
+                'deleted.',
+            action: (
+              'Mark as not applicable',
+              () => _saveAnswer(item, overrideState: 'NOT_APPLICABLE'),
+            ),
+          ),
+        if (mode == 'answerable' && !editable)
+          _infoNotice(
+            'No answer set in this instrument version',
+            'Nothing can be selected here.',
+          ),
+        div(classes: 'asw-qcard__answers', [
+          if (mode == 'answerable' && kind == 'COMPOSITE')
+            _compositeEditor(item)
+          else if (mode == 'answerable' && kind == 'TEXT')
+            textarea(
+              rows: 5,
+              classes: 'm1-textarea',
+              attributes: {'aria-label': key},
+              onInput: (value) {
+                setState(() {
+                  _editorText[key] = value;
+                  _touched.add(key);
+                });
+                _scheduleAutoSave(textInput: true);
+              },
+              [Component.text(_editorText[key] ?? '')],
+            )
+          else if (mode == 'answerable')
+            for (final option in options)
+              label(
+                classes:
+                    'asw-answer${codes.contains(option['code']) ? ' is-on' : ''}',
+                [
+                  input<bool>(
+                    type: multi ? InputType.checkbox : InputType.radio,
+                    name: 'm2-$key',
+                    checked: codes.contains(option['code']),
+                    disabled: state != 'ANSWERED',
+                    events: events(
+                      onChange: (_) {
+                        setState(() {
+                          final code = option['code'] as String;
+                          final current = [
+                            ...(_editorCodes[key] ?? const <String>[]),
+                          ];
+                          if (multi) {
+                            current.contains(code)
+                                ? current.remove(code)
+                                : current.add(code);
+                          } else {
+                            current
+                              ..clear()
+                              ..add(code);
+                          }
+                          _editorCodes[key] = current;
+                          _touched.add(key);
+                          _editorState[key] = 'ANSWERED';
+                        });
+                        _scheduleAutoSave();
+                      },
+                    ),
                   ),
-                ),
-                span(classes: 'asw-answer__label', [
-                  Component.text('${option['label'] ?? option['code']}'),
-                ]),
-              ],
-            ),
-      ]),
-      if (mode == 'answerable' && _canSkip(item))
-        p(classes: 'small asw-muted', [
-          ActionButton(
-            state == 'NOT_PROVIDED'
-                ? 'Skipped for now — tap to answer'
-                : 'Skip this question for now',
-            variant: 'secondary',
-            onClick: () {
-              setState(() {
-                _editorState[key] =
-                    state == 'NOT_PROVIDED' ? 'ANSWERED' : 'NOT_PROVIDED';
-                _touched.add(key);
-              });
-              _scheduleAutoSave();
-            },
-          ),
+                  span(classes: 'asw-answer__label', [
+                    Component.text('${option['label'] ?? option['code']}'),
+                  ]),
+                ],
+              ),
         ]),
-      div(classes: 'asw-qcard__footer', [
-        div(classes: 'asw-qcard__group', [
-          ActionButton(
-            'Previous',
-            variant: 'secondary',
-            onClick: index == 0
-                ? null
-                : () => setState(() => _itemIndex = index - 1),
-          ),
-        ]),
-        div(classes: 'asw-qcard__group', [
-          // One primary action per card: the forward step while there is one,
-          // and the save itself on the last item. Two dark buttons side by side
-          // read as a choice between two equally weighted actions, which is not
-          // what this card offers.
-          if (!component.embedded)
+        if (mode == 'answerable' && _canSkip(item))
+          p(classes: 'small asw-muted', [
             ActionButton(
-              busy ? 'Saving…' : 'Save answer',
-              variant: index < total - 1 ? 'secondary' : 'primary',
-              icon: 'save',
-              onClick: busy ? null : () => _saveAnswer(item),
+              state == 'NOT_PROVIDED'
+                  ? 'Skipped for now — tap to answer'
+                  : 'Skip this question for now',
+              variant: 'secondary',
+              onClick: () {
+                setState(() {
+                  _editorState[key] = state == 'NOT_PROVIDED'
+                      ? 'ANSWERED'
+                      : 'NOT_PROVIDED';
+                  _touched.add(key);
+                });
+                _scheduleAutoSave();
+              },
             ),
-          if (index < total - 1)
+          ]),
+        div(classes: 'asw-qcard__footer', [
+          div(classes: 'asw-qcard__group', [
             ActionButton(
-              'Next question',
-              icon: 'arrow_forward',
-              onClick: () => setState(() => _itemIndex = index + 1),
+              'Previous',
+              variant: 'secondary',
+              onClick: index == 0
+                  ? null
+                  : () => setState(() => _itemIndex = index - 1),
             ),
+          ]),
+          div(classes: 'asw-qcard__group', [
+            // One primary action per card: the forward step while there is one,
+            // and the save itself on the last item. Two dark buttons side by side
+            // read as a choice between two equally weighted actions, which is not
+            // what this card offers.
+            if (!component.embedded)
+              ActionButton(
+                busy ? 'Saving…' : 'Save answer',
+                variant: index < total - 1 ? 'secondary' : 'primary',
+                icon: 'save',
+                onClick: busy ? null : () => _saveAnswer(item),
+              ),
+            if (index < total - 1)
+              ActionButton(
+                'Next question',
+                icon: 'arrow_forward',
+                onClick: () => setState(() => _itemIndex = index + 1),
+              ),
+          ]),
         ]),
-      ]),
-      // Kept visible on purpose: this card writes to the real M2 router, and
-      // the endpoint is how a reviewer checks that claim.
-      if (!component.embedded)
-        p(classes: 'small asw-muted m2q__endpoint', [
-          Component.text(
-            'Writes PUT /api/v1/m2/assessments/{id}/answers/$key',
-          ),
-        ]),
-    ]);
+        // Kept visible on purpose: this card writes to the real M2 router, and
+        // the endpoint is how a reviewer checks that claim.
+        if (!component.embedded)
+          p(classes: 'small asw-muted m2q__endpoint', [
+            Component.text(
+              'Writes PUT /api/v1/m2/assessments/{id}/answers/$key',
+            ),
+          ]),
+      ],
+    );
   }
 
   Component _infoNotice(
@@ -2008,277 +1865,13 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
       ActionButton(action.$1, variant: 'secondary', onClick: action.$2),
   ]);
 
-  Component _bdj() {
-    final sheet = _worksheet;
-    final findings = [
-      for (final f in (sheet?['findings'] as List? ?? const []))
-        if (f is Map) f.cast<String, dynamic>(),
-    ];
-    return div(classes: 'stack', [
-      h2([Component.text('Business description and candidate BDJ')]),
-      p(classes: 'sr-muted', [
-        Component.text(
-          'POST /api/v1/m2/assessments/{id}/bdj/evaluate runs the deterministic '
-          'candidate ruleset. It is not a model call and does not establish '
-          'scientific validity.',
-        ),
-      ]),
-      button(
-        classes: 'sr-button sr-button--primary',
-        attributes: {'type': 'button'},
-        onClick: busy || _draft == null ? null : _evaluate,
-        [Component.text('Run candidate BDJ evaluation')],
-      ),
-      if (sheet == null)
-        p(classes: 'sr-muted', [
-          Component.text('No evaluation has been read for this revision.'),
-        ])
-      else ...[
-        p(classes: 'sr-muted', [
-          Component.text(
-            'Worksheet at revision ${sheet['revision']} · findings '
-            '${findings.length}',
-          ),
-        ]),
-        for (final f in findings) _findingCard(f),
-        if (findings.isEmpty)
-          p(classes: 'sr-muted', [
-            Component.text(
-              'The ruleset recorded no candidate issue. That is not a viability '
-              'or completeness judgement.',
-            ),
-          ]),
-      ],
-    ]);
-  }
-
   /// UI-01: one finding with its real source references and the two decisions
   /// the backend actually accepts. No other code is offered.
-  Component _findingCard(Map<String, dynamic> f) {
-    final id = f['id'] as String? ?? '';
-    final decided = _decisions[id];
-    final draft = _draft;
-    final byId = <String, String>{};
-    final answerOf = <String, Map>{};
-    if (draft != null) {
-      draft.answers.forEach((key, value) {
-        if (value is Map) {
-          answerOf[key] = value;
-          final rid = value['id'];
-          if (rid is String) byId[rid] = key;
-        }
-      });
-    }
-    final refs = f['source_answer_ids'] is List
-        ? f['source_answer_ids'] as List
-        : const [];
-    final items = [for (final r in refs) byId['$r'] ?? '—'];
-    final values = [
-      for (final r in refs)
-        if (byId['$r'] != null)
-          '${byId['$r']} = ${jsonEncode(answerOf[byId['$r']]?['value_json'] ?? answerOf[byId['$r']]?['value'])}',
-    ];
-    return div(classes: 'stack', [
-      p([
-        Component.text(
-          '${f['rule_id'] ?? 'rule'} · ${f['issue_type'] ?? ''} · finding $id',
-        ),
-      ]),
-      p(classes: 'sr-muted', [
-        Component.text('Source items: ${items.join(', ')}'),
-      ]),
-      p(classes: 'sr-muted', [
-        Component.text(
-          'Declared values: ${values.isEmpty ? '—' : values.join(' · ')}',
-        ),
-      ]),
-      p([Component.text('${f['explanation'] ?? ''}')]),
-      p(classes: 'sr-muted', [
-        Component.text(
-          'Not proven: ${f['not_proven'] ?? '—'} · Next: '
-          '${f['next_action'] ?? '—'} · state ${f['review_state'] ?? '—'}',
-        ),
-      ]),
-      p(classes: 'sr-muted', [
-        Component.text(
-          decided == null
-              ? 'No decision recorded for this revision.'
-              : 'Recorded decision: $decided',
-        ),
-      ]),
-      div(classes: 'stack', [
-        button(
-          classes: 'sr-button',
-          attributes: {'type': 'button'},
-          onClick: busy || decided != null || id.isEmpty
-              ? null
-              : () => _decide(id, 'KEEP_ORIGINAL'),
-          [Component.text('Keep original declaration')],
-        ),
-        button(
-          classes: 'sr-button',
-          attributes: {'type': 'button'},
-          onClick: busy || decided != null || id.isEmpty
-              ? null
-              : () => _decide(id, 'REVIEW_LATER'),
-          [Component.text('Review later')],
-        ),
-      ]),
-      p(classes: 'sr-muted', [
-        Component.text(
-          '"Keep original" means the declaration stands as written. It is not '
-          'approval, not proof the declaration is correct, and not resolution of '
-          'the uncertainty.',
-        ),
-      ]),
-    ]);
-  }
 
   /// What still blocks confirmation, in the entrepreneur's terms.
   ///
   /// Mirrors the server's rule (`effective_required` on applicable items) but
   /// never decides confirmation itself — the backend still validates.
-  List<Map<String, dynamic>> _unresolvedRequired() {
-    final draft = _draft;
-    if (draft == null) return const [];
-    return [
-      for (final item in draft.items)
-        if (item['effective_required'] == true &&
-            (draft.answers[item['item_key']]?['answer_state']) != 'ANSWERED')
-          item,
-    ];
-  }
-
-  Component _confirmationSection() {
-    final result = _confirmation;
-    final unresolved = _unresolvedRequired();
-    return div(classes: 'stack', [
-      h2([Component.text('Confirmation and business context')]),
-      if (unresolved.isEmpty)
-        p(classes: 'small asw-muted', [
-          Component.text('Every required question has an answer.'),
-        ])
-      else
-        div(classes: 'm1-notice', [
-          p([
-            Component.text(
-              '${unresolved.length} required question(s) still need an answer '
-              'before this can be confirmed:',
-            ),
-          ]),
-          for (final item in unresolved)
-            p(classes: 'small asw-muted', [
-              Component.text(
-                '${item['item_key']} — ${item['title'] ?? item['question_text'] ?? ''}',
-              ),
-            ]),
-        ]),
-      button(
-        classes: 'sr-button',
-        attributes: {'type': 'button'},
-        onClick: busy || _worksheet == null || _undecidedFindingIds.isNotEmpty
-            ? null
-            : _confirm,
-        [Component.text('Record review + confirmation')],
-      ),
-      if (_worksheet != null && _undecidedFindingIds.isNotEmpty)
-        div(classes: 'm1-notice', [
-          Component.text(
-            '${_undecidedFindingIds.length} current finding(s) still need a '
-            'recorded KEEP_ORIGINAL decision. Confirmation stays disabled until '
-            'the backend prerequisites are met.',
-          ),
-        ]),
-      if (result != null)
-        p(classes: 'sr-muted', [
-          Component.text(
-            'Confirmation ${result['id']} · revision '
-            '${result['assessment_revision']} · snapshot digest '
-            '${result['snapshot_digest']} · qj_handoff_authorized = '
-            '${result['snapshot_json'] is Map ? (result['snapshot_json'] as Map)['qj_handoff_authorized'] : '—'}',
-          ),
-        ]),
-      button(
-        classes: 'sr-button',
-        attributes: {'type': 'button'},
-        onClick: busy || result == null ? null : _readContextStatus,
-        [Component.text('Read business-context status')],
-      ),
-      if (_contextStatus != null)
-        p(classes: 'sr-muted', [
-          Component.text(
-            'BCB status ${_contextStatus!['status']} · attempts '
-            '${_contextStatus!['attempt_count']} · source current '
-            '${_contextStatus!['source_is_current']} · last code '
-            '${_contextStatus!['last_code'] ?? 'none'}',
-          ),
-        ]),
-    ]);
-  }
-
-  Component _objectiveSection() {
-    final result = _objective;
-    return div(classes: 'stack', [
-      h2([Component.text('Confirmed research objective and QJ context')]),
-      textarea(
-        rows: 3,
-        classes: 'm1-textarea',
-        attributes: {'aria-label': 'research objective'},
-        onInput: (value) => setState(() => _objectiveText = value),
-        [Component.text(_objectiveText)],
-      ),
-      button(
-        classes: 'sr-button',
-        attributes: {'type': 'button'},
-        onClick: busy || _confirmation == null ? null : _createObjective,
-        [Component.text('Save research objective')],
-      ),
-      if (result != null)
-        p(classes: 'sr-muted', [
-          Component.text(
-            // UI-02: the backend nests origin under `source`
-            // (confirmation_service.py builds {"source": {"origin": ...}}).
-            'Objective ${result['id']} · origin '
-            '${result['source'] is Map ? (result['source'] as Map)['origin'] ?? '—' : '—'} · '
-            'confirmation ${result['confirmation_id']}',
-          ),
-        ]),
-      button(
-        classes: 'sr-button',
-        attributes: {'type': 'button'},
-        onClick: busy || result == null ? null : _readQjContext,
-        [Component.text('Read QJ context')],
-      ),
-      if (_qjContext != null)
-        pre([
-          Component.text(
-            const JsonEncoder.withIndent('  ').convert(_qjContext),
-          ),
-        ]),
-      div(classes: 'm1-notice', [
-        Component.text(
-          'Reading the QJ context is not a judgement: QJ is retired from the '
-          'active path and this panel never runs it. The next step is the '
-          'research-question candidate below, which is generated from your '
-          'confirmed business facts.',
-        ),
-      ]),
-      if (result != null && _draft != null)
-        ResearchCandidatePanel(
-          // Keyed by objective + revision: a new objective or a new assessment
-          // revision must not reuse the previous candidate's widget state.
-          key: ValueKey(
-            'candidate-${result['id']}-${_draft!.revision}',
-          ),
-          objectiveId: result['id'] as String,
-          expectedRevision: _draft!.revision,
-          contextId: _contextStatus?['context_id'] as String?,
-          objectiveText: result['exact_text'] is String
-              ? result['exact_text'] as String
-              : _objectiveText,
-        ),
-    ]);
-  }
 
   @override
   Component build(BuildContext context) => section(classes: 'stack stack--md', [
@@ -2317,10 +1910,12 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
       if (!component.embedded) ...[
         if (_stage == '2') ...[
           _reviewSection(),
-          p(classes: 'sr-muted', [Component.text(
-            'Stage 2 records what the business is. The research objectives that '
-            'follow from it are reviewed on Stage 3.',
-          )]),
+          p(classes: 'sr-muted', [
+            Component.text(
+              'Stage 2 records what the business is. The research objectives that '
+              'follow from it are reviewed on Stage 3.',
+            ),
+          ]),
           p(classes: 'sr-muted', [
             Component.text(
               'Recorded activity is read-only and lives on the Activity History '
@@ -2350,7 +1945,8 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     final draft = _draft;
     if (draft == null) return div(const []);
     final preview = _conceptPreview;
-    final current = preview != null &&
+    final current =
+        preview != null &&
         preview['assessment_id'] == draft.id &&
         preview['assessment_revision'] == draft.revision;
     final text = preview?['preview_text'];
@@ -2403,9 +1999,9 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
         Component.text(
           'This card creates no confirmation and no business context.'
           '${current ? ' Server-reported: creates_confirmation = '
-                '${preview['creates_confirmation']}, creates_business_context = '
-                '${preview['creates_business_context']}, model_invoked = '
-                '${preview['model_invoked']}.' : ''}',
+                    '${preview['creates_confirmation']}, creates_business_context = '
+                    '${preview['creates_business_context']}, model_invoked = '
+                    '${preview['model_invoked']}.' : ''}',
         ),
       ]),
     ]);
@@ -2440,7 +2036,9 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
         unmapped.isEmpty) {
       return [
         p(classes: 'small asw-muted', [
-          Component.text('No gaps reported: every projection input is accounted for.'),
+          Component.text(
+            'No gaps reported: every projection input is accounted for.',
+          ),
         ]),
       ];
     }
@@ -2452,12 +2050,14 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
         ),
       if (skipped.isNotEmpty)
         _previewGapGroup('Deliberately not provided', skipped),
-      if (absent.isNotEmpty)
-        _previewGapGroup('Never answered', absent),
+      if (absent.isNotEmpty) _previewGapGroup('Never answered', absent),
       if (notApplicable.isNotEmpty)
         _previewGapGroup('Not applicable to these answers', notApplicable),
       if (unmapped.isNotEmpty)
-        _previewGapGroup('Answered, but outside the concept projection', unmapped),
+        _previewGapGroup(
+          'Answered, but outside the concept projection',
+          unmapped,
+        ),
     ];
   }
 
@@ -2481,10 +2081,16 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
   /// proposal whose confirmation is not current.
   Component _stageStepper() {
     final confirmed = _m2StatusLabel() == 'Confirmed';
-    Component pill(String value, String label, String hint, {bool enabled = true}) {
+    Component pill(
+      String value,
+      String label,
+      String hint, {
+      bool enabled = true,
+    }) {
       final active = _stage == value;
       return button(
-        classes: 'tab${active ? ' is-active' : ''}'
+        classes:
+            'tab${active ? ' is-active' : ''}'
             '${enabled ? '' : ' is-disabled'}',
         attributes: {
           'type': 'button',
@@ -2503,8 +2109,11 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     return section(classes: 'panel asw-inline', [
       div(classes: 'panel__body stack stack--sm', [
         div(classes: 'asw-stage-switch', [
-          pill('2', 'Stage 2 · Business declaration',
-              'Answer the M2 instrument and confirm what the business is.'),
+          pill(
+            '2',
+            'Stage 2 · Business declaration',
+            'Answer the M2 instrument and confirm what the business is.',
+          ),
           pill(
             '3',
             'Stage 3 · Research objectives',
@@ -2515,10 +2124,12 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
           ),
         ]),
         p(classes: 'sr-muted', [
-          Component.text(confirmed
-              ? 'The declaration is confirmed. Stage 3 lists the research '
-                  'objectives proposed from it.'
-              : 'Confirm the declaration on Stage 2 to unlock Stage 3.'),
+          Component.text(
+            confirmed
+                ? 'The declaration is confirmed. Stage 3 lists the research '
+                      'objectives proposed from it.'
+                : 'Confirm the declaration on Stage 2 to unlock Stage 3.',
+          ),
         ]),
       ]),
     ]);
@@ -2568,10 +2179,12 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     return section(classes: 'panel asw-inline', [
       div(classes: 'panel__body stack stack--sm', [
         h2([Component.text('Proposals derived from this confirmation')]),
-        p([Component.text(
-          'Confirmation ${_confirmation!['id']} · revision '
-          '${_confirmation!['assessment_revision']}',
-        )]),
+        p([
+          Component.text(
+            'Confirmation ${_confirmation!['id']} · revision '
+            '${_confirmation!['assessment_revision']}',
+          ),
+        ]),
         if (_contextSummary() != null)
           p(classes: 'small asw-muted', [Component.text(_contextSummary()!)]),
       ]),
@@ -2586,7 +2199,11 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
       h2([Component.text('Business declaration review')]),
       p([Component.text('Saved M2 revision ${draft.revision}')]),
       if (_confirmation != null)
-        p([Component.text('Confirmation ${_confirmation!['id']} · revision ${_confirmation!['assessment_revision']}')]),
+        p([
+          Component.text(
+            'Confirmation ${_confirmation!['id']} · revision ${_confirmation!['assessment_revision']}',
+          ),
+        ]),
       // Persisted business context for the confirmation above, restored when the
       // page opens. Read-only: it reports what already exists and never starts a
       // build. Absent until a context has actually been persisted, so it cannot
@@ -2632,7 +2249,11 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
             ActionButton(
               'Confirm business declaration',
               icon: 'verified',
-              onClick: busy || _autoSaveInFlight || _dirtyCount() > 0 || _reviewedRevision != draft.revision
+              onClick:
+                  busy ||
+                      _autoSaveInFlight ||
+                      _dirtyCount() > 0 ||
+                      _reviewedRevision != draft.revision
                   ? null
                   : _confirmDeclarationBeforeBdj,
             ),
@@ -2647,11 +2268,16 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     if (draft == null) return 'Not started';
     final assessment = (draft.data['assessment'] as Map?) ?? const {};
     final confirmed = assessment['confirmed_revision'];
-    if ((confirmed != null && confirmed == draft.revision) || _confirmation?['assessment_revision'] == draft.revision) return 'Confirmed';
+    if ((confirmed != null && confirmed == draft.revision) ||
+        _confirmation?['assessment_revision'] == draft.revision) {
+      return 'Confirmed';
+    }
     final missing = draft.items
-        .where((item) =>
-            item['effective_required'] == true &&
-            (draft.answers[item['item_key']]?['answer_state']) != 'ANSWERED')
+        .where(
+          (item) =>
+              item['effective_required'] == true &&
+              (draft.answers[item['item_key']]?['answer_state']) != 'ANSWERED',
+        )
         .length;
     if (missing == 0) return 'Required answers complete — ready for review';
     return 'Draft in progress — $missing required answer(s) outstanding';
@@ -2670,10 +2296,10 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
         error != null
             ? 'Autosave needs attention — see the error below.'
             : busy || _autoSaveInFlight
-                ? 'Saving answers…'
-                : _dirtyCount() > 0
-                    ? 'Changes waiting to save…'
-                    : 'Draft up to date',
+            ? 'Saving answers…'
+            : _dirtyCount() > 0
+            ? 'Changes waiting to save…'
+            : 'Draft up to date',
       ),
     ]),
     ActionButton(
@@ -2683,11 +2309,9 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
       onClick: busy || _autoSaveInFlight ? null : _pauseForNow,
     ),
     if (_pauseReady)
-      a(
-        href: '/entrepreneur/assessments',
-        classes: 'sr-button',
-        [Component.text('Return to assessments')],
-      ),
+      a(href: '/entrepreneur/assessments', classes: 'sr-button', [
+        Component.text('Return to assessments'),
+      ]),
   ]);
 
   int _dirtyCount() {
@@ -2745,22 +2369,26 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
       }
       final value = _editorValue(fresh, state);
       try {
-        final updated = await AppLocator.m2.save(_draft!, key, state, value,
-            marketplaceAssessmentId: component.marketplaceAssessmentId);
+        final updated = await AppLocator.m2.save(
+          _draft!,
+          key,
+          state,
+          value,
+          marketplaceAssessmentId: component.marketplaceAssessmentId,
+        );
         if (!mounted) return;
         _draft = updated;
         _confirmation = null;
         _reviewedRevision = null;
         _showReview = false;
-        _worksheet = null;
-        _decisions = {};
         saved++;
       } catch (failure) {
         failed.add(key);
         if (failure is AppFailure) {
           final code = failure.backendCode;
           final guidance = code == 'REVISION_CONFLICT'
-              ? 'Reload the current assessment revision.' : failure.userMessage;
+              ? 'Reload the current assessment revision.'
+              : failure.userMessage;
           failureMessages.add('$guidance${code == null ? '' : ' ($code)'}');
         } else {
           failureMessages.add('The answer could not be verified.');
@@ -2776,21 +2404,22 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
           for (final item in _draft!.items)
             if (_isDirty(item)) item['item_key'] as String,
         };
-        _seedEditors(_draft!, preserve: {
-          ...failed,
-          ...skipped,
-          ...changedAfterRequest,
-        });
+        _seedEditors(
+          _draft!,
+          preserve: {...failed, ...skipped, ...changedAfterRequest},
+        );
       }
       busy = false;
       _savedRevision = _draft?.revision;
       if (failed.isEmpty && skipped.isEmpty) {
         notice = 'Assessment draft saved successfully.';
       } else if (failed.isEmpty) {
-        notice = 'Assessment draft saved. ${skipped.length} answer(s) no longer '
+        notice =
+            'Assessment draft saved. ${skipped.length} answer(s) no longer '
             'apply and were left unchanged.';
       } else {
-        error = 'Draft partially saved: $saved stored, ${failed.length} not '
+        error =
+            'Draft partially saved: $saved stored, ${failed.length} not '
             'stored (${failed.join(', ')}). Your edits for those questions are '
             'kept. ${failureMessages.toSet().join(' ')}';
       }
@@ -2802,18 +2431,6 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     if (saved > 0) unawaited(_loadConceptPreview());
   }
 
-  /// Abandon unsaved editor state. Stored answers are untouched.
-  void _discardEdits() {
-    final draft = _draft;
-    if (draft == null) return;
-    setState(() {
-      _seedEditors(draft);
-      _discardArmed = false;
-      error = null;
-      notice = 'Unsaved edits discarded. Stored answers are unchanged.';
-    });
-  }
-
   /// DEF-11 unbound state.
   ///
   /// Deliberately contains **no** questionnaire and **no** save control. The
@@ -2823,7 +2440,9 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
   /// assessment.
   Component _unboundNotice() => div(classes: 'bdj-empty', [
     p(classes: 'bdj-empty__title', [
-      Component.text('This assessment is not linked to an M2 research assessment'),
+      Component.text(
+        'This assessment is not linked to an M2 research assessment',
+      ),
     ]),
     p(classes: 'bdj-empty__body', [
       Component.text(
@@ -2840,10 +2459,8 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
         'questionnaire once a verified link exists.',
       ),
     ]),
-    a(
-      href: '/entrepreneur/m2-workflow',
-      classes: 'sr-button',
-      [Component.text('Open the standalone M2 research workflow')],
-    ),
+    a(href: '/entrepreneur/m2-workflow', classes: 'sr-button', [
+      Component.text('Open the standalone M2 research workflow'),
+    ]),
   ]);
 }

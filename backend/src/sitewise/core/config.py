@@ -1,9 +1,18 @@
+from pathlib import Path
+
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+_BACKEND_ROOT = Path(__file__).resolve().parents[3]
+
+
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=(".env", ".env.local"), extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=(_BACKEND_ROOT / ".env", _BACKEND_ROOT / ".env.local"),
+        extra="ignore",
+        hide_input_in_errors=True,
+    )
 
     # --- Databases ---------------------------------------------------------
     # Schema creation at startup is an explicit operator decision. With this
@@ -14,21 +23,17 @@ class Settings(BaseSettings):
     # Application database (user profiles, saved properties, preferences).
     # Startup `create_all` runs through this URL, so it is the only database
     # the ORM ever writes to.
-    database_url: str = (
-        "postgresql+psycopg2://postgres:123456@localhost:5432/Final_Location_Analysis"
-    )
+    database_url: str
     # Analytics database (DOSM statistics, geospatial features). Read-only by
     # convention; the ORM never runs create_all or migrations against it.
-    analytics_database_url: str = (
-        "postgresql+psycopg2://postgres:123456@localhost:5432/Final_Location_Analysis"
-    )
+    analytics_database_url: str
 
     # Agent assignments: local DB is authoritative; remote mirror is opt-in.
     assignment_sync_enabled: bool = False
 
     # --- Application -------------------------------------------------------
     log_level: str = "INFO"
-    secret_key: str = "change-me"  # app-local signing (NOT Supabase's JWT secret)
+    secret_key: str = ""
     cors_origins: str = (
         "http://localhost:8090,http://127.0.0.1:8090,http://localhost:3000,"
         "http://127.0.0.1:3000"
@@ -265,6 +270,16 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def local_database_url(database: str):
+    """Retarget the configured loopback connection for local maintenance scripts."""
+    from sqlalchemy.engine import make_url
+
+    url = make_url(settings.database_url)
+    if url.host not in {"localhost", "127.0.0.1", "::1"}:
+        raise ValueError("Local maintenance requires a loopback DATABASE_URL")
+    return url.set(database=database)
 
 
 BDJ_CONTRACTS = ("findings", "shadow", "objective")

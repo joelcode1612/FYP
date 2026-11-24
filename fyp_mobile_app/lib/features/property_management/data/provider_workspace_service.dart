@@ -17,6 +17,32 @@ import 'package:fyp/features/property_management/domain/entities/provider_models
 /// workspace no longer reads or displays an enquiry inbox. The backend
 /// endpoints and stored records are untouched.
 abstract final class ProviderWorkspaceService {
+  static String _inspectionPath(int propertyId) =>
+      '/api/v1/provider-flow/properties/$propertyId';
+
+  static Future<Map<String, dynamic>> inspection(int propertyId) async {
+    final response = await ServiceLocator.apiClient.get(
+      '${_inspectionPath(propertyId)}/inspection',
+    );
+    final data = response['data'];
+    if (data is! Map<String, dynamic>) {
+      throw const ResponseFormatFailure('The server did not return an inspection.');
+    }
+    return data;
+  }
+
+  static Future<void> inspectionCommand(
+    int propertyId, String action, Map<String, dynamic> body,
+  ) async {
+    await ServiceLocator.apiClient.post('${_inspectionPath(propertyId)}/$action', body);
+  }
+
+  static Future<void> saveInspection(
+    int propertyId, Map<String, dynamic> checklist,
+  ) async {
+    await ServiceLocator.apiClient.patch('${_inspectionPath(propertyId)}/inspection', checklist);
+  }
+
   /// The signed-in account's own identity payload (`GET /api/v1/auth/me`).
   ///
   /// Returned as the server sent it: the profile page reads fields directly

@@ -22,7 +22,9 @@ sys.path.insert(0, str(ROOT / "src"))
 from sqlalchemy import create_engine, text  # noqa: E402
 
 CLONE = "project1_workflow_tests"
-ADMIN_DSN = "postgresql+psycopg2://postgres:123456@localhost:5432/" + CLONE
+from sitewise.core.config import local_database_url
+
+ADMIN_DSN = local_database_url(CLONE)
 MIGRATIONS = ROOT / "migrations" / "project1_ai"
 RECEIPT = "CP-04A 2026-11-17: bdj result persistence tested on isolated clone"
 

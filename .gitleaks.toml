@@ -1,0 +1,25 @@
+[extend]
+useDefault = true
+
+[[rules]]
+id = "sitewise-private-file"
+description = "Local credential file or private runtime snapshot"
+path = '''(?i)(?:^|/)(?:[^/]*\.env(?:\.[^/]*)?|[^/]+\.(?:key|pem|p12|p8|pfx|jks|keystore)|credentials(?:\.local)?\.json|service-account[^/]*\.json|key\.properties)$'''
+[rules.allowlist]
+paths = ['''\.env\.example$''']
+
+[[rules]]
+id = "sitewise-supabase-secret"
+description = "Supabase server secret"
+regex = '''sb_secret_[A-Za-z0-9_-]{15,}'''
+
+[[rules]]
+id = "sitewise-private-artifact"
+description = "SiteWise local key custody, backup or working snapshot"
+path = '''^(?:backend/(?:backups|var/(?:key-custody|db_sync_audit_ref))|var/checkpoints|out)/'''
+
+[[rules]]
+id = "sitewise-database-password"
+description = "Password in a database connection URL"
+regex = '''(?i)(?:postgres(?:ql)?(?:\+[a-z0-9_]+)?|rediss?)://[^/@\s:'"]+:([^/@\s'"<>]+)@'''
+secretGroup = 1
