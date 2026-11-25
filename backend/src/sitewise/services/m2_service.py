@@ -26,7 +26,12 @@ class M2Service:
     def activity(self,assessment_id,actor_id,limit=50):
         from datetime import timezone
         try:
-            a=self.repo.get_assessment_for_update(assessment_id,actor_id)
+            # A plain read, not `get_assessment_for_update`: this is a read-only
+            # projection, and taking `SELECT ... FOR UPDATE` here made the
+            # Activity History page wait on any unrelated writer holding the
+            # assessment row (DD-120). The row is only needed for its revision
+            # and its ownership check, both of which a consistent read supplies.
+            a=self.repo.get_assessment(assessment_id,actor_id)
             if a is None:raise NotFoundError('Assessment not found.')
             events=self.repo.read_activity(assessment_id,actor_id,a['revision'],limit)
             extra=self.repo.read_activity_supplement(assessment_id,actor_id,a['revision'],limit)
@@ -40,6 +45,17 @@ class M2Service:
                 e['occurred_at']=at.replace(tzinfo=timezone.utc) if at.tzinfo is None else at.astimezone(timezone.utc)
                 e.setdefault('module',modules.get(e['kind'],'M2'))
                 e['source_is_current']=e.get('source_is_current',e['assessment_revision']==a['revision'])
+                # Additive per-event fields (workflow-history-metadata/2 shape).
+                # `event_type` mirrors `kind` so a consumer can branch on type
+                # without knowing every kind. `source_version` coalesces only
+                # version-shaped columns and never a reason. `reason_code` is
+                # null unless the source stores a real code: the existing
+                # prose `reason` field is deliberately not promoted to it.
+                e.setdefault('event_type',e['kind'])
+                if e.get('source_version') is None:
+                    e['source_version']=(e.get('evaluator_version')
+                        or e.get('rule_version') or e.get('builder_version'))
+                e.setdefault('reason_code',None)
                 # Namespaced identity prevents UUID collision across source tables.
                 unique[(e['kind'],str(e['event_id']))]=e
             events=sorted(unique.values(),key=lambda e:(e['occurred_at'],e['kind'],str(e['event_id'])),reverse=True)
@@ -49,6 +65,21 @@ class M2Service:
                 'bcb_statuses':extra['bcb_statuses'],
                 'bcb_statuses_truncated':extra['bcb_statuses_truncated'],
                 'bcb_history_available':extra['bcb_available'],
+                # Per-source availability so a client can state a limitation
+                # instead of implying a module has completed. Additive: an
+                # older consumer ignores the key and keeps its previous shape.
+                'source_states':extra.get('source_states',{}),
+                # Assessment-level questionnaire publication metadata, read
+                # through the owner-scoped CQ interface. Additive key: it is
+                # None when the interface could not be used, and
+                # {'state':'NOT_PUBLISHED'} when it could and nothing exists.
+                'publication':extra.get('publication'),
+                # EE-01 measurement metadata, read through the owner-scoped
+                # measurement interface. Additive key: None when the interface
+                # could not be used, {'state':'NO_CAMPAIGN'} when nothing has
+                # been published, and a projection of snapshots otherwise.
+                # Measurement values are never included.
+                'measurement':extra.get('measurement'),
                 'authorization_decisions_included':False}
         finally:
             self.repo.rollback()

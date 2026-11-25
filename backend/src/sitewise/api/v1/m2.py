@@ -187,6 +187,10 @@ class ConfirmRequest(BoundRevisionRequest):
     #: Omitted means "no permission granted". It is never inferred from the act
     #: of confirming declarations.
     ai_processing: AiProcessingConsentRequest | None = None
+    #: The QG permission, a separate grant with its own version and purpose.
+    #: Omitted means absent, which is *not* the same as declined — and neither
+    #: one authorises a QG dispatch.
+    ai_processing_qg: AiProcessingConsentRequest | None = None
 
 
 class UncertaintyRequest(M2Request):
@@ -280,10 +284,17 @@ def record_review(assessment_id: UUID, payload: BoundRevisionRequest, user: Owne
 def confirm_context(assessment_id: UUID, payload: ConfirmRequest, user: Owner,
                     service: Confirmation):
     from sitewise.project1.ai_processing_consent import build_consent
+    from sitewise.project1.ai_processing_consent import build_qg_consent
     from sitewise.project1.provider import ENDPOINT, MODEL
     try:
         consent = build_consent(request=payload.ai_processing, endpoint=ENDPOINT,
                                 model=MODEL, owner_id=user.user_id)
+        # A second, independently versioned grant. It is built even when the
+        # client omits it, so every new snapshot records the *absence* of the
+        # QG permission explicitly rather than leaving a reader to infer it.
+        consent_qg = build_qg_consent(request=payload.ai_processing_qg,
+                                      endpoint=ENDPOINT, model=MODEL,
+                                      owner_id=user.user_id)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail={
             'code': getattr(exc, 'args', ['AI_PROCESSING_DISCLOSURE_MISMATCH'])[0],
@@ -293,7 +304,7 @@ def confirm_context(assessment_id: UUID, payload: ConfirmRequest, user: Owner,
         expected_revision=payload.expected_revision,
         acknowledged_issue_ids=payload.acknowledged_issue_ids,
         marketplace_assessment_id=payload.marketplace_assessment_id,
-        ai_processing=consent)
+        ai_processing=consent, ai_processing_qg=consent_qg)
 
 
 @router.get("/ai-processing-disclosure")
@@ -301,6 +312,18 @@ def read_ai_processing_disclosure():
     """The exact terms the interface must display before asking for consent."""
     from sitewise.project1.ai_processing_consent import disclosure
     return disclosure({})
+
+
+@router.get("/ai-processing-disclosure-qg")
+def read_ai_processing_qg_disclosure():
+    """The exact terms for the *separate* question-generation permission.
+
+    A distinct route because it is a distinct grant: an interface that showed
+    one set of terms for both acts would be asking the owner to agree to
+    something the disclosure never described.
+    """
+    from sitewise.project1.ai_processing_consent import qg_disclosure
+    return qg_disclosure()
 
 
 @router.post("/confirmations/{confirmation_id}/uncertainty", response_model=UncertaintyResponse)

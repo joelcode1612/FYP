@@ -3,7 +3,9 @@
 The tables live in separate opt-in SQLAlchemy metadata to prevent the legacy
 startup create_all hook from silently provisioning an unapproved schema.
 """
-from uuid import UUID, uuid4
+import re
+from datetime import datetime
+from uuid import UUID, uuid4, uuid5, NAMESPACE_URL
 
 from sqlalchemy import and_, select, text, update, func
 from sqlalchemy.orm import Session
@@ -25,6 +27,146 @@ def _one(session: Session, statement) -> dict | None:
 
 def _all(session: Session, statement) -> list[dict]:
     return [dict(row) for row in session.execute(statement).mappings().all()]
+
+
+_SHA256_HEX = re.compile(r'^[0-9a-f]{64}$')
+
+
+def _digest_projection(value) -> dict:
+    """Report a digest only when the stored value is one.
+
+    A synthetic confirmation has been observed storing the placeholder
+    `synthetic-snapshot-digest-stage5` in `snapshot_digest`. Emitting that under
+    the digest key makes the client's format validator reject the *entire*
+    activity response, so the History page shows an error instead of records.
+    The stored value is preserved under its own key rather than discarded, and
+    no hash is ever manufactured here.
+    """
+    if isinstance(value, str) and _SHA256_HEX.match(value):
+        return {'snapshot_digest': value}
+    return {'snapshot_digest': None,
+            'snapshot_digest_state': 'STORED_VALUE_IS_NOT_A_SHA256',
+            'snapshot_digest_stored': value}
+
+
+# ---------------------------------------------------------------------------
+# Governance-history event builders.
+#
+# Each returns only columns the record actually stores. A field the source does
+# not carry is `None`, never a friendly default: a missing actor must read as
+# "not recorded", not as the owner, and a version must never stand in a reason
+# slot. The service adds `event_type`/`source_version`/`reason_code` uniformly
+# from these keys.
+# ---------------------------------------------------------------------------
+
+def _objective_proposal_event(row: dict) -> dict:
+    # `reason` is model-authored explanatory prose and is not projected, so it
+    # can never be mistaken for a stored reason code. A proposal carries no
+    # `objective_id` column: objective identity is only established when a
+    # proposal is admitted, so the field is null here rather than inferred.
+    return {'event_id': row['proposal_id'], 'kind': 'OBJECTIVE_PROPOSED',
+            'assessment_revision': row['confirmation_revision'],
+            'occurred_at': row['created_at'], 'actor_id': row['owner_user_id'],
+            'module': 'BDJ', 'status': row['review_state'],
+            'objective_id': None,
+            'source_version': row['contract_version'],
+            'reason_code': None,
+            'recommendation_status': row['recommendation_status'],
+            'validation_status': row['validation_status'],
+            'problem_type': row['problem_type'],
+            'execution_mode': row['execution_mode'],
+            'prompt_version': row['prompt_version'],
+            'source_id': None}
+
+
+def _objective_decision_event(row: dict) -> dict:
+    # Objective identity comes from the admission for this proposal (1:1 by
+    # `uq_admission_once`), because the decision row itself does not store it.
+    return {'event_id': row['decision_id'], 'kind': 'OBJECTIVE_DECIDED',
+            'assessment_revision': row['confirmation_revision'],
+            'occurred_at': row['decided_at'], 'actor_id': row['decided_by'],
+            'module': 'BDJ', 'status': row['decision'],
+            'objective_id': row['objective_id'],
+            'source_version': None, 'reason_code': None,
+            'source_id': row['proposal_id']}
+
+
+def _objective_admission_event(row: dict) -> dict:
+    return {'event_id': row['admission_id'], 'kind': 'OBJECTIVE_ADMITTED',
+            'assessment_revision': row['confirmation_revision'],
+            'occurred_at': row['created_at'], 'actor_id': row['actor_user_id'],
+            'module': 'BDJ', 'status': row['decision'],
+            'objective_id': row['objective_id'],
+            'source_version': row['policy_version'],
+            'reason_code': row['policy_disposition'],
+            'source_id': row['proposal_id']}
+
+
+def _publication_event(entry: dict, actor_id, occurred_at) -> dict:
+    """One publication event per campaign.
+
+    Identity is the campaign id. ``cq_campaigns.assessment_id`` is UNIQUE, so a
+    campaign is the durable record of exactly one publication for one
+    assessment, and re-reading it yields the same event rather than a new one.
+
+    ``assessment_revision`` is the revision the release was *built against*, not
+    the current one. A later assessment revision makes this publication
+    historical, and reporting the current revision here would misrepresent an
+    older release as current.
+    """
+    return {'event_id': entry['campaign_id'], 'kind': 'QUESTIONNAIRE_PUBLISHED',
+            'assessment_revision': entry.get('published_at_revision'),
+            'occurred_at': occurred_at, 'actor_id': actor_id,
+            'module': 'CQ', 'status': 'PUBLISHED',
+            'source_version': entry.get('bank_version'),
+            'reason_code': None,
+            'release_id': entry.get('release_id'),
+            'source_class': entry.get('source_class'),
+            'question_count': entry.get('question_count'),
+            'authorized_question_count': entry.get('authorized_question_count'),
+            'source_id': entry.get('release_id'),
+            'source_is_current': entry.get('is_current_for_revision')}
+
+
+def _qg_candidate_event(row: dict) -> dict:
+    # `candidate_state` is the stored value. A candidate is not an approved
+    # item, so nothing here promotes it to APPROVED or ADOPTED.
+    return {'event_id': row['candidate_id'], 'kind': 'QG_CANDIDATE_RECORDED',
+            'assessment_revision': row['assessment_revision'],
+            'occurred_at': row['created_at'], 'actor_id': row['owner_user_id'],
+            'module': 'QG', 'status': row['candidate_state'],
+            'objective_id': row['objective_id'],
+            'measurement_id': row['measurement_id'],
+            'source_version': row['measurement_version'],
+            'reason_code': None,
+            'structural_status': row['structural_status'],
+            'semantic_status': row['semantic_status'],
+            'provenance_status': row['provenance_status'],
+            'execution_mode': row['execution_mode'],
+            'contract_version': row['contract_version'],
+            'adapter_version': row['adapter_version'],
+            'qg_authorization_id': row['qg_authorization_id'],
+            'source_id': row['candidate_id']}
+
+
+def _qg_review_event(row: dict) -> dict:
+    # The review table's primary key is (candidate_id, reviewer_id) and it has
+    # no surrogate key. The candidate id alone is therefore NOT a durable
+    # identity: a second reviewer reviewing the same candidate is a distinct
+    # decision and must survive the `(kind, event_id)` de-duplication. The
+    # event id is a deterministic namespace UUIDv5 over the real composite key;
+    # `source_id` still carries the candidate id the record actually stores.
+    identity = uuid5(NAMESPACE_URL, 'sitewise:m2:qg-review:'
+                     f'{row["candidate_id"]}:{row["reviewer_id"]}')
+    return {'event_id': str(identity), 'kind': 'QG_REVIEW_RECORDED',
+            'assessment_revision': row['assessment_revision'],
+            'occurred_at': row['recorded_at'], 'actor_id': row['reviewer_id'],
+            'module': 'QG', 'status': row['decision'],
+            'objective_id': row['objective_id'],
+            'source_version': None, 'reason_code': None,
+            'expected_option_code': row['expected_option_code'],
+            'event_id_derivation': 'uuid5(candidate_id,reviewer_id)',
+            'source_id': row['candidate_id']}
 
 
 class SqlModelM2Repository:
@@ -137,7 +279,7 @@ class SqlModelM2Repository:
             rows.append({'event_id': row['id'], 'kind': 'CONTEXT_CONFIRMED',
                 'assessment_revision': row['assessment_revision'],
                 'occurred_at': row['created_at'], 'actor_id': row['actor_user_id'],
-                'snapshot_digest': row['snapshot_digest']})
+                **_digest_projection(row['snapshot_digest'])})
 
         # CLARIFICATION_RECORDED — `decision` is a real outcome and `finding_id`
         # is the source record the decision was made about.
@@ -168,7 +310,8 @@ class SqlModelM2Repository:
         assessment = self.get_assessment(assessment_id, actor_id)
         if assessment is None:
             return {'events': [], 'bcb_statuses': [], 'bcb_available': False,
-                    'bcb_statuses_truncated': False}
+                    'bcb_statuses_truncated': False, 'source_states': {},
+                    'publication': None, 'measurement': None}
         events.append({'event_id': assessment_id, 'kind': 'ASSESSMENT_CREATED',
             'assessment_revision': 0, 'occurred_at': assessment['created_at'],
             'actor_id': None, 'module': 'M2', 'status': None,
@@ -245,9 +388,297 @@ class SqlModelM2Repository:
         except SQLAlchemyError:
             available = False
             snapshots = []
+        # QG/QJ and BDJ-objective history. These tables are owner-scoped by a
+        # `TO PUBLIC` policy that reads `project1.actor_id`, so the M2 runtime
+        # principal can read them without any new grant. Each stream gets its
+        # own savepoint: a missing or refused table must not discard the M2
+        # stream, and must not be reported as an empty history.
+        states = {
+            'M2': {'state': 'VERIFIED_AVAILABLE',
+                   'detail': 'Persisted assessment, answer, review, confirmation, '
+                             'finding and clarification records.'},
+            'BDJ_DETERMINISTIC': {'state': 'VERIFIED_AVAILABLE',
+                   'detail': 'Candidate-rule evaluation and finding receipts; empty '
+                             'means no such record exists, not that evaluation did not run.'},
+            'BCB': ({'state': 'VERIFIED_AVAILABLE',
+                     'detail': 'Persisted context metadata and latest build status.'}
+                    if available else
+                    {'state': 'BLOCKED_SOURCE',
+                     'detail': 'Context/build store unavailable to this principal.'}),
+            # `CQ` and `EE01` are resolved below through their own authorized
+            # read paths: `p1_m2_runtime` holds no policy that grants it a CQ or
+            # EE-01 row, so reading them here would return zero rows and read
+            # as "nothing exists". Each is read as the principal that already
+            # owns the data, in a read-only transaction, with the actor bound.
+            'EE01': {'state': 'BLOCKED_SOURCE',
+                     'detail': 'EE-01 measurement metadata was not resolved.'},
+            'REPORTS': {'state': 'BLOCKED_AUTHORIZATION',
+                        'detail': 'p1_m2_runtime holds no SELECT on the report '
+                                  'readback tables.'},
+            'CLOUD_BDJ': {'state': 'BLOCKED_AUTHORIZATION',
+                          'detail': 'project1_ai is a restricted execution ledger with '
+                                    'no owner-scoped history contract for this endpoint.'},
+        }
+        events.extend(self._read_governance_history(
+            assessment_id, actor_id, revision, limit, states))
+        publication, publication_event = self._read_publication_history(
+            assessment_id, actor_id, states)
+        if publication_event is not None:
+            events.append(publication_event)
+        measurements = self._read_measurement_history(
+            assessment_id, actor_id, states)
         return {'events': events, 'bcb_statuses': snapshots[:limit],
                 'bcb_statuses_truncated': len(snapshots) > limit,
-                'bcb_available': available}
+                'bcb_available': available, 'source_states': states,
+                'publication': publication, 'measurement': measurements}
+
+    def _read_measurement_history(self, assessment_id, actor_id, states):
+        """EE-01 measurement *metadata*.
+
+        Read through :mod:`sitewise.services.ee01_measurement_metadata`, which
+        performs the same read-only, REPEATABLE READ transaction as the EE-01
+        service, as ``p1_ee01_runtime`` with the actor bound. No grant is added
+        to ``p1_m2_runtime`` and no policy is changed.
+
+        Measurement values are not projected: this reports that a measurement
+        was computed, against which slot and cutoff, from which class of
+        evidence, and whether its findings were admitted -- not the numbers.
+        A failed read is ``BLOCKED_SOURCE`` with a reason, never "not measured".
+
+        No timeline event is emitted. ``ee01_measurement_snapshots`` records no
+        assessment revision, and this projection will not substitute the
+        revision the release was built against: that would place a measurement
+        on a timeline position it was never recorded at.
+        """
+        from sitewise.services.ee01_measurement_metadata import (
+            measurement_metadata,
+        )
+
+        try:
+            result = measurement_metadata(actor_id, assessment_id)
+        except Exception as exc:  # noqa: BLE001 - a source failure must not 500 the page
+            states['EE01'] = {'state': 'BLOCKED_SOURCE',
+                              'detail': f'EE-01 metadata interface failed: '
+                                        f'{type(exc).__name__}'}
+            return None
+
+        if result.get('state') != 'AVAILABLE':
+            states['EE01'] = {'state': 'BLOCKED_SOURCE',
+                              'detail': result.get('reason')
+                                        or 'EE-01 metadata unavailable.'}
+            return None
+
+        entry = (result.get('assessments') or {}).get(str(assessment_id)) or {}
+        summary = entry.get('summary') or {}
+        if entry.get('state') == 'NO_CAMPAIGN':
+            # Nothing has been published, so no measurement can be bound to
+            # this assessment. That is a fact about publication, not an
+            # unreadable source, and it is not a measurement failure.
+            states['EE01'] = {
+                'state': 'VERIFIED_AVAILABLE',
+                'detail': 'EE-01 metadata readable; no campaign is owned by this '
+                          'actor for this assessment, so no measurement can be '
+                          'bound to it.'}
+            states['REPORTS'] = {
+                'state': 'VERIFIED_AVAILABLE',
+                'detail': 'Report finding admission status is read through the '
+                          'EE-01 readback. With no campaign there is no readback '
+                          'row to report, which is not a source failure. Report '
+                          'generation history and content are not exposed.'}
+            return entry
+
+        customer = summary.get('customer_research_snapshot_count', 0)
+        preview = (summary.get('by_evidence_class') or {}).get(
+            'DEVELOPER_PREVIEW', 0)
+        states['EE01'] = {
+            'state': 'VERIFIED_AVAILABLE',
+            'detail': f'{summary.get("snapshot_count", 0)} measurement '
+                      f'snapshot(s) over {summary.get("slot_count", 0)} slot(s); '
+                      f'{customer} from customer research evidence and '
+                      f'{preview} from developer-preview evidence. Measurement '
+                      f'values are not exposed; a computed measurement is not '
+                      f'scientific acceptance or report authorization.'}
+        # Report *admission* status lives in `ee01_report_readbacks`, which this
+        # read has just succeeded in reading. Leaving REPORTS at
+        # BLOCKED_AUTHORIZATION while displaying an admission status in the
+        # measurement section would contradict itself, and classifying it as
+        # blocked merely because an assessment has no snapshot yet would report
+        # "unavailable" for a source that is in fact readable.
+        states['REPORTS'] = {
+            'state': 'VERIFIED_AVAILABLE',
+            'detail': 'Report finding admission status is read through the '
+                      'EE-01 readback that holds it. Report generation history '
+                      'and report content are not exposed.'}
+        return entry
+
+
+    def _read_publication_history(self, assessment_id, actor_id, states):
+        """Assessment-level questionnaire publication metadata and its event.
+
+        Read through :mod:`sitewise.services.cq_publication_metadata`, which
+        opens a read-only transaction as ``p1_ee01_runtime`` with the actor
+        bound, so the existing ``ee01_owner_read`` policies scope the rows. No
+        grant is added to ``p1_m2_runtime`` and no policy is changed.
+
+        Only campaign/release facts and aggregate response counts are
+        projected. Respondent identities, answers and receipt bodies are never
+        read: a publication is a property of the campaign, and the counts are
+        the size of the response rather than a description of the people in it.
+
+        Returns ``(metadata, event)``. A failed read is ``BLOCKED_SOURCE`` with
+        a reason -- never "not published".
+        """
+        from sitewise.services.cq_publication_metadata import publication_metadata
+
+        try:
+            result = publication_metadata(actor_id, assessment_id)
+        except Exception as exc:  # noqa: BLE001 - a source failure must not 500 the page
+            states['CQ'] = {'state': 'BLOCKED_SOURCE',
+                            'detail': f'CQ metadata interface failed: {type(exc).__name__}'}
+            return None, None
+
+        if result.get('state') != 'AVAILABLE':
+            states['CQ'] = {'state': 'BLOCKED_SOURCE',
+                            'detail': result.get('reason') or 'CQ metadata unavailable.'}
+            return None, None
+
+        entry = (result.get('assessments') or {}).get(str(assessment_id)) or {}
+        state = entry.get('state')
+
+        if state == 'NOT_PUBLISHED':
+            states['CQ'] = {
+                'state': 'VERIFIED_AVAILABLE',
+                'detail': 'Questionnaire publication metadata readable; this '
+                          'assessment has no campaign owned by the actor.'}
+            return {'state': 'NOT_PUBLISHED', 'detail': entry.get('detail')}, None
+
+        if state == 'INTEGRITY_FAILED':
+            # A release whose stored body does not match its stored hash is not
+            # a publication. Reporting it as one would be a false statement.
+            states['CQ'] = {
+                'state': 'BLOCKED_SOURCE',
+                'detail': 'Stored manifest or policy hash does not match the '
+                          'stored body; publication state cannot be asserted.'}
+            return {'state': 'INTEGRITY_FAILED', 'detail': entry.get('detail')}, None
+
+        if state != 'PUBLISHED':
+            states['CQ'] = {'state': 'BLOCKED_SOURCE',
+                            'detail': f'Unrecognised publication state {state!r}.'}
+            return None, None
+
+        published_at = entry.get('campaign_created_at') or entry.get('release_created_at')
+        try:
+            occurred_at = (datetime.fromisoformat(published_at)
+                           if isinstance(published_at, str) else published_at)
+        except (TypeError, ValueError):
+            occurred_at = None
+
+        states['CQ'] = {
+            'state': 'VERIFIED_AVAILABLE',
+            'detail': 'Assessment-level campaign and release metadata, plus '
+                      'aggregate session and receipt counts; no respondent '
+                      'identity, answer, session record or receipt body is '
+                      'exposed.'}
+        revision_at_publish = entry.get('published_at_revision')
+        if occurred_at is None or not isinstance(revision_at_publish, int):
+            # Without the revision the release was built against, the event
+            # cannot be placed in the assessment's timeline. The metadata is
+            # still reported; only the timeline entry is withheld.
+            return entry, None
+        return entry, _publication_event(entry, actor_id, occurred_at)
+
+
+    def _read_governance_history(self, assessment_id, actor_id, revision, limit,
+                                 states) -> list[dict]:
+        """Objective-proposal and QG candidate/review metadata, newest first.
+
+        Metadata only. `candidate_json`, `problem`, `research_objective`,
+        `rationale`, prompt and output hashes are deliberately not selected: a
+        candidate's text is model output, and a proposal's `problem` is the
+        entrepreneur's own wording. Neither belongs in a history projection.
+
+        A generated candidate is reported as a candidate, never as an approved
+        questionnaire item: `candidate_state` is the stored value and nothing
+        here upgrades it.
+        """
+        events: list[dict] = []
+        bounded = limit + 1
+
+        proposals = (
+            'SELECT proposal_id, created_at, owner_user_id, confirmation_revision, '
+            '       review_state, recommendation_status, validation_status, '
+            '       problem_type, contract_version, prompt_version, execution_mode '
+            '  FROM public.m2_bdj_objective_proposals '
+            ' WHERE assessment_id = :aid AND owner_user_id = :actor '
+            '   AND confirmation_revision <= :rev '
+            ' ORDER BY created_at DESC, proposal_id DESC LIMIT :n')
+        decisions = (
+            'SELECT d.decision_id, d.decided_at, d.decided_by, d.decision, '
+            '       d.proposal_id, p.confirmation_revision, ao.objective_id '
+            '  FROM public.m2_bdj_objective_decisions d '
+            '  JOIN public.m2_bdj_objective_proposals p '
+            '    ON p.proposal_id = d.proposal_id '
+            '  LEFT JOIN LATERAL ('
+            '        SELECT a.objective_id FROM public.m2_bdj_objective_admissions a '
+            '         WHERE a.proposal_id = d.proposal_id LIMIT 1) ao ON TRUE '
+            ' WHERE p.assessment_id = :aid AND p.owner_user_id = :actor '
+            '   AND p.confirmation_revision <= :rev '
+            ' ORDER BY d.decided_at DESC, d.decision_id DESC LIMIT :n')
+        admissions = (
+            'SELECT admission_id, proposal_id, created_at, actor_user_id, '
+            '       confirmation_revision, objective_id, policy_version, '
+            '       policy_disposition, decision '
+            '  FROM public.m2_bdj_objective_admissions '
+            ' WHERE assessment_id = :aid AND actor_user_id = :actor '
+            '   AND confirmation_revision <= :rev '
+            ' ORDER BY created_at DESC, admission_id DESC LIMIT :n')
+        candidates = (
+            'SELECT candidate_id, created_at, owner_user_id, assessment_revision, '
+            '       objective_id, measurement_id, measurement_version, '
+            '       qg_authorization_id, candidate_state, structural_status, '
+            '       semantic_status, provenance_status, execution_mode, '
+            '       contract_version, adapter_version '
+            '  FROM public.m2_qg_candidates '
+            ' WHERE assessment_id = :aid AND owner_user_id = :actor '
+            '   AND assessment_revision <= :rev '
+            ' ORDER BY created_at DESC, candidate_id DESC LIMIT :n')
+        reviews = (
+            'SELECT r.candidate_id, r.recorded_at, r.reviewer_id, r.decision, '
+            '       r.expected_option_code, c.assessment_revision, c.objective_id '
+            '  FROM public.m2_qg_candidate_reviews r '
+            '  JOIN public.m2_qg_candidates c ON c.candidate_id = r.candidate_id '
+            ' WHERE c.assessment_id = :aid AND c.owner_user_id = :actor '
+            '   AND c.assessment_revision <= :rev '
+            ' ORDER BY r.recorded_at DESC, r.candidate_id DESC LIMIT :n')
+
+        params = {'aid': assessment_id, 'actor': actor_id,
+                  'rev': revision, 'n': bounded}
+
+        def run(statement):
+            # Read-only savepoint: a refused or absent table rolls back to here
+            # and the remaining streams still run.
+            with self.session.begin_nested():
+                return [dict(row) for row in
+                        self.session.execute(text(statement), params).mappings()]
+
+        for label, statement, builder in (
+            ('BDJ_OBJECTIVES', proposals, _objective_proposal_event),
+            ('BDJ_OBJECTIVES', decisions, _objective_decision_event),
+            ('BDJ_OBJECTIVES', admissions, _objective_admission_event),
+            ('QG_QJ', candidates, _qg_candidate_event),
+            ('QG_QJ', reviews, _qg_review_event),
+        ):
+            try:
+                rows = run(statement)
+            except SQLAlchemyError:
+                states[label] = {'state': 'BLOCKED_SOURCE',
+                                 'detail': 'Source table unavailable to this principal.'}
+                continue
+            states.setdefault(label, {'state': 'VERIFIED_AVAILABLE',
+                                      'detail': 'Owner-scoped metadata projection.'})
+            for row in rows:
+                events.append(builder(row))
+        return events
 
     def get_instrument(self, instrument_id: UUID) -> dict | None:
         return _one(self.session, select(instruments).where(instruments.c.id == instrument_id))

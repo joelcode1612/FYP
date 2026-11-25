@@ -18,7 +18,10 @@ class FavouriteProperty(SQLModel, table=True):
     __tablename__ = "favorite_property"
     __table_args__ = (
         UniqueConstraint("user_id", "property_id", name="uq_favorite_property_user_property"),
-        {"schema": "fyp", "info": {"externally_managed": True}},
+        # ``public``, not ``fyp``: the live table is ``public.favorite_property``
+        # in both databases. ``fyp.favourite_properties`` is a different, legacy
+        # table with bigint ids and must not be confused with this one.
+        {"schema": "public", "info": {"externally_managed": True}},
     )
 
     favorite_id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)

@@ -640,11 +640,18 @@ class _ActivityHistoryPageState extends State<ActivityHistoryPage> {
           ]),
           div(classes: 'sr-coverage-group', [
             h3([
-              Component.text('Latest BCB status snapshots — not attempt history'),
+              Component.text(
+                'Current state snapshots — publication, measurement, BCB',
+              ),
             ]),
             p([
               Component.text(
-                'Earlier failed build attempts may have been overwritten by recovery. No synthetic failure or invalidation events are created.',
+                'These are current-state reads, not an attempt history. A '
+                'publication is not an open fielding authorization; a computed '
+                'measurement is not scientific acceptance or report '
+                'authorization. Earlier failed BCB build attempts may have been '
+                'overwritten by recovery, and no synthetic failure or '
+                'invalidation events are created.',
               ),
             ]),
             if (component.currentSnapshots.isEmpty)

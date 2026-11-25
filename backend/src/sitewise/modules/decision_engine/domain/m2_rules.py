@@ -1,5 +1,9 @@
 """Pure, draft-stage M2 answer rules. No framework/ORM imports."""
 
+from sitewise.modules.decision_engine.domain.geo_catalogue import (
+    UNVERIFIED_STATUS, m2_geography_catalogue,
+)
+
 class M2ValidationError(ValueError):
     pass
 
@@ -35,6 +39,16 @@ def resolve_m2_items(items: list[dict], answers: dict[str, dict]) -> list[dict]:
         item.update(option_labels={o['code']: o['label'] for o in options},
                     effective_options=[o['code'] for o in options], applicable=True,
                     derived_value=None)
+        # DD-063: a GEO item whose stored block declares that no authority is
+        # connected is served the approved GEO_V1 catalogue at request time. The
+        # stored definition is never rewritten — it is hashed into every
+        # confirmation's item_definition_hashes, so editing it would retroactively
+        # unpin historical confirmations. Only AUTHORITY_UNVERIFIED is overlaid;
+        # any other non-verified status is a different declaration and fails closed.
+        geography = rules.get('geography') if isinstance(rules, dict) else None
+        if (item.get('answer_kind') == 'GEO' and isinstance(geography, dict)
+                and geography.get('status') == UNVERIFIED_STATUS):
+            item['effective_geography'] = m2_geography_catalogue()
         if 'not_applicable_when' in rules:
             condition = rules['not_applicable_when']
             if value(condition['item']) != condition['value']:
@@ -217,8 +231,11 @@ def validate_m2_answer(item: dict, state: str, value: object, items=None) -> Non
     if kind == 'GEO':
         if value == 'UNDECIDED':
             return
-        geo = rules['geography']
-        if geo['status'] != 'VERIFIED':
+        # DD-063: the served catalogue wins over the stored block. ``resolve_m2_items``
+        # attaches it only when the stored block declares AUTHORITY_UNVERIFIED, so a
+        # stored verified catalogue is still the one that validates.
+        geo = item.get('effective_geography') or rules.get('geography') or {}
+        if geo.get('status') != 'VERIFIED':
             raise M2ValidationError('The approved versioned GEO catalogue is unavailable. No area reference can be invented.')
         if not isinstance(value, dict) or set(value) != {'jurisdiction', 'area_ref', 'catalogue_version'}:
             raise M2ValidationError('Select an authorized area and catalogue version.')

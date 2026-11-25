@@ -415,3 +415,147 @@ def latest_receipt(engine, actor_id: UUID, run_id: UUID):
         raise
     except SQLAlchemyError:
         raise WorkflowHeld('WORKFLOW_STORAGE_UNAVAILABLE') from None
+
+
+# ---------------------------------------------------------------------------
+# Execution progress, read from the ledger that already exists
+# ---------------------------------------------------------------------------
+#
+# The owner asked for a real execution indicator for BDJ and QG, built on the
+# existing AI ledger, with no second ledger, no progress table and no invented
+# percentages. Everything below is read from ``project1_ai.runs``,
+# ``project1_ai.attempts`` and ``project1_ai.attempt_receipts`` — the same three
+# tables the dispatcher already writes. Nothing here can observe a model call
+# that the ledger did not record, which is exactly the property that makes it
+# trustworthy: an empty ledger means "no attempt", not "probably nothing".
+
+#: The states the interface may render. Each one is derived from a fact, never
+#: interpolated between facts.
+EXECUTION_STATES = (
+    'BLOCKED',          # no attempt has been reserved for this stage
+    'PROCESSING',       # reserved, no receipt, still within the dispatch window
+    'RETURNED',         # the provider answered; no domain row has landed
+    'VALIDATING',       # a domain row landed but has not finished validation
+    'PERSISTED',        # a domain row landed and is validated
+    'FAILED',           # the receipt records a refusal
+    'UNKNOWN_OUTCOME',  # reserved, no receipt, past the dispatch window
+)
+
+#: How long a reservation may stand with no receipt before "in flight" becomes
+#: "we do not know what happened". Derived from the configured provider timeout
+#: plus a margin, so it tracks the deployment rather than a guess.
+def in_flight_grace() -> 'timedelta':
+    from datetime import timedelta
+    return timedelta(seconds=int(settings.tokenharbor_timeout_seconds) + 30)
+
+
+def execution_status(engine, actor_id: UUID, assessment_id: UUID, *,
+                     stage: str, now=None) -> dict:
+    """The newest attempt for one stage, as the ledger records it.
+
+    ``state`` is ledger-only: it cannot tell whether a returned result was
+    written to its domain table, because that table is not the ledger. The
+    caller upgrades ``RETURNED`` to ``VALIDATING`` or ``PERSISTED`` once it has
+    looked, which keeps the two facts separable instead of guessing here.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    moment = now or datetime.now(timezone.utc)
+    try:
+        with Session(engine) as session:
+            restricted_scope(session, actor_id)
+            row = session.execute(text("""
+                SELECT r.id AS run_id, r.assessment_revision,
+                       a.attempt_no, a.reserved_at,
+                       rec.outcome AS receipt_outcome,
+                       rec.created_at AS receipt_at,
+                       (SELECT count(*) FROM project1_ai.attempts a2
+                         WHERE a2.run_id = r.id
+                           AND a2.owner_user_id = r.owner_user_id
+                           AND a2.stage = a.stage) AS attempts_reserved
+                  FROM project1_ai.runs r
+                  JOIN project1_ai.attempts a
+                    ON a.run_id = r.id AND a.owner_user_id = r.owner_user_id
+                  LEFT JOIN project1_ai.attempt_receipts rec
+                    ON rec.run_id = a.run_id
+                   AND rec.attempt_no = a.attempt_no
+                   AND rec.owner_user_id = a.owner_user_id
+                 WHERE r.owner_user_id = :actor
+                   AND r.assessment_id = :assessment
+                   AND a.stage = :stage
+                 ORDER BY a.reserved_at DESC
+                 LIMIT 1
+            """), {'actor': actor_id, 'assessment': assessment_id,
+                   'stage': stage}).mappings().one_or_none()
+            session.rollback()
+    except WorkflowHeld:
+        raise
+    except SQLAlchemyError:
+        raise WorkflowHeld('WORKFLOW_STORAGE_UNAVAILABLE') from None
+
+    if row is None:
+        return {'stage': stage, 'state': 'BLOCKED', 'reason': 'NO_ATTEMPT_RESERVED',
+                'run_id': None, 'attempt_no': None, 'attempts_reserved': 0,
+                'reserved_at': None, 'receipt_outcome': None,
+                'receipt_at': None, 'assessment_revision': None}
+
+    reserved_at = row['reserved_at']
+    if reserved_at is not None and reserved_at.tzinfo is None:
+        reserved_at = reserved_at.replace(tzinfo=timezone.utc)
+    receipt_at = row['receipt_at']
+    if receipt_at is not None and receipt_at.tzinfo is None:
+        receipt_at = receipt_at.replace(tzinfo=timezone.utc)
+
+    outcome = row['receipt_outcome']
+    if outcome is None:
+        waited = (moment - reserved_at) if reserved_at is not None else timedelta(0)
+        if waited <= in_flight_grace():
+            state, reason = 'PROCESSING', 'RESERVED_AWAITING_RECEIPT'
+        else:
+            # The reservation outlived the dispatch window with no receipt. That
+            # is not a failure and not a success: the peer may or may not have
+            # been reached, and the attempt is spent either way.
+            state, reason = 'UNKNOWN_OUTCOME', 'RESERVED_PAST_DISPATCH_WINDOW'
+    elif outcome == 'returned':
+        state, reason = 'RETURNED', 'RECEIPT_RETURNED'
+    elif outcome == 'unknown_outcome':
+        state, reason = 'UNKNOWN_OUTCOME', 'RECEIPT_UNKNOWN_OUTCOME'
+    else:
+        state, reason = 'FAILED', f'RECEIPT_{str(outcome).upper()}'
+
+    return {
+        'stage': stage,
+        'state': state,
+        'reason': reason,
+        'run_id': str(row['run_id']),
+        'attempt_no': int(row['attempt_no']),
+        'attempts_reserved': int(row['attempts_reserved'] or 0),
+        'reserved_at': reserved_at.isoformat() if reserved_at else None,
+        'receipt_outcome': outcome,
+        'receipt_at': receipt_at.isoformat() if receipt_at else None,
+        'assessment_revision': row['assessment_revision'],
+    }
+
+
+def refine_with_domain(status: dict, *, persisted: int,
+                       pending_validation: int) -> dict:
+    """Upgrade a ledger ``RETURNED`` once the domain table has been consulted.
+
+    The ledger records that the provider answered. Whether the governed write
+    landed is a different fact, held by a different table. Keeping the upgrade
+    here — rather than inside :func:`execution_status` — is what lets the
+    interface say "returned but not persisted" instead of claiming a persistence
+    that never happened.
+    """
+    if status.get('state') != 'RETURNED':
+        return {**status, 'domain': {'persisted': persisted,
+                                     'pending_validation': pending_validation}}
+    if persisted <= 0:
+        return {**status, 'state': 'RETURNED', 'reason': 'RETURNED_NOT_PERSISTED',
+                'domain': {'persisted': 0, 'pending_validation': 0}}
+    if pending_validation > 0:
+        return {**status, 'state': 'VALIDATING', 'reason': 'PERSISTED_PENDING_VALIDATION',
+                'domain': {'persisted': persisted,
+                           'pending_validation': pending_validation}}
+    return {**status, 'state': 'PERSISTED', 'reason': 'PERSISTED_AND_VALIDATED',
+            'domain': {'persisted': persisted, 'pending_validation': 0}}

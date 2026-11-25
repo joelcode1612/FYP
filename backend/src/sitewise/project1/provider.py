@@ -6,7 +6,7 @@ import math
 import time
 
 import httpx
-from pydantic import SecretStr
+from pydantic import SecretStr, ValidationError
 
 from sitewise.core import config as core_config
 from sitewise.project1.contracts import WorkflowHeld
@@ -45,6 +45,53 @@ def strict_json(text: str):
         return result
     return json.loads(text, object_pairs_hook=pairs,
                       parse_constant=lambda _: (_ for _ in ()).throw(ValueError('nonfinite')))
+
+
+def _content_shape(text: str) -> str:
+    """The structure of a non-JSON reply — never the text itself.
+
+    A fenced code block and a prose answer need different fixes, and neither is
+    a schema problem. Length and the first meaningful character distinguish them
+    without recording anything the model wrote.
+    """
+    stripped = text.lstrip()
+    head = stripped[:1]
+    return (f'len={len(text)} first_char={head!r} fenced={stripped.startswith("```")} '
+            f'starts_brace={head == "{"}')
+
+
+def _schema_mismatch(exc: ValidationError) -> str:
+    """Field paths and error types only — no values, no model text.
+
+    ``loc`` names a field the schema already publishes, so it discloses nothing
+    the caller did not send. It is enough to say which contract clause failed.
+    """
+    parts = []
+    for err in exc.errors()[:6]:
+        loc = '.'.join(str(p) for p in err.get('loc', ()))
+        parts.append(f'{loc or "<root>"}:{err.get("type")}')
+    return '; '.join(parts) or 'unknown'
+
+
+def _receipt_metadata(provider) -> dict:
+    """The two bounded provider facts a receipt may store (DD-055).
+
+    ``model_returned`` is the provider's own model label and ``http_status`` the
+    status of the call that produced the outcome. Both are already allow-listed
+    into ``last_execution`` at the edge, so this copies rather than widens.
+    Anything absent stays ``None`` — the receipt says "not recorded" instead of
+    guessing, and ``ledger.finish`` validates the shapes again before writing.
+    """
+    execution = getattr(provider, 'last_execution', None)
+    if not isinstance(execution, dict):
+        return {}
+    model = execution.get('model_returned')
+    status = execution.get('http_status')
+    return {
+        'model_returned': model if isinstance(model, str) else None,
+        'provider_response_status': (status if isinstance(status, int)
+                                     and not isinstance(status, bool) else None),
+    }
 
 
 class TokenHarbor:
@@ -207,7 +254,23 @@ class TokenHarbor:
             content = message['content']
             if not isinstance(content, str):
                 raise WorkflowHeld('PROVIDER_INVALID_ENVELOPE')
-            result = output_type.model_validate(strict_json(content)).model_dump()
+            # Two failures that used to be one code, because they need opposite
+            # fixes: content that is not JSON at all (a transport/provider
+            # contract break — the gateway ignored ``response_format``) versus
+            # JSON that does not satisfy the published schema (a prompt or
+            # contract problem). Both record structure only, never text.
+            try:
+                parsed = strict_json(content)
+            except ValueError:
+                self.last_execution['failure_code'] = 'PROVIDER_NON_JSON_CONTENT'
+                self.last_execution['failure_detail'] = _content_shape(content)
+                raise WorkflowHeld('PROVIDER_NON_JSON_CONTENT') from None
+            try:
+                result = output_type.model_validate(parsed).model_dump()
+            except ValidationError as exc:
+                self.last_execution['failure_code'] = 'PROVIDER_SCHEMA_MISMATCH'
+                self.last_execution['failure_detail'] = _schema_mismatch(exc)
+                raise WorkflowHeld('PROVIDER_SCHEMA_MISMATCH') from None
             self.last_execution['schema_validation'] = 'VALID'
             remaining()
             return result
@@ -287,7 +350,8 @@ class ModelRunner:
         """Identity record of the most recent completed call (for the audit trail)."""
         return getattr(self.provider, 'last_identity', None)
 
-    def __call__(self, stage, packet, output_type, *, prompt_key=None):
+    def __call__(self, stage, packet, output_type, *, prompt_key=None,
+                 attempt_slot=1):
         self._execution_receipt = None
         from sitewise.project1.contracts import digest
         # `stage` is the governed ledger label; `prompt_key` selects the template.
@@ -311,8 +375,13 @@ class ModelRunner:
         spend_kwargs = ({'authorization_id': authorization.id,
                          'authorization_receipt': authorization.receipt}
                         if authorization is not None else {})
+        # A retry is recorded as a NEW attempt beside the original rather than
+        # replacing it. Slot 1 keeps the original statement, so the ordinary
+        # path is byte-for-byte what it was; a slot above 1 is only reachable
+        # from a caller that deliberately asks for one (DD-054).
         attempt = self.ledger.reserve(stage, prompt.version, prompt.fingerprint,
-                                      request_hash, **spend_kwargs)
+                                      request_hash, attempt_slot=attempt_slot,
+                                      **spend_kwargs)
         self._execution_receipt = {'stage':stage, 'attempt_no':attempt,
             'prompt_version':prompt.version, 'prompt_sha256':prompt.fingerprint,
             'request_sha256':request_hash, 'receipt_recorded':False}
@@ -323,10 +392,15 @@ class ModelRunner:
                 'E_PROVIDER_TIMEOUT_OUTCOME_UNKNOWN',
                 'E_PROVIDER_RESPONSE_DECODE_OUTCOME_UNKNOWN',
             } else 'rejected')
-            self.ledger.finish(attempt, reason, None)
+            # A refusal is still a fact about which model answered and what it
+            # said over the wire, so the receipt records both. Without this the
+            # columns exist and are never written (DD-055).
+            self.ledger.finish(attempt, reason, None,
+                               **_receipt_metadata(self.provider))
             self._execution_receipt.update(receipt_recorded=True, receipt_outcome=reason)
             raise
-        self.ledger.finish(attempt, 'returned', digest(output))
+        self.ledger.finish(attempt, 'returned', digest(output),
+                           **_receipt_metadata(self.provider))
         self._execution_receipt.update(receipt_recorded=True, receipt_outcome='returned', output_sha256=digest(output))
         return output
 

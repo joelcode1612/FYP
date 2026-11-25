@@ -158,7 +158,7 @@ PROMPTS = {
         'Do not flag an omitted optional field as a business defect.',
         (({'declarations': [], 'example_only': True},
           {'issues': [], 'overall_note': 'No declarations were available; no business judgment is possible.'}),)),
-    'BDJ_OBJECTIVE_M2V2': Prompt('BDJ-OBJECTIVE-3-M2V2-CAND',
+    'BDJ_OBJECTIVE_M2V2': Prompt('BDJ-OBJECTIVE-4-M2V2-CAND',
         'You are a bounded research-objective proposer for a cafe business plan.',
         'Read the confirmed M2 V2 declarations in source_data.declarations. '
         'Identify at most one information gap per confirmed answer and propose a research '
@@ -176,11 +176,25 @@ PROMPTS = {
         'declaration in source_data.declarations; never synthesise, shorten, reformat or reuse '
         'an identifier from a different item. If you cannot copy them exactly, emit SUGGESTED '
         'instead, or return no recommendations. '
-        'Only an answer whose value is exactly UNDECIDED, UNSURE or UNKNOWN can support a '
-        'MOST_SUGGESTED recommendation. A structured value is an object and a multi-select '
-        'value is a list, so neither is one of those literals even when it contains one; do '
-        'not cite them as the source of an information gap. A definite value such as DINE_IN, '
-        'TAKEAWAY, COFFEE or STUDENTS is a decision, not a gap. '
+        # -- DD-064: two valid source shapes ---------------------------------
+        'An information gap is established in one of two ways, and both are valid. '
+        'The first is an answer whose value is exactly UNDECIDED, UNSURE or UNKNOWN: the '
+        'entrepreneur has not decided. '
+        'The second is a confirmed declaration that states an unresolved CUSTOMER uncertainty: '
+        'an identified but untested hypothesis (M2V2-18 hypothesis_status HYPOTHESIS_IDENTIFIED), '
+        'a declared validation requirement or exploration priority (M2V2-11 VALIDATE_CHOICE or '
+        'EXPLORE), or a declared research topic (M2V2-09) naming what the entrepreneur wants to '
+        'learn. '
+        'For the second shape you MAY cite a definite or structured declaration, because that '
+        'declaration is the SUBJECT of the uncertainty rather than the uncertainty itself: a '
+        'priced offer (M2V2-14 decision PRICED), a chosen product, or a multi-select topic list '
+        '(M2V2-09) are all valid source_refs. A structured value is an object and a multi-select '
+        'value is a list; cite them exactly as stored, including when the uncertainty lives in '
+        'one field of the object. '
+        'A definite declaration on its own is still NOT a gap. DINE_IN, TAKEAWAY, COFFEE, '
+        'STUDENTS or a decided price is a decision, and citing one without another declaration '
+        'that establishes the uncertainty is invalid. Never turn every confirmed declaration '
+        'into an uncertainty. '
         'SUGGESTED means the objective is exploratory and no confirmed answer establishes a '
         'problem: set problem_type to EXPLORATORY_RESEARCH_NEED, set problem to null, leave '
         'source_refs empty, and say in reason that no M2 finding establishes the need. '
@@ -211,6 +225,48 @@ PROMPTS = {
                                 'item_version_id': 'b1c2d3e4-0000-4000-8000-000000000000'}],
                'reason': 'The declared trading area is explicitly undecided, so no location '
                          'commitment is established.',
+               'authority': 'CANDIDATE_ONLY'}]}),
+         # The second source shape, and the one the prompt previously could not
+         # express: a priced offer plus a stated hypothesis is a customer
+         # uncertainty even though both values are definite. Structured
+         # (M2V2-14) and multi-select (M2V2-09) references are cited verbatim.
+         ({'declarations': [{'item_key': 'M2V2-09', 'answer_state': 'ANSWERED',
+                             'value': ['PRICE_ACCEPTABILITY'],
+                             'answer_revision_id': 'c1d2e3f4-0000-4000-8000-000000000000',
+                             'item_version_id': 'd1e2f3a4-0000-4000-8000-000000000000'},
+                            {'item_key': 'M2V2-14', 'answer_state': 'ANSWERED',
+                             'value': {'decision': 'PRICED',
+                                       'product_reference': 'Single-origin filter coffee',
+                                       'size': '250 ml', 'price': '16.00',
+                                       'currency': 'MYR'},
+                             'answer_revision_id': 'e1f2a3b4-0000-4000-8000-000000000000',
+                             'item_version_id': 'f1a2b3c4-0000-4000-8000-000000000000'},
+                            {'item_key': 'M2V2-18', 'answer_state': 'ANSWERED',
+                             'value': {'hypothesis_status': 'HYPOTHESIS_IDENTIFIED',
+                                       'hypothesis_text': 'Customers will accept RM16.00 for '
+                                                          'a 250 ml filter coffee.'},
+                             'answer_revision_id': 'a2b3c4d5-0000-4000-8000-000000000000',
+                             'item_version_id': 'b2c3d4e5-0000-4000-8000-000000000000'}],
+           'example_only': True},
+          {'contract_version': 'bdj-objective-proposal/1',
+           'recommendations': [{
+               'recommendation_status': 'MOST_SUGGESTED',
+               'problem_type': 'SOURCE_CONFIRMED_INFORMATION_GAP',
+               'problem': 'The stated RM16.00 acceptance for a 250 ml filter coffee is an '
+                          'untested hypothesis with no customer evidence behind it.',
+               'research_objective': 'To investigate whether prospective customers would accept '
+                                     'RM16.00 for a 250 ml single-origin filter coffee.',
+               'source_refs': [{'item_key': 'M2V2-09',
+                                'answer_revision_id': 'c1d2e3f4-0000-4000-8000-000000000000',
+                                'item_version_id': 'd1e2f3a4-0000-4000-8000-000000000000'},
+                               {'item_key': 'M2V2-14',
+                                'answer_revision_id': 'e1f2a3b4-0000-4000-8000-000000000000',
+                                'item_version_id': 'f1a2b3c4-0000-4000-8000-000000000000'},
+                               {'item_key': 'M2V2-18',
+                                'answer_revision_id': 'a2b3c4d5-0000-4000-8000-000000000000',
+                                'item_version_id': 'b2c3d4e5-0000-4000-8000-000000000000'}],
+               'reason': 'The priced offer and the acceptance hypothesis are both confirmed, '
+                         'but the hypothesis has not been tested with customers.',
                'authority': 'CANDIDATE_ONLY'}]}),
          ({'declarations': [], 'example_only': True},
           {'contract_version': 'bdj-objective-proposal/1',
@@ -345,7 +401,33 @@ PROMPTS = {
         'scientifically accepted or fielded, and you must not say that it is.'),
     # Prepared for the fixed-option amendment; not selected by the live runner
     # until its source, disclosure and respondent compatibility are verified.
-    'QG_FIXED_OPTION': Prompt('QG-FIXED-OPTION-1-CAND',
+    #
+    # 3-CAND states the abstention contract. 2-CAND was answered with
+    # ``decision = ABSTAIN_NEEDS_REVIEW`` *and* a drafted question, which the
+    # contract refuses as self-contradictory (QG_ABSTENTION_CONTAINS_QUESTION):
+    # an abstention says "this cannot be drafted", so it may not carry a draft.
+    # The model was complying with "abstain when information is missing" while
+    # also trying to be helpful, and nothing told it the two are exclusive.
+    #
+    # 2-CAND also stated the structural ceilings. The previous version did not,
+    # and a generation that ran long was rejected in full by the output schema
+    # with no way for the model to have known the limit. The limits below are
+    # the schema's own numbers, not new policy.
+    # 3-CAND retired (live Direct-QG attempt 2026-11-25, run 14b85828): the
+    # provider returned a schema-valid DRAFT (HTTP 200, identity verified, 6178
+    # completion tokens, response_sha256 27f3d853...) and ``validate_fixed_candidate``
+    # then refused it with QG_ROUTING_DRIFT, because 3-CAND never mentioned
+    # `routing` at all while `validate_candidate` requires it to be keyed by
+    # exactly the declared response_codes and `validate_fixed_candidate` requires
+    # every target to be "END". The same omission covered denominator_specification
+    # and used_confirmed_facts, so an attempt that got past routing would have
+    # spent a second provider call to fail on those instead.
+    #
+    # 4-CAND states the four rules the server already enforces. It adds no new
+    # check, relaxes none, and does not change the response schema. This is the
+    # same class of correction as the QG_PROPOSAL v4/v6 revisions above, and the
+    # evidence is recorded the same way.
+    'QG_FIXED_OPTION': Prompt('QG-FIXED-OPTION-4-CAND',
         'Draft an unfieldable fixed-option research question for owner review.',
         'Use only an approved objective and source-bound confirmed facts. '
         'Propose only supported selectable options with stable codes and ordering. '
@@ -354,7 +436,58 @@ PROMPTS = {
         'population, selection limits, limitations and any necessary reference '
         'period. Do not invent prices, products, locations or respondent facts. '
         'Abstain or request clarification when necessary information is missing. '
-        'Your output is a proposal, never an approval or customer observation.'),
+        'Your output is a proposal, never an approval or customer observation.\n'
+        'THE TWO DECISIONS ARE EXCLUSIVE. Choose exactly one.\n'
+        'If you can phrase a usable question at all, decision must be DRAFT, and '
+        'you must supply fixed_measurement.\n'
+        'If you cannot, decision must be ABSTAIN_NEEDS_REVIEW, and then ALL of '
+        'the following are required: question is the empty string (do NOT draft '
+        'one "for reference", do NOT leave a placeholder, do NOT write it in '
+        'justification instead); fixed_measurement is null; missing_business_facts '
+        'lists at least one of PRICE, PRODUCT, PACKAGE_SIZE, SERVICE_FORMAT, '
+        'POPULATION, REFERENCE_PERIOD, LOCATION, OBJECTIVE, OTHER; and '
+        'justification explains what is missing. An abstention that contains a '
+        'question is rejected outright, so never combine the two.\n'
+        'HARD LENGTH LIMITS, in characters. The server rejects the entire answer '
+        'if any one is exceeded, so stay inside them: question 2000; '
+        'justification 1000; construct_interpretation 1000; '
+        'measurement_description 1000; limitations 1000; '
+        'denominator_specification 500; reference_period 500. Write densely. '
+        'Do not pad, do not repeat the question inside justification, and do not '
+        'restate the confirmed facts at length.\n'
+        'HARD ITEM LIMITS. response_options and response_codes: at most 12 each, '
+        'and the same count. unresolved_assumptions and missing_business_facts: '
+        'at most 12 each. used_confirmed_facts: at most 32 entries, each a single '
+        'source_ref identifier, numeric token or currency amount.\n'
+        'OPTION RULES, when fixed_measurement is supplied. 2 to 12 options. Each '
+        'code matches ^[A-Z][A-Z0-9_]{0,63}$ (uppercase; letters, digits and '
+        'underscore only; no punctuation, no spaces, no lowercase). Each label is '
+        '1 to 500 characters. order is 0, 1, 2, ... with no gaps and no repeats. '
+        'Codes and labels are each unique. response_format is exactly one of '
+        'SINGLE_CHOICE, BINARY_CHOICE, ORDERED_SCALE, NUMERIC_RANGE_OPTIONS, '
+        'MULTIPLE_CHOICE. For any format other than MULTIPLE_CHOICE, '
+        'min_selections and max_selections must both be 1 and exclusive_codes '
+        'must be empty. BINARY_CHOICE requires exactly 2 options. '
+        'NUMERIC_RANGE_OPTIONS requires a non-empty unit, and every option needs '
+        'both lower and upper set with lower <= upper.\n'
+        'SERVER-CHECKED FIELDS. These are enforced, not stylistic.\n'
+        'routing is an object keyed by the exact strings in response_codes: '
+        'exactly one key for every code and no other key, never an option label '
+        'and never a snake_case name. Every routing value is exactly the string '
+        '"END". If response_codes are DA and PA, routing is {"DA": "END", '
+        '"PA": "END"} and nothing else.\n'
+        'denominator_specification names the declared response codes explicitly, '
+        'for example "codes VU, U and NU are in the denominator; code NS is '
+        'reported separately", and says which codes are excluded. "All '
+        'respondents who select an option" without naming codes is not a '
+        'denominator.\n'
+        'used_confirmed_facts may contain ONLY source_ref identifiers, numeric '
+        'tokens and currency amounts that appear in confirmed_facts - never '
+        'words such as "iced" or "takeaway" and never a sentence. Cite at least '
+        'one of those three kinds.\n'
+        'When fixed_measurement is supplied, its options must carry the same '
+        'codes and the same labels, in the same order, as response_codes and '
+        'response_options, because the server compares them entry by entry.'),
     # V1.0 candidate — SUPERSEDED. Kept for its truthful version label and for
     # the governance wording `tests/api/test_ee01_explanation.py` asserts, but it
     # must never be dispatched. The dispatchable explanation prompt is

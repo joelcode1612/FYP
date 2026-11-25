@@ -121,8 +121,9 @@ dev_dependencies:
   # native ORB / registration symbols the panorama pipeline calls
   # (integration_test/opencv_orb_native_test.dart drives the real probe on a
   # connected Android device — a unit test cannot prove symbol availability).
-  integration_test:
-    sdk: flutter
+  # NOTE: the `integration_test` dependency itself is declared once, above;
+  # a second identical key here is a YAML duplicate-mapping error and broke
+  # `jaspr build` for the web app (which resolves this workspace).
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

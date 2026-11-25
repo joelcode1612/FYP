@@ -26,7 +26,14 @@ class Assessment(SQLModel, table=True):
     __tablename__ = "assessment"
     __table_args__ = (
         UniqueConstraint("user_id", "property_id", name="uq_assessment_user_property"),
-        {"schema": "fyp", "info": {"externally_managed": True}},
+        # ``public``, not ``fyp``. The live table is ``public.assessment`` in
+        # both databases, and every raw-SQL reader agrees: the M2 link service
+        # validates ownership against ``public.assessment``
+        # (``assessment_link_service.py:315``) and the discard service reads the
+        # same table (``assessment_discard_service.py:58``). Declaring ``fyp``
+        # here made the ORM query a table that exists in neither database, so
+        # the assessment list failed while the raw-SQL paths kept working.
+        {"schema": "public", "info": {"externally_managed": True}},
     )
 
     assessment_id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)

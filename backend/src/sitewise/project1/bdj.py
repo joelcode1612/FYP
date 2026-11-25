@@ -68,7 +68,11 @@ def load_rules(version: str, expected_sha256: str, adoption_receipt: str):
     if version not in RULE_MODULES or not adoption_receipt:
         raise WorkflowHeld('BDJ_RULE_ADOPTION_REQUIRED')
     module = import_module(RULE_MODULES[version])
-    if hashlib.sha256(Path(module.__file__).read_bytes()).hexdigest() != expected_sha256:
+    # CRLF-normalised, for the same reason as ``ruleset_resolver.resolve_ruleset``:
+    # the digest must identify the ruleset's content, not the checkout's
+    # line-ending policy.
+    source = Path(module.__file__).read_bytes().replace(b'\r\n', b'\n')
+    if hashlib.sha256(source).hexdigest() != expected_sha256:
         raise WorkflowHeld('BDJ_RULE_FINGERPRINT_MISMATCH')
     return module
 

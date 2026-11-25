@@ -141,14 +141,38 @@ class PostgresAttemptLedger:
             session.commit()  # No provider dispatch before this succeeds.
             return number
 
-    def finish(self, attempt, outcome, output_digest):
+    def finish(self, attempt, outcome, output_digest, *,
+               model_returned=None, provider_response_status=None):
+        """Record the receipt for one reserved attempt.
+
+        ``model_returned`` and ``provider_response_status`` are optional so the
+        three-argument call sites keep working unchanged, but they are the only
+        way the two existing receipt columns are ever populated. They are
+        bounded metadata copied from ``provider.last_execution`` — never prompt
+        text, response bodies, headers or credentials — and they are written on
+        refusals as well as on successes, because "which model answered" is a
+        fact about the attempt, not about its outcome (DD-055).
+        """
         if outcome not in {'returned', 'rejected', 'unknown_outcome'}:
             raise WorkflowHeld('MODEL_RECEIPT_OUTCOME_INVALID')
+        if model_returned is not None and not isinstance(model_returned, str):
+            model_returned = None
+        if model_returned is not None and len(model_returned) > 128:
+            # The provider's own label is bounded at the edge; a longer value is
+            # not an identifier this ledger is willing to store.
+            model_returned = None
+        if (provider_response_status is not None
+                and (isinstance(provider_response_status, bool)
+                     or not isinstance(provider_response_status, int)
+                     or not 100 <= provider_response_status <= 599)):
+            provider_response_status = None
         with Session(self.engine) as session:
             self._scope(session)
             session.execute(text('INSERT INTO project1_ai.attempt_receipts '
-                '(run_id, owner_user_id, attempt_no, outcome, output_digest) '
-                'VALUES (:run,:actor,:attempt,:outcome,:digest)'),
+                '(run_id, owner_user_id, attempt_no, outcome, output_digest, '
+                ' model_returned, provider_response_status) '
+                'VALUES (:run,:actor,:attempt,:outcome,:digest,:model,:status)'),
                 {'run': self.run_id, 'actor': self.actor_id, 'attempt': attempt,
-                 'outcome': outcome, 'digest': output_digest})
+                 'outcome': outcome, 'digest': output_digest,
+                 'model': model_returned, 'status': provider_response_status})
             session.commit()

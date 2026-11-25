@@ -15,7 +15,17 @@ def get_inspector():
     if not settings.cq_synthetic_preview_enabled:
         raise HTTPException(404,detail={'code':'SYNTHETIC_PREVIEW_DISABLED'})
     raw=settings.ee01_database_url.get_secret_value();u=make_url(raw) if raw else None
-    if not u or u.host not in ('localhost','127.0.0.1','::1') or u.database!='Dss' or u.username!='p1_ee01_runtime' or u.drivername!='postgresql+psycopg2':
+    # The target check is kept in full -- loopback only, the restricted reporting
+    # login only, psycopg2 only -- but the database is compared against the
+    # *declared* EE-01 target rather than the literal 'Dss'. Pinning 'Dss' made
+    # this route reject the very DSN that `customer_questionnaire.get_ee01_service`
+    # accepts, so the same credential was authorised on one route and refused on
+    # the other, and the whole synthetic surface was unreachable on any cluster
+    # whose database is not named 'Dss' (DD-105).
+    if (not u or u.host not in ('localhost','127.0.0.1','::1')
+            or not settings.ee01_expected_database
+            or u.database!=settings.ee01_expected_database
+            or u.username!='p1_ee01_runtime' or u.drivername!='postgresql+psycopg2'):
         raise HTTPException(503,detail={'code':'SYNTHETIC_TARGET_UNVERIFIED'})
     from sitewise.api.v1.customer_questionnaire import _ee01_engine
     from sitewise.services.synthetic_inspection_service import SyntheticInspectionService

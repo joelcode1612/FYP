@@ -151,6 +151,19 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
   Map<String, dynamic>? _confirmation;
   Map<String, dynamic>? _contextStatus;
 
+  /// The exact AI-processing terms this release discloses, read from the
+  /// server. The client never composes them: it shows what it was given and
+  /// echoes it back unchanged, because the server refuses any disagreement.
+  Map<String, dynamic>? _aiDisclosure;
+  String? _aiDisclosureError;
+
+  /// The owner's AI-processing decision for the next confirmation.
+  ///
+  /// Starts false, always. The snapshot records an omitted control as
+  /// NOT_GRANTED, so a pre-checked box would turn "did nothing" into a grant —
+  /// and no consent may ever be inferred from the act of confirming.
+  bool _aiConsent = false;
+
   /// The deterministic draft concept for the currently saved revision.
   ///
   /// Read-only by contract: the endpoint behind it creates no confirmation and
@@ -354,18 +367,33 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
   /// "Answer must match one registered option value." The resolved view is
   /// authoritative; the static list is only a fallback for older payloads.
   List<Map<String, dynamic>> _options(Map<String, dynamic> item) {
-    // M2V1-01 is a GEO item whose instrument ships area codes, but the backend
-    // only accepts UNDECIDED while rules.geography.status != VERIFIED. Offering
-    // JOHOR/PENANG/... would produce a guaranteed 422, so the authorized
-    // mechanism is the single "not decided" choice. No location is invented.
+    // DD-063: a GEO item is answered from the approved GEO_V1 catalogue, which
+    // the server attaches as `effective_geography` when the stored definition
+    // declares AUTHORITY_UNVERIFIED. The catalogue's own `area_ref` is the
+    // option code and its jurisdiction name is the label; no area is invented.
+    // When no catalogue is served the single "not decided" choice remains the
+    // only authorized answer, because the backend would refuse anything else.
     if ((item['answer_kind'] as String? ?? '') == 'GEO') {
-      final geo = _rules(item)['geography'];
-      final verified = geo is Map && geo['status'] == 'VERIFIED';
-      if (!verified) {
-        return const [
+      final areas = _geography(item)?['areas'];
+      final options = <Map<String, dynamic>>[
+        for (final area in areas is List ? areas : const [])
+          if (area is Map && area['area_ref'] is String)
+            {
+              'code': area['area_ref'] as String,
+              'label': area['jurisdiction'] is String
+                  ? area['jurisdiction'] as String
+                  : area['area_ref'] as String,
+            },
+      ];
+      if (options.isNotEmpty) {
+        return [
+          ...options,
           {'code': 'UNDECIDED', 'label': 'Not decided yet'},
         ];
       }
+      return const [
+        {'code': 'UNDECIDED', 'label': 'Not decided yet'},
+      ];
     }
     final labels = item['option_labels'];
     final effective = item['effective_options'];
@@ -400,6 +428,24 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
       return (values['rules'] as Map).cast<String, dynamic>();
     }
     return const {};
+  }
+
+  /// The verified geography catalogue for a GEO item, or null when none applies.
+  ///
+  /// DD-063: the server serves the approved GEO_V1 catalogue as
+  /// `effective_geography` when the stored definition declares
+  /// AUTHORITY_UNVERIFIED. A stored verified block is used when the server sends
+  /// no overlay, so an instrument that ships its own catalogue keeps working.
+  Map<String, dynamic>? _geography(Map<String, dynamic> item) {
+    final served = item['effective_geography'];
+    if (served is Map && served['status'] == 'VERIFIED') {
+      return served.cast<String, dynamic>();
+    }
+    final stored = _rules(item)['geography'];
+    if (stored is Map && stored['status'] == 'VERIFIED') {
+      return stored.cast<String, dynamic>();
+    }
+    return null;
   }
 
   /// The question this one depends on, per the instrument's own rule.
@@ -713,6 +759,14 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
         } else if (value is String && value.isNotEmpty) {
           text = value;
           if (allowed.isEmpty || allowed.contains(value)) codes.add(value);
+        } else if (value is Map && (raw['answer_kind'] as String? ?? '') == 'GEO') {
+          // DD-063: a stored GEO answer is the structured catalogue entry, while
+          // the editor works in area references. Seed the selection from it so a
+          // reload shows the area the entrepreneur already chose.
+          final ref = value['area_ref'];
+          if (ref is String && (allowed.isEmpty || allowed.contains(ref))) {
+            codes.add(ref);
+          }
         }
       }
       _editorState[key] = state;
@@ -733,10 +787,14 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
 
   /// The exact value the API receives for the current editor state.
   ///
-  /// DEF-UX-01: GEO is a bare string, like SINGLE. It used to fall through to
-  /// the MULTI branch and send `["UNDECIDED"]`, which the backend rejects
-  /// (`value == 'UNDECIDED'` is compared to a string). One serializer, used by
-  /// both the save and the dirty check, so the two can never disagree.
+  /// DEF-UX-01: GEO used to be sent as a bare string like SINGLE, which fell
+  /// through to the MULTI branch and sent `["UNDECIDED"]` — rejected by the
+  /// backend, because `value == 'UNDECIDED'` is compared to a string. It is now
+  /// serialized explicitly: `UNDECIDED` stays the literal string the validator
+  /// accepts, and a selected area becomes the exact
+  /// `{jurisdiction, area_ref, catalogue_version}` entry from the served GEO_V1
+  /// catalogue (DD-063). One serializer, used by both the save and the dirty
+  /// check, so the two can never disagree.
   Object? _editorValue(Map<String, dynamic> item, String state) {
     if (state != 'ANSWERED') return null;
     final kind = item['answer_kind'] as String? ?? '';
@@ -746,7 +804,25 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     if (kind == 'COMPOSITE') {
       return _compositeValue(item, _editorComposite[key] ?? const <String, dynamic>{});
     }
-    if (kind == 'SINGLE' || kind == 'GEO') {
+    if (kind == 'GEO') {
+      if (codes.isEmpty) return null;
+      final code = codes.first;
+      if (code == 'UNDECIDED') return 'UNDECIDED';
+      final areas = _geography(item)?['areas'];
+      for (final area in areas is List ? areas : const []) {
+        if (area is Map && area['area_ref'] == code) {
+          return {
+            'jurisdiction': area['jurisdiction'],
+            'area_ref': area['area_ref'],
+            'catalogue_version': area['catalogue_version'],
+          };
+        }
+      }
+      // A code with no catalogue entry is not sendable; the backend refuses any
+      // area that is not registered, so nothing is invented here.
+      return null;
+    }
+    if (kind == 'SINGLE') {
       return codes.isEmpty ? null : codes.first;
     }
     return List<String>.unmodifiable(codes);
@@ -819,6 +895,17 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
   }
 
   bool _sameValue(Object? a, Object? b) {
+    if (a is Map && b is Map) {
+      // DD-063: a GEO value is a structured entry. Dart prints a Map in insertion
+      // order, so comparing their toString() would report a false dirty state
+      // whenever the server returned the keys in a different order.
+      if (a.length != b.length) return false;
+      for (final key in a.keys) {
+        if (!b.containsKey(key)) return false;
+        if (!_sameValue(a[key], b[key])) return false;
+      }
+      return true;
+    }
     if (a is List && b is List) {
       if (a.length != b.length) return false;
       for (var i = 0; i < a.length; i++) {
@@ -923,8 +1010,9 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
         _worksheet = sheet;
         notice =
             'Candidate BDJ evaluation recorded at revision ${draft.revision}. '
-            'These are deterministic candidate findings, not a model output and '
-            'not a scientific verdict.';
+            'These are candidate findings from a governed model-assisted run — '
+            'not an approval, not a customer observation and not a scientific '
+            'verdict.';
       });
     } catch (_) {
       if (mounted) {
@@ -1032,11 +1120,115 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
           marketplaceAssessmentId: component.marketplaceAssessmentId);
       if (!mounted || _draft?.id != draft.id || _draft?.revision != draft.revision) return;
       setState(() { _reviewedRevision = draft.revision; _showReview = true; });
+      // The permission is offered next to the confirm action, so its terms are
+      // fetched with the review rather than on every panel build.
+      await _loadAiDisclosure();
     } catch (failure) {
       if (mounted) setState(() => error = _confirmationError(failure));
     } finally {
       if (mounted) setState(() => busy = false);
     }
+  }
+
+  /// Read the disclosed AI-processing terms before offering the control.
+  ///
+  /// Read-only. Nothing is granted by reading it, and a failure leaves the
+  /// control unavailable rather than showing invented terms.
+  Future<void> _loadAiDisclosure() async {
+    if (_aiDisclosure != null) return;
+    try {
+      final terms = await AppLocator.m2.aiProcessingDisclosure();
+      if (!mounted) return;
+      setState(() {
+        _aiDisclosure = terms;
+        _aiDisclosureError = null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _aiDisclosureError =
+            'The AI-processing terms could not be read. The permission cannot '
+            'be offered without them, and confirming without it grants nothing.';
+      });
+    }
+  }
+
+  /// The echo the server will compare against its own disclosure.
+  ///
+  /// Only an affirmative decision produces this map. Omission is the honest
+  /// representation of "not granted", so nothing is sent unless the box is
+  /// checked *and* the terms were actually displayed.
+  Map<String, dynamic>? _aiConsentEcho() {
+    final terms = _aiDisclosure;
+    if (!_aiConsent || terms == null) return null;
+    return {
+      'granted': true,
+      'disclosure_version': terms['contract_version'],
+      'provider': terms['provider'],
+      'purpose': terms['purpose'],
+      'endpoint': terms['endpoint'],
+      'model': terms['model'],
+    };
+  }
+
+  /// The AI-processing permission, immediately before the confirm action.
+  ///
+  /// Unchecked on every render and every reload: the decision belongs to the
+  /// owner, and a default of "yes" would make silence look like agreement.
+  Component _aiConsentControl() {
+    final terms = _aiDisclosure;
+    return div(classes: 'stack stack--sm', [
+      p(classes: 'small asw-muted', [
+        Component.text(
+          'Confirming the declaration grants nothing downstream. Sending the '
+          'confirmed information to an external AI model to derive research '
+          'objectives is a separate permission, asked for separately.',
+        ),
+      ]),
+      if (terms == null)
+        p(classes: 'small', [
+          Component.text(
+            _aiDisclosureError ??
+                'Reading the AI-processing terms before offering the choice…',
+          ),
+        ])
+      else ...[
+        label(classes: 'ops-checkrow', [
+          input(
+            type: InputType.checkbox,
+            checked: _aiConsent,
+            events: events(
+              onClick: () => setState(() => _aiConsent = !_aiConsent),
+            ),
+          ),
+          span([
+            Component.text(
+              'I allow ${terms['provider']} to process the confirmed business '
+              'information of this assessment with model ${terms['model']} in '
+              'order to derive research objectives.',
+            ),
+          ]),
+        ]),
+        p(classes: 'small asw-muted', [
+          Component.text('Recipient: ${terms['endpoint']}'),
+        ]),
+        p(classes: 'small asw-muted', [
+          Component.text('Purpose: ${terms['purpose']}'),
+        ]),
+        p(classes: 'small asw-muted', [
+          Component.text(
+            'Information sent: '
+            '${(terms['data_shared'] as List? ?? const []).join(', ')}.',
+          ),
+        ]),
+        p(classes: 'small asw-muted', [
+          Component.text(
+            'Attempts covered by this permission: ${terms['max_attempts']}. '
+            '${terms['note'] ?? ''}',
+          ),
+        ]),
+      ],
+    ]);
   }
 
   Future<void> _confirmDeclarationBeforeBdj() async {
@@ -1055,8 +1247,12 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     try {
       // No finding acknowledgements are required to confirm entrepreneur
       // declarations. BDJ findings belong to the NEXT stage.
+      // ``aiProcessing`` is omitted unless the owner checked the box, so an
+      // untouched control records NOT_GRANTED rather than a silent grant.
+      final consent = _aiConsentEcho();
       await AppLocator.m2.confirm(draft, const <String>[],
-          marketplaceAssessmentId: component.marketplaceAssessmentId);
+          marketplaceAssessmentId: component.marketplaceAssessmentId,
+          aiProcessing: consent);
       final persisted = await AppLocator.m2.currentConfirmation(draft.id);
       if (!mounted) return;
       if (persisted == null || persisted['assessment_revision'] != draft.revision) {
@@ -1996,6 +2192,15 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
       ActionButton(action.$1, variant: 'secondary', onClick: action.$2),
   ]);
 
+  /// Candidate BDJ evaluation panel.
+  ///
+  /// **Not mounted.** No render path references this builder, so the "Run
+  /// candidate BDJ evaluation" button never reaches the DOM and
+  /// `POST …/bdj/evaluate` is never sent from the application (DD-039). The
+  /// findings model call is deliberately not reactivated until its necessity
+  /// under `PROJECT1_BDJ_CONTRACT=objective` is established. The copy below was
+  /// corrected because it described the route as deterministic when it runs the
+  /// governed model-assisted path.
   Component _bdj() {
     final sheet = _worksheet;
     final findings = [
@@ -2006,9 +2211,10 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
       h2([Component.text('Business description and candidate BDJ')]),
       p(classes: 'sr-muted', [
         Component.text(
-          'POST /api/v1/m2/assessments/{id}/bdj/evaluate runs the deterministic '
-          'candidate ruleset. It is not a model call and does not establish '
-          'scientific validity.',
+          'POST /api/v1/m2/assessments/{id}/bdj/evaluate runs the governed '
+          'model-assisted BDJ path: it dispatches a TokenHarbour model call '
+          'under the adopted ruleset and requires a real-data authorization. '
+          'It does not establish scientific validity.',
         ),
       ]),
       button(
@@ -2730,6 +2936,8 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
             variant: 'secondary',
             onClick: busy || _autoSaveInFlight ? null : _reviewDeclarations,
           ),
+          if (_showReview)
+            _aiConsentControl(),
           if (_showReview)
             ActionButton(
               'Confirm business declaration',

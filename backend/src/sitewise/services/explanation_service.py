@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from typing import Any
 
 from sqlmodel import Session
@@ -41,6 +42,8 @@ from sitewise.services.explanation_cache import (
     get_ready_raw,
     store_ready,
 )
+
+_log = logging.getLogger(__name__)
 
 # Deterministic feature -> analysis category mapping. The five categories are
 # the ones the evidence stage presents, so a contribution is always shown next
@@ -347,17 +350,39 @@ class ExplanationService:
         the report reuses the stored payload. The row is only accepted when its
         embedded ``assessment_id`` matches, which is what keeps one
         assessment's explanation from being shown against another property.
+
+        An unreadable store is reported as "nothing stored", not raised. The
+        table is provisioned by the schema-standardisation step that moves
+        ``public.ai_explanation`` into the ``fyp`` schema; until a deployment
+        has run it, the relation is absent and every report read failed with a
+        500 rather than showing its explanation section as unavailable. A
+        missing store cannot make the rest of an assessment unreadable.
+
+        The read runs inside a SAVEPOINT so a failed statement cannot abort the
+        caller's transaction: without it PostgreSQL leaves the session in
+        ``InFailedSqlTransaction`` and every later statement in the same
+        request fails too.
         """
         import json
 
+        from sqlalchemy.exc import SQLAlchemyError
         from sqlmodel import select
 
-        rows = self.session.exec(
-            select(AiExplanation)
-            .where(AiExplanation.user_id == assessment.user_id)
-            .order_by(AiExplanation.created_at.desc())
-            .limit(20)
-        ).all()
+        try:
+            with self.session.begin_nested():
+                rows = self.session.exec(
+                    select(AiExplanation)
+                    .where(AiExplanation.user_id == assessment.user_id)
+                    .order_by(AiExplanation.created_at.desc())
+                    .limit(20)
+                ).all()
+        except SQLAlchemyError as exc:
+            _log.warning(
+                'explanation store unreadable for assessment %s: %s',
+                assessment.assessment_id,
+                exc,
+            )
+            return None
         for row in rows:
             try:
                 content = json.loads(row.content)

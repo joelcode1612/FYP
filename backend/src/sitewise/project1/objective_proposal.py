@@ -30,8 +30,41 @@ PROBLEM_TYPE_FOR_STATUS = {
 # as an information gap.
 SUPPORTING_LITERALS = {
     'M2V1-08': frozenset({'UNKNOWN', 'NONE'}),
+    # DD-064. The adopted objective prompt declares a *second* valid source
+    # shape: a confirmed declaration that states an unresolved CUSTOMER
+    # uncertainty. The declaration is definite; what it states is unresolved.
+    # These entries are that shape, transcribed from the adopted prompt:
+    #
+    #   M2V2-11  "a declared validation requirement or exploration priority"
+    #   M2V2-18  "an identified but untested hypothesis"
+    #
+    # Before this, only the first shape (an uncertainty *literal*) was
+    # accepted, so a proposal the adopted prompt explicitly permits could
+    # never pass: it was refused as BDJ_OBJECTIVE_SOURCE_NOT_SUPPORTING no
+    # matter how faithfully the model followed the prompt. Demonstrated with
+    # backend/var/e2e/tmp/probe_dd064.py cases B and C.
+    #
+    # M2V2-18 accepts only HYPOTHESIS_IDENTIFIED. NOT_ESTABLISHED is not an
+    # identified hypothesis, and accepting it would let every unanswered
+    # hypothesis pass as a gap.
+    'M2V2-11': frozenset({'VALIDATE_CHOICE', 'EXPLORE'}),
+    'M2V2-18': frozenset({'HYPOTHESIS_IDENTIFIED'}),
 }
 DEFAULT_SUPPORTING_LITERALS = frozenset({'UNDECIDED', 'UNSURE', 'UNKNOWN'})
+
+#: Items whose *content* is a declared research topic rather than a status.
+#: DD-064 names "a declared research topic (M2V2-09) naming what the
+#: entrepreneur wants to learn" as the third form of the second shape, and the
+#: value is a multi-select list, so it establishes when it carries at least one
+#: topic code.
+#:
+#: This is the one entry that *broadens* eligibility beyond a conditional
+#: status: the instrument collects a topic list from every respondent, so any
+#: assessment that answered M2V2-09 can support a MOST_SUGGESTED proposal.
+#: That is what the adopted prompt says, and implementing the prompt is the
+#: point -- but it is a scientific consequence the owner should confirm, not
+#: something a validator may quietly decide. Recorded as DD-099.
+DECLARED_TOPIC_ITEMS = frozenset({'M2V2-09'})
 
 CLAIM_PHRASES = (
     'guarantee', 'guaranteed', 'will definitely', 'proves demand', 'proven demand',
@@ -145,6 +178,52 @@ def _normalise(text: str) -> str:
     return ' '.join(text.casefold().split())
 
 
+def _string_leaves(value):
+    """Every string inside a declared value, whatever its shape.
+
+    The M2 V2 instrument mixes scalar, multi-select (list) and structured
+    (object) answers, and an uncertainty can live in one *field* of an object.
+    Comparing only the top-level value meant a structured declaration could
+    never satisfy any literal set, so ``M2V2-18 HYPOTHESIS_IDENTIFIED`` was
+    unreachable even after its literal was registered. Keys are deliberately
+    excluded: a field *name* is not a declared value.
+    """
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for inner in value.values():
+            yield from _string_leaves(inner)
+    elif isinstance(value, list):
+        for inner in value:
+            yield from _string_leaves(inner)
+
+
+def _establishes_uncertainty(item_key: str, value) -> bool:
+    """Does this confirmed declaration state an unresolved uncertainty?
+
+    Both shapes DD-064 defines, and nothing else:
+
+    *first* — the value itself is an uncertainty literal (UNDECIDED / UNSURE /
+    UNKNOWN), or the item's own registered literal set says so (M2V1-08).
+
+    *second* — a **declared** uncertainty: a validation requirement, an
+    identified but untested hypothesis, or a declared research topic. The
+    declaration is definite; the thing it states is not yet resolved.
+
+    A definite operational choice (DINE_IN, TAKEAWAY, PRICED, a chosen product)
+    is establishing under neither shape. It may still be *cited* — the prompt
+    allows it as the subject of the uncertainty — but it cannot be the sole
+    reason a gap exists.
+    """
+    leaves = list(_string_leaves(value))
+    allowed = SUPPORTING_LITERALS.get(item_key, DEFAULT_SUPPORTING_LITERALS)
+    if any(leaf in allowed for leaf in leaves):
+        return True
+    if item_key in DECLARED_TOPIC_ITEMS:
+        return any(leaf.strip() for leaf in leaves)
+    return False
+
+
 def validate_objective_proposal(raw, packet: dict) -> ObjectiveProposal:
     """Fail-closed validation of a candidate proposal against the source packet.
 
@@ -178,17 +257,27 @@ def validate_objective_proposal(raw, packet: dict) -> ObjectiveProposal:
                 raise WorkflowHeld('BDJ_OBJECTIVE_PROBLEM_REQUIRED')
             if not rec.source_refs:
                 raise WorkflowHeld('BDJ_OBJECTIVE_SOURCE_REQUIRED')
+            # Every ref must still be a real, exactly-matching, ANSWERED
+            # declaration -- a citation is never accepted on trust.
+            #
+            # What changed (DD-064): *one* ref must establish the uncertainty,
+            # not all of them. The adopted prompt lets a proposal cite the
+            # definite declaration the uncertainty is *about* (a priced offer,
+            # a chosen product) alongside the declaration that establishes it.
+            # Requiring every ref to be an uncertainty literal refused exactly
+            # that permitted combination. A definite value on its own still
+            # fails, because nothing in the set then establishes a gap.
+            establishing = False
             for ref in rec.source_refs:
                 source = sources.get(ref.item_key)
                 if (source is None or source.get('answer_state') != 'ANSWERED' or
                         source.get('answer_revision_id') != ref.answer_revision_id or
                         source.get('item_version_id') != ref.item_version_id):
                     raise WorkflowHeld('BDJ_OBJECTIVE_SOURCE_INVALID')
-                value = source.get('value')
-                values = value if isinstance(value, list) else [value]
-                allowed = SUPPORTING_LITERALS.get(ref.item_key, DEFAULT_SUPPORTING_LITERALS)
-                if not any(isinstance(v, str) and v in allowed for v in values):
-                    raise WorkflowHeld('BDJ_OBJECTIVE_SOURCE_NOT_SUPPORTING')
+                if _establishes_uncertainty(ref.item_key, source.get('value')):
+                    establishing = True
+            if not establishing:
+                raise WorkflowHeld('BDJ_OBJECTIVE_SOURCE_NOT_SUPPORTING')
         else:
             # 4b. an exploratory proposal may not pretend a problem was found.
             if rec.problem is not None:

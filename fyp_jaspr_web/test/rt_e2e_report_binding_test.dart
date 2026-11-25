@@ -1,3 +1,4 @@
+import 'package:jaspr/jaspr.dart' show DomElement;
 import 'package:jaspr_test/jaspr_test.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/assessment_api.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/assessment_report.dart';
@@ -83,7 +84,10 @@ BusinessDescription _confirmed() => BusinessDescription.fromJson({
       'label': 'Concept',
       'text': 'Slow Bar',
       'code': null,
-      'source': {'item_key': 'M2V2-12', 'confirmation_id': 'd2453af1-70e8-4be6-9fbe-20fe5e41b357'},
+      'source': {
+        'item_key': 'M2V2-12',
+        'confirmation_id': 'd2453af1-70e8-4be6-9fbe-20fe5e41b357',
+      },
     },
     {
       'key': 'product_categories',
@@ -97,11 +101,94 @@ BusinessDescription _confirmed() => BusinessDescription.fromJson({
     'id': '4c9691a9-4db4-44f2-9688-a930cd295dd7',
     'text': 'Whether customers would pay the tested price.',
   },
-  'limitations': ['Entrepreneur confirmation is not independent factual verification.'],
+  'limitations': [
+    'Entrepreneur confirmation is not independent factual verification.',
+  ],
   'evidence_class': 'ENTREPRENEUR_CONFIRMED',
 });
 
 void main() {
+  group('report document', () {
+    // The report is one document of nine sections. It was once cut down to the
+    // last three by hiding the first six in CSS while keeping them in the DOM,
+    // which left a reader with a single chip and no way to reach the overview,
+    // the business description or the question decisions. These assertions are
+    // about what a reader can see, so they check the classes and attributes that
+    // did the hiding — not just that the markup still exists.
+    const sectionIds = [
+      'asw-rpt-overview',
+      'asw-rpt-business',
+      'asw-rpt-findings',
+      'asw-rpt-decisions',
+      'asw-rpt-questionnaire',
+      'asw-rpt-extras',
+      'asw-rpt-evidence',
+      'asw-rpt-coverage',
+      'asw-rpt-sources',
+    ];
+
+    testComponents('renders all nine sections, none hidden', (tester) {
+      tester.pumpComponent(_report());
+      tester.pump();
+
+      for (final id in sectionIds) {
+        expect(
+          find.byElementPredicate(
+            (element) =>
+                element is DomElement &&
+                element.component.attributes?['id'] == id &&
+                element.component.attributes?['aria-hidden'] == null &&
+                !(element.component.classes ?? '').contains(
+                  'asw-rpt__section--prior',
+                ),
+            description: 'the visible $id section',
+          ),
+          findsOneComponent,
+          reason: 'section $id must be drawn, not merely present in the DOM',
+        );
+      }
+    });
+
+    testComponents('gives every section a visible jump chip', (tester) {
+      tester.pumpComponent(_report());
+      tester.pump();
+
+      // No chip may be hidden from the reader: that is what reduced the bar to
+      // a single bubble.
+      expect(
+        find.byElementPredicate(
+          (element) =>
+              element is DomElement &&
+              (element.component.classes ?? '').contains(
+                'asw-rpt__navlink--prior',
+              ),
+          description: 'a hidden jump chip',
+        ),
+        findsNothing,
+      );
+
+      // Each section title has a chip, and a chip is a button: the section head
+      // itself is not one, so this cannot match the heading instead.
+      for (final title in const [
+        'Assessment overview',
+        'Business description',
+        'Business findings and uncertainties',
+        'Research and question decisions',
+        'Customer questionnaire',
+        'Additional questions',
+        'Evidence and scoring',
+        'Report coverage',
+        'Sources and limitations',
+      ]) {
+        expect(
+          find.ancestor(of: find.text(title), matching: find.tag('button')),
+          findsOneComponent,
+          reason: 'no jump chip for "$title"',
+        );
+      }
+    });
+  });
+
   group('measurement readback binding', () {
     testComponents('is not drawn under another assessment', (tester) {
       // The bundled fixture belongs to the FC4-D assessment, not to this one.
@@ -112,7 +199,10 @@ void main() {
       expect(find.textContaining('measurement readback'), findsNothing);
       expect(find.text('Findings withheld'), findsNothing);
       // R03 keeps its held state, and the section is still whole.
-      expect(find.text('R03 · Concept intent distribution — held'), findsOneComponent);
+      expect(
+        find.text('R03 · Concept intent distribution — held'),
+        findsOneComponent,
+      );
       expect(find.text('Customer questionnaire'), findsNComponents(2));
     });
 
@@ -133,35 +223,46 @@ void main() {
       expect(find.textContaining('V = 24'), findsNComponents(2));
       expect(find.text('28'), findsNothing);
       // R03 itself is still held: a readback is not an admission.
-      expect(find.text('R03 · Concept intent distribution — held'), findsOneComponent);
+      expect(
+        find.text('R03 · Concept intent distribution — held'),
+        findsOneComponent,
+      );
     });
 
     testComponents('renders nothing when no readback is supplied', (tester) {
       tester.pumpComponent(_report());
 
       expect(find.textContaining('measurement readback'), findsNothing);
-      expect(find.text('R03 · Concept intent distribution — held'), findsOneComponent);
+      expect(
+        find.text('R03 · Concept intent distribution — held'),
+        findsOneComponent,
+      );
     });
   });
 
   group('confirmed business description', () {
-    testComponents('renders the confirmed rows with provenance and limitations',
-        (tester) {
-      tester.pumpComponent(_report(businessDescription: _confirmed()));
+    testComponents(
+      'renders the confirmed rows with provenance and limitations',
+      (tester) {
+        tester.pumpComponent(_report(businessDescription: _confirmed()));
 
-      expect(find.text('Confirmed business description'), findsOneComponent);
-      expect(find.text('Slow Bar'), findsOneComponent);
-      expect(find.text('Coffee and espresso beverages'), findsComponents);
-      expect(find.text('Confirmed declaration'), findsOneComponent);
-      expect(find.textContaining('confirmation d2453af1-70'), findsOneComponent);
-      expect(find.textContaining('revision 20'), findsOneComponent);
-      expect(
-        find.textContaining('not independent factual verification'),
-        findsOneComponent,
-      );
-      // The Step-2 draft card is not printed beside the confirmed one.
-      expect(find.text('Declared business'), findsNothing);
-    });
+        expect(find.text('Confirmed business description'), findsOneComponent);
+        expect(find.text('Slow Bar'), findsOneComponent);
+        expect(find.text('Coffee and espresso beverages'), findsComponents);
+        expect(find.text('Confirmed declaration'), findsOneComponent);
+        expect(
+          find.textContaining('confirmation d2453af1-70'),
+          findsOneComponent,
+        );
+        expect(find.textContaining('revision 20'), findsOneComponent);
+        expect(
+          find.textContaining('not independent factual verification'),
+          findsOneComponent,
+        );
+        // The Step-2 draft card is not printed beside the confirmed one.
+        expect(find.text('Declared business'), findsNothing);
+      },
+    );
 
     testComponents('renders a held state when nothing is confirmed', (tester) {
       final held = BusinessDescription.fromJson({
@@ -177,7 +278,10 @@ void main() {
       });
       tester.pumpComponent(_report(businessDescription: held));
 
-      expect(find.text('No confirmed business description yet'), findsOneComponent);
+      expect(
+        find.text('No confirmed business description yet'),
+        findsOneComponent,
+      );
       expect(
         find.textContaining('no persisted business context yet'),
         findsOneComponent,
@@ -186,15 +290,17 @@ void main() {
       expect(find.text('Declared business'), findsNothing);
     });
 
-    testComponents('falls back to the Step-2 rows when no description was read',
-        (tester) {
-      tester.pumpComponent(
-        _report(scope: const [('Business overview', 'Neighbourhood café')]),
-      );
+    testComponents(
+      'falls back to the Step-2 rows when no description was read',
+      (tester) {
+        tester.pumpComponent(
+          _report(scope: const [('Business overview', 'Neighbourhood café')]),
+        );
 
-      expect(find.text('Declared business'), findsOneComponent);
-      expect(find.text('Neighbourhood café'), findsOneComponent);
-    });
+        expect(find.text('Declared business'), findsOneComponent);
+        expect(find.text('Neighbourhood café'), findsOneComponent);
+      },
+    );
   });
 
   group('BusinessDescription adapter', () {

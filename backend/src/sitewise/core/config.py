@@ -82,6 +82,22 @@ class Settings(BaseSettings):
     # Separate local operator inspection. Never authorizes participation.
     cq_synthetic_preview_enabled: bool = False
     cq_synthetic_interactive_enabled: bool = False
+    # --- CQ publication (DD-096) -------------------------------------------
+    # Publication is a distinct operation from respondent runtime, performed by
+    # a distinct database principal (`p1_cq_publisher`). It is therefore gated
+    # by its own switch and its own DSN: `cq_runtime_enabled` stays false while
+    # publication works, and publication never implies fielding authority.
+    #
+    # Defaults: the switch is ON because the directive is that the Publish
+    # Questionnaire button must not be permanently disabled, and because the
+    # real gate is the database principal. `cq_publication_database_url` is
+    # empty by default, so `get_publication_engine()` refuses until an operator
+    # names the publisher DSN -- a deployment that has not installed the
+    # principal fails closed with CQ_PUBLICATION_TARGET_UNVERIFIED rather than
+    # publishing as some other role.
+    cq_publication_enabled: bool = True
+    cq_publication_database_url: SecretStr = SecretStr('')
+    cq_publication_expected_database: str = ''
 
     # Separate staging bridge; does not enable the unresolved BDJ/M2 write router.
     project1_cp07_enabled: bool = False
@@ -116,6 +132,20 @@ class Settings(BaseSettings):
     project1_rules_m2v2_version: str = ""
     project1_rules_m2v2_sha256: str = ""
     project1_rules_m2v2_adoption_receipt: str = ""
+    #: Objective-artefact adoption, binding the same way the ruleset does. The
+    #: ruleset pin covers the findings rules only; the objective prompt and the
+    #: issue-resolution policy decide which objective a LIVE run may propose, so
+    #: they are adopted independently. All three values of a pair must be set or
+    #: that artefact is unadopted and a LIVE run is refused — a partial set never
+    #: borrows the other artefact's receipt. Fingerprints are taken over the
+    #: prompt's own declared content and the policy's published surface, so a
+    #: comment or a line-ending change cannot read as a content change.
+    project1_objective_prompt_version: str = ""
+    project1_objective_prompt_sha256: str = ""
+    project1_objective_prompt_adoption_receipt: str = ""
+    project1_issue_policy_version: str = ""
+    project1_issue_policy_sha256: str = ""
+    project1_issue_policy_adoption_receipt: str = ""
     #: Explicit synthetic instrument scope. Empty disables the mechanism.
     #: Activation additionally requires a disposable, non-5432 database target;
     #: see sitewise.services.instrument_authorization. It never changes a

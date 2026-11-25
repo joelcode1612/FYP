@@ -127,4 +127,82 @@ def resolve(engine, actor_id, *, assessment_id, objective_id, proposal_id,
     }
 
 
-__all__ = ['DEFAULT_STIMULUS', 'operative_admission', 'resolve']
+def resolve_authorized(engine, actor_id, *, assessment_id, proposal_id,
+                       context_id, authority: dict,
+                       prompt_key: str = 'QG_FIXED_OPTION',
+                       stimulus: dict | None = None) -> dict:
+    """Binding set for a contract 2.1 attempt, derived from the owner's approval.
+
+    ``authority`` is the result of
+    ``qg_generation_eligibility.derive_objective_authority``. No admission row is
+    read: the derivation has already proved the approval still describes the
+    current confirmation revision, source fingerprint and context packet, which
+    is exactly what the admission used to supply. Reading an admission here as
+    well would reintroduce the manual step the directive removes.
+
+    The objective text comes from the proposal rather than the registry, because
+    an ``ADDITIONAL_ASSESSMENT_OBJECTIVE`` has no registry entry — that is what
+    makes it additional.
+    """
+    from sitewise.repositories.m2_context_bindings import bind_restricted_principal
+
+    prompt = PROMPTS.get(prompt_key)
+    if prompt is None:
+        raise WorkflowHeld('PROVIDER_PROMPT_NOT_REGISTERED')
+
+    with engine.connect() as conn:
+        bind_restricted_principal(conn, actor_id)
+        packet_row = conn.execute(text("""
+            SELECT packet_json, packet_hash FROM public.m2_business_contexts
+             WHERE context_id = :cid AND assessment_id = :assessment
+        """), {'cid': str(context_id),
+               'assessment': str(assessment_id)}).mappings().one_or_none()
+        if packet_row is None:
+            raise WorkflowHeld('QG_BINDING_CONTEXT_NOT_FOUND')
+        if str(packet_row['packet_hash']) != str(authority['context_packet_hash']):
+            # The derivation already compared the approval against the packet it
+            # named. Reaching here means the caller named a different packet than
+            # the one the approval covers, which must be refused rather than
+            # relabelled.
+            raise WorkflowHeld('QG_BINDING_CONTEXT_NOT_ADMITTED')
+        packet = packet_row['packet_json']
+
+    objective_id = str(authority['objective_id'])
+    objective_text = str(authority['objective_text'])
+    decision_id = str((authority.get('decision') or {})['decision_id'])
+    facts = facts_from_objective(
+        packet, objective_id=objective_id, objective_text=objective_text,
+        authority_ref=f'decision:{decision_id}')
+    measurement = ml.resolve(
+        ml.PostgresMeasurementStore(engine, actor_id), objective_id,
+        stimulus=dict(stimulus or DEFAULT_STIMULUS),
+        supported_formats=ml.CANDIDATE_FORMATS,
+        allow_synthetic_test_approval=True)
+    policy = authority.get('policy') or {}
+    return {
+        'actor': str(actor_id),
+        'assessment_id': str(assessment_id),
+        'confirmation_id': str(authority['confirmation_id']),
+        'assessment_revision': int(authority['confirmation_revision']),
+        'source_fingerprint': str(authority['source_fingerprint']),
+        'context_id': str(context_id),
+        'context_packet_hash': str(authority['context_packet_hash']),
+        'objective_id': objective_id,
+        'objective_text': objective_text,
+        'objective_kind': str(authority['objective_kind']),
+        'proposal_id': str(proposal_id),
+        # Kept in the returned set, and explicitly None, so a caller cannot
+        # mistake its absence for an omission.
+        'objective_admission_id': None,
+        'authority': authority,
+        'measurement': measurement,
+        'prompt': prompt,
+        'prompt_key': prompt_key,
+        'facts': facts,
+        'packet': packet,
+        'policy_version': policy.get('version'),
+    }
+
+
+__all__ = ['DEFAULT_STIMULUS', 'operative_admission', 'resolve',
+           'resolve_authorized']

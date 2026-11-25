@@ -254,6 +254,17 @@ def run_model_assisted(*, packet: dict, actor_id: UUID, runtime_engine,
     # provider call from disagreeing about which contract is running.
     prompt_key = source_prompt_key(instrument)
 
+    # The objective prompt and the issue-resolution policy are adopted
+    # independently of the findings ruleset above, because the ruleset pin
+    # covers neither. A LIVE run whose artefacts are unadopted or drifted is
+    # refused here — before ensure_run(), so a refusal cannot leave an orphan
+    # run behind on the append-only ledger. Synthetic diagnostics are unaffected.
+    if purpose != SYNTHETIC_PURPOSE:
+        from sitewise.project1.artifact_adoption import (
+            require_objective_artifacts_adopted,
+        )
+        require_objective_artifacts_adopted(prompt_key)
+
     # The FULL disclosure predicate runs before provisioning, not just the two
     # cheap checks. Every DISCLOSURE_* condition is decidable from the packet and
     # the policy, and project1_ai.runs is append-only, so a refusal that happens

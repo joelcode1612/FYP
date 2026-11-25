@@ -6,11 +6,13 @@ import 'package:shared_logic/shared_logic.dart';
 import 'package:sitewise_jaspr_web/features/assessment/presentation/components/assessment_journey_stepper.dart';
 import 'package:sitewise_jaspr_web/features/assessment/presentation/components/customer_questionnaire_step5.dart';
 import 'package:sitewise_jaspr_web/features/assessment/presentation/components/m2_workflow_panel.dart';
-import 'package:sitewise_jaspr_web/features/assessment/presentation/components/bdj_objective_proposal_panel.dart';
 import 'package:sitewise_jaspr_web/features/assessment/presentation/components/project1_research_stage_panel.dart';
-import 'package:sitewise_jaspr_web/shared/presentation/components/dashboard_kit.dart' show SitewiseDialog;
+import 'package:sitewise_jaspr_web/shared/presentation/components/dashboard_kit.dart'
+    show SitewiseDialog;
 import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart';
 import 'package:sitewise_jaspr_web/core/di/app_locator.dart';
+import 'package:sitewise_jaspr_web/core/utils/stage_url.dart';
+import 'package:sitewise_jaspr_web/features/assessment/application/stage_reason_copy.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/assessment_api.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/assessment_report.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/business_description.dart';
@@ -177,13 +179,24 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   int _readinessRequest = 0;
   bool _declarationEditing = false;
 
+  /// Coalescing guard for [_reloadAfterStagePanel].
+  ///
+  /// The governed Stage 3/4 panels can save several decisions in a row (one
+  /// objective, then five questions). Each save asks the page to re-read the
+  /// record. Letting every request run would be wasteful and, worse, wrong: the
+  /// answers can arrive out of order and an older record could land last and
+  /// overwrite a newer one. So one read runs at a time, and any request that
+  /// arrives while it is in flight sets [_stageReloadQueued] instead, causing
+  /// exactly one more read afterwards — which is enough, because that read
+  /// already reflects every save that queued it.
+  bool _stageReloadInFlight = false;
+  bool _stageReloadQueued = false;
+
   void _invalidateWorkflowReadiness() {
     _readinessRequest++;
     _readinessAssessmentId = null;
     _workflowReadiness = null;
     _readinessError = null;
-    _previewAssessmentId = null;
-    _previewFuture = null;
     _declarationEditing = false;
     _m2LinkRequest++;
     _m2LinkFor = '';
@@ -206,8 +219,10 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   /// So the id is adopted rather than compared, and a post-write caller gets a
   /// bounded number of retries. The retry stops the moment stage 2 is complete,
   /// so a healthy save costs exactly one request.
-  Future<void> _refreshWorkflowReadiness(String assessmentId,
-      {bool afterWrite = false}) async {
+  Future<void> _refreshWorkflowReadiness(
+    String assessmentId, {
+    bool afterWrite = false,
+  }) async {
     if (!mounted || _declarationEditing) return;
     if (_readinessAssessmentId != assessmentId) {
       _readinessAssessmentId = assessmentId;
@@ -346,8 +361,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   /// document cannot be assembled without section 02, and two independent
   /// futures would let the document render once without it and again with it.
   Future<_ReportBundle>? _reportFuture;
-  Future<ApiResult<QuestionnairePreviewStatus>>? _previewFuture;
-  String? _previewAssessmentId;
 
   // --- Assessments listing (the tab's default view) -------------------------
   //
@@ -383,6 +396,14 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   /// step-5 checkpoint. Clearing it returns the caller exactly where it was
   /// (the entry page or the step-5 checkpoint).
   AssessmentRecord? _reportRecord;
+
+  // --- Respondents ----------------------------------------------------------
+  //
+  // Read-only. The panel reports the count the server holds for this
+  // assessment; it does not ask the owner to declare one. The earlier design
+  // had the owner set a target that gated the report, but the figure was never
+  // sent anywhere (it lived in browser storage), so the gate protected a number
+  // only that browser could see.
 
   // --- Create-assessment dialog ---------------------------------------------
 
@@ -572,12 +593,20 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   /// (entry page and step 5) and replaces the tab's content without a
   /// navigation, exactly like the workspace itself. The memoised payload is
   /// dropped first so a report opened after a stage change is current.
-  void _openReport(AssessmentRecord record) => setState(() {
-    _reportRecord = record;
-    _reportFuture = null;
-    _notice = null;
-    _writeError = null;
-  });
+  ///
+  /// There is no target gate. It used to refuse the report until the owner
+  /// declared a sample size, but that figure lived in this browser's storage and
+  /// reached no server — so the gate locked the report on every other device
+  /// while telling the owner it was their own decision. The report already marks
+  /// each section whose evidence is missing, which is the honest signal.
+  void _openReport(AssessmentRecord record) {
+    setState(() {
+      _reportRecord = record;
+      _reportFuture = null;
+      _notice = null;
+      _writeError = null;
+    });
+  }
 
   /// Returns from the report document to whatever opened it.
   void _closeReport() => setState(() {
@@ -635,7 +664,10 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     // than failing the whole report; the failure is not silent, because the
     // section then says no confirmed description could be read.
     return _ReportBundle(
-        report, business.ok ? business.value : null, explanation);
+      report,
+      business.ok ? business.value : null,
+      explanation,
+    );
   }
 
   /// The explanation the report may show.
@@ -751,38 +783,26 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     });
   }
 
-  /// Asks the backend to record a stage as complete. The server refuses with
-  /// 409 when the stage's own precondition is unmet, and that refusal is
-  /// shown verbatim — progress is never marked up locally.
-  Future<void> _completeStage(AssessmentRecord record, String stageKey) async {
-    if (_busy) return;
-    setState(() {
-      _busy = true;
-      _writeError = null;
-      _notice = null;
-    });
-    final result = await _api.completeStage(record.assessmentId, stageKey);
-    if (!mounted) return;
-    if (!result.ok) {
-      setState(() {
-        _busy = false;
-        _writeError = result.failure;
-      });
-      return;
-    }
-    final updated = result.value!;
-    final stage = updated.stageByKey(stageKey);
-    setState(() {
-      _busy = false;
-      _record = updated;
-      _future = Future.value(_Started(updated));
-      _notice = stage == null
-          ? 'The assessment was updated.'
-          : 'Stage ${stage.number} — ${stage.title} is now recorded as '
-                'complete. ${updated.completedStages} of '
-                '${updated.totalStages} stages done.';
-    });
-  }
+  // -- why there is no generic "complete stage" write here --------------------
+  //
+  // There used to be one: `_completeStage(record, key)` posted
+  // `{"complete_stage": key}` for whatever checkpoint was on screen. For stages
+  // 3, 4 and 5 that endpoint writes a legacy timestamp column
+  // (`location_evidence_at`, `explanation_reviewed_at`, `report_generated_at`),
+  // and `assessment_progress.evaluate()` does not read those columns for those
+  // stages — stage 3 completes on the `sitewise-stage3-completion` verdict,
+  // stage 4 on approved questions per verified objective, stage 5 on an adopted
+  // questionnaire-preview contract. The request returned 200, the record was
+  // replaced, and `progress_percent` came back byte-identical: a bar that could
+  // not move while the page said the stage was recorded.
+  //
+  // Stage 2 still writes its own completion, because there the timestamp *is*
+  // the evidence the contract accepts (see `_saveRequirements` and the
+  // questionnaire's save). Stages 3–5 have no button here on purpose: their
+  // evidence is produced by the governed panels (BDJ disposition, question
+  // approval, preview contract), and where that is not adopted the stage is
+  // reported BLOCKED with the server's own reason rather than offered as a
+  // click that cannot work.
 
   /// Validates locally (the same rules the server enforces, so the message
   /// arrives before a round trip), then asks the backend to confirm stage 2.
@@ -837,6 +857,70 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
           'Stage 2 — Business preferences is recorded as complete. '
           '${updated.completedStages} of ${updated.totalStages} stages done.';
     });
+    // The count and the bar come from `updated`; the stepper's enterability
+    // comes from workflow readiness. Refreshing one and not the other is what
+    // left the tracker disagreeing with the number printed above it.
+    await _refreshAfterStageWrite(updated.assessmentId);
+  }
+
+  /// Re-reads workflow readiness after a stage-changing write.
+  ///
+  /// Two surfaces describe the same assessment and they are fed by different
+  /// requests: the record carries `completed_stages` / `progress_percent`, and
+  /// `/workflow-readiness` carries which checkpoints are enterable. A write
+  /// invalidates both, so both are re-read — the record is replaced by the
+  /// caller, and this covers the readiness half.
+  ///
+  /// The retry (`afterWrite`) is the existing bounded one: a readiness read that
+  /// lands before the write is visible must not report "confirm first" for a
+  /// declaration that is already confirmed.
+  Future<void> _refreshAfterStageWrite(String assessmentId) async {
+    if (!mounted) return;
+    _invalidateWorkflowReadiness();
+    await _refreshWorkflowReadiness(assessmentId, afterWrite: true);
+  }
+
+  /// Re-reads the record after a governed Stage 3/4 panel reported a save.
+  ///
+  /// Stages 3 and 4 do not complete through a stage-write endpoint: they
+  /// complete when their own evidence exists (an admitted research objective
+  /// for stage 3, an approved question per verified objective for stage 4).
+  /// Those writes are issued *inside* [Project1ResearchStagePanel], which is why
+  /// the count used to sit at 40% after a stage had genuinely finished — the
+  /// page had no idea anything had changed and nothing re-read the record.
+  ///
+  /// The panel now calls back here. This re-reads the authoritative record and
+  /// then readiness, so the count, the percentage, the bar and the stepper all
+  /// move together the moment the evidence exists — 3/5 → 60%, 4/5 → 80%, with
+  /// no page reload and no client-side arithmetic.
+  ///
+  /// Coalesced by [_stageReloadInFlight] / [_stageReloadQueued]: a burst of
+  /// decisions produces at most one trailing read, and an older response can
+  /// never overwrite a newer one.
+  Future<void> _reloadAfterStagePanel(String propertyId) async {
+    if (_stageReloadInFlight) {
+      _stageReloadQueued = true;
+      return;
+    }
+    _stageReloadInFlight = true;
+    try {
+      do {
+        _stageReloadQueued = false;
+        final result = await _api.byProperty(propertyId);
+        if (!mounted) return;
+        final updated = result.value;
+        if (result.ok && updated != null) {
+          _applyToSharedPreferences(updated);
+          setState(() {
+            _record = updated;
+            _future = Future.value(_Started(updated));
+          });
+          await _refreshAfterStageWrite(updated.assessmentId);
+        }
+      } while (_stageReloadQueued && mounted);
+    } finally {
+      _stageReloadInFlight = false;
+    }
   }
 
   /// Points the shared [BusinessPreferences] at the values just persisted, so
@@ -863,11 +947,10 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   /// between the five checkpoints; the workspace renders exactly one at a
   /// time, and an inline stage's panel expands with its checkpoint.
   void _openCheckpoint(String key) => setState(() {
+    // Written before the rebuild so a refresh during the transition still
+    // restores this checkpoint. Only the `stage` parameter is replaced.
+    replaceStageInUrl(key);
     _checkpoint = key;
-    if (key == 'assessment_report') {
-      _previewAssessmentId = null;
-      _previewFuture = null;
-    }
     _notice = null;
     _writeError = null;
     if (_inlineStages.contains(key)) {
@@ -1520,24 +1603,25 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
           // "2/5 stages" string. A screen reader announced the number but not
           // that it was progress, and nothing exposed the percentage the fill
           // actually encodes. The roles below make the bar and the text agree
-          // on one value, taken from the same record field that sizes the fill.
+          // on one value, taken from the same stage list the count is read from
+          // — see [AssessmentRecord.stageProgressPercent].
           div(
             [
               span(
                 classes: 'asw-ecard__fill',
                 styles: Styles(
                   width: Unit.percent(
-                    record.progressPercent.clamp(0, 100).toDouble(),
+                    record.stageProgressPercent.toDouble(),
                   ),
                 ),
                 [],
               ),
             ],
-            classes: 'asw-ecard__track',
+            classes: 'asw-ecard__track'
+                '${record.allStagesComplete ? ' asw-ecard__track--complete' : ''}',
             attributes: {
               'role': 'progressbar',
-              'aria-valuenow':
-                  '${record.progressPercent.clamp(0, 100).toInt()}',
+              'aria-valuenow': '${record.stageProgressPercent}',
               'aria-valuemin': '0',
               'aria-valuemax': '100',
               'aria-valuetext':
@@ -1592,7 +1676,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
         .where((stage) => stage.number == record.currentStage)
         .firstOrNull;
     final title = property?.title ?? 'Property ${record.propertyId}';
-    final businessProfiles = (record.requirements?.isEmpty ?? true) ? '0' : '1';
 
     return section(classes: 'panel panel--flush asw-entry__detail', [
       div(classes: 'panel__head', [
@@ -1639,7 +1722,10 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
         ]),
         div(classes: 'asw-eprogress', [
           div(classes: 'asw-eprogress__head', [
-            strong([Component.text('Progress & inputs')]),
+            // Not "Progress & inputs" any more: the input tiles are gone and the
+            // one remaining figure below is read-only, so the heading would be
+            // promising an edit that no longer exists.
+            strong([Component.text('Progress')]),
             span(classes: 'asw-eprogress__count', [
               Component.text(
                 '${record.completedStages} of ${record.totalStages} stages '
@@ -1648,19 +1734,23 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
             ]),
           ]),
           div(classes: 'asw-eprogress__bar', [
-            div(classes: 'asw-eprogress__track', [
-              span(
-                classes: 'asw-eprogress__fill',
-                styles: Styles(
-                  width: Unit.percent(
-                    record.progressPercent.clamp(0, 100).toDouble(),
+            div(
+              classes: 'asw-eprogress__track'
+                  '${record.allStagesComplete ? ' asw-eprogress__track--complete' : ''}',
+              [
+                span(
+                  classes: 'asw-eprogress__fill',
+                  styles: Styles(
+                    width: Unit.percent(
+                      record.stageProgressPercent.toDouble(),
+                    ),
                   ),
+                  [],
                 ),
-                [],
-              ),
-            ]),
+              ],
+            ),
             strong([
-              Component.text('${record.progressPercent.clamp(0, 100)}%'),
+              Component.text('${record.stageProgressPercent}%'),
             ]),
           ]),
           p(classes: 'asw-eprogress__stage', [
@@ -1669,29 +1759,17 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
               '${currentStage?.title ?? record.nextAction.label}',
             ),
           ]),
-          div(classes: 'asw-ekpis', [
-            _inputKpi('badge', businessProfiles, 'Business profiles'),
-            _inputKpi(
-              'apartment',
-              '${record.property == null ? 0 : 1}',
-              'Selected rentals',
-            ),
-            _inputKpi(
-              'group',
-              record.respondentCount?.toString() ?? '—',
-              'Respondents',
-            ),
-            _inputKpi(
-              'fact_check',
-              record.responseCount?.toString() ?? '—',
-              'Survey responses',
-            ),
-            _inputKpi(
-              'public',
-              record.externalSourceCount?.toString() ?? '—',
-              'External sources',
-            ),
-          ]),
+          // The four-tile "Progress & inputs" strip is gone. Three of its tiles
+          // were either repeated further down this panel (selected rentals) or
+          // permanently empty on a fresh assessment (survey responses, external
+          // sources), and the one figure that mattered — the business profile —
+          // now sits in the respondents row below.
+          //
+          // That row is read-only. It reports the count the server holds; it no
+          // longer asks the owner to declare a target, because the target was
+          // stored only in this browser and gated the report on a number no
+          // other device — and no server — could see.
+          _respondentRow(record),
         ]),
         div(classes: 'asw-ecallout', [
           span(classes: 'asw-ecallout__icon', [
@@ -1769,13 +1847,41 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
         strong(classes: 'asw-emeta__value', [Component.text(value)]),
       ]);
 
-  /// One "Progress & inputs" tile: icon, figure, label.
-  Component _inputKpi(String icon, String value, String label) =>
-      div(classes: 'asw-ekpi', [
-        span(classes: 'asw-ekpi__icon', [Icon(icon, size: 'sm')]),
-        strong(classes: 'asw-ekpi__value', [Component.text(value)]),
-        span(classes: 'asw-ekpi__label', [Component.text(label)]),
-      ]);
+  /// The respondents this assessment has registered, as the server reports them.
+  ///
+  /// Read-only, and deliberately not a target. The row used to ask the owner to
+  /// declare a sample size that gated the report, but that number was written to
+  /// browser storage and sent nowhere: the server has no field for it, so the
+  /// gate could not be honoured anywhere except the browser that set it. What is
+  /// shown here is the only figure that actually exists — `respondent_count`,
+  /// the distinct respondents registered against this assessment.
+  ///
+  /// It is not a count of completed responses, and it says so: a registered
+  /// respondent has not necessarily answered anything.
+  Component _respondentRow(AssessmentRecord record) {
+    final collected = record.respondentCount;
+    return div(classes: 'asw-rtarget asw-rtarget--summary', [
+      span(classes: 'asw-rtarget__icon', [Icon('group', size: 'sm')]),
+      div(classes: 'asw-rtarget__copy', [
+        strong([Component.text('Respondents')]),
+        span([
+          Component.text(
+            collected == null
+                // A dash, not 0: the server may simply not report the count, and
+                // zero would claim nobody had registered.
+                ? 'Registered respondents · not reported by the server'
+                : 'Registered for this assessment · not a count of completed '
+                      'responses',
+          ),
+        ]),
+      ]),
+      div(classes: 'asw-rtarget__figure', [
+        strong(classes: 'asw-rtarget__value', [
+          Component.text(collected == null ? '\u2014' : '$collected'),
+        ]),
+      ]),
+    ]);
+  }
 
   static const _monthNames = [
     'Jan',
@@ -2228,6 +2334,11 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
             .firstOrNull ??
         record.stages.last;
 
+    // The server's own explanation for why the stage on screen is not complete.
+    // Computed once so the element below cannot be built twice with different
+    // copy.
+    final stageReason = _stageReasonNotice(selected);
+
     return _shell(
       showHead: !_openedInPlace,
       title: 'Location assessment',
@@ -2280,6 +2391,11 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
           },
         ),
 
+        // Why this stage is not complete, in the progress contract's own terms.
+        // Without it the reader sees "2 / 5" and a blocked stage with no way to
+        // tell "I still have work to do" from "the system is holding this".
+        ?stageReason,
+
         // One independent checkpoint at a time, each in the reference's own
         // layout: saved-property selection, questionnaire, findings &
         // decision, question review, report review.
@@ -2292,24 +2408,32 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
             marketplaceAssessmentId: record.assessmentId,
             propertyId: record.propertyId,
             stageNumber: 3,
+            // Stage 3 completes when an objective is admitted inside this
+            // panel. Without this the page never learned about it and the
+            // count stayed at 2/5 after the stage had finished.
+            onStageProgressChanged: () =>
+                _reloadAfterStagePanel(record.propertyId),
             onOpenStage: (key) {
               if (canViewAssessmentStage(key, _workflowReadiness)) {
                 _openCheckpoint(key);
               }
             },
           ),
-          // Governed BDJ research-objective proposals for the current
-          // confirmation. Additive: the legacy stage panel above is unchanged,
-          // and this panel reads only the objective-proposal endpoints.
-          BdjObjectiveProposalPanel(
-            marketplaceAssessmentId: record.assessmentId,
-          ),
+          // Stage 3 now mounts the governed BdjObjectiveProposalPanel inside
+          // its main column, in the slot formerly used by the BDJ status card
+          // and the no-objective notice. No second copy belongs here.
         ],
         if (selected.key == 'ai_explanation')
           Project1ResearchStagePanel(
             marketplaceAssessmentId: record.assessmentId,
             propertyId: record.propertyId,
             stageNumber: 4,
+            // Stage 4 completes when every verified objective carries an
+            // approved question. Those decisions are saved inside this panel,
+            // so it reports them and the page re-reads the record: 3/5 → 60%
+            // when stage 3 finishes, 4/5 → 80% when this one does.
+            onStageProgressChanged: () =>
+                _reloadAfterStagePanel(record.propertyId),
             onOpenStage: (key) {
               if (key == 'location_evidence') {
                 _continueToBusinessReview(record.assessmentId);
@@ -2355,6 +2479,30 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
       'Assemble and review the full suitability report for this assessment.',
     _ => 'Continue this assessment to move closer to your report.',
   };
+
+  /// Why [stage] is not complete, in the server's own terms.
+  ///
+  /// Returns null for a complete stage and for a stage whose payload carries no
+  /// reason — an absent reason renders as nothing rather than as an invented
+  /// explanation. The token itself is never printed: [stageReasonCopy] owns the
+  /// wording, and it de-tokenises an unrecognised code instead of hiding it.
+  ///
+  /// The prefix is the distinction the contract draws and the page previously
+  /// lost: "Next step" means the reader's own action clears the hold, "Held"
+  /// means a contract or governance decision does. Telling a reader to act on a
+  /// hold is what sends them round the same loop again.
+  Component? _stageReasonNotice(AssessmentStage stage) {
+    if (stage.isComplete) return null;
+    final copy = stageReasonCopy(stage.blockerReason);
+    if (copy == null) return null;
+    return div(classes: 'notice notice-warn asw-stage-reason', [
+      Icon(copy.isYourAction ? 'arrow_forward' : 'lock', size: 'sm'),
+      span([
+        strong([Component.text(copy.isYourAction ? 'Next step: ' : 'Held: ')]),
+        Component.text(copy.message),
+      ]),
+    ]);
+  }
 
   /// The reference's per-step heading: icon tile, kicker, title, description.
   Component _stepHeading({
@@ -2782,6 +2930,13 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   /// rendered here. BDJ findings and research goals have their own governed
   /// M2/Direct-QG workflow; this screen must not substitute catalogue metrics
   /// for verified BDJ findings.
+  ///
+  /// **Not mounted.** No render path calls this builder, so its "Continue to
+  /// question review" button never reaches the DOM. The rendered Stage 4 entry
+  /// points are the journey stepper and the Stage 3 panel's own "View Stage 4"
+  /// control; both call [_openCheckpoint], which is what makes them the same
+  /// workflow. Recorded as DD-043 so a reader does not treat this label as a
+  /// control that exists.
   List<Component> _findingsStep(
     AssessmentRecord record,
     AssessmentStage stage,
@@ -3099,7 +3254,13 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
               'confirm',
               'check',
               'Yes, this objective works',
-              'Keep this objective and record the stage as complete.',
+              // This used to read "…and record the stage as complete", which the
+              // action could not do: it wrote `location_evidence_at`, and the
+              // progress contract never reads that column for stage 3 — only the
+              // `sitewise-stage3-completion` verdict counts. Promising completion
+              // from a click that cannot deliver it is how a bar gets stuck while
+              // the page insists it moved.
+              'Keep this objective for this session.',
             ),
             _bdjChoice(
               record,
@@ -3227,9 +3388,11 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
         'you marked for research.';
   }
 
-  /// Validates the step-3 decision and records it. `confirm` goes through the
-  /// existing stage-completion endpoint; refine / add keep the note for the
-  /// session and say so.
+  /// Validates the step-3 decision and records it **for this session only**.
+  ///
+  /// No branch writes a stage. The decision is the entrepreneur's own record of
+  /// what they want researched; stage 3's completeness belongs to its completion
+  /// contract, so this method cannot advance the bar and does not claim to.
   void _saveBdjDecision(AssessmentRecord record, AssessmentStage stage) {
     if (_bdjSelected.isEmpty) {
       setState(() {
@@ -3247,11 +3410,18 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
       return;
     }
     if (_bdjDecision == 'confirm') {
+      // Deliberately **not** a stage write. Stage 3 is COMPLETE only when the
+      // `sitewise-stage3-completion` verdict says so; the old call here wrote
+      // `location_evidence_at`, which `assessment_progress.evaluate()` never
+      // reads for stage 3, so the request succeeded and the bar never moved.
+      // The decision is kept for the session and the copy says exactly that.
       setState(() {
-        _bdjStatus = null;
+        _bdjStatus =
+            'Objective kept for this session. Stage 3 is completed by its own '
+            'completion contract, not by this decision — open the stage to see '
+            'what it is still waiting for.';
         _bdjStatusError = false;
       });
-      _completeStage(record, stage.key);
       return;
     }
     setState(() {
@@ -4007,60 +4177,18 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   /// report applies to "View report" only). It states what the report contains
   /// and what is still missing, then hands over to the assembled report — which
   /// opens in place via [_openReport] and comes back here on Back.
-  /// Step 5 body: the customer questionnaire review.
+  /// Step 5 body: the composed questionnaire.
   ///
-  /// Replaces the old "report contents" summary that used to sit here. The
-  /// report document itself is untouched — it still opens from "View report"
-  /// on the assessment card and in the details panel, so this checkpoint no
-  /// longer duplicates that table. Stage completion lives inside the
-  /// questionnaire component, beside the design's own preview-only controls.
+  /// The component retrieves the document itself, because composition is bound
+  /// to the M2 revision *and* the current confirmation, and only the M2 service
+  /// can answer whether the pair is still current. Passing a pre-fetched list
+  /// from here is what previously left `rows` permanently empty.
   List<Component> _reportStep(AssessmentRecord record, AssessmentStage stage) {
-    if (_previewAssessmentId != record.assessmentId) {
-      _previewAssessmentId = record.assessmentId;
-      _previewFuture = _api.questionnairePreview(record.assessmentId);
-    }
     return [
-      FutureBuilder<ApiResult<QuestionnairePreviewStatus>>(
-        future: _previewFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return p([Component.text('Checking questionnaire sources…')]);
-          }
-          final result = snapshot.data;
-          if (result?.ok != true ||
-              result?.value == null ||
-              result!.value!.assessmentId != record.assessmentId) {
-            return section(classes: 'panel asw-inline', [
-              p([
-                Component.text(
-                  'Questionnaire source could not be verified. No questions are shown.',
-                ),
-              ]),
-              button(
-                attributes: const {'type': 'button'},
-                onClick: () => setState(
-                  () => _previewFuture = _api.questionnairePreview(
-                    record.assessmentId,
-                  ),
-                ),
-                [Component.text('Retry questionnaire source')],
-              ),
-            ]);
-          }
-          // The preview contract currently reports UNAVAILABLE with an empty
-          // item list, so no rows are invented here. The server's own reason is
-          // passed through verbatim for the blocked state.
-          final preview = result.value!;
-          return CustomerQuestionnaireStep5(
-            assessmentId: record.assessmentId,
-            rows: const [],
-            blockedReason: preview.reason,
-            onBack: () => _openCheckpoint('ai_explanation'),
-            busy: _busy,
-            stageComplete: false,
-            onMarkComplete: null,
-          );
-        },
+      CustomerQuestionnaireStep5(
+        assessmentId: record.assessmentId,
+        onBack: () => _openCheckpoint('ai_explanation'),
+        busy: _busy,
       ),
     ];
   }
@@ -4523,6 +4651,9 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
           '${updated.completedStages} of '
           '${updated.totalStages} stages done.';
     });
+    // Same reason as the requirements form: the record moved, so the readiness
+    // that gates the next checkpoint has to move with it.
+    await _refreshAfterStageWrite(updated.assessmentId);
   }
 
   /// Stage 2, in the mockup's two-pane question layout: a navigator column
@@ -5181,8 +5312,9 @@ const Map<String, (String, String)> _stageDescriptions = {
   ),
   'assessment_report': (
     'Publish questionnaire',
-    'Review the customer questionnaire, then publish it or keep it as a '
-        'draft. The consolidated report stays available from "View report".',
+    'Review the composed customer questionnaire and what still blocks it. '
+        'Publication is not available from this page; the consolidated report '
+        'stays available from "View report".',
   ),
 };
 

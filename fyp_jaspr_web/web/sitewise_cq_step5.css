@@ -982,3 +982,1156 @@
   flex: 0 0 auto;
 }
 
+
+/* ---------------------------------------------------------------------------
+ * Composed-questionnaire blocks (Stage 5 real document).
+ *
+ * Added when the checkpoint stopped rendering the design's illustrative rows and
+ * started rendering the server's composed document. Every rule stays scoped
+ * under `.cq5` so the app chrome is untouched.
+ * ------------------------------------------------------------------------ */
+
+.cq5 .cq-status-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 0 4px;
+}
+
+.cq5 .cq-section-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid #e8edf5;
+}
+
+.cq5 .cq-section-head:first-of-type {
+  margin-top: 10px;
+  border-top: none;
+  padding-top: 0;
+}
+
+.cq5 .cq-section-head h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 650;
+  color: #16233a;
+}
+
+.cq5 .cq-section-head p {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: #5b6b85;
+}
+
+/* An approved additional question: a card, because it carries objective
+   bindings and validation provenance that a table cell cannot hold. */
+.cq5 .cq-additional {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 14px 16px;
+  border: 1px solid #d9e4f2;
+  border-radius: 12px;
+  background: #fbfdff;
+}
+
+.cq5 .cq-additional-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.cq5 .cq-option-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 0.84rem;
+  line-height: 1.6;
+  color: #34435c;
+}
+
+.cq5 .cq-extra-meta p {
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.5;
+  color: #6b7c96;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The owner's intended answer. Visually separated on purpose: it is
+   entrepreneur-only metadata, never a respondent answer. */
+.cq5 .cq-intended {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px dashed #c9b98a;
+  border-radius: 10px;
+  background: #fffdf4;
+}
+
+.cq5 .cq-intended strong {
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #7a6420;
+}
+
+.cq5 .cq-intended p {
+  margin: 0;
+  font-size: 0.88rem;
+  color: #3d3315;
+}
+
+.cq5 .cq-intended small {
+  font-size: 0.74rem;
+  line-height: 1.45;
+  color: #857038;
+}
+
+.cq5 .cq-code {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: #eef2f8;
+  color: #4a5a74;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72rem;
+}
+
+.cq5 .cq-blocked.is-error {
+  border-color: #f0c9c9;
+  background: #fff5f5;
+  color: #7a2f2f;
+}
+
+.cq5 .cq-blocked.is-error strong,
+.cq5 .cq-blocked.is-error p {
+  color: #7a2f2f;
+}
+
+/* Publication readiness. The control is present but inert: the document states
+   its own blockers, and a disabled button is not an available action. */
+.cq5 .cq-publish {
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px 14px;
+  border: 1px solid #c9d4e4;
+  border-radius: 10px;
+  background: #eef2f8;
+  color: #8b98ac;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: not-allowed;
+}
+
+.cq5 .cq-publish[disabled] {
+  opacity: 1;
+}
+
+/* Candidate target — the publication gate.
+   The entrepreneur declares how many people the questionnaire is fielded to.
+   It is a planning figure they own, so it is presented as a control with its own
+   state chip rather than as another read-only summary row. Sized for the narrow
+   decision column: the slider takes the full width and the exact value, unit and
+   commit action share the row beneath it. */
+.cq5 .cq-candidate {
+  display: grid;
+  gap: 8px;
+  padding: 11px 12px 10px;
+  border: 1px solid var(--cq-line);
+  border-radius: 10px;
+  background: #f8fafd;
+}
+
+.cq5 .cq-candidate__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cq5 .cq-candidate__title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--cq-ink);
+}
+
+.cq5 .cq-candidate__state {
+  flex: 0 0 auto;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.cq5 .cq-candidate__state.is-locked {
+  color: #b45309;
+  background: #fdf4e3;
+  border: 1px solid #f2dfb8;
+}
+
+.cq5 .cq-candidate__state.is-ready {
+  color: #0d9488;
+  background: #e8f7f4;
+  border: 1px solid #c6e9e2;
+}
+
+.cq5 .cq-candidate__range {
+  width: 100%;
+  margin: 0;
+  height: 16px;
+  accent-color: var(--cq-blue);
+  cursor: pointer;
+}
+
+.cq5 .cq-candidate__row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.cq5 .cq-candidate__num {
+  width: 62px;
+  padding: 5px 7px;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--cq-ink);
+  background: var(--surface);
+  border: 1px solid var(--cq-line);
+  border-radius: 7px;
+}
+
+.cq5 .cq-candidate__num:focus-visible {
+  outline: 2px solid var(--cq-blue);
+  outline-offset: 1px;
+}
+
+.cq5 .cq-candidate__unit {
+  font-size: 0.7rem;
+  color: var(--cq-muted);
+}
+
+.cq5 .cq-candidate__set {
+  margin-left: auto;
+  padding: 5px 11px;
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #fff;
+  background: var(--cq-blue);
+  border: 1px solid var(--cq-blue);
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.cq5 .cq-candidate__set:hover {
+  background: var(--cq-blue-dark);
+  border-color: var(--cq-blue-dark);
+}
+
+.cq5 .cq-candidate__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.68rem;
+  color: var(--cq-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.cq5 .cq-candidate__meta b {
+  color: var(--cq-ink);
+  font-weight: 700;
+}
+
+.cq5 .cq-decision-box small {
+  display: block;
+  margin-top: 6px;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: #6b7c96;
+}
+
+.cq5 .cq-blocked strong .ms {
+  margin-right: 6px;
+  vertical-align: -3px;
+}
+
+/* A requirement or exclusion row: headline with its code, then the server's
+   own sentence on its own line. */
+.cq5 .cq-req {
+  margin-bottom: 8px;
+}
+
+.cq5 .cq-req__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.cq5 .cq-req__head .cq-code {
+  margin-left: 0;
+}
+
+.cq5 .cq-req__detail {
+  margin: 2px 0 0;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: #5b6b85;
+}
+
+/* ==========================================================================
+ * Stage 5 review layout (`cqr-*`)
+ * --------------------------------------------------------------------------
+ * Supersedes the `cq-heading` / `cq-layout` / `cq-panel-head` / `cq-tabs` /
+ * `cq-table` / `cq-summary` / `cq-decision` / `cq-status-strip` /
+ * `cq-section-head` / `cq-additional` blocks above. Those rules are kept for
+ * now because nothing else references them and deleting them is a separate,
+ * mechanical change; no element emits their class names any more.
+ *
+ * Still live from the older block: `cq-detail-box`, `cq-blocked`, `cq-code`,
+ * `cq-publish`, `cq-candidate*`, `cq-secondary`, `cq-primary`, the respondent
+ * dialog, and the responsive rules that mention them.
+ *
+ * Everything stays scoped under `.cq5`.
+ * ========================================================================== */
+
+/* ------------------------------------------------------------------ header */
+
+.cq5 .cqr-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 2px 2px 18px;
+}
+
+.cq5 .cqr-head__main {
+  display: flex;
+  gap: 14px;
+  min-width: 0;
+}
+
+.cq5 .cqr-head__icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: var(--cq-blue-soft);
+  color: var(--cq-blue);
+}
+
+.cq5 .cqr-head__icon .ms {
+  font-size: 22px;
+}
+
+.cq5 .cqr-head__eyebrow {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--cq-blue);
+  margin-bottom: 5px;
+}
+
+.cq5 .cqr-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 26px;
+  line-height: 1.15;
+  letter-spacing: -0.9px;
+  color: var(--cq-ink);
+}
+
+.cq5 .cqr-head__sub {
+  margin: 6px 0 0;
+  max-width: 68ch;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--cq-muted);
+}
+
+.cq5 .cqr-head__act {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 9px 14px;
+  border: 1px solid #d8e2ef;
+  border-radius: var(--cq-radius);
+  background: var(--surface);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #244067;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.cq5 .cqr-head__act:hover {
+  background: #f8fbff;
+  border-color: #bfd0f6;
+}
+
+.cq5 .cqr-head__act:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.cq5 .cqr-head__act .ms {
+  font-size: 16px;
+}
+
+/* -------------------------------------------------------------- meta strip */
+
+.cq5 .cqr-meta {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin-bottom: 16px;
+  background: var(--surface);
+  border: 1px solid var(--cq-line);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.cq5 .cqr-meta__cell {
+  padding: 12px 16px 13px;
+  border-left: 1px solid #eef2f8;
+  min-width: 0;
+}
+
+.cq5 .cqr-meta__cell:first-child {
+  border-left: 0;
+}
+
+.cq5 .cqr-meta__k {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #8b98ab;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cq5 .cqr-meta__v {
+  margin-top: 3px;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.3px;
+  color: var(--cq-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.cq5 .cqr-meta__v--ok {
+  color: #0d9488;
+}
+
+.cq5 .cqr-meta__v--warn {
+  color: #b45309;
+}
+
+.cq5 .cqr-meta__sub {
+  margin-top: 1px;
+  font-size: 10.5px;
+  color: var(--cq-muted);
+}
+
+/* ------------------------------------------------------------------ layout */
+
+.cq5 .cqr-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 328px;
+  gap: 18px;
+  align-items: start;
+  min-width: 0;
+}
+
+.cq5 .cqr-main,
+.cq5 .cqr-rail {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.cq5 .cqr-card {
+  background: var(--surface);
+  border: 1px solid var(--cq-line);
+  border-radius: var(--radius-lg);
+  min-width: 0;
+}
+
+/* Shared inset for the views that are not the row list. */
+.cq5 .cqr-pad {
+  padding: 4px 20px 16px;
+}
+
+/* -------------------------------------------------------------------- tabs */
+
+.cq5 .cqr-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 16px;
+  border-bottom: 1px solid #edf2f8;
+}
+
+.cq5 .cqr-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: -1px;
+  padding: 14px 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: #64748b;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.cq5 .cqr-tab:hover {
+  color: #244067;
+}
+
+.cq5 .cqr-tab.is-active {
+  color: var(--cq-blue);
+  border-bottom-color: var(--cq-blue);
+}
+
+.cq5 .cqr-tab__n {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #eef2f8;
+  color: #4a5a74;
+  font-size: 10.5px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.cq5 .cqr-tab.is-active .cqr-tab__n {
+  background: var(--cq-blue-soft);
+  color: var(--cq-blue);
+}
+
+.cq5 .cqr-tabs__end {
+  margin-left: auto;
+  padding-left: 12px;
+  font-size: 11.5px;
+  color: var(--cq-muted);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------ status line */
+
+.cq5 .cqr-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+  padding: 11px 20px;
+  border-bottom: 1px solid #f1f5fa;
+  font-size: 11.5px;
+  color: #54637a;
+}
+
+.cq5 .cqr-status__i {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.cq5 .cqr-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #94a3b8;
+  flex: none;
+}
+
+.cq5 .cqr-dot--ok {
+  background: #0d9488;
+}
+
+.cq5 .cqr-dot--warn {
+  background: #b45309;
+}
+
+/* --------------------------------------------------------- section header */
+
+.cq5 .cqr-sec {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  padding: 18px 20px 10px;
+}
+
+.cq5 .cqr-sec h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+  color: var(--cq-ink);
+}
+
+.cq5 .cqr-sec__n {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--cq-blue-soft);
+  color: var(--cq-blue);
+  font-size: 10.5px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.cq5 .cqr-sec__note {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--cq-muted);
+  text-align: right;
+}
+
+/* ------------------------------------------------------------ question row */
+
+.cq5 .cqr-list {
+  padding: 0 20px;
+}
+
+.cq5 .cqr-row-wrap {
+  border-top: 1px solid #f1f5fa;
+}
+
+.cq5 .cqr-row-wrap:first-child {
+  border-top: 0;
+}
+
+.cq5 .cqr-row {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) 104px 24px;
+  gap: 12px;
+  align-items: start;
+  padding: 13px 4px;
+}
+
+.cq5 .cqr-row:hover {
+  background: #fbfdff;
+}
+
+.cq5 .cqr-id {
+  display: inline-grid;
+  place-items: center;
+  padding: 4px 0;
+  border-radius: 8px;
+  background: var(--cq-blue-soft);
+  color: var(--cq-blue);
+  font-size: 11.5px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.cq5 .cqr-id--extra {
+  background: #e8f7f4;
+  color: #0f766e;
+}
+
+.cq5 .cqr-stem {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 650;
+  line-height: 1.5;
+  color: var(--cq-ink);
+}
+
+.cq5 .cqr-opts {
+  margin-top: 4px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--cq-muted);
+}
+
+.cq5 .cqr-flag {
+  display: inline-block;
+  margin-top: 5px;
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: #fdf4e3;
+  color: #8a5a12;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.cq5 .cqr-fmt {
+  justify-self: end;
+  padding-top: 2px;
+  font-size: 11px;
+  color: #7c8a9e;
+  white-space: nowrap;
+}
+
+.cq5 .cqr-chev {
+  justify-self: end;
+  padding: 2px 0 0;
+  border: 0;
+  background: none;
+  color: #b6c1d0;
+  cursor: pointer;
+}
+
+.cq5 .cqr-chev:hover {
+  color: var(--cq-blue);
+}
+
+.cq5 .cqr-chev .ms {
+  font-size: 18px;
+}
+
+/* Expanded governed record, indented to the stem rather than the id chip. */
+.cq5 .cqr-inline {
+  padding: 0 4px 12px 58px;
+}
+
+.cq5 .cqr-inline .cq-detail-box {
+  margin-bottom: 0;
+}
+
+/* ------------------------------------------------------ additional question */
+
+.cq5 .cqr-add {
+  margin: 10px 20px 0;
+  padding: 14px 16px;
+  border: 1px solid #dbe6f3;
+  border-radius: 12px;
+  background: #fcfdff;
+}
+
+.cq5 .cqr-add:first-of-type {
+  margin-top: 4px;
+}
+
+.cq5 .cqr-add__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.cq5 .cqr-add__ok {
+  padding: 2px 7px;
+  border: 1px solid #c6e9e2;
+  border-radius: 999px;
+  background: #e8f7f4;
+  color: #0f766e;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+.cq5 .cqr-add__mode {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #eef2f8;
+  color: #4a5a74;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.cq5 .cqr-add__opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.cq5 .cqr-opt {
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  color: #334155;
+  font-size: 11.5px;
+}
+
+.cq5 .cqr-add__bind {
+  margin: 10px 0 0;
+  padding-top: 9px;
+  border-top: 1px dashed #e6edf7;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: #8492a6;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The owner's intended answer: entrepreneur-only metadata, never a respondent
+   answer. Kept visually separate from the question itself. */
+.cq5 .cqr-intended {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px dashed #d8c9a0;
+  border-radius: 8px;
+  background: #fffdf5;
+}
+
+.cq5 .cqr-intended strong {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8a7333;
+}
+
+.cq5 .cqr-intended span {
+  font-size: 12px;
+  color: #453a1a;
+}
+
+.cq5 .cqr-intended small {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  line-height: 1.45;
+  color: #94824f;
+}
+
+/* --------------------------------------------------------- blocking card */
+
+.cq5 .cqr-block {
+  margin: 8px 20px 18px;
+  padding: 14px 16px;
+  border: 1px solid #f2e3c4;
+  border-radius: 12px;
+  background: #fdfaf1;
+}
+
+.cq5 .cqr-block--clear {
+  border-color: #cfe9e2;
+  background: #f5faf8;
+}
+
+.cq5 .cqr-block__h {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 10px;
+  font-family: var(--font-display);
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #7a5a12;
+}
+
+.cq5 .cqr-block--clear .cqr-block__h {
+  color: #0f766e;
+}
+
+.cq5 .cqr-block__h .ms {
+  font-size: 15px;
+}
+
+/* A Material Symbols ligature is one glyph, but if the font ever fails to
+   load the span holds a word (`cancel`, `check_circle`) and `white-space:
+   nowrap` lets it run over whatever sits beside it. Cap the ligature box so a
+   missing font can never break the row. */
+.cq5 .ms {
+  max-width: 1.4em;
+  overflow: hidden;
+  text-overflow: clip;
+}
+
+.cq5 .cqr-block__h--sub {
+  margin: 14px 0 8px;
+  padding-top: 11px;
+  border-top: 1px solid #f4ead2;
+  font-size: 11.5px;
+}
+
+.cq5 .cqr-block__item {
+  padding: 9px 0;
+  border-top: 1px solid #f4ead2;
+}
+
+.cq5 .cqr-block__item:first-of-type {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.cq5 .cqr-block__t {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #6b4e10;
+}
+
+.cq5 .cqr-block__code {
+  margin-left: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  font-weight: 500;
+  color: #9a8054;
+}
+
+.cq5 .cqr-block__d {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #7d6636;
+}
+
+.cq5 .cqr-block--clear .cqr-block__d {
+  color: #3f6b64;
+}
+
+/* ---------------------------------------------------------------- footer */
+
+.cq5 .cqr-foot {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 20px 16px;
+  border-top: 1px solid #f1f5fa;
+  font-size: 11px;
+  line-height: 1.55;
+  color: #7c8a9e;
+}
+
+.cq5 .cqr-foot .ms {
+  font-size: 15px;
+  color: var(--cq-blue);
+  margin-top: 1px;
+  flex: none;
+}
+
+/* ------------------------------------------------------------ gate (rail) */
+
+.cq5 .cqr-card__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 15px 18px 11px;
+}
+
+.cq5 .cqr-card__head h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+  color: var(--cq-ink);
+}
+
+.cq5 .cqr-card__state {
+  margin-left: auto;
+  padding: 3px 8px;
+  border: 1px solid #f2dfb8;
+  border-radius: 999px;
+  background: #fdf4e3;
+  color: #b45309;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.cq5 .cqr-gate {
+  padding: 0 18px;
+}
+
+.cq5 .cqr-gate__row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  padding: 11px 0;
+  border-top: 1px solid #f1f5fa;
+}
+
+.cq5 .cqr-gate__row:first-child {
+  border-top: 0;
+}
+
+.cq5 .cqr-gate__ico {
+  display: grid;
+  place-items: center;
+  margin-top: 1px;
+  width: 18px;
+  height: 18px;
+  overflow: hidden;
+}
+
+.cq5 .cqr-gate__ico.is-met {
+  color: #0d9488;
+}
+
+.cq5 .cqr-gate__ico.is-unmet {
+  color: #b45309;
+}
+
+/* The ligature glyph must never widen the column: `.ms` is nowrap, so an
+   unrendered font would push the whole row out of alignment. */
+.cq5 .cqr-gate__ico .ms {
+  font-size: 16px;
+  line-height: 18px;
+  max-width: 18px;
+  overflow: hidden;
+}
+
+.cq5 .cqr-gate__k {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--cq-ink);
+}
+
+.cq5 .cqr-gate__d {
+  margin: 2px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--cq-muted);
+}
+
+.cq5 .cqr-gate__v {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--cq-ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.cq5 .cqr-gate__v--met {
+  color: #0d9488;
+}
+
+.cq5 .cqr-gate__v--unmet {
+  color: #b45309;
+}
+
+.cq5 .cqr-gate__act {
+  padding: 12px 18px 16px;
+}
+
+.cq5 .cqr-gate__act .cq-publish {
+  margin-top: 0;
+}
+
+.cq5 .cqr-gate__cap {
+  display: block;
+  margin: 7px 0 0;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: #8492a6;
+}
+
+/* The candidate control keeps its own rules above; inside the rail card it
+   becomes a section of that card rather than a second bordered box. */
+.cq5 .cqr-card .cq-candidate {
+  margin: 0;
+  padding: 12px 18px 14px;
+  border: 0;
+  border-top: 1px solid #f1f5fa;
+  border-radius: 0;
+  background: transparent;
+}
+
+/* The block's head now holds only the state chip. */
+.cq5 .cqr-card .cq-candidate__head {
+  justify-content: flex-end;
+}
+
+/* ------------------------------------------------------------ responsive */
+
+@media (max-width: 1080px) {
+  .cq5 .cqr-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cq5 .cqr-meta {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .cq5 .cqr-meta__cell:nth-child(4) {
+    border-left: 0;
+  }
+
+  .cq5 .cqr-meta__cell:nth-child(n + 4) {
+    border-top: 1px solid #eef2f8;
+  }
+}
+
+@media (max-width: 760px) {
+  .cq5 .cqr-head {
+    flex-direction: column;
+  }
+
+  .cq5 .cqr-head__act {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .cq5 .cqr-meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .cq5 .cqr-meta__cell {
+    border-left: 0;
+    border-top: 1px solid #eef2f8;
+  }
+
+  .cq5 .cqr-meta__cell:nth-child(-n + 2) {
+    border-top: 0;
+  }
+
+  .cq5 .cqr-tabs {
+    overflow-x: auto;
+    padding: 0 10px;
+  }
+
+  .cq5 .cqr-tabs__end {
+    display: none;
+  }
+
+  .cq5 .cqr-row {
+    grid-template-columns: 44px minmax(0, 1fr) 22px;
+  }
+
+  .cq5 .cqr-fmt {
+    display: none;
+  }
+
+  .cq5 .cqr-list,
+  .cq5 .cqr-status,
+  .cq5 .cqr-sec,
+  .cq5 .cqr-foot,
+  .cq5 .cqr-pad {
+    padding-inline: 16px;
+  }
+
+  .cq5 .cqr-inline {
+    padding-left: 56px;
+  }
+
+  .cq5 .cqr-add,
+  .cq5 .cqr-block {
+    margin-inline: 16px;
+  }
+}

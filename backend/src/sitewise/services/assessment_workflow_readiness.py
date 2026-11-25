@@ -165,12 +165,14 @@ def _payload(assessment, evidence: dict, *, link, source) -> dict:
         },
         "blocked": blocked,
         "outstanding": outstanding,
-        # Stage 3's rule is adopted and enforced by the evaluator; stage 5's is
-        # still a proposal, because no adopted questionnaire-preview contract
-        # exists. Keeping them in separate keys stops an unapplied rule from
-        # reading as an applied one.
+        # Stage 3's rule is adopted and enforced by the evaluator; stage 4's rule
+        # is now adopted and enforced too (it had an implementation but no
+        # written rule until 2026-11-24). Stage 5's is still a proposal, because
+        # no adopted questionnaire-preview contract exists. Keeping them in
+        # separate keys stops an unapplied rule from reading as an applied one.
         "applied_completion_rules": {
             "stage_3": assessment_progress.STAGE_3_RULE,
+            "stage_4": assessment_progress.STAGE_4_RULE,
         },
         "proposed_completion_rules": {
             "stage_5": STAGE_5_PROPOSED_RULE,

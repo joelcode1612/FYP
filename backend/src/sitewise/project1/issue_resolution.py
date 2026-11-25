@@ -44,7 +44,13 @@ from dataclasses import dataclass, field
 #: domain words, so ``dine-in`` bound a trading-area objective to O4. Stored
 #: 0.1 dispositions are left exactly as they were; this only changes how a new
 #: candidate is classified.
-POLICY_VERSION = 'P1-BDJ-ISSUE-0.2-CAND'
+#:
+#: 0.3 — O3 also recognises price acceptance written as a verb phrase
+#: ("would they accept RM 16.00"), not only as a noun ("price acceptability").
+#: Same construct, same objective; only the wording the lexicon could see was
+#: too narrow, so a real price objective was reported as NOVEL (DD-067).
+#: Stored 0.2 dispositions are untouched for the same reason as above.
+POLICY_VERSION = 'P1-BDJ-ISSUE-0.3-CAND'
 
 #: Never true in this module. Kept as a value so a caller can assert it.
 POLICY_ADOPTED = False
@@ -86,6 +92,58 @@ NOT_CUSTOMER_RESEARCH_SUITABLE = 'NOT_CUSTOMER_RESEARCH_SUITABLE'
 RESOLUTIONS = (COVERED_BY_FIXED_OBJECTIVE, COVERED_BY_OPTIONAL_OBJECTIVE,
                POTENTIAL_EXTENSION, NOVEL_CANDIDATE,
                NOT_CUSTOMER_RESEARCH_SUITABLE)
+
+#: Classes a customer survey *can* resolve. Kept apart from the planning
+#: classes because the two answer different questions: a planning class says the
+#: entrepreneur has not decided something, while these say the customer answer
+#: is genuinely unknown.
+#:
+#: DD-064: ``policy_binding`` used to take the *first* matched issue, so a
+#: proposal that cited both an undecided study area and an explicitly declared
+#: customer uncertainty was refused for the study area — even though the
+#: objective was about the uncertainty. One refused planning item must not veto a
+#: gap that other confirmed declarations establish.
+CUSTOMER_ANSWERABLE_CLASSES = frozenset({
+    EXPLICIT_UNCERTAINTY, UNVERIFIED_ASSUMPTION, EVIDENCE_UNAVAILABLE})
+
+#: Literals that declare a customer-answerable uncertainty, keyed by
+#: ``(item_key, literal)``.
+#:
+#: Separate from ``ITEM_RULES`` on purpose: one item can carry both a planning
+#: literal and a research literal, and M2V2-11 is exactly that case — UNDECIDED
+#: is a clarification request, VALIDATE_CHOICE is a declared research priority.
+#: A single disposition per item cannot express both, and inventing a second
+#: item key would misreport which declaration was cited.
+#:
+#: ``link_objective`` stays ``None`` for these: the objective is decided by the
+#: declared research topic (M2V2-09) and by what the proposal text actually
+#: claims, not by the fact that a hypothesis exists.
+DECLARED_UNCERTAINTY_RULES: dict[tuple[str, str], dict] = {
+    ('M2V2-11', 'VALIDATE_CHOICE'): {
+        'classification': EXPLICIT_UNCERTAINTY,
+        'disposition': OTHER_EVIDENCE_REQUIRED,
+        'reason': ('The entrepreneur has explicitly asked for customer '
+                   'validation of a choice already made. That is a declared '
+                   'research priority a survey can answer.'),
+        'link_objective': None,
+    },
+    ('M2V2-11', 'EXPLORE'): {
+        'classification': EXPLICIT_UNCERTAINTY,
+        'disposition': OTHER_EVIDENCE_REQUIRED,
+        'reason': ('The entrepreneur has explicitly declared an exploratory '
+                   'research priority. That is a declared uncertainty, not a '
+                   'planning decision.'),
+        'link_objective': None,
+    },
+    ('M2V2-18', 'HYPOTHESIS_IDENTIFIED'): {
+        'classification': UNVERIFIED_ASSUMPTION,
+        'disposition': OTHER_EVIDENCE_REQUIRED,
+        'reason': ('The entrepreneur has stated a hypothesis that no customer '
+                   'evidence has tested yet. An untested hypothesis is a '
+                   'customer-answerable uncertainty, not a proven need.'),
+        'link_objective': None,
+    },
+}
 
 #: Item-specific rules. Keyed by the exact registered item and literal, because
 #: the directive forbids broadening these globally: "Do not call `NONE` or
@@ -193,6 +251,18 @@ CONSTRUCT_LEXICON: dict[str, tuple[str, ...]] = {
         r'\bacceptance of the\b',
         r'\bpriced offer\b',
         r'\bwillingness to pay\b',
+        # DD-067. "Would they accept RM 16.00 for this coffee?" is the price
+        # construct written in plain English, but the lexicon above only knew
+        # the noun forms, so a genuine price objective resolved NOVEL and a
+        # reader was told it was a new construct. Each pattern below still
+        # requires a price word or a currency amount, so ordinary uses of
+        # "accept" ("accept the invitation") cannot claim O3.
+        r'\baccept(?:s|ed|ing)?\s+(?:an?\s+|the\s+)?'
+        r'(?:price|pricing|price point)\b',
+        r'\baccept(?:s|ed|ing)?\s+(?:rm|myr)\s?\d',
+        r'\bacceptability of\s+(?:the\s+|that\s+|this\s+)?'
+        r'(?:price|priced|rm|myr)\b',
+        r'\b(?:price|priced)\s+(?:point\s+)?(?:is|be)\s+acceptable\b',
     ),
     'O4': (
         # The construct itself.
@@ -323,29 +393,66 @@ def classify(declarations: list[dict]) -> list[dict]:
 
     Returns issues only for declarations that matched a rule. A declaration that
     matches nothing is not an issue; silence is not evidence.
+
+    Both tables are consulted: ``ITEM_RULES`` for the planning and evidence
+    literals, ``DECLARED_UNCERTAINTY_RULES`` for the literals that declare a
+    customer-answerable uncertainty. A declaration can match at most one of
+    them, because the second is keyed by the exact literal.
     """
     issues = []
     for declaration in declarations:
         key = declaration.get('item_key')
-        rule = ITEM_RULES.get(key)
-        if rule is None:
-            continue
         literal = _literal(declaration.get('value'))
-        if literal is None or literal not in rule['literals']:
+        if literal is None:
             continue
-        issues.append(Issue(
-            item_key=key, literal=literal,
-            classification=rule['classification'],
-            disposition=rule['disposition'],
-            reason=rule['reason'],
-            link_objective=rule['link_objective'],
-            source_ref=_source_ref(declaration),
-            # A coded rule is deterministic, but the *disposition* is a policy
-            # proposal, so a reviewer still has to adopt it. It is not a
-            # per-item human hold; it is an unadopted rule.
-            requires_human_review=False,
-        ).as_dict())
+
+        rule = ITEM_RULES.get(key)
+        if rule is not None and literal in rule['literals']:
+            issues.append(Issue(
+                item_key=key, literal=literal,
+                classification=rule['classification'],
+                disposition=rule['disposition'],
+                reason=rule['reason'],
+                link_objective=rule['link_objective'],
+                source_ref=_source_ref(declaration),
+                # A coded rule is deterministic, but the *disposition* is a policy
+                # proposal, so a reviewer still has to adopt it. It is not a
+                # per-item human hold; it is an unadopted rule.
+                requires_human_review=False,
+            ).as_dict())
+            continue
+
+        declared = DECLARED_UNCERTAINTY_RULES.get((key, literal))
+        if declared is not None:
+            issues.append(Issue(
+                item_key=key, literal=literal,
+                classification=declared['classification'],
+                disposition=declared['disposition'],
+                reason=declared['reason'],
+                link_objective=declared['link_objective'],
+                source_ref=_source_ref(declaration),
+                requires_human_review=False,
+            ).as_dict())
     return issues
+
+
+def governing_issue(issues: list[dict]) -> dict | None:
+    """The issue whose disposition decides the proposal.
+
+    A customer-answerable class outranks a planning class. DD-064: the objective
+    is about what customers can tell the entrepreneur, so an explicitly declared
+    uncertainty governs even when the same proposal also cites an undecided
+    planning item as its context.
+
+    When no answerable issue exists, the first matched issue decides exactly as
+    before — so a proposal that cites only an undecided study area is still
+    refused.
+    """
+    if not issues:
+        return None
+    answerable = [i for i in issues
+                  if i.get('classification') in CUSTOMER_ANSWERABLE_CLASSES]
+    return (answerable or issues)[0]
 
 
 def service_mode_conflict(declarations: list[dict]) -> dict | None:
@@ -554,6 +661,12 @@ def policy_summary() -> dict:
                            'disposition': v['disposition'],
                            'link_objective': v['link_objective']}
                        for k, v in ITEM_RULES.items()},
+        'declared_uncertainty_rules': {
+            f'{k[0]}:{k[1]}': {'classification': v['classification'],
+                               'disposition': v['disposition'],
+                               'link_objective': v['link_objective']}
+            for k, v in DECLARED_UNCERTAINTY_RULES.items()},
+        'customer_answerable_classes': sorted(CUSTOMER_ANSWERABLE_CLASSES),
         'topic_mapping': dict(TOPIC_TO_OBJECTIVE),
         'topic_mapping_status': TOPIC_MAPPING_STATUS,
         'invariants': {
@@ -566,10 +679,12 @@ def policy_summary() -> dict:
 
 
 __all__ = ['CLASSES', 'CONSTRUCT_LEXICON', 'COVERED_BY_FIXED_OBJECTIVE',
-           'COVERED_BY_OPTIONAL_OBJECTIVE', 'DISPOSITIONS', 'ITEM_RULES',
+           'COVERED_BY_OPTIONAL_OBJECTIVE', 'CUSTOMER_ANSWERABLE_CLASSES',
+           'DECLARED_UNCERTAINTY_RULES', 'DISPOSITIONS', 'ITEM_RULES',
            'NOVEL_CANDIDATE', 'NOT_CUSTOMER_RESEARCH_SUITABLE', 'POLICY_ADOPTED',
            'POLICY_VERSION', 'POTENTIAL_CONFLICT', 'POTENTIAL_EXTENSION',
            'RESOLUTIONS', 'TOPIC_MAPPING_STATUS', 'TOPIC_TO_OBJECTIVE', 'Issue',
-           'classify', 'construct_matches', 'has_anchor', 'is_exact_duplicate',
-           'normalise', 'policy_summary', 'resolve_candidate',
-           'service_mode_conflict', 'textual_conflict', 'topic_objectives']
+           'classify', 'construct_matches', 'governing_issue', 'has_anchor',
+           'is_exact_duplicate', 'normalise', 'policy_summary',
+           'resolve_candidate', 'service_mode_conflict', 'textual_conflict',
+           'topic_objectives']

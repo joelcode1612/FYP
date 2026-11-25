@@ -20328,6 +20328,10 @@ input[type="range"] {
   top: 72px;
   z-index: 16;
 }
+/* A grid child defaults to `min-width: auto`, so the nowrap chip row set the
+   minimum width of the whole document and pushed the page wider than the
+   viewport instead of scrolling inside its own bar. */
+.asw-rpt > * { min-width: 0; }
 .asw-rpt__bar {
   display: flex;
   flex-wrap: wrap;
@@ -20399,7 +20403,13 @@ input[type="range"] {
   gap: 4px;
   padding: 6px;
   border-color: var(--arp-line);
-  border-radius: 999px;
+  /* Nine sections do not fit one row at every width, and a horizontally
+     scrolling bar hides the last chips behind a scrollbar most readers never
+     touch — the same failure as hiding them outright. Wrapping keeps every
+     section visible, so the corners are a rounded rectangle, not a pill. */
+  flex-wrap: wrap;
+  overflow-x: visible;
+  border-radius: 16px;
   background: rgba(255, 255, 255, .97);
   box-shadow: 0 4px 18px rgba(15, 23, 42, .05);
 }
@@ -20421,57 +20431,10 @@ input[type="range"] {
   background: var(--arp-geo-wash);
   color: var(--arp-action);
 }
-.asw-rpt__navlink--prior { display: none; }
-.asw-rpt__navlink--current,
-.asw-rpt__navlink--current:hover {
-  background: var(--arp-action);
-  color: var(--arp-surface);
-}
-.asw-rpt__navlink--current .asw-rpt__navindex { color: var(--arp-surface); }
 
-/* Evidence section reads as a short guided page before the detail cards.
-   Jump targets clear the sticky app bar plus the report's own chrome. */
+/* Every section is listed. The strip scrolls horizontally rather than wrapping,
+   so a nine-section document keeps one row of chips under the app bar. */
 .asw-rpt__section { scroll-margin-top: 236px; }
-.asw-rpt__section--prior { display: none; }
-.asw-rpt__section--evidence { gap: 18px; }
-.asw-rpt__heroeyebrow {
-  color: var(--arp-action);
-  font-family: var(--arp-mono);
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-}
-.asw-rpt__section--evidence .asw-rpt__sechead {
-  align-items: flex-start;
-  gap: 16px;
-  margin-bottom: 2px;
-}
-.asw-rpt__section--evidence .asw-rpt__secindex {
-  width: 44px;
-  height: 44px;
-  border-color: var(--arp-geo-border);
-  border-radius: 12px;
-  background: var(--arp-geo-wash);
-  color: var(--arp-action);
-  font-size: 14px;
-}
-.asw-rpt__section--evidence .asw-rpt__sectitle {
-  max-width: 24ch;
-  font-size: clamp(26px, 3vw, 36px);
-  line-height: 1.15;
-  letter-spacing: -.6px;
-  color: var(--arp-ink);
-}
-.asw-rpt__section--evidence .asw-rpt__secdesc {
-  max-width: 72ch;
-  margin-top: 6px;
-  font-size: 16px;
-  line-height: 1.65;
-  color: var(--arp-muted);
-}
-
-/* Cards carry the same radius and calmer borders across the document. */
 .asw-rpt__card {
   padding: 20px 22px;
   border-color: var(--arp-line);

@@ -24,6 +24,8 @@ Rules enforced here:
 """
 from __future__ import annotations
 
+from sitewise.modules.decision_engine.domain.geo_catalogue import area_label as geo_area_label
+
 SECTION_CONTRACT = "bcb-sections/1"
 
 #: M2V2-09 substantive topics map one-to-one onto the mandatory objectives.
@@ -76,6 +78,14 @@ def _field(declaration: dict | None, confirmation_id: str, item: dict | None,
         out["item_key"] = key
     if isinstance(value, str) and value in labels:
         out["label"] = labels[value]
+    elif isinstance(value, dict):
+        # DD-063: a GEO answer is {jurisdiction, area_ref, catalogue_version}.
+        # Its label is the catalogue's own jurisdiction name, resolved from the
+        # authority — the instrument's option codes (JOHOR, PENANG, ...) are not
+        # carried inside the structured value, so they cannot be looked up here.
+        area = geo_area_label(value)
+        if area:
+            out["label"] = area
     elif isinstance(value, list):
         out["labels"] = [labels.get(v, v) for v in value]
     return out

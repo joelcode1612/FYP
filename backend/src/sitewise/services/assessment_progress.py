@@ -127,6 +127,34 @@ STAGE_3_RULE = (
     "measurement exists. ADOPTED and APPLIED 2026-11-24."
 )
 
+#: Stage 4's completion rule. Until 2026-11-24 stage 4 had an implementation but
+#: no written rule, so its verdict could only be read out of the branch order in
+#: :func:`evaluate` -- and a reader could not tell a deliberate predicate from an
+#: accident. This constant is that rule, and the branch below is its only
+#: implementation.
+#:
+#: Deliberately *not* "a candidate was generated". Generating a question is not
+#: constructing a questionnaire, and treating it as progress is how a bar moves
+#: without work. It is also not "the fixed core is complete": Q01-Q13 carries no
+#: approval at all, so it can never be the evidence that stage 4 is done.
+STAGE_4_RULE = (
+    "Stage 4 completes when all four hold for the current confirmation: (a) "
+    "Stage 3 is COMPLETE by its own contract verdict; (b) at least one research "
+    "objective is verified; (c) every verified objective has at least one current "
+    "question carrying an APPROVE_FOR_REVIEW decision, i.e. approved >= verified; "
+    "and (d) the composed questionnaire validates (composition_status = VALID), "
+    "so the document does not contain a duplicate stem, a colliding option code "
+    "or an item claiming authority. Generation alone is not completion, and the "
+    "fixed core is never the evidence: none of Q01-Q13 is approved. Fielding and "
+    "publication stay false at every stage -- completion is not authorisation. "
+    "ADOPTED and APPLIED 2026-11-24."
+)
+
+#: Composition verdict codes used by the stage-4 rule.
+COMPOSITION_VALID = "VALID"
+COMPOSITION_INVALID = "INVALID"
+REASON_COMPOSITION_INVALID = "QUESTIONNAIRE_COMPOSITION_INVALID"
+
 
 def empty_evidence(property_selected_at: Any = None,
                    requirements_saved_at: Any = None) -> dict:
@@ -150,6 +178,10 @@ def empty_evidence(property_selected_at: Any = None,
         # BLOCKED -- never COMPLETE. Objective rows cannot substitute for it.
         "stage3": {},
         "candidates": {"current": 0, "approved": 0, "rejected": 0, "pending": 0},
+        # The composed questionnaire's own verdict, when a caller has assembled
+        # it. Absent means "not composed", which does not block stage 4 (the
+        # candidate counts still decide it) but is never read as VALID.
+        "composition": {},
         "preview": {"status": "UNAVAILABLE",
                     "reason": REASON_CURRENT_CONFIRMATION_REQUIRED},
     }
@@ -299,11 +331,23 @@ def evaluate(evidence: dict) -> dict:
     stage_3_done = stages[2]["complete"]
 
     # -- stage 4: an approved current question per verified objective ------
+    #
+    # Implementation of ``STAGE_4_RULE``. The order of these branches *is* the
+    # rule, which is why the rule is also written down as a constant: a reader
+    # must be able to check one against the other.
     candidates = evidence["candidates"]
+    composition = evidence.get("composition") or {}
     if not stage_3_done:
         add("ai_explanation", 4, BLOCKED, "STAGE_3_INCOMPLETE")
-    elif candidates["approved"] > 0 and candidates["approved"] >= objectives["verified"]:
-        add("ai_explanation", 4, COMPLETE, completed_at=candidates.get("completed_at"))
+    elif composition.get("status") == COMPOSITION_INVALID:
+        # The document contradicts itself (duplicate stem, colliding option
+        # code, or an item claiming authority). Reviewing more questions cannot
+        # fix that, so it is a hold rather than progress.
+        add("ai_explanation", 4, BLOCKED, REASON_COMPOSITION_INVALID)
+    elif (objectives["verified"] > 0
+          and candidates["approved"] >= objectives["verified"]):
+        add("ai_explanation", 4, COMPLETE,
+            completed_at=candidates.get("completed_at"))
     elif candidates["current"] > 0:
         add("ai_explanation", 4, IN_PROGRESS,
             REASON_CANDIDATE_REJECTED if candidates["approved"] == 0 and candidates["rejected"] > 0

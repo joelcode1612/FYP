@@ -1,0 +1,585 @@
+{
+ "schema_version": "cq-preview-catalogue/1",
+ "authority": "PREVIEW_ONLY_NON_AUTHORITATIVE",
+ "not_a_qg_bank": true,
+ "production_fielding_authorized": false,
+ "report_release_authorized": false,
+ "provenance": {
+  "artifact": "artifacts/cq_fc4d_50_real_service_replay_v1/runs/regression_lifecycle/api_execution.json",
+  "artifact_bytes": 108505329,
+  "artifact_sha256": "e4c2436df8c5ae4beb61b8fab81c81022caf0a7717c3dd18926ebafc903e9244",
+  "extraction_key": "validation{id,stem,...}",
+  "generated_at_utc": "2026-11-24T05:35:45.609225+00:00",
+  "generator": "backend/var/e2e/pg18/generate_preview_catalogue.py"
+ },
+ "question_ids": [
+  "Q01",
+  "Q02",
+  "Q03",
+  "Q04",
+  "Q05",
+  "Q06",
+  "Q07",
+  "Q08",
+  "Q09",
+  "Q10",
+  "Q11",
+  "Q12",
+  "Q13"
+ ],
+ "questions": [
+  {
+   "question_id": "Q01",
+   "stem": "Which of the following describe your connection to [named area]? Select all that apply. If none apply, select one of: Rarely, Never, Not sure.",
+   "type": "multi_select_with_exclusive_terminals",
+   "class": "ESSENTIAL_SCREEN",
+   "construct": "G01_AREA_AFFILIATION",
+   "disposition": "REWRITE_WITH_ROUTE_OUTS_RESTORED",
+   "codes": [
+    "LIVE",
+    "WORK",
+    "STUDY",
+    "RUN_BUSINESS",
+    "VISIT_PURPOSE",
+    "PASS_THROUGH",
+    "RARELY",
+    "NEVER",
+    "NOT_SURE"
+   ],
+   "display_order": [
+    "LIVE",
+    "WORK",
+    "STUDY",
+    "RUN_BUSINESS",
+    "VISIT_PURPOSE",
+    "PASS_THROUGH",
+    "RARELY",
+    "NEVER",
+    "NOT_SURE"
+   ],
+   "max_selections": null,
+   "exclusive_codes": [
+    "RARELY",
+    "NEVER",
+    "NOT_SURE"
+   ],
+   "non_substantive_codes": [
+    "NEVER",
+    "NOT_SURE",
+    "RARELY"
+   ],
+   "substantive_codes": [
+    "LIVE",
+    "WORK",
+    "STUDY",
+    "RUN_BUSINESS",
+    "VISIT_PURPOSE",
+    "PASS_THROUGH"
+   ],
+   "gate_dependencies": [
+    "G01",
+    "G06",
+    "G07",
+    "G08"
+   ],
+   "source_original": "CS-01",
+   "measurement_status": "BLOCKED_MEASUREMENT",
+   "approval_state": "NOT_APPROVED",
+   "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT"
+  },
+  {
+   "question_id": "Q02",
+   "stem": "In the last four weeks, on how many days were you physically present in [named area]? Please count each day once, even if you were there more than once that day.",
+   "type": "ordinal_single",
+   "class": "ESSENTIAL_SCREEN",
+   "construct": "G01_AREA_PRESENCE_FREQUENCY",
+   "disposition": "REWRITE_BLOCKED_SOURCE",
+   "codes": [
+    "NONE",
+    "DAYS_1_3",
+    "DAYS_4_10",
+    "DAYS_11_20",
+    "DAYS_GT_20",
+    "PREFER_NOT_TO_ANSWER"
+   ],
+   "display_order": null,
+   "max_selections": 1,
+   "exclusive_codes": [],
+   "non_substantive_codes": [
+    "PREFER_NOT_TO_ANSWER"
+   ],
+   "substantive_codes": [
+    "NONE",
+    "DAYS_1_3",
+    "DAYS_4_10",
+    "DAYS_11_20",
+    "DAYS_GT_20"
+   ],
+   "gate_dependencies": [
+    "G01",
+    "G07"
+   ],
+   "source_original": "CS-02",
+   "measurement_status": "SCIENTIFIC_APPROVAL_PENDING",
+   "approval_state": "NOT_APPROVED",
+   "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT"
+  },
+  {
+   "question_id": "Q03",
+   "stem": "If you decided to visit the café described above, where would you most likely begin that journey?",
+   "type": "nominal_single",
+   "class": "ESSENTIAL",
+   "construct": "GEO_ORIGIN_TYPE_01",
+   "disposition": "NON_EQUIVALENT_REPLACEMENT_BLOCKED_SOURCE",
+   "codes": [
+    "HOME",
+    "WORKPLACE",
+    "STUDY_LOCATION",
+    "OTHER_ACTIVITY",
+    "VARIES",
+    "DECLINE",
+    "NOT_SURE"
+   ],
+   "display_order": null,
+   "max_selections": 1,
+   "exclusive_codes": [],
+   "non_substantive_codes": [
+    "DECLINE",
+    "NOT_SURE"
+   ],
+   "substantive_codes": [
+    "HOME",
+    "WORKPLACE",
+    "STUDY_LOCATION",
+    "OTHER_ACTIVITY",
+    "VARIES"
+   ],
+   "gate_dependencies": [
+    "G01",
+    "G03",
+    "G05"
+   ],
+   "source_original": "CS-11",
+   "measurement_status": "BLOCKED_SOURCE",
+   "approval_state": "NOT_APPROVED",
+   "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT"
+  },
+  {
+   "question_id": "Q04",
+   "stem": "In the past 30 days, on how many occasions have you bought food or a drink from an existing café?",
+   "type": "ordinal_single",
+   "class": "ESSENTIAL",
+   "construct": "D04_EXISTING_USE",
+   "disposition": "NON_EQUIVALENT_REWRITE",
+   "codes": [
+    "ZERO",
+    "ONE",
+    "TWO_THREE",
+    "FOUR_SEVEN",
+    "EIGHT_PLUS",
+    "CANNOT_REMEMBER",
+    "PREFER_NOT_TO_ANSWER"
+   ],
+   "display_order": null,
+   "max_selections": 1,
+   "exclusive_codes": [],
+   "non_substantive_codes": [
+    "CANNOT_REMEMBER",
+    "PREFER_NOT_TO_ANSWER"
+   ],
+   "substantive_codes": [
+    "ZERO",
+    "ONE",
+    "TWO_THREE",
+    "FOUR_SEVEN",
+    "EIGHT_PLUS"
+   ],
+   "gate_dependencies": [
+    "G03",
+    "G04",
+    "G05"
+   ],
+   "source_original": "CS-03",
+   "measurement_status": "BLOCKED_MEASUREMENT",
+   "approval_state": "NOT_APPROVED",
+   "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT"
+  },
+  {
+   "question_id": "Q05",
+   "stem": "If the café described in [concept_card_version] opened in [named area], how likely would you be to visit it at least once during its first three months?",
+   "type": "ordinal_single",
+   "class": "ESSENTIAL",
+   "construct": "D01_CONCEPT_INTENT",
+   "disposition": "REWRITE_COMPOUND",
+   "codes": [
+    "DEF_NO",
+    "PROB_NO",
+    "UNSURE",
+    "PROB_YES",
+    "DEF_YES",
+    "CANNOT_JUDGE",
+    "PREFER_NOT_TO_ANSWER"
+   ],
+   "display_order": [
+    "DEF_NO",
+    "PROB_NO",
+    "UNSURE",
+    "PROB_YES",
+    "DEF_YES",
+    "CANNOT_JUDGE",
+    "PREFER_NOT_TO_ANSWER"
+   ],
+   "max_selections": 1,
+   "exclusive_codes": [],
+   "non_substantive_codes": [
+    "CANNOT_JUDGE",
+    "PREFER_NOT_TO_ANSWER"
+   ],
+   "substantive_codes": [
+    "DEF_NO",
+    "PROB_NO",
+    "UNSURE",
+    "PROB_YES",
+    "DEF_YES"
+   ],
+   "gate_dependencies": [
+    "G03",
+    "G04",
+    "G05",
+    "G06"
+   ],
+   "source_original": "CS-06",
+   "measurement_status": "BLOCKED_MEASUREMENT",
+   "approval_state": "NOT_APPROVED",
+   "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT"
+  },
+  {
+   "question_id": "Q06",
+   "stem": "Which of the following categories from this proposed café menu would you be interested in? Select up to three.",
+   "type": "multi_select",
+   "class": "ESSENTIAL",
+   "construct": "D02_PRODUCT_INTEREST",
+   "disposition": "REWRITE_WITH_RESOLVABLE_OTHER",
+   "codes": [
+    "COFFEE_ESPRESSO",
+    "NON_COFFEE",
+    "BAKED_PASTRY",
+    "LIGHT_MEALS",
+    "DESSERTS",
+    "RETAIL",
+    "UNLISTED_CATEGORY_REPORTED",
+    "NONE",
+    "NOT_SURE",
+    "PREFER_NOT_TO_ANSWER"
+   ],
+   "display_order": null,
+   "max_selections": 3,
+   "exclusive_codes": [
+    "NONE",
+    "NOT_SURE",
+    "PREFER_NOT_TO_ANSWER"
+   ],
+   "non_substantive_codes": [
+    "NOT_SURE",
+    "PREFER_NOT_TO_ANSWER"
+   ],
+   "substantive_codes": [
+    "COFFEE_ESPRESSO",
+    "NON_COFFEE",
+    "BAKED_PASTRY",
+    "LIGHT_MEALS",
+    "DESSERTS",
+    "RETAIL",
+    "UNLISTED_CATEGORY_REPORTED",
+    "NONE"
+   ],
+   "gate_dependencies": [
+    "G01",
+    "G06"
+   ],
+   "source_original": "CS-09",
+   "measurement_status": "BLOCKED_MEASUREMENT",
+   "approval_state": "NOT_APPROVED",
+   "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT"
+  },
+  {
+   "question_id": "Q07",
+   "stem": "How acceptable would paying [exact_rm_price] for [one_exact_product_size_quantity_fulfilment_and_charges] at the proposed café be to you?",
+   "type": "ordinal_single",
+   "class": "ESSENTIAL_CONDITIONAL",
+   "construct": "D03A_PRICE_ACCEPT",
+   "disposition": "NON_EQUIVALENT_REPLACEMENT",
+   "codes": [
+    "VERY_UNACCEPTABLE",
+    "SOMEWHAT_UNACCEPTABLE",
+    "NEITHER",
+    "SOMEWHAT_ACCEPTABLE",
+    "VERY_ACCEPTABLE",
+    "CANNOT_JUDGE",
+    "PREFER_NOT_TO_ANSWER"
+   ],
+   "display_order": null,
+   "max_selections": 1,
+   "exclusive_codes": [],
+   "non_substantive_codes": [
+    "CANNOT_JUDGE",
+    "PREFER_NOT_TO_ANSWER"
+   ],
+   "substantive_codes": [
+    "VERY_UNACCEPTABLE",
+    "SOMEWHAT_UNACCEPTABLE",
+    "NEITHER",
+    "SOMEWHAT_ACCEPTABLE",
+    "VERY_ACCEPTABLE"
+   ],
+   "gate_dependencies": [
+    "G01",
+    "G06"
+   ],
+   "source_original": "CS-07",
+   "measurement_status": "BLOCKED_MEASUREMENT",
+   "approval_state": "NOT_APPROVED",
+   "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT"
+  },
+  {
+   "question_id": "Q08",
+   "stem": "Thinking only about the existing-café visits you reported in the past 30 days, on which occasions did you visit a café? Select all that apply.",
+   "type": "multi_select",
+   "class": "CONDITIONAL_R07",
+   "construct": "D05A_PAST_OCCASION",
+   "disposition": "NEW_ITEM",
+   "codes": [
+    "WORK_BREAK",
+    "STUDY",
+    "SOCIAL",
+    "ON_THE_GO",
+    "UNLISTED_OCCASION_REPORTED",
+    "CANNOT_REMEMBER",
+    "PREFER_NOT_TO_ANSWER"
+   ],
+   "display_order": null,
+   "max_selections": null,
+   "exclusive_codes": [
+    "CANNOT_REMEMBER"
+   ],
+   "non_substantive_codes": [
+    "CANNOT_REMEMBER",
+    "PREFER_NOT_TO_ANSWER"
+   ],
+   "substantive_codes": [
+    "WORK_BREAK",
+    "STUDY",
+    "SOCIAL",
+    "ON_THE_GO",
+    "UNLISTED_OCCASION_REPORTED"
+   ],
+   "gate_dependencies": [
+    "G01",
+    "G06"
+   ],
+   "source_original": null,
+   "measurement_status": "BLOCKED_SOURCE",
+   "approval_state": "NOT_APPROVED",
+   "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT"
+  },
+  {
+   "question_id": "Q09",
+   "stem": "If you visited this proposed café, on which occasions might you choose to visit? Select all that apply.",
+   "type": "multi_select",
+   "class": "CONDITIONAL_R07",
+   "construct": "D05B_PLANNED_OCCASION",
+   "disposition": "NEW_ITEM",
+   "codes": [
+    "WORK_BREAK",
+    "STUDY",
+    "SOCIAL",
+    "ON_THE_GO",
+    "UNLISTED_OCCASION_REPORTED",
+    "NONE",
+    "CANNOT_JUDGE",
+    "PREFER_NOT_TO_ANSWER"
+   ],
+   "display_order": null,
+   "max_selections": null,
+   "exclusive_codes": [
+    "NONE",
+    "CANNOT_JUDGE"
+   ],
+   "non_substantive_codes": [
+    "CANNOT_JUDGE",
+    "PREFER_NOT_TO_ANSWER"
+   ],
+   "substantive_codes": [
+    "WORK_BREAK",
+    "STUDY",
+    "SOCIAL",
+    "ON_THE_GO",
+    "UNLISTED_OCCASION_REPORTED",
+    "NONE"
+   ],
+   "gate_dependencies": [
+    "G01",
+    "G06"
+   ],
+   "source_original": null,
+   "measurement_status": "BLOCKED_SOURCE",
+   "approval_state": "NOT_APPROVED",
+   "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT"
+  },
+  {
+   "question_id": "Q10",
+   "stem": "For each feature of the described café, how important would that feature be to you if you chose to visit?",
+   "type": "ordinal_matrix",
+   "class": "CONDITIONAL_R07",
+   "construct": "D06_EXPERIENCE_PRIORITY",
+   "disposition": "NEW_ITEM",
+   "codes": [
+    "NOT_AT_ALL_IMPORTANT",
+    "SLIGHTLY_IMPORTANT",
+    "MODERATELY_IMPORTANT",
+    "VERY_IMPORTANT",
+    "EXTREMELY_IMPORTANT",
+    "NOT_APPLICABLE",
+    "CANNOT_JUDGE",
+    "PREFER_NOT_TO_ANSWER"
+   ],
+   "display_order": null,
+   "max_selections": 1,
+   "exclusive_codes": [],
+   "non_substantive_codes": [
+    "NOT_APPLICABLE",
+    "CANNOT_JUDGE",
+    "PREFER_NOT_TO_ANSWER"
+   ],
+   "substantive_codes": [
+    "NOT_AT_ALL_IMPORTANT",
+    "SLIGHTLY_IMPORTANT",
+    "MODERATELY_IMPORTANT",
+    "VERY_IMPORTANT",
+    "EXTREMELY_IMPORTANT"
+   ],
+   "gate_dependencies": [
+    "G01",
+    "G06",
+    "G05"
+   ],
+   "source_original": null,
+   "measurement_status": "G06_APPROVAL_PENDING",
+   "approval_state": "NOT_APPROVED",
+   "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT"
+  },
+  {
+   "question_id": "Q11",
+   "stem": "For the proposed café offer, which service format would you mainly choose?",
+   "type": "nominal_single",
+   "class": "OPTIONAL_CONTEXT",
+   "construct": "FMT01_FORMAT_CHOICE",
+   "disposition": "RESEARCH_ONLY",
+   "codes": [
+    "DINE_IN",
+    "TAKEAWAY",
+    "EITHER_EQUALLY",
+    "CANNOT_JUDGE",
+    "PREFER_NOT_TO_ANSWER"
+   ],
+   "display_order": null,
+   "max_selections": 1,
+   "exclusive_codes": [],
+   "non_substantive_codes": [
+    "CANNOT_JUDGE",
+    "PREFER_NOT_TO_ANSWER"
+   ],
+   "substantive_codes": [
+    "DINE_IN",
+    "TAKEAWAY",
+    "EITHER_EQUALLY"
+   ],
+   "gate_dependencies": [
+    "G01",
+    "G06"
+   ],
+   "source_original": "CS-08",
+   "measurement_status": "BLOCKED_OWNER",
+   "approval_state": "NOT_APPROVED",
+   "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT"
+  },
+  {
+   "question_id": "Q12",
+   "stem": "What is your usual way of travelling to [named area]?",
+   "type": "nominal_single",
+   "class": "OPTIONAL_CONTEXT",
+   "construct": "GEO_TRANSPORT_TO_AREA_01",
+   "disposition": "OPTIONAL_CONTEXT",
+   "codes": [
+    "WALK",
+    "MOTORCYCLE",
+    "CAR",
+    "PUBLIC_TRANSPORT",
+    "OTHER",
+    "NOT_SURE",
+    "PREFER_NOT_TO_ANSWER"
+   ],
+   "display_order": null,
+   "max_selections": 1,
+   "exclusive_codes": [],
+   "non_substantive_codes": [
+    "NOT_SURE",
+    "PREFER_NOT_TO_ANSWER",
+    "OTHER"
+   ],
+   "substantive_codes": [
+    "WALK",
+    "MOTORCYCLE",
+    "CAR",
+    "PUBLIC_TRANSPORT"
+   ],
+   "gate_dependencies": [
+    "G01",
+    "G07"
+   ],
+   "source_original": "CS-12",
+   "measurement_status": "BLOCKED_MEASUREMENT",
+   "approval_state": "NOT_APPROVED",
+   "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT"
+  },
+  {
+   "question_id": "Q13",
+   "stem": "What would you expect to pay for [defined item: medium latte, dine-in]?",
+   "type": "ordinal_single",
+   "class": "OPTIONAL_CONTEXT",
+   "construct": "EXP01_PRICE_EXPECTATION",
+   "disposition": "RESTORED_FROM_ORIGINAL_AS_SEPARATE_CONSTRUCT",
+   "codes": [
+    "LT_RM8",
+    "RM8_TO_1199",
+    "RM12_TO_1499",
+    "RM15_TO_1799",
+    "GE_RM18",
+    "NOT_SURE",
+    "PREFER_NOT_TO_ANSWER"
+   ],
+   "display_order": null,
+   "max_selections": 1,
+   "exclusive_codes": [],
+   "non_substantive_codes": [
+    "NOT_SURE",
+    "PREFER_NOT_TO_ANSWER"
+   ],
+   "substantive_codes": [
+    "LT_RM8",
+    "RM8_TO_1199",
+    "RM12_TO_1499",
+    "RM15_TO_1799",
+    "GE_RM18"
+   ],
+   "gate_dependencies": [
+    "G01",
+    "G06"
+   ],
+   "source_original": "CS-07",
+   "measurement_status": "BLOCKED_OWNER",
+   "approval_state": "NOT_APPROVED",
+   "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT"
+  }
+ ]
+}

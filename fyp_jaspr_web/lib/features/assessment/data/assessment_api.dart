@@ -112,6 +112,21 @@ final class AssessmentStage {
   /// SHAP or the evidence row is missing.
   final String? unavailableReason;
 
+  /// The server's machine-readable blocker for this stage, for every state.
+  ///
+  /// This is the field the progress contract is written in
+  /// (`sitewise-assessment-progress/1`), and it is **not** the same thing as
+  /// [unavailableReason]: the server only copies a reason into
+  /// `unavailable_reason` when the legacy `status` is `unavailable`, so a stage
+  /// that is `BLOCKED` or `IN_PROGRESS` while still being the current
+  /// checkpoint carried its reason in `reason` alone. Dropping that field is
+  /// why a blocked stage could only be described as "Blocked" with no
+  /// explanation.
+  ///
+  /// Never rendered raw; `stage_reason_copy.dart` turns the token into a
+  /// sentence and says whether it is the reader's next action or a system hold.
+  final String? reason;
+
   const AssessmentStage({
     required this.key,
     required this.number,
@@ -120,6 +135,7 @@ final class AssessmentStage {
     this.state,
     this.completedAt,
     this.unavailableReason,
+    this.reason,
   });
 
   bool get isComplete => status == 'complete';
@@ -128,6 +144,17 @@ final class AssessmentStage {
 
   /// Blocked by a missing contract or a governance hold, not by the user.
   bool get isBlocked => state == 'BLOCKED' || state == 'NOT_AVAILABLE';
+
+  /// The blocker to explain, from either channel.
+  ///
+  /// `reason` is authoritative for every state; `unavailableReason` is kept as
+  /// the fallback for a backend that only ever populated the legacy field.
+  String? get blockerReason {
+    final explicit = reason?.trim();
+    if (explicit != null && explicit.isNotEmpty) return explicit;
+    final legacy = unavailableReason?.trim();
+    return legacy == null || legacy.isEmpty ? null : legacy;
+  }
 
   factory AssessmentStage.fromJson(Map<String, dynamic> json) =>
       AssessmentStage(
@@ -138,6 +165,7 @@ final class AssessmentStage {
         state: json['state'] as String?,
         completedAt: json['completed_at'] as String?,
         unavailableReason: json['unavailable_reason'] as String?,
+        reason: json['reason'] as String?,
       );
 }
 
@@ -245,6 +273,29 @@ final class AssessmentRecord {
   /// Always renderable: never negative, never above the total.
   int get stagesRemaining =>
       (remainingStages ?? (totalStages - completedStages)).clamp(0, totalStages);
+
+  /// The percentage implied by the stage list itself.
+  ///
+  /// [progressPercent] is the server's own `progress_percent`, and the server
+  /// derives it from exactly this division. The bar is drawn from this getter so
+  /// that the width, the `aria-valuenow` and the "N / 5" count printed beside it
+  /// are all functions of one input: a payload whose percent disagreed with its
+  /// stage list would otherwise render two different progress figures on one
+  /// card. A regression test asserts the server field still equals this value,
+  /// so a real divergence is caught in CI rather than on screen.
+  int get stageProgressPercent {
+    if (totalStages <= 0) return 0;
+    return ((completedStages / totalStages) * 100).round().clamp(0, 100);
+  }
+
+  /// True when every stage is complete.
+  ///
+  /// Derived from the same two numbers as [stageProgressPercent] and
+  /// [stagesRemaining], so the "finished" styling and the count printed beside
+  /// it cannot disagree — a bar can never be painted complete while its own
+  /// label still says stages remain. A record with no stages is not complete:
+  /// it has nothing to have finished.
+  bool get allStagesComplete => totalStages > 0 && completedStages >= totalStages;
 
   final int totalStages;
 

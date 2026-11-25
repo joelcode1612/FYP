@@ -73,17 +73,31 @@ enum BdjReviewState {
 /// approval is valid but a separate requirement is unmet, which is not the
 /// same as "not admissible".
 enum BdjAdmissionState {
+  /// The owner's approval has been recorded as an admission for this proposal.
+  ///
+  /// It is deliberately **not** an authority: an admission says the cited gap is
+  /// worth researching, while question generation additionally needs its own
+  /// exact-bound authorization. That distinction lives in `qgExecution` and in
+  /// the QG authorization row, never in this state.
+  admitted,
   held,
   notAdmissible,
   unrecognised;
 
   static BdjAdmissionState parse(String? raw) => switch (raw) {
+    'ADMITTED' => BdjAdmissionState.admitted,
     'HELD' => BdjAdmissionState.held,
     'NOT_ADMISSIBLE' => BdjAdmissionState.notAdmissible,
     _ => BdjAdmissionState.unrecognised,
   };
 
   /// Admission was never granted, whatever the review state says.
+  ///
+  /// This stays `false` for [admitted] on purpose. Before 2026-11-25 the enum
+  /// had no `admitted` member at all, so an admitted objective parsed as
+  /// [unrecognised] and the Stage 3 card said "Admission unreadable" about a
+  /// state the server had reported plainly. Adding the member fixes the
+  /// reporting without turning an admission into a permission.
   bool get grantsDownstreamAuthority => false;
 }
 
@@ -470,6 +484,10 @@ final class BdjAdmission {
 
   /// The one sentence a reviewer must see next to any APPROVED badge.
   String get summary => switch (state) {
+    BdjAdmissionState.admitted =>
+      'Approved by you and admitted for question generation'
+          '${reason == null ? '' : ' ($reason)'}. Admission is not a fielding '
+          'or publication permission.',
     BdjAdmissionState.held =>
       'Approved by you, but not admitted for question generation yet'
           '${reason == null ? '' : ' ($reason)'}.',

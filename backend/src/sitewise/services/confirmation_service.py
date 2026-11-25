@@ -16,6 +16,7 @@ from sitewise.domain.m2_provenance import (
     SNAPSHOT_VERSION,
 )
 from sitewise.project1.ai_processing_consent import not_granted as not_granted_consent
+from sitewise.project1.ai_processing_consent import not_granted_qg as not_granted_qg_consent
 from sitewise.services.instrument_authorization import instrument_is_usable
 from sitewise.services.ports.m2_repository_port import M2RepositoryPort
 
@@ -170,7 +171,8 @@ class ConfirmationService:
 
     def confirm(self, assessment_id: UUID, actor_id: UUID, *, expected_revision: int,
                 acknowledged_issue_ids: list[str], marketplace_assessment_id: UUID | None = None,
-                ai_processing: dict | None = None) -> dict:
+                ai_processing: dict | None = None,
+                ai_processing_qg: dict | None = None) -> dict:
         try:
             assessment = self.repo.get_assessment_for_update(assessment_id, actor_id)
             if assessment is None:
@@ -215,6 +217,13 @@ class ConfirmationService:
                 # a v4 declaration confirmation for cloud permission, and no
                 # v3 row can be reinterpreted as one either.
                 "ai_processing": ai_processing or not_granted_consent(),
+                # A *second*, separately versioned permission. Generating
+                # candidate questions is a different act from deriving
+                # objectives, so it has its own block and its own digest. A
+                # snapshot written before this contract existed simply has no
+                # such key, and a QG dispatch against it is refused rather than
+                # inheriting the objective grant.
+                "ai_processing_qg": ai_processing_qg or not_granted_qg_consent(),
             }
             digest = hashlib.sha256(json.dumps(
                 snapshot, sort_keys=True, separators=(",", ":"), ensure_ascii=False

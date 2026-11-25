@@ -32,7 +32,10 @@ def _utcnow() -> datetime:
 
 class MlExplanationCache(SQLModel, table=True):
     __tablename__ = "ml_explanation_cache"
-    __table_args__ = {"schema": "fyp", "info": {"externally_managed": True}}
+    # ``public``, not ``fyp``: the table is ``public.ml_explanation_cache`` in
+    # both databases. Declaring ``fyp`` made every cache read and write target a
+    # table that exists in neither, so the cache silently never persisted.
+    __table_args__ = {"schema": "public", "info": {"externally_managed": True}}
 
     #: SHA-256 hex digest of the canonical identity tuple.
     cache_key: str = Field(primary_key=True, max_length=64)

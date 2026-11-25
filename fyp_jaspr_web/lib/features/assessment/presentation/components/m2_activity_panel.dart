@@ -5,6 +5,8 @@ import 'package:jaspr/jaspr.dart';
 
 import 'package:sitewise_jaspr_web/core/di/app_locator.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/activity_event_presentation.dart';
+import 'package:sitewise_jaspr_web/features/assessment/data/activity_snapshot_lines.dart'
+    as snapshot_lines;
 import 'package:sitewise_jaspr_web/features/assessment/presentation/pages/activity_history_page.dart';
 import 'package:sitewise_jaspr_web/features/recommendations/data/full_analysis_actions.dart';
 import 'package:sitewise_jaspr_web/features/assessment/presentation/components/saved_assessment_dropdown.dart'
@@ -181,6 +183,108 @@ class _M2ActivityState extends State<M2ActivityPanel> {
     );
   }
 
+  /// Display order and human labels for the server-reported sources.
+  static const List<String> _sourceOrder = [
+    'M2',
+    'BDJ_DETERMINISTIC',
+    'BDJ_OBJECTIVES',
+    'QG_QJ',
+    'BCB',
+    'CQ',
+    'EE01',
+    'REPORTS',
+    'CLOUD_BDJ',
+  ];
+
+  static const Map<String, String> _sourceLabels = {
+    'M2': 'M2 / Business Understanding',
+    'BDJ_DETERMINISTIC': 'BDJ candidate-rule receipts',
+    'BDJ_OBJECTIVES': 'BDJ objectives (proposal, decision, admission)',
+    'QG_QJ': 'Question Bank / QG (candidate and review metadata)',
+    'BCB': 'BCB',
+    'CQ': 'Customer Questionnaire',
+    'EE01': 'EE-01 measurement',
+    'REPORTS': 'Report generation / admission',
+    'CLOUD_BDJ': 'BDJ cloud execution ledger',
+  };
+
+  /// Limits that survive a healthy source. These are properties of the stored
+  /// records, so they are stated even when the source is available.
+  static const Map<String, String> _sourceCaveats = {
+    'M2':
+        'Creation, answers, candidate-rule evaluation, findings, decisions, '
+        'review and confirmation only; validation failures and distinct '
+        'submission attempts are not durably exposed.',
+    'BCB':
+        'Currentness is a read-time revision check, not an invalidation event '
+        'or new authorization. The build row is a latest-state snapshot, not '
+        'an attempt history.',
+    'QG_QJ':
+        'A candidate is recorded material under review, never an approved '
+        'questionnaire item.',
+    'CQ':
+        'Assessment-level campaign and release metadata plus aggregate session '
+        'and receipt counts only; no respondent identity, answer, session '
+        'record or receipt body is exposed. A published release is not an open '
+        'fielding authorization.',
+    'EE01':
+        'Measurement metadata only: execution status, snapshot version, cutoff '
+        'and finding admission status. Measurement values, category cells and '
+        'per-session evidence are not exposed. A computed measurement is not '
+        'scientific acceptance or report authorization.',
+  };
+
+  /// Per-source coverage lines.
+  ///
+  /// The server reports a state and a reason per source; this panel renders
+  /// them rather than asserting coverage of its own. An older service that
+  /// omits `source_states` falls back to the previous literal lines, so the
+  /// panel degrades instead of claiming coverage it cannot see.
+  List<String> _sourceCoverage() {
+    final states = activity?['source_states'];
+    if (states is! Map || states.isEmpty) {
+      return [
+        'M2 / Business Understanding: ${activity == null
+            ? 'NOT_VERIFIED — history source unavailable or not selected.'
+            : const {
+                'workflow-history-metadata/1',
+                'workflow-history-metadata/2',
+              }.contains(activity?['history_extension'])
+            ? 'Persisted records loaded. ${_sourceCaveats['M2']}'
+            : 'Legacy M2 receipts loaded. Additional creation, finding, uncertainty and BCB sources are NOT_VERIFIED; the workflow history extension is unavailable.'}',
+        'BDJ cloud: NOT_VERIFIED — no owner-scoped durable execution, output-validation or recovery history API. Candidate-rule receipts are not cloud completion.',
+        'BCB: ${activity?['bcb_history_available'] == true ? 'Persisted context metadata and latest status snapshots loaded. ${_sourceCaveats['BCB']}' : 'NOT_VERIFIED — context/history source unavailable or unsupported.'}',
+        'QJ: NOT_VERIFIED — no version-bound research processing/route/review history API.',
+        'Question Bank / QG: NOT_VERIFIED — no authorized reuse/candidate/technical-review history API.',
+        'Scientific / Owner / Fielding: NOT_VERIFIED — independent authorization decisions are not supplied by this history source.',
+        'Customer Questionnaire: NOT_VERIFIED — respondent history contains private answers; no authorized assessment-level campaign/session metadata binding is available.',
+      ];
+    }
+    String line(String key, Map source) {
+      final state = source['state'] as String? ?? 'NOT_VERIFIED';
+      final detail = source['detail'] as String?;
+      final caveat = _sourceCaveats[key];
+      return '${_sourceLabels[key] ?? key}: $state'
+          '${detail == null || detail.isEmpty ? '' : ' — $detail'}'
+          '${caveat == null ? '' : ' $caveat'}';
+    }
+
+    return [
+      for (final key in _sourceOrder)
+        if (states[key] is Map)
+          line(key, states[key] as Map)
+        else
+          '${_sourceLabels[key] ?? key}: NOT_VERIFIED — source not reported '
+              'by this service version.',
+      // A source the panel does not know about is still reported, not dropped.
+      for (final entry in states.entries)
+        if (!_sourceOrder.contains(entry.key) && entry.value is Map)
+          '${entry.key}: ${(entry.value as Map)['state'] ?? 'NOT_VERIFIED'}'
+              '${(entry.value as Map)['detail'] == null ? '' : ' — ${(entry.value as Map)['detail']}'}',
+    ];
+  }
+
+
   @override
   Component build(BuildContext context) => section(classes: 'stack stack--md', [
     if (assessments.length == 50)
@@ -204,23 +308,10 @@ class _M2ActivityState extends State<M2ActivityPanel> {
       activitiesAvailable: !busy && error == null && activity != null,
       workflowHistory: true,
       onViewFullLog: _openJson,
-      sourceCoverage: [
-        'M2 / Business Understanding: ${activity == null
-            ? 'NOT_VERIFIED — history source unavailable or not selected.'
-            : const {
-                'workflow-history-metadata/1',
-                'workflow-history-metadata/2',
-              }.contains(activity?['history_extension'])
-            ? 'Persisted records loaded. Creation, answers, candidate-rule evaluation, findings, decisions, review and confirmation only; validation failures and distinct submission attempts are not durably exposed.'
-            : 'Legacy M2 receipts loaded. Additional creation, finding, uncertainty and BCB sources are NOT_VERIFIED; the workflow history extension is unavailable.'}',
-        'BDJ cloud: NOT_VERIFIED — no owner-scoped durable execution, output-validation or recovery history API. Candidate-rule receipts are not cloud completion.',
-        'BCB: ${activity?['bcb_history_available'] == true ? 'Persisted context metadata and latest status snapshots loaded. Currentness is a read-time revision check, not an invalidation event or new authorization.' : 'NOT_VERIFIED — context/history source unavailable or unsupported.'}',
-        'QJ: NOT_VERIFIED — no version-bound research processing/route/review history API.',
-        'Question Bank / QG: NOT_VERIFIED — no authorized reuse/candidate/technical-review history API.',
-        'Scientific / Owner / Fielding: NOT_VERIFIED — independent authorization decisions are not supplied by this history source.',
-        'Customer Questionnaire: NOT_VERIFIED — respondent history contains private answers; no authorized assessment-level campaign/session metadata binding is available.',
-      ],
+      sourceCoverage: _sourceCoverage(),
       currentSnapshots: [
+        ...snapshot_lines.publicationLines(activity),
+        ...snapshot_lines.measurementLines(activity),
         for (final b in activity?['bcb_statuses'] as List? ?? const [])
           'Confirmation ${b['confirmation_id']} · revision ${b['assessment_revision']} · ${b['status']} · attempts ${b['attempt_count']} · updated ${b['updated_at']} · reason ${b['last_code'] ?? 'Not recorded'} · context ${b['context_id'] ?? 'None recorded'} · ${b['source_is_current'] == true ? 'source revision current' : 'historical source; not a current handoff'}. Actor not recorded; scientific and Owner authorization not supplied.',
         if (activity?['bcb_statuses_truncated'] == true)

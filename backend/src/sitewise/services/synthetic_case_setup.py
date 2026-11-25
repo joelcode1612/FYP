@@ -7,15 +7,39 @@ from sitewise.db.models import cq_runtime_schema as db
 from sitewise.domain.customer_questionnaire import digest
 
 
-def prepare_cases(c,run_id,developer,receipt):
+def prepare_cases(c,run_id,developer,receipt,*,campaign_id=None):
+    """Prepare the six nonhuman interactive cases for one run's campaign.
+
+    ``campaign_id`` selects the campaign explicitly. When it is omitted the
+    campaign is resolved from the run's own record of what it published
+    (``manifest_json->>'release_id'``), never from a literal assessment id: the
+    previous hard-coded ``6a59045c-…`` meant this function could only ever
+    prepare one assessment, so every other campaign failed with
+    ``NoResultFound`` before any check ran (DD-105).
+
+    The provenance checks are unchanged and still refuse: the run must not be
+    ``real_reportable``, must not be retired, must have a verified developer
+    preview grant, and the campaign must be one of the records in that run's
+    package.
+    """
     run=c.execute(text('SELECT * FROM cq_synthetic_import_runs WHERE run_id=:id'),{'id':run_id}).mappings().one()
     if run['real_reportable'] or c.scalar(text('SELECT count(*) FROM cq_synthetic_import_retirements WHERE run_id=:id'),{'id':run_id}):raise ValueError('Run is unavailable')
     if not c.scalar(text('SELECT count(*) FROM cq_synthetic_preview_grants WHERE run_id=:id AND developer_user_id=:dev'),{'id':run_id,'dev':developer}):raise ValueError('Existing verified developer grant required')
-    campaign=c.execute(text("SELECT c.*,r.manifest_json,r.manifest_hash FROM cq_campaigns c JOIN cq_manifest_releases r ON r.id=c.release_id WHERE c.owner_user_id=:owner AND c.assessment_id='6a59045c-7bc2-4c1c-942a-f4e97e65166d'"),{'owner':run['owner_user_id']}).mappings().one()
+    if campaign_id is not None:
+        campaign=c.execute(text('SELECT c.*,r.manifest_json,r.manifest_hash FROM cq_campaigns c JOIN cq_manifest_releases r ON r.id=c.release_id WHERE c.owner_user_id=:owner AND c.id=:cid'),{'owner':run['owner_user_id'],'cid':str(campaign_id)}).mappings().one()
+    else:
+        published_release=(run['manifest_json'] or {}).get('release_id')
+        if not published_release:raise ValueError('Run does not record a published release; pass campaign_id')
+        campaign=c.execute(text('SELECT c.*,r.manifest_json,r.manifest_hash FROM cq_campaigns c JOIN cq_manifest_releases r ON r.id=c.release_id WHERE c.owner_user_id=:owner AND c.release_id=:rid'),{'owner':run['owner_user_id'],'rid':str(published_release)}).mappings().one()
     # Exact campaign is one of the verified input package's two mappings.
     if not c.scalar(text("SELECT count(*) FROM cq_synthetic_import_records WHERE run_id=:run AND table_name='cq_campaigns' AND record_key->>'id'=:cid"),{'run':run_id,'cid':str(campaign['id'])}):raise ValueError('Campaign is outside this verified package')
     m=campaign['manifest_json']
-    if m['authorized_question_ids']!=['Q'+str(i).zfill(2) for i in range(1,14)]:raise ValueError('Exact full synthetic candidate required')
+    # The instrument must be complete, but completeness is a property of the
+    # manifest, not of the authorization decision: requiring all thirteen ids in
+    # `authorized_question_ids` refused every assessment that withholds a
+    # question by policy (DD-104, DD-105). What a respondent is shown is decided
+    # by `route()`, not here.
+    if [q['id'] for q in m['questions']]!=['Q'+str(i).zfill(2) for i in range(1,14)]:raise ValueError('Exact full questionnaire required')
     c.execute(text('INSERT INTO cq_synthetic_execution_grants(run_id,developer_user_id,operator_receipt) VALUES(:run,:dev,:receipt) ON CONFLICT DO NOTHING'),{'run':run_id,'dev':developer,'receipt':receipt})
     cases=[]
     for key,scenario in [('01-normal-completion','NORMAL'),('02-hypothetical-screenout','HYPOTHETICAL_SCREENOUT'),('03-pause-recovery','NORMAL'),('04-unresolved-eligibility','UNRESOLVED'),('05-full-questionnaire-retry','NORMAL'),('06-single-continue-check','NORMAL')]:

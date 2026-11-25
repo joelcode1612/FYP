@@ -11,7 +11,10 @@
 /// * `GET /m2/assessments/{id}/questionnaire-preview`
 library;
 
+import 'dart:math';
+
 import 'package:sitewise_jaspr_web/features/assessment/data/assessment_api.dart';
+import 'package:sitewise_jaspr_web/features/assessment/data/bdj_objective_proposal.dart';
 import 'package:sitewise_jaspr_web/features/authentication/data/auth_service.dart';
 
 const String _workflow = '/api/v1/project1-workflow/assessments';
@@ -29,10 +32,25 @@ final class QuestionOption {
   final bool? eligible;
 }
 
+/// Reported when the server returned no admission state at all.
+///
+/// Deliberately not `UNKNOWN`: the previous code defaulted to that word, which
+/// reads like a state the server chose and rendered as `Admission UNKNOWN ()`.
+const String unreadableState = 'UNREADABLE';
+
 /// The owner-admission state for one proposal.
 ///
 /// `state` is the server's own vocabulary (`HELD`, `ADMITTED`,
 /// `NOT_ADMISSIBLE`). The panel never derives it.
+///
+/// [pendingRequirement] is the server's own sentence describing what is
+/// outstanding — or, when the refusal is a policy result, that it is *not* a
+/// missing owner action. Stage 4 used to have no field for it and therefore
+/// rewrote every non-admitted state as "the owner has not recorded that this
+/// gap is worth researching", which misattributed
+/// `ADMISSION_NOT_RESEARCH_SUITABLE_*` to the owner. The server's sentence is
+/// now preferred verbatim, and the local fallback is used only when the server
+/// sent none.
 final class ProposalAdmission {
   const ProposalAdmission({
     required this.state,
@@ -41,6 +59,8 @@ final class ProposalAdmission {
     this.qgEligible = false,
     this.qgBlocker,
     this.admissionId,
+    this.pendingRequirement,
+    this.policyDisposition,
   });
 
   final String state;
@@ -49,20 +69,52 @@ final class ProposalAdmission {
   final bool qgEligible;
   final String? qgBlocker;
   final String? admissionId;
+  final String? pendingRequirement;
+  final String? policyDisposition;
 
   bool get isAdmitted => state == 'ADMITTED';
+
+  /// The same state, in the vocabulary Stage 3 already renders.
+  ///
+  /// Both surfaces describe one server value, so both must read it through one
+  /// parser. `unrecognised` means the wire value was absent or unknown — it is
+  /// never used for a state the server actually sent.
+  BdjAdmissionState get parsedState => BdjAdmissionState.parse(
+    state == unreadableState ? null : state,
+  );
 
   factory ProposalAdmission.fromJson(Map<String, dynamic> json) {
     final admission = json['admission'] is Map
         ? Map<String, dynamic>.from(json['admission'] as Map)
         : json;
+    // The server's authority block is emitted by
+    // `objective_admission._state` as `admission_state` / `admission_reason`.
+    // This projection used to read `state` / `reason`, which match nothing, so
+    // every Stage 4 card fell back to `UNKNOWN` with an empty reason and
+    // contradicted Stage 3 about the same proposal. The legacy names are still
+    // accepted second, so an older payload cannot silently regress.
+    final rawState = admission['admission_state'] ?? admission['state'];
+    final rawReason = admission['admission_reason'] ?? admission['reason'];
+    // A genuinely absent state is reported as unreadable, never as a state the
+    // server might have meant.
+    final state = rawState is String && rawState.trim().isNotEmpty
+        ? rawState.trim()
+        : unreadableState;
+    final rawPending = admission['pending_requirement'];
+    final rawDisposition = admission['policy_disposition'];
     return ProposalAdmission(
-      state: '${admission['state'] ?? 'UNKNOWN'}',
-      reason: '${admission['reason'] ?? ''}',
+      state: state,
+      reason: rawReason is String ? rawReason : '',
       objectiveId: admission['objective_id'] as String?,
       qgEligible: admission['qg_eligible'] == true,
       qgBlocker: admission['qg_blocker'] as String?,
       admissionId: admission['admission_id'] as String?,
+      pendingRequirement: rawPending is String && rawPending.trim().isNotEmpty
+          ? rawPending.trim()
+          : null,
+      policyDisposition: rawDisposition is String && rawDisposition.isNotEmpty
+          ? rawDisposition
+          : null,
     );
   }
 }
@@ -575,6 +627,14 @@ final class EligibilityCheck {
 /// `prepareStatus` asks whether a candidate can exist at all, `dispatchStatus`
 /// whether that candidate may reach a real provider. A `PASS` here is
 /// diagnostic only — the live runner re-verifies every condition itself.
+///
+/// The field names are the v1 ones; the contract the server actually serves is
+/// `sitewise-qg-generation-eligibility/2`, which calls the same two axes
+/// `generation` and `scientific`. The parser below reads the v2 keys first and
+/// keeps the v1 names only as a fallback, because reading only v1 made every
+/// real report render as `prepare UNVERIFIED` / `dispatch UNVERIFIED` with an
+/// empty requirement list — the server's refusal was in the payload and never
+/// reached the page.
 final class QgEligibility {
   const QgEligibility({
     required this.prepareStatus,
@@ -590,6 +650,9 @@ final class QgEligibility {
     this.proposalId,
     this.measurementId,
     this.measurementVersion,
+    this.scientificChecks = const [],
+    this.objectiveKind,
+    this.contractVersion,
   });
 
   final String prepareStatus;
@@ -609,42 +672,63 @@ final class QgEligibility {
   final String? measurementId;
   final String? measurementVersion;
 
+  /// The scientific axis, check by check. Kept separate from [checks] because
+  /// the two lists answer different questions and a refusal on one is not a
+  /// refusal on the other.
+  final List<EligibilityCheck> scientificChecks;
+
+  /// `ADDITIONAL_ASSESSMENT_OBJECTIVE` or `MANDATORY_REGISTRY_OBJECTIVE`.
+  final String? objectiveKind;
+  final String? contractVersion;
+
   factory QgEligibility.fromJson(Map<String, dynamic> json) {
-    final raw = json['checks'];
+    List<EligibilityCheck> parseChecks(Object? raw) => raw is List
+        ? raw
+              .whereType<Map>()
+              .map(
+                (row) => EligibilityCheck(
+                  checkId: '${row['check_id'] ?? ''}',
+                  title: '${row['title'] ?? ''}',
+                  status: '${row['status'] ?? 'UNVERIFIED'}',
+                  reasonCode: '${row['reason_code'] ?? ''}',
+                  sources: row['sources'] is List
+                      ? (row['sources'] as List)
+                            .map((s) => '$s')
+                            .toList(growable: false)
+                      : const [],
+                  evidence: row['evidence'] is Map
+                      ? Map<String, dynamic>.from(row['evidence'] as Map)
+                      : const {},
+                ),
+              )
+              .toList(growable: false)
+        : const [];
+
     return QgEligibility(
-      prepareStatus: '${json['prepare_status'] ?? 'UNVERIFIED'}',
-      prepareRefusal: '${json['prepare_refusal'] ?? ''}',
-      dispatchStatus: '${json['dispatch_status'] ?? 'UNVERIFIED'}',
-      dispatchRefusal: '${json['dispatch_refusal'] ?? ''}',
+      // v2 first, v1 second. `generation` is what v1 called `prepare`.
+      prepareStatus:
+          '${json['generation_status'] ?? json['prepare_status'] ?? 'UNVERIFIED'}',
+      prepareRefusal:
+          '${json['generation_refusal'] ?? json['prepare_refusal'] ?? ''}',
+      // `scientific` is what v1 called `dispatch`.
+      dispatchStatus:
+          '${json['scientific_status'] ?? json['dispatch_status'] ?? 'UNVERIFIED'}',
+      dispatchRefusal:
+          '${json['scientific_refusal'] ?? json['dispatch_refusal'] ?? ''}',
       objectiveId: json['objective_id'] as String?,
+      objectiveKind: json['objective_kind'] as String?,
+      contractVersion: json['contract_version'] as String?,
       admissionId: json['admission_id'] as String?,
       proposalId: json['proposal_id'] as String?,
       measurementId: json['measurement_id'] as String?,
       measurementVersion: json['measurement_version'] as String?,
       fieldingAuthorized: json['fielding_authorized'] == true,
-      scientificallyAccepted: json['scientifically_accepted'] == true,
+      scientificallyAccepted:
+          json['scientifically_approved'] == true ||
+          json['scientifically_accepted'] == true,
       dispatchesModel: json['dispatches_model'] == true,
-      checks: raw is List
-          ? raw
-                .whereType<Map>()
-                .map(
-                  (row) => EligibilityCheck(
-                    checkId: '${row['check_id'] ?? ''}',
-                    title: '${row['title'] ?? ''}',
-                    status: '${row['status'] ?? 'UNVERIFIED'}',
-                    reasonCode: '${row['reason_code'] ?? ''}',
-                    sources: row['sources'] is List
-                        ? (row['sources'] as List)
-                              .map((s) => '$s')
-                              .toList(growable: false)
-                        : const [],
-                    evidence: row['evidence'] is Map
-                        ? Map<String, dynamic>.from(row['evidence'] as Map)
-                        : const {},
-                  ),
-                )
-                .toList(growable: false)
-          : const [],
+      checks: parseChecks(json['generation_checks'] ?? json['checks']),
+      scientificChecks: parseChecks(json['scientific_checks']),
     );
   }
 
@@ -670,8 +754,240 @@ final class QgEligibility {
   }
 }
 
+
+/// The authority the owner's approval already establishes (contract 2.1).
+///
+/// The objective identity is derived by the server from the proposal
+/// (`proposal:<uuid>`), not from a registry id, because an additional objective
+/// has no registry entry. The client asks for it rather than composing the
+/// string itself, so the contract has one definition.
+final class ObjectiveAuthority {
+  const ObjectiveAuthority({
+    required this.objectiveId,
+    required this.objectiveKind,
+    required this.objectiveText,
+    required this.decisionId,
+    required this.decision,
+    required this.confirmationRevision,
+  });
+
+  final String objectiveId;
+  final String objectiveKind;
+  final String objectiveText;
+  final String decisionId;
+  final String decision;
+  final int confirmationRevision;
+
+  bool get isApproved => decision == 'APPROVED';
+
+  factory ObjectiveAuthority.fromJson(Map<String, dynamic> json) {
+    final decision = json['decision'];
+    return ObjectiveAuthority(
+      objectiveId: json['objective_id'] as String? ?? '',
+      objectiveKind: json['objective_kind'] as String? ?? '',
+      objectiveText: json['objective_text'] as String? ?? '',
+      decisionId: decision is Map
+          ? decision['decision_id'] as String? ?? ''
+          : '',
+      decision: decision is Map ? decision['decision'] as String? ?? '' : '',
+      confirmationRevision:
+          (json['confirmation_revision'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+/// One purpose's execution state, read from the AI ledger.
+///
+/// The ledger records discrete states, so this carries a state and the facts
+/// behind it — never a percentage. [progressPercent] is deliberately absent from
+/// this type: the server reports it as `null` and the interface must not invent
+/// one.
+final class AiExecutionPurpose {
+  const AiExecutionPurpose({
+    required this.purpose,
+    required this.state,
+    required this.reason,
+    this.attemptNo,
+    this.attemptsReserved = 0,
+    this.reservedAt,
+    this.receiptOutcome,
+    this.receiptAt,
+    this.persisted = 0,
+    this.pendingValidation = 0,
+  });
+
+  /// `BDJ` or `QG`.
+  final String purpose;
+
+  /// One of BLOCKED, PROCESSING, RETURNED, VALIDATING, PERSISTED, FAILED,
+  /// UNKNOWN_OUTCOME.
+  final String state;
+  final String reason;
+  final int? attemptNo;
+  final int attemptsReserved;
+  final String? reservedAt;
+  final String? receiptOutcome;
+  final String? receiptAt;
+  final int persisted;
+  final int pendingValidation;
+
+  bool get isTerminal => state == 'PERSISTED' || state == 'FAILED';
+
+  factory AiExecutionPurpose.fromJson(Map<String, dynamic> json) {
+    final domain = json['domain'];
+    return AiExecutionPurpose(
+      purpose: json['purpose'] as String? ?? '',
+      state: json['state'] as String? ?? 'UNKNOWN_OUTCOME',
+      reason: json['reason'] as String? ?? '',
+      attemptNo: (json['attempt_no'] as num?)?.toInt(),
+      attemptsReserved: (json['attempts_reserved'] as num?)?.toInt() ?? 0,
+      reservedAt: json['reserved_at'] as String?,
+      receiptOutcome: json['receipt_outcome'] as String?,
+      receiptAt: json['receipt_at'] as String?,
+      persisted: domain is Map
+          ? (domain['persisted'] as num?)?.toInt() ?? 0
+          : 0,
+      pendingValidation: domain is Map
+          ? (domain['pending_validation'] as num?)?.toInt() ?? 0
+          : 0,
+    );
+  }
+}
+
+final class AiExecutionReading {
+  const AiExecutionReading({
+    required this.purposes,
+    required this.domainReadable,
+    this.progressPercent,
+    this.bdjObjectives,
+  });
+
+  final List<AiExecutionPurpose> purposes;
+
+  /// False when the domain counts could not be read. A count that could not be
+  /// read is not a count of zero, and the interface says so.
+  final bool domainReadable;
+
+  /// Always null today, and kept as a field so the interface can show that the
+  /// absence is deliberate rather than an omission.
+  final int? progressPercent;
+
+  /// BDJ objective proposals: how many exist, how many the owner approved, and
+  /// how many were scientifically admitted. The last two are separate facts —
+  /// an approved objective can still be refused as research-unsuitable — and
+  /// null means the read failed, never zero.
+  final BdjObjectiveCounts? bdjObjectives;
+
+  AiExecutionPurpose? forPurpose(String purpose) {
+    for (final p in purposes) {
+      if (p.purpose == purpose) return p;
+    }
+    return null;
+  }
+
+  factory AiExecutionReading.fromJson(Map<String, dynamic> json) {
+    final raw = json['purposes'];
+    return AiExecutionReading(
+      purposes: raw is List
+          ? raw
+                .whereType<Map<String, dynamic>>()
+                .map(AiExecutionPurpose.fromJson)
+                .toList(growable: false)
+          : const <AiExecutionPurpose>[],
+      domainReadable: json['domain_readable'] as bool? ?? false,
+      progressPercent: (json['progress_percent'] as num?)?.toInt(),
+      bdjObjectives: json['bdj_objectives'] is Map
+          ? BdjObjectiveCounts.fromJson(
+              (json['bdj_objectives'] as Map).cast<String, dynamic>(),
+            )
+          : null,
+    );
+  }
+}
+
+/// Proposal counts for Stage 3's summary.
+final class BdjObjectiveCounts {
+  const BdjObjectiveCounts({
+    required this.proposed,
+    required this.approved,
+    required this.admitted,
+    required this.readable,
+  });
+
+  final int proposed;
+  final int approved;
+  final int admitted;
+
+  /// False when the server could not read the counts. The summary then says
+  /// "unavailable" rather than printing a zero it cannot stand behind.
+  final bool readable;
+
+  factory BdjObjectiveCounts.fromJson(Map<String, dynamic> json) =>
+      BdjObjectiveCounts(
+        proposed: (json['proposed'] as num?)?.toInt() ?? 0,
+        approved: (json['approved'] as num?)?.toInt() ?? 0,
+        admitted: (json['admitted'] as num?)?.toInt() ?? 0,
+        readable: json['readable'] as bool? ?? false,
+      );
+}
+
+/// The owner's QG processing permission for one objective.
+///
+/// [state] distinguishes five situations the interface must word differently:
+/// `ABSENT` (never asked), `GRANTED`, `EXPIRED`, `REVOKED` and `CONSUMED` (the
+/// single authorised attempt is spent).
+final class QgConsent {
+  const QgConsent({
+    required this.state,
+    required this.disclosure,
+    this.consentId,
+    this.maxAttempts = 0,
+    this.expiresAt,
+    this.grantedAt,
+    this.revokedReason,
+  });
+
+  final String state;
+  final Map<String, dynamic> disclosure;
+  final String? consentId;
+  final int maxAttempts;
+  final String? expiresAt;
+  final String? grantedAt;
+  final String? revokedReason;
+
+  bool get isGranted => state == 'GRANTED';
+
+  factory QgConsent.fromJson(Map<String, dynamic> json) {
+    final grant = json['grant'];
+    final disclosure = json['disclosure'];
+    return QgConsent(
+      state: json['state'] as String? ?? 'ABSENT',
+      disclosure: disclosure is Map<String, dynamic>
+          ? disclosure
+          : const <String, dynamic>{},
+      consentId: grant is Map ? grant['consent_id'] as String? : null,
+      maxAttempts: grant is Map
+          ? (grant['max_attempts'] as num?)?.toInt() ?? 0
+          : 0,
+      expiresAt: grant is Map ? grant['expires_at'] as String? : null,
+      grantedAt: grant is Map ? grant['granted_at'] as String? : null,
+      revokedReason: grant is Map ? grant['revoked_reason'] as String? : null,
+    );
+  }
+}
+
 /// Transport port for the Stage 4/5 reads and the Stage 4 review decisions.
 abstract interface class StageFourFivePort {
+  /// The authority the owner's approval establishes for one proposal.
+  ///
+  /// This is the contract 2.1 replacement for the admission read: the approval
+  /// is the authority, and the server names the objective it authorises.
+  Future<ApiResult<ObjectiveAuthority>> objectiveAuthority({
+    required String assessmentId,
+    required String proposalId,
+    required String contextId,
+  });
+
   Future<ApiResult<ProposalAdmission>> admission({
     required String assessmentId,
     required String proposalId,
@@ -732,10 +1048,47 @@ abstract interface class StageFourFivePort {
   });
 
   Future<ApiResult<QuestionnairePreview>> preview({required String assessmentId});
+
+  /// What the AI ledger recorded for BDJ and Direct-QG on this assessment.
+  ///
+  /// Reading this never invokes a model, so the card may poll it.
+  Future<ApiResult<AiExecutionReading>> executionStatus({
+    required String assessmentId,
+  });
+
+  /// Whether the owner has granted QG processing for one approved objective.
+  Future<ApiResult<QgConsent>> qgConsent({
+    required String assessmentId,
+    required String proposalId,
+  });
+
+  /// Records the owner's QG processing permission.
+  ///
+  /// [echo] is what the interface showed them, sent back unchanged. The server
+  /// re-derives every term and refuses any disagreement, so this cannot widen
+  /// the disclosure.
+  Future<ApiResult<QgConsent>> grantQgConsent({
+    required String assessmentId,
+    required String proposalId,
+    required Map<String, dynamic> echo,
+    String? contextId,
+  });
 }
 
 final class StageFourFiveApi implements StageFourFivePort {
   const StageFourFiveApi();
+
+  @override
+  Future<ApiResult<ObjectiveAuthority>> objectiveAuthority({
+    required String assessmentId,
+    required String proposalId,
+    required String contextId,
+  }) => _call(
+    '$_m2/assessments/${Uri.encodeComponent(assessmentId)}/objective-authority'
+    '?proposal_id=${Uri.encodeQueryComponent(proposalId)}'
+    '&context_id=${Uri.encodeQueryComponent(contextId)}',
+    ObjectiveAuthority.fromJson,
+  );
 
   @override
   Future<ApiResult<ProposalAdmission>> admission({
@@ -879,6 +1232,76 @@ final class StageFourFiveApi implements StageFourFivePort {
     '$_m2/assessments/${Uri.encodeComponent(assessmentId)}/questionnaire-preview',
     QuestionnairePreview.fromJson,
   );
+
+  @override
+  Future<ApiResult<AiExecutionReading>> executionStatus({
+    required String assessmentId,
+  }) => _call(
+    '$_m2/assessments/${Uri.encodeComponent(assessmentId)}/ai-execution-status',
+    AiExecutionReading.fromJson,
+  );
+
+  @override
+  Future<ApiResult<QgConsent>> qgConsent({
+    required String assessmentId,
+    required String proposalId,
+  }) => _call(
+    '$_m2/assessments/${Uri.encodeComponent(assessmentId)}/qg-consents/current'
+    '?proposal_id=${Uri.encodeQueryComponent(proposalId)}',
+    QgConsent.fromJson,
+  );
+
+  @override
+  Future<ApiResult<QgConsent>> grantQgConsent({
+    required String assessmentId,
+    required String proposalId,
+    required Map<String, dynamic> echo,
+    String? contextId,
+  }) => _call(
+    '$_m2/assessments/${Uri.encodeComponent(assessmentId)}/qg-consents',
+    (json) {
+      // A declined request answers 200 with granted:false and no grant, which is
+      // a decision rather than a failure. It is reported as ABSENT so the
+      // interface says "you did not grant this" instead of "it did not work".
+      if (json['granted'] == false) {
+        return QgConsent.fromJson({
+          'state': 'ABSENT',
+          'disclosure': json['disclosure'],
+        });
+      }
+      final consent = json['consent'];
+      return QgConsent.fromJson({
+        'state': consent is Map ? consent['state'] : 'GRANTED',
+        'grant': consent,
+        'disclosure': json['disclosure'],
+      });
+    },
+    method: 'POST',
+    body: {
+      'proposal_id': proposalId,
+      if (contextId != null) 'context_id': contextId,
+      'request_id': _requestId(),
+      ...echo,
+    },
+  );
+
+  /// A per-attempt idempotency key, so a double-click cannot record two
+  /// permissions and a retry is recognised as the same request.
+  ///
+  /// The server types this as a UUID, so it is generated in that shape rather
+  /// than as an opaque string: a malformed id would be rejected as a validation
+  /// error before it ever reached the idempotency check.
+  static String _requestId() {
+    final random = Random.secure();
+    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
+    bytes[8] = (bytes[8] & 0x3f) | 0x80; // variant 10
+    String hex(int start, int end) => bytes
+        .sublist(start, end)
+        .map((b) => b.toRadixString(16).padLeft(2, '0'))
+        .join();
+    return '${hex(0, 4)}-${hex(4, 6)}-${hex(6, 8)}-${hex(8, 10)}-${hex(10, 16)}';
+  }
 
   static Future<ApiResult<T>> _call<T>(
     String path,

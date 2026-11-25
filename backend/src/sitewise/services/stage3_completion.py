@@ -381,13 +381,21 @@ def collect(cur, *, marketplace_assessment_id: UUID, m2_assessment_id: UUID,
             cur, m2_assessment_id, actor_id, records["confirmation"])
 
     if records["context"]:
+        # `m2_business_contexts.context_id` is `uuid`, so the driver hands back a
+        # `UUID`; `m2_bdj_objective_proposals.context_id` is `varchar(64)`
+        # (`20261121_0100_m2_bdj_objective_proposals.sql:16`). Binding the UUID
+        # object raises `operator does not exist: character varying = uuid`, which
+        # made `collect` — and therefore the whole completion verdict — fail for
+        # every assessment that has a business context. Normalising to text here
+        # matches the column that is actually compared, and changes no value: the
+        # varchar holds the same uuid string.
         records["proposals"] = _rows(
             cur,
             "select proposal_id, review_state, owner_user_id, context_packet_hash, "
             "confirmation_revision, execution_mode "
             "from public.m2_bdj_objective_proposals "
             "where assessment_id = %s and context_id = %s",
-            (m2_assessment_id, records["context"]["context_id"]),
+            (m2_assessment_id, str(records["context"]["context_id"])),
         )
         for p in records["proposals"]:
             records["decisions"][p["proposal_id"]] = _rows(

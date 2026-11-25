@@ -519,16 +519,38 @@ final class ApiM2Repository {
     return result;
   }
 
+  /// The exact terms the interface must show before asking for AI permission.
+  ///
+  /// The client never composes these: it displays what the server discloses and
+  /// echoes it back unchanged. `build_consent` refuses any disagreement, so a
+  /// locally invented term would be a refusal rather than a wider grant.
+  Future<Map<String, dynamic>> aiProcessingDisclosure() async {
+    final result =
+        await client.get('/api/v1/m2/ai-processing-disclosure');
+    if (result['contract_version'] is! String ||
+        result['provider'] is! String ||
+        result['purpose'] is! String ||
+        result['endpoint'] is! String ||
+        result['model'] is! String) {
+      throw const FormatException('AI-processing disclosure is incomplete.');
+    }
+    return result;
+  }
+
   Future<Map<String, dynamic>> confirm(
     M2Draft d,
     List<String> findingIds, {
     String? marketplaceAssessmentId,
+    Map<String, dynamic>? aiProcessing,
   }) async {
     if (marketplaceAssessmentId != null) _id(marketplaceAssessmentId);
     final result = await action(d, 'confirm', {
       'acknowledged_issue_ids': findingIds,
       if (marketplaceAssessmentId != null)
         'marketplace_assessment_id': marketplaceAssessmentId,
+      // Omitted, never false-by-default: absence and "declined" are different
+      // records, and the server treats only an affirmative echo as a grant.
+      if (aiProcessing != null) 'ai_processing': aiProcessing,
     });
     if (result['assessment_id'] != d.id ||
         result['assessment_revision'] != d.revision ||

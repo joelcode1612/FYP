@@ -183,12 +183,21 @@ def validate_response(spec: FixedOptionMeasurement, selected) -> list[str]:
 
 def validate_fixed_candidate(raw: dict, facts: ConfirmedFacts, *,
                              supported_formats: frozenset[str],
-                             approved_population: str,
-                             period_required: bool) -> FixedOptionCandidate:
+                             approved_population: str | None,
+                             period_required: bool,
+                             population_basis: str = 'APPROVED_SPECIFICATION') -> FixedOptionCandidate:
     """Admit a source-bound proposal; semantic quality remains for review.
 
     Restrict routing to END until a server-authoritative target/version policy is
     available. Never infer the approved population from model output.
+
+    ``population_basis`` says whether an approved population exists at all.
+    Under contract 2.1 a candidate may be drafted against a *proposed*
+    measurement, in which case there is nothing to compare the candidate's
+    population against. Comparing it to the model's own output would make the
+    check self-satisfying, which is the same defect as checking a purpose the
+    caller just wrote (DD-034). So the proposed basis requires only that a
+    population is declared, and the row records that it is not approved.
     """
     try:
         candidate = FixedOptionCandidate.model_validate(raw)
@@ -207,7 +216,13 @@ def validate_fixed_candidate(raw: dict, facts: ConfirmedFacts, *,
         raise WorkflowHeld('QG_FIXED_MEASUREMENT_REQUIRED')
     spec = validate_fixed_measurement(candidate.fixed_measurement.model_dump(by_alias=True),
         supported_formats=supported_formats, period_required=period_required)
-    if not approved_population.strip() or spec.population != approved_population:
+    if population_basis == 'PROPOSED_NOT_CONFIRMED':
+        # No approved population exists to compare against. Requiring a declared
+        # one keeps the field answerable without pretending it was approved.
+        if not str(spec.population or '').strip():
+            raise WorkflowHeld('QG_POPULATION_NOT_DECLARED')
+    elif (not str(approved_population or '').strip()
+          or spec.population != approved_population):
         raise WorkflowHeld('QG_POPULATION_AUTHORITY_MISMATCH')
     if [o.code for o in spec.options] != candidate.response_codes or [o.label for o in spec.options] != candidate.response_options:
         raise WorkflowHeld('QG_FIXED_OPTION_MISMATCH')

@@ -58,6 +58,10 @@ class _FakeProposalPort implements BdjObjectiveProposalPort {
   ApiResult<BdjObjectiveDecision>? readDecisionResult;
   ApiResult<BdjObjectiveDecision>? decideResult;
 
+  /// Overrides the evaluate envelope so a LIVE TokenHarbour pass can be tested
+  /// without changing the shared simulated fixture used by other assertions.
+  Map<String, dynamic>? evaluationOverride;
+
   final listCalls = <String>[];
   final decideCalls = <String>[];
 
@@ -97,7 +101,9 @@ class _FakeProposalPort implements BdjObjectiveProposalPort {
     required int expectedRevision,
     required String contextId,
   }) async => ApiResult.success(
-    BdjObjectiveEvaluation.fromJson(evaluationPayload()),
+    BdjObjectiveEvaluation.fromJson(
+      evaluationOverride ?? evaluationPayload(),
+    ),
   );
 
   @override
@@ -355,6 +361,69 @@ void main() {
     expect(find.text('Approve'), findsOneComponent);
   });
 
+  testComponents('a stored decision tells the owner the record may have moved', (
+    tester,
+  ) async {
+    // Stage 3 completes on its own evidence — an admitted objective — not on a
+    // stage-write endpoint. This panel therefore has to report the save so the
+    // owning page can re-read the assessment record; that re-read is what moves
+    // the count from 2/5 (40%) to 3/5 (60%). Reading the list is not a save.
+    port.decideResult = ApiResult.success(
+      BdjObjectiveDecision.fromJson(
+        heldDecisionPayload(proposalId: sourcedProposalId),
+      ),
+    );
+    var notified = 0;
+    tester.pumpComponent(
+      BdjObjectiveProposalPanel(
+        marketplaceAssessmentId: marketplaceAssessmentId,
+        api: port,
+        onDecisionRecorded: () => notified++,
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(notified, 0, reason: 'reading proposals is not a save');
+
+    await tester.click(
+      find.ancestor(of: find.text('Approve'), matching: find.tag('button')).first,
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(port.decideCalls.single, '$sourcedProposalId|APPROVED');
+    expect(notified, 1);
+  });
+
+  testComponents('a refused decision does not claim anything moved', (
+    tester,
+  ) async {
+    // The re-read is only worth triggering when something was stored. A 409 is
+    // the source changing under the decision — nothing was recorded, so the
+    // page must not be told to reload as if it had been.
+    port.decideResult = const ApiResult.error(
+      AssessmentFailure(status: 409, message: 'The source changed.'),
+    );
+    var notified = 0;
+    tester.pumpComponent(
+      BdjObjectiveProposalPanel(
+        marketplaceAssessmentId: marketplaceAssessmentId,
+        api: port,
+        onDecisionRecorded: () => notified++,
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    await tester.click(
+      find.ancestor(of: find.text('Approve'), matching: find.tag('button')).first,
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(notified, 0);
+  });
+
   testComponents('a simulated pass is labelled, and a re-read drops the label', (
     tester,
   ) async {
@@ -384,6 +453,46 @@ void main() {
     await tester.pump();
     // The list endpoint returns persisted rows only, so the note cannot outlive
     // the re-read and imply a run that this read did not perform.
+    expect(
+      find.textContaining('Simulated pass — no cloud model was called'),
+      findsNothing,
+    );
+  });
+
+  testComponents('a live TokenHarbour pass highlights the updated objectives', (
+    tester,
+  ) async {
+    final payload = evaluationPayload();
+    final execution = Map<String, dynamic>.from(
+      payload['execution'] as Map<String, dynamic>,
+    )
+      ..['execution_mode'] = 'LIVE'
+      ..['model_provider'] = 'tokenharbor'
+      ..['dispatched'] = true;
+    port.evaluationOverride = Map<String, dynamic>.from(payload)
+      ..['execution'] = execution;
+
+    tester.pumpComponent(panel());
+    await tester.pump();
+    await tester.pump();
+    await tester.click(
+      find.ancestor(of: find.text('Re-run'), matching: find.tag('button')).first,
+    );
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      find.textContaining('Latest governed LLM result updated'),
+      findsOneComponent,
+    );
+    expect(
+      find.text(
+        'Source: live model result from TokenHarbour, not synthetic data.',
+      ),
+      findsOneComponent,
+    );
+    expect(find.text('Updated by latest LLM pass'), findsNComponents(3));
     expect(
       find.textContaining('Simulated pass — no cloud model was called'),
       findsNothing,

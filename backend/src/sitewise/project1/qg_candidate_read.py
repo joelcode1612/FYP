@@ -50,10 +50,21 @@ def _bind(conn, actor_id):
     The explicit owner predicate in each statement remains authoritative; this is
     the second layer, and it is what makes a foreign owner's row indistinguishable
     from a missing one.
+
+    ``is_local=true`` (DD-R20-1). The binding must not outlive the transaction
+    that made it: these helpers run on pooled connections, and a session-scoped
+    ``set_config`` inside a transaction that COMMITS stays on the connection
+    after it is returned to the pool, so the next checkout would inherit the
+    previous actor. Measured on ``project1_pg18_migrated_tests``: with
+    ``is_local=false`` the next checkout on the same backend pid read the
+    previous actor; with ``is_local=true`` it read unset. The read-only helpers
+    below hid the defect because returning a connection to the pool rolls back,
+    which reverts a non-local ``SET`` — only the ``engine.begin()`` writers
+    commit, and only they leaked.
     """
     if actor_id is None:
         raise WorkflowHeld('PROPOSAL_OWNER_REQUIRED')
-    conn.execute(text("SELECT set_config('project1.actor_id', :actor, false)"),
+    conn.execute(text("SELECT set_config('project1.actor_id', :actor, true)"),
                  {'actor': str(actor_id)})
 
 
@@ -137,10 +148,18 @@ def project_candidate(row: dict) -> dict:
         'policy_disposition': row.get('policy_disposition'),
         'policy_classification': row.get('policy_classification'),
         'policy_version': row.get('policy_version'),
+        # A contract-2.1 candidate carries no admission row, so `proposal_id`
+        # is null and the objective identity is the derived
+        # `proposal:<proposal_id>` written by `derive_objective_authority`.
+        # Reading only the column classified every such candidate as
+        # UNCLASSIFIED even though its objective came from a proposal.
         'objective_classification': ('FIXED_O1_O6'
                                      if row.get('objective_id') in
                                      ('O1', 'O2', 'O3', 'O4', 'O5', 'O6')
-                                     else ('OPTIONAL_BDJ' if row.get('proposal_id')
+                                     else ('OPTIONAL_BDJ'
+                                           if (row.get('proposal_id') or
+                                               str(row.get('objective_id') or '')
+                                               .startswith('proposal:'))
                                            else 'UNCLASSIFIED')),
 
         # -- measurement --------------------------------------------------------
@@ -235,6 +254,35 @@ def list_candidates(engine, *, actor_id, assessment_id, limit: int = 50) -> dict
     }
 
 
+def list_candidates_in_session(session, *, actor_id, assessment_id,
+                               limit: int = 200) -> dict:
+    """Same read as :func:`list_candidates`, on an existing owner-bound session.
+
+    Exists so composition reads candidates inside the transaction that already
+    verified the assessment, revision and confirmation. A second connection
+    could observe a different revision, which would let the composed document mix
+    a verified header with candidate rows from another state.
+
+    The actor GUC is set ``is_local`` so it is scoped to this transaction and
+    cannot leak to a later statement on the pooled connection.
+    """
+    if actor_id is None:
+        raise WorkflowHeld('PROPOSAL_OWNER_REQUIRED')
+    session.execute(text("SELECT set_config('project1.actor_id', :actor, true)"),
+                    {'actor': str(actor_id)})
+    rows = session.execute(
+        text(_SELECT + ' ORDER BY c.created_at DESC LIMIT :limit'),
+        {'assessment': str(assessment_id),
+         'actor': str(actor_id),
+         'limit': max(1, min(int(limit), 200))}).mappings().all()
+    return {
+        'contract_version': READ_CONTRACT,
+        'assessment_id': str(assessment_id),
+        'candidate_count': len(rows),
+        'candidates': [project_candidate(dict(row)) for row in rows],
+    }
+
+
 def read_candidate(engine, *, actor_id, assessment_id, candidate_id) -> dict:
     """One candidate. A foreign owner's id is indistinguishable from a missing one."""
     with engine.connect() as conn:
@@ -309,12 +357,37 @@ def set_expected_answer(engine, *, actor_id, assessment_id, candidate_id,
 
     Not a respondent answer. It is never written to a customer-response table and
     never read by a CQ or EE-01 calculation. A ``None`` code clears it.
+
+    Three predicates are enforced, all against the row that is about to be
+    written -- never against a copy:
+
+    1. the candidate belongs to this assessment and this owner;
+    2. the candidate was raised against the assessment's **current** revision,
+       so a selection cannot attach to a superseded question version;
+    3. the code exists in that candidate's own option set, and the response
+       format can represent a selection at all.
+
+    Predicate 2 was missing before 2026-11-24: ``record_review`` refused a stale
+    candidate but this function did not, so a superseded candidate could still
+    receive an intended answer.
+
+    One row carries both facts, so the write touches only ``expected_option_code``
+    and leaves ``recorded_at`` alone. It used to set ``recorded_at = now()`` on
+    conflict, which restamped the *decision's* timestamp every time the owner
+    changed their expectation — the Stage 4 card printed that column under
+    "Recorded review", so a decision made on Monday was shown as recorded on
+    Friday because an expectation had been edited. A row created by this function
+    alone still takes the column default, which is the time of creation, and no
+    decision is displayed against it because ``decision`` stays null.
     """
+    from sitewise.services.owner_intended_option import (
+        OwnerIntendedOptionError, policy_for, validate_selection)
+
     with engine.begin() as conn:
         _bind(conn, actor_id)
         row = conn.execute(text("""
             SELECT c.candidate_id, c.assessment_revision, c.owner_user_id,
-                   c.candidate_json
+                   c.response_format, c.candidate_json
               FROM public.m2_qg_candidates c
               JOIN public.m2_assessments m ON m.id = c.assessment_id
              WHERE c.candidate_id = :cid AND c.assessment_id = :assessment
@@ -326,23 +399,35 @@ def set_expected_answer(engine, *, actor_id, assessment_id, candidate_id,
         current = _current_revision(conn, assessment_id)
         if expected_revision is not None and int(expected_revision) != current:
             raise WorkflowHeld('QG_CANDIDATE_REVISION_STALE')
+        if int(row['assessment_revision']) != current:
+            # The candidate itself is stale, whatever the caller asked for.
+            raise WorkflowHeld('QG_CANDIDATE_REVISION_STALE')
 
-        if option_code is not None:
-            allowed = {option['code'] for option in _options(_body(row['candidate_json']))}
-            if option_code not in allowed:
-                raise WorkflowHeld('QG_CANDIDATE_OPTION_NOT_AVAILABLE')
+        body = _body(row['candidate_json'])
+        codes = [option['code'] for option in _options(body)]
+        try:
+            verdict = validate_selection(
+                response_format=row['response_format'] or body.get('response_format'),
+                option_codes=codes,
+                selected=option_code,
+            )
+        except OwnerIntendedOptionError as exc:
+            raise WorkflowHeld(exc.code) from None
 
         conn.execute(text("""
             INSERT INTO public.m2_qg_candidate_reviews
                 (candidate_id, owner_user_id, reviewer_id, expected_option_code)
             VALUES (:cid, :owner, :actor, :code)
             ON CONFLICT (candidate_id, reviewer_id) DO UPDATE
-               SET expected_option_code = excluded.expected_option_code,
-                   recorded_at = now()
+               SET expected_option_code = excluded.expected_option_code
         """), {'cid': str(candidate_id), 'owner': str(row['owner_user_id']),
                'actor': str(actor_id), 'code': option_code})
     return {'contract_version': READ_CONTRACT, 'candidate_id': str(candidate_id),
-            'expected_option_code': option_code}
+            'expected_option_code': option_code,
+            'selection_policy': policy_for(row['response_format']),
+            'owner_only': True,
+            'respondent_visible': False,
+            'is_customer_evidence': False}
 
 
 __all__ = ['READ_CONTRACT', 'REVIEW_DECISIONS', 'list_candidates', 'read_candidate',

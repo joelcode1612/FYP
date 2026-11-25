@@ -78,8 +78,11 @@ NOT_RESEARCH_SUITABLE = frozenset({
     'BUSINESS_DECISION_REQUIRED', 'HOLD_REVIEW', 'NO_ACTION'})
 
 #: Resolutions (from ``issue_resolution.resolve_candidate``) that deny a
-#: candidate objective even when no coded item rule fired.
-_UNSUITABLE_RESOLUTIONS = frozenset({'NOT_CUSTOMER_RESEARCH_SUITABLE'})
+#: candidate objective even when no coded item rule fired. Public because the
+#: QG gate must read the same set: a refusal carried as a resolution rather than
+#: a disposition is still a refusal (DD-123).
+UNSUITABLE_RESOLUTIONS = frozenset({'NOT_CUSTOMER_RESEARCH_SUITABLE'})
+_UNSUITABLE_RESOLUTIONS = UNSUITABLE_RESOLUTIONS
 
 
 def proposal_hash(row: dict) -> str:
@@ -194,8 +197,15 @@ def policy_binding(conn, row: dict, *, objective_id: str | None = None) -> dict:
     declarations = _cited_declarations(conn, row)
     issues = ir.classify(declarations)
 
-    disposition = issues[0]['disposition'] if issues else None
-    classification = issues[0]['classification'] if issues else None
+    # DD-064: the governing issue, not simply the first one. A declared customer
+    # uncertainty outranks an undecided planning item cited as context, so a
+    # proposal is no longer refused for the study area when the gap it actually
+    # addresses is one customers can answer. A proposal that cites only the
+    # planning item still has that item as its governing issue and is still
+    # refused.
+    governing = ir.governing_issue(issues)
+    disposition = governing['disposition'] if governing else None
+    classification = governing['classification'] if governing else None
     rule_objective = next((i['link_objective'] for i in issues
                            if i.get('link_objective')), None)
     topic_objective = None
@@ -441,15 +451,20 @@ def admission_state(engine, proposal_id, *, source_fingerprint, actor_id) -> dic
                 return {**_state('NOT_ADMISSIBLE', policy['reason']),
                         'policy_disposition': policy['disposition'],
                         'policy_classification': policy['classification'],
+                        # The refusal may be carried by a coded disposition or
+                        # by a text resolution; either way the policy has said
+                        # no, and this flag is what a downstream gate should
+                        # read instead of guessing from the disposition alone.
+                        'policy_refused': True,
                         'policy_version': policy['policy_version'],
                         'policy_adopted': policy['policy_adopted'],
                         'cited_items': policy['cited_items'],
                         'pending_requirement': (
-                            'The candidate policy classifies this gap as '
-                            f"{policy['disposition']}; a customer survey is not "
-                            'the instrument that can answer it, so no objective '
-                            'admission is available. This is a policy result, '
-                            'not a missing owner action.')}
+                            'The candidate policy refuses this gap '
+                            f'({_refusal_basis(policy)}); a customer survey is '
+                            'not the instrument that can answer it, so no '
+                            'objective admission is available. This is a policy '
+                            'result, not a missing owner action.')}
             return {**_state('HELD', 'M2_UNCERTAINTY_LINK_REQUIRED'),
                     'policy_disposition': policy['disposition'],
                     'policy_classification': policy['classification'],
@@ -479,11 +494,37 @@ def admission_state(engine, proposal_id, *, source_fingerprint, actor_id) -> dic
                 'objective_id': record['objective_id'],
                 'policy_disposition': record['policy_disposition'],
                 'policy_resolution': record['policy_resolution'],
+                # An admission row is a decision, not an immunity: a record
+                # written under a disposition or resolution the policy now
+                # treats as a refusal still reports that refusal, so the QG
+                # gate cannot be widened by a stale admission.
+                'policy_refused': (record['policy_disposition'] in NOT_RESEARCH_SUITABLE
+                                   or record['policy_resolution'] in _UNSUITABLE_RESOLUTIONS),
                 'qg_eligible': qg_eligible,
                 'qg_blocker': None if qg_eligible else (
                     'ADMISSION_BINDS_NO_FIXED_OBJECTIVE'
                     if record['objective_id'] is None
                     else 'CLARIFICATION_PENDING')}
+
+
+def _refusal_basis(policy: dict) -> str:
+    """The shortest honest name for *why* the policy refused this gap.
+
+    Two paths reach ``NOT_ADMISSIBLE`` and only one of them has a coded
+    ``disposition``. The text-resolution path has none, and interpolating that
+    field directly printed ``The candidate policy classifies this gap as None``
+    — a sentence that tells the owner nothing and reads like a bug in the
+    refusal itself. The resolution is the basis that path actually used, so it
+    is quoted instead.
+    """
+    disposition = policy.get('disposition')
+    if disposition:
+        return f'disposition {disposition}'
+    resolution = policy.get('resolution')
+    if resolution:
+        return f'text resolution {resolution}'
+    # Nothing coded fired: the reason code is the only statement available.
+    return f"reason {policy.get('reason') or 'UNSPECIFIED'}"
 
 
 def _state(state: str, reason: str) -> dict:
@@ -502,6 +543,12 @@ def _state(state: str, reason: str) -> dict:
         'objective_id': None,
         'policy_disposition': None,
         'policy_classification': None,
+        #: True only when the policy refused this gap. It is separate from
+        #: ``policy_disposition`` because the text-resolution path refuses
+        #: without ever setting a disposition, and a reader that consults only
+        #: the disposition cannot tell that refusal from "nothing decided yet"
+        #: (DD-123).
+        'policy_refused': False,
         'policy_version': None,
         'policy_adopted': False,
         'qg_eligible': False,

@@ -10,7 +10,9 @@ const path = require('path');
 const { chromium } = require('playwright-core');
 const { installHarnessSession, FIXTURE } = require('./session_harness');
 
-const EXE = 'C:/Users/Lenovo/AppData/Local/ms-playwright/chromium-1248/chrome-win64/chrome.exe';
+const EXE =
+  process.env.CHROME_PATH ||
+  'C:/Users/Lenovo/AppData/Local/ms-playwright/chromium-1248/chrome-win64/chrome.exe';
 
 const GROUPS = [
   {
@@ -188,6 +190,10 @@ const GROUPS = [
     bypassCSP: true,
   });
   const page = await ctx.newPage();
+  const failed = [];
+  page.on('response', (res) => {
+    if (res.status() >= 400) failed.push(`${res.status()} ${res.url()}`);
+  });
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
   page.on('console', (m) => {
     if (m.type() === 'error') errors.push('console: ' + m.text());
@@ -196,6 +202,35 @@ const GROUPS = [
   await installHarnessSession(page, { role: 'entrepreneur' });
   await page.route('**/api/v1/assessments/by-property/**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ assessment: record }) }),
+  );
+  // The report is opened from the assessment card on the list page, so the list
+  // has to contain this record. One row, one total, one report.
+  await page.route('**/api/v1/assessments/me*', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: [record], meta: { total: 1, reports_total: 1 } }),
+    }),
+  );
+  // The report checkpoint is only enterable when readiness says so, so the
+  // harness has to answer for it — otherwise the workspace opens the stage-5
+  // panel instead of the report and this tool times out. The values below are
+  // the ones the server actually returns for this shape: stage 3/4 open once
+  // stages 1 and 2 are complete, and stage 5 is always preview-enterable.
+  await page.route('**/api/v1/assessments/*/workflow-readiness', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        contract_version: 'sitewise-assessment-workflow/3',
+        assessment_id: record.assessment_id,
+        stage_1: { complete: true },
+        stage_2: { complete: true },
+        stage_3: { enterable: true },
+        stage_4: { enterable: true },
+        stage_5: { preview_enterable: true },
+      }),
+    }),
   );
   await page.route('**/api/v1/assessments/*/report', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(report) }),
@@ -223,15 +258,53 @@ const GROUPS = [
     }),
   );
 
-  const id = encodeURIComponent(prop.id);
-  await page.goto(`${base}/entrepreneur/assessments?id=${id}&stage=assessment_report`, {
+  // The report is not a `?stage=` checkpoint any more: stage 5 opens the
+  // customer-questionnaire preview, and the assembled document is reached from
+  // the assessment card's "View report" action. Going through that action keeps
+  // the harness on the same path a reader takes.
+  await page.goto(`${base}/entrepreneur/assessments`, {
     waitUntil: 'networkidle',
     timeout: 30000,
   });
-  await page.waitForSelector('.asw-rpt', { timeout: 15000 });
+  // A silent timeout here says nothing about *why* the document never appeared,
+  // so on failure print what the page actually rendered and which API calls the
+  // live server refused — the usual cause is an endpoint this harness does not
+  // mock yet.
+  try {
+    await page.waitForSelector('.asw-ecard__link', { timeout: 15000 });
+    await page.locator('.asw-ecard__link').first().click();
+    await page.waitForSelector('.asw-rpt', { timeout: 15000 });
+  } catch (e) {
+    const body = await page.evaluate(() =>
+      document.body.innerText.replace(/\n{2,}/g, '\n').slice(0, 700),
+    );
+    console.error('--- report did not render ---');
+    console.error(body);
+    console.error('--- refused API calls ---');
+    console.error(failed.join('\n') || '(none)');
+    throw e;
+  }
   await page.waitForTimeout(1200);
 
   await page.screenshot({ path: path.join(outdir, 'step5_report.png'), fullPage: true });
+  // The full-page shot is unreadable at this width, so keep the toolbar and the
+  // jump bar on their own at full resolution.
+  await page.locator('.asw-rpt__chrome').screenshot({
+    path: path.join(outdir, 'step5_report_top.png'),
+  });
+
+  // Nine chips do not fit every window. A narrower viewport is captured too, so
+  // a clipped or scrolling jump bar is visible in review rather than assumed.
+  const narrowTop = async (width, file) => {
+    await page.setViewportSize({ width, height: 1100 });
+    await page.waitForTimeout(350);
+    await page.locator('.asw-rpt__chrome').screenshot({
+      path: path.join(outdir, file),
+    });
+  };
+  await narrowTop(1080, 'step5_report_top_1080.png');
+  await page.setViewportSize({ width: 1440, height: 1100 });
+  await page.waitForTimeout(250);
 
   // The report is long: capture the mid-document sections separately so each
   // one can be reviewed at a readable size.
@@ -253,20 +326,11 @@ const GROUPS = [
   await page.waitForTimeout(900);
   await page.screenshot({ path: path.join(outdir, 'step5_report_jump.png') });
 
-  // Step-4 decisions must carry into the report's decision register.
-  await page.locator('.sw-assessment-journey__step').nth(3).locator('button').click();
-  await page.waitForSelector('.asw-rqr', { timeout: 15000 });
-  await page.locator('.asw-rqr__decopt.is-approve').nth(0).click();
-  await page.locator('.asw-rqr__decopt.is-reject').nth(1).click();
-  await page.waitForTimeout(300);
-  await page.locator('.sw-assessment-journey__step').nth(4).locator('button').click();
-  await page.waitForSelector('.asw-rpt', { timeout: 15000 });
-  await page.waitForTimeout(700);
-  await shotSection('asw-rpt-decisions', 'step5_report_decisions_decided.png');
-  const decidedPill = await page
-    .locator('#asw-rpt-decisions .asw-rpt__cardhead .st')
-    .nth(1)
-    .innerText();
+  // The Step-4 → report decision flow used to be exercised here, by walking the
+  // workspace stepper back to question review and forward again. That path no
+  // longer lands on this document: stage 5 now opens the questionnaire preview
+  // and the report is a destination of its own, so replaying it here would test
+  // a route the report is not reached by.
 
   const counts = await page.evaluate(() => ({
     sections: document.querySelectorAll('.asw-rpt__section').length,
@@ -279,7 +343,7 @@ const GROUPS = [
 
   console.log('saved step-5 report screenshots in', outdir);
   console.log('dom:', JSON.stringify(counts));
-  console.log('decision register pill:', decidedPill.trim());
+  if (failed.length) console.log('refused:', failed.join(', '));
   console.log(errors.length ? errors.join('\n') : 'no console/page errors');
   await browser.close();
 })().catch((e) => {

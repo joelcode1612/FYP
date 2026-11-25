@@ -23,10 +23,10 @@ def get_cq_authority():
 def get_cq_service(authority=Depends(get_cq_authority)):
     if not settings.cq_runtime_enabled:
         raise HTTPException(503,detail={'code':'PRODUCTION_FIELDING_HOLD','message':'Customer questionnaires are not activated.'})
-    from sitewise.db.m2_session import get_m2_engine
-    from sitewise.repositories.cq_repository import PostgresCqStore
+    from sitewise.repositories.cq_repository import PostgresCqStore,get_cq_engine
     from sitewise.services.customer_questionnaire_service import CustomerQuestionnaireService
-    return CustomerQuestionnaireService(PostgresCqStore(get_m2_engine()),authority)
+    # The CQ write principal, not the M2 read-only login. See DD-CQ-11.
+    return CustomerQuestionnaireService(PostgresCqStore(get_cq_engine()),authority)
 
 
 Service=Annotated[object,Depends(get_cq_service)]
@@ -34,10 +34,9 @@ Service=Annotated[object,Depends(get_cq_service)]
 
 def get_cq_withdrawal_service():
     # Withholding new participation must not trap a respondent's consent.
-    from sitewise.db.m2_session import get_m2_engine
-    from sitewise.repositories.cq_repository import PostgresCqStore,UnverifiedCqAuthority
+    from sitewise.repositories.cq_repository import PostgresCqStore,UnverifiedCqAuthority,get_cq_engine
     from sitewise.services.customer_questionnaire_service import CustomerQuestionnaireService
-    return CustomerQuestionnaireService(PostgresCqStore(get_m2_engine()),UnverifiedCqAuthority())
+    return CustomerQuestionnaireService(PostgresCqStore(get_cq_engine()),UnverifiedCqAuthority())
 
 
 WithdrawalService=Annotated[object,Depends(get_cq_withdrawal_service)]
@@ -62,6 +61,54 @@ def _ee01_engine(raw):
 
 
 Ee01=Annotated[object,Depends(get_ee01_service)]
+
+
+def get_publication_service():
+    """Publication, deliberately independent of ``cq_runtime_enabled``.
+
+    The respondent route is held by ``CQ_RUNTIME_ENABLED`` because customer
+    fielding is not authorised. Publication is a different operation with a
+    different principal: it writes the instrument, it does not field it. Gating
+    it on the respondent switch is what made the Publish Questionnaire button
+    permanently dead (DD-096). The real gate is
+    ``get_publication_engine()``, which refuses unless the DSN names
+    ``p1_cq_publisher`` and the declared database, so a deployment without the
+    principal fails closed with ``CQ_PUBLICATION_TARGET_UNVERIFIED``.
+    """
+    from sitewise.repositories.cq_repository import PostgresCqStore,get_publication_engine
+    from sitewise.services.cq_publication_service import PublicationService
+    return PublicationService(PostgresCqStore(get_publication_engine()))
+
+
+Publication=Annotated[object,Depends(get_publication_service)]
+
+
+class PublicationRequest(BaseModel):
+    """No option is accepted from the client except none.
+
+    ``optional_context``, ``mode`` and ``q02_policy`` are the builder's
+    fail-closed defaults and the owner has not decided them, so the request
+    body carries no way to set them. A client that wants a different instrument
+    is asking for a different publication decision, not a different parameter.
+    """
+    model_config=ConfigDict(extra='forbid')
+
+
+@router.get('/publication/{assessment_id}')
+def publication_preview(assessment_id:UUID,user:Owner,service:Publication,response:Response):
+    """What publishing would do. Read-only; writes no row."""
+    return call(response,lambda:service.preview(str(assessment_id),user.user_id))
+
+
+@router.post('/publication/{assessment_id}')
+def publication_publish(assessment_id:UUID,user:Owner,service:Publication,response:Response,
+                        body:PublicationRequest|None=None):
+    """Publish the questionnaire for an assessment the caller owns.
+
+    Idempotent by content: republishing an unchanged questionnaire returns
+    ``ALREADY_PUBLISHED`` with the same release id and writes nothing.
+    """
+    return call(response,lambda:service.publish(str(assessment_id),user.user_id))
 
 
 @router.get('/assessments/{assessment_id}/campaigns/{campaign_id}/measurements/{snapshot_id}')

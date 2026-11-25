@@ -19,7 +19,21 @@ def verify_release(manifest, policy, contract, reference):
     if manifest.get('contract_version')!='cq-manifest/1' or manifest.get('lane') not in {'BASELINE','ENTREPRENEUR_SPECIFIC'}:
         raise CqRefused('CQ_MANIFEST_INVALID')
     items=manifest.get('questions',[])
-    if [x['id'] for x in items] != [x['id'] for x in contract['items']]:
+    # The fixed core must still be the frozen codebook, complete and in order.
+    # Additional (Section B) questions are additive and follow it; they are
+    # validated separately below because they have no contract entry.
+    contract_ids=[x['id'] for x in contract['items']]
+    if [x['id'] for x in items][:len(contract_ids)] != contract_ids:
+        raise CqRefused('CQ_QUESTION_IDENTITIES_INVALID')
+    fixed=items[:len(contract_ids)]
+    additional=items[len(contract_ids):]
+    for extra in additional:
+        if str(extra.get('section') or '')!='B_ADDITIONAL':
+            # Only a marked Section B item may sit past the frozen codebook.
+            raise CqRefused('CQ_QUESTION_IDENTITIES_INVALID')
+        if extra['id'] in contract_ids:
+            raise CqRefused('CQ_QUESTION_IDENTITIES_INVALID')
+    if len({x['id'] for x in items}) != len(items):
         raise CqRefused('CQ_QUESTION_IDENTITIES_INVALID')
     if policy['gate'].get('unresolved_token_policy')!='NOT_SHOWN' or policy['gate'].get('undecided_input_policy')!='NOT_SHOWN':
         raise CqRefused('CQ_UNRESOLVED_POLICY_MUST_HOLD')
@@ -35,7 +49,7 @@ def verify_release(manifest, policy, contract, reference):
     order=manifest.get('stimulus_order',[])
     if len(order)!=len(set(order)) or set(order)!=set(manifest['stimuli']):
         raise CqRefused('CQ_STIMULUS_ORDER_INVALID')
-    for item,source in zip(items,contract['items']):
+    for item,source in zip(fixed,contract['items']):
         if item['type']!=source['type'] or item['codes']!=source['codes'] or item['validation']!=source:
             raise CqRefused('CQ_CODEBOOK_MISMATCH')
         if not isinstance(item['required_for_presentation'],bool) or not isinstance(item['required_for_answer'],bool):
@@ -57,6 +71,34 @@ def verify_release(manifest, policy, contract, reference):
             raise CqRefused('CQ_FEATURE_BANK_INVALID')
         if item['id']=='Q10' and item['id'] in authorized and 'features' in manifest['stimuli'] and not features:
             raise CqRefused('CQ_FEATURE_BANK_INVALID')
+    # Section B. Its contract is the composition record it carries, not a
+    # frozen codebook entry, so the checks are the ones that can be made
+    # truthfully: identity, option set, labels, routing position and a gate the
+    # interpreter actually implements.
+    for item in additional:
+        qid=item['id']
+        validation=item.get('validation')
+        if not isinstance(validation,dict) or str(validation.get('item_id'))!=str(qid):
+            raise CqRefused('CQ_CODEBOOK_MISMATCH')
+        codes=item.get('codes')
+        if not isinstance(codes,list) or len(codes)<2 or len(set(codes))!=len(codes):
+            raise CqRefused('CQ_ADDITIONAL_OPTIONS_INVALID')
+        if not isinstance(item.get('required_for_presentation'),bool) or not isinstance(item.get('required_for_answer'),bool):
+            raise CqRefused('CQ_REQUIREDNESS_UNVERIFIED')
+        for language in manifest['locales']:
+            if not item.get('wording',{}).get(language) or set(item.get('labels',{}).get(language,{}))!=set(codes):
+                raise CqRefused('CQ_LANGUAGE_VERSION_INCOMPLETE')
+        if item.get('dependencies')!=['Q01']:
+            raise CqRefused('CQ_ROUTING_DEPENDENCY_INVALID')
+        if any(d not in positions or positions[d]>=positions[qid] for d in item['dependencies']):
+            raise CqRefused('CQ_ROUTING_DEPENDENCY_INVALID')
+        token=policy['item_show_gate'].get(qid) or item.get('gate_token')
+        if token not in policy['gate']['token_predicates']:
+            raise CqRefused('CQ_GATE_UNREGISTERED')
+        if item.get('feature_ids'):
+            # No governed feature bank exists for an additional question, so
+            # claiming one would be an unverifiable assertion.
+            raise CqRefused('CQ_FEATURE_BANK_INVALID')
     for predicate in policy['gate']['token_predicates'].values():
         for clause in predicate.get('clauses',[]):
             # The sealed A2 interpreter only implements a true const. Reject
@@ -68,8 +110,17 @@ def verify_release(manifest, policy, contract, reference):
     if manifest['mode'] not in {'C0','C1'} or manifest['q02_policy'] not in {'SHOW_ALL','ELIGIBLE_ONLY','UNDECIDED'}:
         raise CqRefused('CQ_POLICY_VERSION_INVALID')
     if manifest['lane']=='ENTREPRENEUR_SPECIFIC':
-        # No QJ/BCB/measurement/approved-bank adapter is fabricated here.
-        raise CqRefused('CQ_ENTREPRENEUR_ASSIGNMENT_AUTHORITY_UNVERIFIED',503)
+        # Was an unconditional refusal: no adapter bound an owner's confirmed
+        # context to a release, so the questionnaire Stage 5 actually produces
+        # could never be released. The adapter now has to *establish* that
+        # authority -- a binding block plus a stem reproduced from a governed
+        # template -- before this returns. Everything it cannot verify still
+        # raises, and it raises its own specific code so a caller can tell
+        # "unbound" from "wording was edited" from "no governed label exists".
+        from sitewise.project1.cq_entrepreneur_adapter import (
+            verify_assignment_authority,
+        )
+        verify_assignment_authority(manifest)
 
 
 def route(manifest, policy, latest, exposures, reference):
@@ -88,7 +139,12 @@ def route(manifest, policy, latest, exposures, reference):
             'OCCASION_READY':ready('occasion'),'FEATURE_BANK_READY':ready('features'),
             'APPROVED_EXACT_OFFER_STIMULUS':ready('offer'),
             'OPTIONAL_CONTEXT_ENABLED':manifest['optional_context']}
-        token=policy['item_show_gate'][q]
+        # A fixed-core question is gated by the frozen map. A Section B question
+        # has no entry there, so it carries its own token -- which
+        # verify_release already required to be one the interpreter implements.
+        token=policy['item_show_gate'].get(q) or item.get('gate_token')
+        if token not in policy['gate']['token_predicates']:
+            raise CqRefused('CQ_GATE_UNREGISTERED')
         verdict,reason=reference.gate(token,facts,policy)
         if q not in manifest['authorized_question_ids']:
             verdict,reason='NOT_SHOWN','QUESTION_AUTHORITY_UNVERIFIED'

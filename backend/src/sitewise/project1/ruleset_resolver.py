@@ -78,7 +78,15 @@ def resolve_ruleset(instrument: str) -> RulesetBinding:
     module = import_module(module_path)
     if getattr(module, 'RULE_VERSION', None) != version:
         raise WorkflowHeld('BDJ_RULE_FINGERPRINT_MISMATCH')
-    actual = hashlib.sha256(Path(module.__file__).read_bytes()).hexdigest()
+    # Normalise CRLF before hashing. The adoption receipt pins the *content* of
+    # the ruleset, but ``read_bytes()`` also picks up the checkout's line-ending
+    # policy: a Windows working tree (CRLF) hashed differently from the LF tree
+    # the receipt was computed on, so every M2V2 run was refused with
+    # BDJ_RULE_FINGERPRINT_MISMATCH even though the module matched HEAD exactly.
+    # A fingerprint that changes with git's EOL setting does not identify an
+    # artefact, so the digest is taken over the normalised bytes.
+    source = Path(module.__file__).read_bytes().replace(b'\r\n', b'\n')
+    actual = hashlib.sha256(source).hexdigest()
     if actual != sha256:
         raise WorkflowHeld('BDJ_RULE_FINGERPRINT_MISMATCH')
     if instrument not in getattr(module, 'SUPPORTED_INSTRUMENT_VERSIONS', ()):

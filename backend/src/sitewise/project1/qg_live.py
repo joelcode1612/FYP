@@ -91,12 +91,20 @@ class QgLiveRunner:
 
     def __init__(self, *, engine, authorization: dict | None = None,
                  provider=None, prompts=None, budget_path=None,
-                 authorization_path=None):
+                 authorization_path=None, authorization_verifier=None):
         self.engine = engine
         # Loading is deferred to dispatch: a missing artifact must fail the
         # request with a named hold, not break app startup or dependency wiring.
         self.authorization = authorization
         self._authorization_path = authorization_path
+        #: Called at dispatch to re-derive the authority from what is *stored*.
+        #:
+        #: ``authorization`` alone is not enough for the HTTP path: a dict built
+        #: by the caller makes the purpose check below self-referential. When a
+        #: verifier is supplied it is the only source of ``auth``, so a caller
+        #: cannot assert a purpose, an attempt budget or a prompt identity the
+        #: persisted record does not carry.
+        self.authorization_verifier = authorization_verifier
         self.prompts = prompts if prompts is not None else PROMPTS
         self._provider = provider
         self.budget_path = budget_path
@@ -118,15 +126,36 @@ class QgLiveRunner:
     def last_identity(self):
         return getattr(self.provider, 'last_identity', None)
 
-    def __call__(self, stage, packet, output_type, *, prompt_key=None):
+    def __call__(self, stage, packet, output_type, *, prompt_key=None,
+                 attempt_slot=1):
+        """Dispatch one governed attempt.
+
+        ``attempt_slot`` mirrors ``ModelRunner.__call__`` so the two runners are
+        interchangeable. It is *not* how a recovery is distinguished: a recovery
+        is issued as a new authorization, and the authorization id is part of the
+        run's work identity, so a recovery lands in its own run with slot 1 free
+        (DD-054). The parameter exists for a same-run retry, which this path
+        never produces, and is forwarded so the ledger stays the single place
+        that decides what a slot means.
+        """
         self.last_execution = None
         if self.engine is None:
             raise WorkflowHeld('WORKFLOW_STORAGE_UNAVAILABLE')
-        if self.authorization is None:
+        if self.authorization_verifier is not None:
+            # Re-read at dispatch, not at construction: an authorization can be
+            # consumed or expire between the route resolving it and the socket
+            # opening, and a cached dict would not notice.
+            self.authorization = self.authorization_verifier()
+        elif self.authorization is None:
             self.authorization = load_authorization(self._authorization_path)
         auth = self.authorization
         if stage != 'QG':
             raise WorkflowHeld('DISCLOSURE_STAGE_NOT_AUTHORIZED')
+        # The purpose is now read from the persisted authorization row (via the
+        # verifier) rather than from a dict this process assembled, so a BDJ
+        # grant cannot be presented as QG authority.
+        if auth.get('purpose') != QG_PURPOSE:
+            raise WorkflowHeld('QG_LIVE_PURPOSE_NOT_AUTHORIZED')
         key = prompt_key or DEFAULT_PROMPT_KEY
         if key not in AUTHORIZED_PROMPT_KEYS:
             # Refused before the run is provisioned: an unregistered prompt must
@@ -173,7 +202,8 @@ class QgLiveRunner:
         runner = ModelRunner(self.provider, ledger, self.prompts,
                              disclosure=disclosure)
         try:
-            return runner('QG', packet, output_type, prompt_key=key)
+            return runner('QG', packet, output_type, prompt_key=key,
+                          attempt_slot=attempt_slot)
         finally:
             receipt=runner.last_execution
             if receipt is not None:

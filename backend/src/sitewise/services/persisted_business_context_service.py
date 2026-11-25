@@ -10,8 +10,8 @@ from sitewise.core.exceptions import ConflictError, NotFoundError
 from sitewise.domain.m2_provenance import pins_match
 from sitewise.services.business_context_v1 import (
     CONTRACTS, CURRENT_CONTEXT_VERSION, HISTORICAL_SECTIONS_CONTRACTS,
-    SECTIONS_CONTEXT_VERSION, BusinessContextBuilderV1, ContextRefused,
-    canonical_bytes, json_value, source_hash,
+    SECTIONS_CONTRACTS, SECTIONS_CONTEXT_VERSION, BusinessContextBuilderV1,
+    ContextRefused, canonical_bytes, json_value, source_hash,
 )
 from sitewise.services.ports.business_context_v1_port import ContextReadView
 from sitewise.services.ports.business_context_store_port import (
@@ -120,6 +120,29 @@ class PersistedBusinessContextService:
         return SECTIONS_CONTEXT_VERSION if tag.startswith('M2V2-') else CURRENT_CONTEXT_VERSION
 
     @staticmethod
+    def _require_contract_family(unit, selection, actor, contract: str) -> None:
+        """Refuse a caller-pinned contract from the wrong family (DD-078).
+
+        ``_instrument_contract`` already selects the right family when nobody
+        pins one. The remaining hole is the opt-in override: a caller could pin
+        a non-sections label on an M2V2 assessment and get a packet that
+        silently drops the three separable V2 outputs. That packet still passes
+        its own integrity checks, so the loss is invisible until BDJ or QG
+        cannot read it — which is exactly how a ``BCB-V1-1.1.0`` row was once
+        persisted against an M2V2 assessment.
+
+        This is the mirror of the builder's ``SECTIONS_REQUIRE_M2V2`` refusal,
+        and it stays inside the family rather than pinning one label: a caller
+        may still reproduce the historical ``BCB-V1-1.2.0`` sections label. It
+        is deliberately not applied to ``_reproduction_failure``, which rebuilds
+        a recorded packet under its own recorded contract.
+        """
+        wants_sections = PersistedBusinessContextService._instrument_contract(
+            unit, selection, actor) in SECTIONS_CONTRACTS
+        if wants_sections != (contract in SECTIONS_CONTRACTS):
+            raise ContextOperationHeld('BCB_CONTRACT_INSTRUMENT_MISMATCH')
+
+    @staticmethod
     def _select(unit, selection, actor, *, initialize_build=True):
         assessment = unit.m2.get_assessment_for_update(selection.assessment_id, actor.user_id)
         if assessment is None:
@@ -213,6 +236,7 @@ class PersistedBusinessContextService:
         # An explicit contract is opt-in per call; an explicit service contract
         # pins every build. When neither is given, the instrument decides
         # (DD-017): M2V2 -> sections, otherwise the geo-excluded 1.1 contract.
+        caller_contract = contract
         contract = contract or self.contract
         selected = False
         try:
@@ -223,6 +247,11 @@ class PersistedBusinessContextService:
                     contract = self._instrument_contract(unit, selection, actor)
                 if contract not in CONTRACTS:
                     raise ContextOperationHeld('BCB_CONTRACT_VERSION_UNSUPPORTED')
+                if caller_contract is not None:
+                    # Only the caller-supplied pin is checked: a service-level
+                    # contract is a construction-time decision, and the
+                    # reproduction path never reaches this method.
+                    self._require_contract_family(unit, selection, actor, contract)
                 try:
                     packet = self._build(unit, selection, actor, contract)
                 except (ContextBindingUnavailable, ContextRefused) as exc:

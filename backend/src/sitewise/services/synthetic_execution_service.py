@@ -50,18 +50,38 @@ class ExecutionStore:
         self.engine,self.actor,self.run,self.sid,self.operation,self.body=engine,actor,run_id,sid,operation,body
 
     @contextmanager
-    def open(self):
+    def open(self, actor_id=None):
+        # `execute` opens the store with no argument to read the case back after
+        # the operation, so a bare `open()` means "as the developer".
+        if actor_id is None:
+            actor_id = self.actor
+        # Two principals legitimately reach this store, and they are not the same
+        # person. The HTTP caller is the *developer*, who opens the store to look
+        # up the case; `CustomerQuestionnaireService` then re-enters with the
+        # session's *respondent*, because every domain call is answered as the
+        # respondent. Comparing the second against the first refused every
+        # operation with SYNTHETIC_ACTOR_MISMATCH, so the developer-synthetic
+        # surface could never execute at all (DD-107).
+        #
+        # The check is therefore moved below, after the case is known, and
+        # accepts exactly those two identities -- the run's developer and the
+        # case's respondent. Anyone else is still refused.
         with Session(self.engine,autoflush=False) as s:
             try:
                 s.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ'))
                 role=s.execute(text('SELECT current_user,rolsuper,rolbypassrls FROM pg_roles WHERE rolname=current_user')).one()
                 if role!=('p1_ee01_runtime',False,False):raise CqRefused('SYNTHETIC_RESTRICTED_ROLE_REQUIRED',503)
+                # Bound to the developer on purpose: RLS on `cq_campaigns` is
+                # owner-scoped, so binding the respondent would hide the campaign
+                # and every lookup below would return zero rows.
                 s.execute(text("SELECT set_config('project1.actor_id',:actor,true),set_config('project1.synthetic_run_id',:run,true),set_config('project1.synthetic_session_id',:sid,true)"),
                     {'actor':str(self.actor),'run':str(self.run),'sid':str(self.sid)})
                 case=s.execute(text('SELECT x.*,r.release_id,r.respondent_user_id,r.campaign_id FROM cq_synthetic_cases x JOIN cq_sessions r ON r.id=x.session_id '
                     'JOIN cq_synthetic_execution_grants g ON g.run_id=x.run_id WHERE x.session_id=:sid AND x.run_id=:run AND g.developer_user_id=:actor'),
                     {'sid':self.sid,'run':self.run,'actor':self.actor}).mappings().first()
                 if not case or not s.scalar(text('SELECT cq_synthetic_can_execute(:sid)'),{'sid':self.sid}):raise CqRefused('SYNTHETIC_SESSION_NOT_FOUND',404)
+                if str(actor_id) not in {str(self.actor), str(case['respondent_user_id'])}:
+                    raise CqRefused('SYNTHETIC_ACTOR_MISMATCH', 403)
                 case=dict(case)
                 if digest(case['source_json'])!=case['source_sha256']:raise CqRefused('SYNTHETIC_CASE_INTEGRITY_INVALID',503)
                 unit=ExecutionUnit(s,case,self.actor,self.operation,digest(normalized(self.body)))
@@ -104,7 +124,7 @@ class SyntheticExecutionService:
 
     def execute(self,actor,run_id,sid,operation,**body):
         store=ExecutionStore(self.engine,actor,run_id,sid,operation,body)
-        with store.open() as unit:subject=unit.case['respondent_user_id']
+        with store.open(actor) as unit:subject=unit.case['respondent_user_id']
         engine=CustomerQuestionnaireService(store,NonhumanExecutionAuthority())
         if operation in ('pause','resume'):
             result=engine.lifecycle(sid,subject,action=operation.upper(),**body)

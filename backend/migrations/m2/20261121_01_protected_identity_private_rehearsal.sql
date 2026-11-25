@@ -33,6 +33,13 @@ END $$;
 REVOKE ALL ON FUNCTION project1_identity.verified_actor() FROM PUBLIC;
 GRANT USAGE ON SCHEMA project1_identity TO p1_m2_runtime;
 GRANT EXECUTE ON FUNCTION project1_identity.verified_actor() TO p1_m2_runtime;
+-- DD-021's registry RLS policy also calls verified_actor() and is read by
+-- p1ai_runtime. EXECUTE is required even though the function is SECURITY
+-- DEFINER; the private key itself remains revoked. Rehearsal proved that
+-- without this grant the AI runtime gets "permission denied for function
+-- verified_actor" when it merely SELECTs the registry.
+GRANT USAGE ON SCHEMA project1_identity TO p1ai_runtime;
+GRANT EXECUTE ON FUNCTION project1_identity.verified_actor() TO p1ai_runtime;
 DROP POLICY owner_scope ON public.m2_assessments;
 CREATE POLICY owner_scope ON public.m2_assessments
   USING (owner_user_id = project1_identity.verified_actor())

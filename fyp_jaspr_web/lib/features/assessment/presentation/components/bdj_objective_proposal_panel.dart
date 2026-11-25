@@ -48,11 +48,20 @@ class BdjObjectiveProposalPanel extends StatefulComponent {
   /// authenticated client; a component test substitutes a recorded result.
   final BdjObjectiveProposalPort api;
 
+  /// Called after a decision was recorded on the server.
+  ///
+  /// An accepted objective is the evidence stage 3 is waiting for, but this
+  /// panel cannot know that the *assessment* moved — it only knows the decision
+  /// was stored. So it reports the save and lets the owner re-read the record,
+  /// which is what turns 2/5 into 3/5 (60%). It never claims a stage completed.
+  final VoidCallback? onDecisionRecorded;
+
   const BdjObjectiveProposalPanel({
     super.key,
     this.marketplaceAssessmentId = '',
     this.m2AssessmentId = '',
     this.api = const BdjObjectiveProposalApi(),
+    this.onDecisionRecorded,
   });
 
   /// Which assessment this panel is bound to, for the runtime guard below.
@@ -61,7 +70,8 @@ class BdjObjectiveProposalPanel extends StatefulComponent {
   /// would not survive a release build anyway, so the exactly-one rule is
   /// enforced where it actually matters: before the first read.
   String? get _bindingError {
-    final count = (marketplaceAssessmentId.isEmpty ? 0 : 1) +
+    final count =
+        (marketplaceAssessmentId.isEmpty ? 0 : 1) +
         (m2AssessmentId.isEmpty ? 0 : 1);
     if (count == 1) return null;
     return 'BdjObjectiveProposalPanel needs exactly one of '
@@ -73,8 +83,7 @@ class BdjObjectiveProposalPanel extends StatefulComponent {
       _BdjObjectiveProposalPanelState();
 }
 
-class _BdjObjectiveProposalPanelState
-    extends State<BdjObjectiveProposalPanel> {
+class _BdjObjectiveProposalPanelState extends State<BdjObjectiveProposalPanel> {
   bool _loading = true;
   bool _proposing = false;
   String? _busyProposalId;
@@ -103,12 +112,28 @@ class _BdjObjectiveProposalPanelState
   final Map<String, BdjObjectiveDecision> _decisions = {};
   BdjExecution? _execution;
 
+  /// Proposal ids returned by the most recent governed LLM pass.
+  ///
+  /// Kept separately from [_execution] because the pass is followed by a
+  /// persisted readback: the readback proves which model actually produced the
+  /// stored rows, while this set answers the narrower question "which research
+  /// objectives did the pass just update?".
+  final Set<String> _updatedProposalIds = <String>{};
+
+  /// Execution block of the most recent pass, preserved across that readback.
+  BdjExecution? _lastRunExecution;
+
   /// Persisted provenance per proposal, read from the single-proposal route.
   ///
   /// The list endpoint deliberately carries no execution block (it is a read of
   /// stored rows, not of a run), so without this a page opened on already-
   /// persisted proposals could not say which model produced the text it shows.
   final Map<String, BdjProposalReadback> _readbacks = {};
+
+  /// Guards the asynchronous provenance/decision hydration against a newer
+  /// load. The proposals themselves render as soon as the list returns; the
+  /// per-proposal reads only enrich the cards afterwards.
+  int _loadRequest = 0;
 
   @override
   void initState() {
@@ -126,6 +151,8 @@ class _BdjObjectiveProposalPanelState
       _readbacks.clear();
       _proposals = const [];
       _execution = null;
+      _updatedProposalIds.clear();
+      _lastRunExecution = null;
       _notice = null;
       _load();
     }
@@ -134,14 +161,15 @@ class _BdjObjectiveProposalPanelState
   /// Resolves the current M2 confirmation and its persisted business context,
   /// then reads the persisted proposals. Every step can independently make the
   /// view stale, so the panel refuses to show proposals unless all three agree.
-  Future<void> _load() async {
+  Future<void> _load({bool preserveLastRun = false}) async {
+    final request = ++_loadRequest;
     setState(() {
       _loading = true;
       _error = null;
       _staleMessage = null;
       // The list endpoint reads persisted rows and carries no execution block,
       // so a provenance note from an earlier pass must not outlive this read.
-      _execution = null;
+      _execution = preserveLastRun ? _lastRunExecution : null;
     });
     try {
       final bindingError = component._bindingError;
@@ -197,7 +225,9 @@ class _BdjObjectiveProposalPanelState
       _revision = draft.revision;
       _confirmationId = confirmationId;
       _contextMissing =
-          status['status'] != 'PERSISTED' || contextId is! String || contextId.isEmpty;
+          status['status'] != 'PERSISTED' ||
+          contextId is! String ||
+          contextId.isEmpty;
       if (_contextMissing || status['source_is_current'] != true) {
         _stale(
           'No persisted business context is current for this confirmation '
@@ -218,45 +248,113 @@ class _BdjObjectiveProposalPanelState
         _handleFailure(listed.failure!);
         return;
       }
-      _proposals = listed.value!.proposals;
+      if (!mounted || request != _loadRequest) return;
+      final proposals = listed.value!.proposals;
+      final proposalIds = proposals.map((row) => row.proposalId).toSet();
+
+      // The list is the authoritative read, so render it immediately. The
+      // single-proposal reads below only enrich the cards with persisted
+      // provenance and decisions; waiting for them kept the whole panel in
+      // "Reading persisted research objectives…" for many seconds.
+      setState(() {
+        _proposals = proposals;
+        _loading = false;
+        _readbacks.clear();
+        _decisions.removeWhere((id, _) => !proposalIds.contains(id));
+      });
 
       // Persisted provenance for each row. A failure here must not hide the
       // proposal: the card simply omits the provenance line rather than
       // inventing one. A transport that *throws* is treated exactly like one
       // that returns a failed result — an uncaught exception would abort the
       // rest of this load and blank a list that has already been read.
-      _readbacks.clear();
-      for (final proposal in _proposals) {
-        try {
-          final detail = await component.api.read(
-            assessmentId: m2Id,
-            proposalId: proposal.proposalId,
-            expectedRevision: draft.revision,
+      final readbacks = await Future.wait([
+        for (final proposal in proposals)
+          _readback(
+            m2Id: m2Id,
+            proposal: proposal,
+            revision: draft.revision,
             contextId: contextId,
-          );
-          if (detail.ok) _readbacks[proposal.proposalId] = detail.value!;
-        } catch (_) {
-          // No provenance line for this card; the proposal still renders.
+          ),
+      ]);
+      if (!mounted || request != _loadRequest) return;
+      setState(() {
+        for (final entry
+            in readbacks.whereType<MapEntry<String, BdjProposalReadback>>()) {
+          _readbacks[entry.key] = entry.value;
         }
-      }
+      });
 
       // Persisted decision readback: a proposal that already carries a review
       // state must show the stored decision and its admission, not a guess.
-      for (final proposal in _proposals) {
-        if (!proposal.reviewState.hasDecision) continue;
-        final decision = await component.api.readDecision(
-          assessmentId: m2Id,
-          proposalId: proposal.proposalId,
-          expectedRevision: draft.revision,
-          contextId: contextId,
-        );
-        if (decision.ok) {
-          _decisions[proposal.proposalId] = decision.value!;
+      final decisions = await Future.wait([
+        for (final proposal in proposals)
+          if (proposal.reviewState.hasDecision)
+            _decision(
+              m2Id: m2Id,
+              proposal: proposal,
+              revision: draft.revision,
+              contextId: contextId,
+            ),
+      ]);
+      if (!mounted || request != _loadRequest) return;
+      setState(() {
+        for (final entry
+            in decisions.whereType<MapEntry<String, BdjObjectiveDecision>>()) {
+          _decisions[entry.key] = entry.value;
         }
-      }
-      setState(() => _loading = false);
+        // A successful evaluate is followed by this readback so the persisted
+        // LIVE provenance replaces the in-memory result. Keep the just-completed
+        // pass visible while that happens; a manual refresh does not preserve it.
+        if (preserveLastRun && _lastRunExecution != null) {
+          _execution = _lastRunExecution;
+        }
+      });
     } on Object catch (error) {
+      if (!mounted || request != _loadRequest) return;
       _fail('The research objectives could not be read: $error');
+    }
+  }
+
+  Future<MapEntry<String, BdjProposalReadback>?> _readback({
+    required String m2Id,
+    required BdjObjectiveProposal proposal,
+    required int revision,
+    required String contextId,
+  }) async {
+    try {
+      final detail = await component.api.read(
+        assessmentId: m2Id,
+        proposalId: proposal.proposalId,
+        expectedRevision: revision,
+        contextId: contextId,
+      );
+      if (!detail.ok) return null;
+      return MapEntry(proposal.proposalId, detail.value!);
+    } catch (_) {
+      // No provenance line for this card; the proposal still renders.
+      return null;
+    }
+  }
+
+  Future<MapEntry<String, BdjObjectiveDecision>?> _decision({
+    required String m2Id,
+    required BdjObjectiveProposal proposal,
+    required int revision,
+    required String contextId,
+  }) async {
+    try {
+      final decision = await component.api.readDecision(
+        assessmentId: m2Id,
+        proposalId: proposal.proposalId,
+        expectedRevision: revision,
+        contextId: contextId,
+      );
+      if (!decision.ok) return null;
+      return MapEntry(proposal.proposalId, decision.value!);
+    } catch (_) {
+      // The decision badge is omitted rather than failing the whole list.
+      return null;
     }
   }
 
@@ -344,6 +442,10 @@ class _BdjObjectiveProposalPanelState
         _proposing = false;
         _proposals = evaluation.proposals;
         _execution = evaluation.execution;
+        _lastRunExecution = evaluation.execution;
+        _updatedProposalIds
+          ..clear()
+          ..addAll(evaluation.proposals.map((row) => row.proposalId));
         _decisions.removeWhere(
           (id, _) => !evaluation.proposals.any((row) => row.proposalId == id),
         );
@@ -353,6 +455,10 @@ class _BdjObjectiveProposalPanelState
                   'placeholder.'
             : null;
       });
+      // Re-read the stored rows and their per-proposal provenance. Without this
+      // the browser keeps the evaluate envelope in memory and only a manual
+      // Refresh reveals that the result came from a live TokenHarbour call.
+      await _load(preserveLastRun: true);
     } on Object catch (error) {
       setState(() {
         _proposing = false;
@@ -403,6 +509,10 @@ class _BdjObjectiveProposalPanelState
             ? 'This decision was already recorded; the stored decision is shown.'
             : null;
       });
+      // The decision is stored, so the assessment may have moved a stage. Tell
+      // the owner; it re-reads the authoritative record rather than trusting a
+      // local increment.
+      component.onDecisionRecorded?.call();
     } on Object catch (error) {
       setState(() {
         _busyProposalId = null;
@@ -471,7 +581,12 @@ class _BdjObjectiveProposalPanelState
     final mostSuggested = _proposals
         .where((row) => row.recommendation.status.isSourceConfirmed)
         .length;
-    final decided = _proposals.where((row) => row.reviewState.hasDecision).length;
+    final decided = _proposals
+        .where((row) => row.reviewState.hasDecision)
+        .length;
+    final updatedCount = _proposals
+        .where((row) => _updatedProposalIds.contains(row.proposalId))
+        .length;
 
     return section(classes: 'panel stack stack--sm', [
       div(classes: 'panel-head panel-head--split', [
@@ -507,12 +622,36 @@ class _BdjObjectiveProposalPanelState
             onClick: _proposing
                 ? null
                 : () {
+                    // A refresh is a fresh read, not the latest LLM pass: drop
+                    // the "updated by this pass" markers before re-reading.
+                    _updatedProposalIds.clear();
+                    _lastRunExecution = null;
                     _load();
                   },
           ),
         ]),
       ]),
       if (_execution != null) _executionNote(_execution!),
+      if (updatedCount > 0)
+        div(
+          classes: 'card card--flat',
+          attributes: const {'role': 'status', 'aria-live': 'polite'},
+          [
+            p([
+              Component.text(
+                'Latest governed LLM result updated $updatedCount '
+                'research objective${updatedCount == 1 ? '' : 's'}; '
+                'the updated objective(s) are highlighted below.',
+              ),
+            ]),
+            if (_lastRunExecution != null && !_lastRunExecution!.isSimulated)
+              p(classes: 'muted', [
+                const Component.text(
+                  'Source: live model result from TokenHarbour, not synthetic data.',
+                ),
+              ]),
+          ],
+        ),
       if (_notice != null)
         div(classes: 'card card--flat', [
           p(classes: 'muted', [Component.text(_notice!)]),
@@ -543,15 +682,18 @@ class _BdjObjectiveProposalPanelState
 
   /// Makes the execution provenance visible, because a simulated pass must not
   /// read like a live model result.
-  Component _executionNote(BdjExecution execution) {    final parts = <String>[
+  Component _executionNote(BdjExecution execution) {
+    final parts = <String>[
       if (execution.isSimulated)
         'Simulated pass — no cloud model was called'
       else
         'Execution mode ${execution.executionMode}',
       if (execution.modelProvider.isNotEmpty) execution.modelProvider,
-      if (execution.promptVersion.isNotEmpty) 'prompt ${execution.promptVersion}',
+      if (execution.promptVersion.isNotEmpty)
+        'prompt ${execution.promptVersion}',
       if (execution.attemptNo != null) 'attempt ${execution.attemptNo}',
-      if (execution.receiptOutcome != null) 'receipt ${execution.receiptOutcome}',
+      if (execution.receiptOutcome != null)
+        'receipt ${execution.receiptOutcome}',
       if (execution.reused) 'reused an existing governed attempt',
     ];
     return div(classes: 'card card--flat', [
@@ -620,6 +762,8 @@ class _BdjObjectiveProposalPanelState
             BdjReviewState.unrecognised => 'neutral',
           },
         ),
+        if (_updatedProposalIds.contains(proposal.proposalId))
+          StatusBadge('Updated by latest LLM pass', tone: 'action', dot: true),
       ]),
       h4([Component.text(recommendation.researchObjective)]),
       if (recommendation.problem != null)
@@ -656,18 +800,20 @@ class _BdjObjectiveProposalPanelState
         ]),
       // Provenance of the stored row, so a reader can tell a live model result
       // from a simulated one without running anything.
-      if (provenance != null) provenance,
+      ?provenance,
       // Decision and admission are rendered as two separate facts.
       if (isDecided && admission != null)
         div(classes: 'card card--flat stack stack--xs', [
           div(classes: 'row row--sm', [
             StatusBadge(
               switch (admission.state) {
+                BdjAdmissionState.admitted => 'Admitted',
                 BdjAdmissionState.held => 'Admission held',
                 BdjAdmissionState.notAdmissible => 'Not admissible',
                 BdjAdmissionState.unrecognised => 'Admission unreadable',
               },
               tone: switch (admission.state) {
+                BdjAdmissionState.admitted => 'success',
                 BdjAdmissionState.held => 'warning',
                 BdjAdmissionState.notAdmissible => 'danger',
                 BdjAdmissionState.unrecognised => 'neutral',
@@ -686,6 +832,22 @@ class _BdjObjectiveProposalPanelState
               '${admission.qgExecution ? 'authorised' : 'not authorised'} · '
               'Fielding: '
               '${admission.fieldingAuthorized ? 'authorised' : 'not authorised'}',
+            ),
+          ]),
+          // Three different things, named separately, because an owner reading
+          // this card needs to know which of them is waiting on them. Before
+          // this line the block was read as "approval was not enough, do
+          // something else" — which is wrong under contract 2.1: the approval is
+          // the authority, the admission is a separate axis, and eligibility is
+          // a property of the objective's measurement.
+          p(classes: 'muted', [
+            Component.text(
+              'Three separate things. Your approval is the authority for this '
+              'objective (contract 2.1) and is not repeated later. Admission is '
+              'a second, independent record: a refusal here is a policy result, '
+              'not an unfinished step of yours. QG eligibility — whether this '
+              'objective can be turned into a fixed-option question at all — is '
+              'reported check by check on Stage 4, next to the objective.',
             ),
           ]),
         ])

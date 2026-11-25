@@ -270,29 +270,19 @@ final class AssessmentReportView extends StatelessComponent {
     ]);
   }
 
-  /// Only the report's final three steps get a visible bubble. Steps 01–06
-  /// stay in the DOM (with the original full section titles) so the existing
-  /// report tests still see the same document, but they are hidden from both
-  /// sighted and assistive-technology users.
-  bool _isTailStep(String index) =>
-      index == '07' || index == '08' || index == '09';
-
+  /// The jump bar for the whole document: one chip per section, in order.
+  ///
+  /// Every section is listed. A chip that scrolls to a section which is not
+  /// drawn would be a dead control, so the two lists are the same [_sections]
+  /// constant and cannot drift apart.
   Component _jumpBar() => nav(
     classes: 'asw-rpt__nav',
     attributes: const {'aria-label': 'Jump to a report section'},
     [
       for (final section in _sections)
         button(
-          classes: [
-            'asw-rpt__navlink',
-            if (!_isTailStep(section.$2)) 'asw-rpt__navlink--prior',
-            if (section.$1 == 'asw-rpt-evidence') 'asw-rpt__navlink--current',
-          ].join(' '),
-          attributes: {
-            'type': 'button',
-            if (!_isTailStep(section.$2)) 'aria-hidden': 'true',
-            if (section.$1 == 'asw-rpt-evidence') 'aria-current': 'step',
-          },
+          classes: 'asw-rpt__navlink',
+          attributes: const {'type': 'button'},
           events: events(onClick: () => scrollToId(section.$1)),
           [
             span(classes: 'asw-rpt__navindex', [
@@ -311,20 +301,9 @@ final class AssessmentReportView extends StatelessComponent {
     String purpose,
     List<Component> body,
   ) => section(
-    classes: [
-      'asw-rpt__section',
-      if (!_isTailStep(index)) 'asw-rpt__section--prior',
-      if (index == '07') 'asw-rpt__section--evidence',
-    ].join(' '),
-    attributes: {
-      'id': id,
-      if (!_isTailStep(index)) 'aria-hidden': 'true',
-    },
+    classes: 'asw-rpt__section',
+    attributes: {'id': id},
     [
-      if (index == '07')
-        span(classes: 'asw-rpt__heroeyebrow', [
-          Component.text('STEP 07 OF 09 · EVIDENCE AND SCORING'),
-        ]),
       div(classes: 'asw-rpt__sechead', [
         span(classes: 'asw-rpt__secindex', [Component.text(index)]),
         div(classes: 'asw-rpt__seccopy', [
@@ -337,7 +316,7 @@ final class AssessmentReportView extends StatelessComponent {
   );
 
   /// The report is a read-only destination; the checkpoint owns stage
-  /// completion. The pager only moves between visible tail sections.
+  /// completion. The footer only links onward to the next section.
   Component _actions() => div(classes: 'asw-rpt__actions', [
     ActionButton(
       backLabel,

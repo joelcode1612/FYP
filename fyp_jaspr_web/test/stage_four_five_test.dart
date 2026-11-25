@@ -26,8 +26,13 @@ class _FakeStagePort implements StageFourFivePort {
 
   ApiResult<QuestionReviewReceipt>? reviewResult;
   ApiResult<String?>? desiredResult;
+  /// Contract 2.1 authority. Defaults to a refusal so the existing fixtures
+  /// keep exercising the admission path; a test that wants the approval to be
+  /// the authority sets this explicitly.
+  ApiResult<ObjectiveAuthority>? authorityResult;
 
   final admissionCalls = <String>[];
+  final authorityCalls = <String>[];
   final historyCalls = <String>[];
   final detailCalls = <String>[];
   final reviewCalls = <String>[];
@@ -42,6 +47,91 @@ class _FakeStagePort implements StageFourFivePort {
   }) async {
     admissionCalls.add('$proposalId|$expectedRevision|$contextId');
     return ApiResult.success(admissionValue);
+  }
+
+  @override
+  /// The ledger reading. Defaults to a refusal, so a fixture that does not care
+  /// about execution status renders the "unavailable" wording rather than a
+  /// state nobody recorded.
+  ApiResult<AiExecutionReading>? executionResult;
+
+  /// The QG permission. Defaults to `ABSENT`, which is the true state before the
+  /// owner has been asked.
+  ApiResult<QgConsent>? consentResult;
+
+  final executionCalls = <String>[];
+  final consentCalls = <String>[];
+  final grantCalls = <String>[];
+
+  @override
+  Future<ApiResult<AiExecutionReading>> executionStatus({
+    required String assessmentId,
+  }) async {
+    executionCalls.add(assessmentId);
+    return executionResult ??
+        ApiResult.error(
+          const AssessmentFailure(
+            code: 'ledger_unavailable',
+            message: 'No execution reading in this fixture.',
+          ),
+        );
+  }
+
+  @override
+  Future<ApiResult<QgConsent>> qgConsent({
+    required String assessmentId,
+    required String proposalId,
+  }) async {
+    consentCalls.add(proposalId);
+    return consentResult ??
+        ApiResult.success(
+          const QgConsent(
+            state: 'ABSENT',
+            disclosure: <String, dynamic>{
+              'contract_version': 'ai-processing-consent-qg/1',
+              'provider': 'tokenharbor',
+              'purpose': 'Generate candidate customer questions.',
+              'data_shared': <String>['confirmed_facts', 'objective'],
+              'max_attempts': 1,
+              'endpoint': 'https://example.invalid/v1/chat/completions',
+              'model': 'fixture-model',
+            },
+          ),
+        );
+  }
+
+  @override
+  Future<ApiResult<QgConsent>> grantQgConsent({
+    required String assessmentId,
+    required String proposalId,
+    required Map<String, dynamic> echo,
+    String? contextId,
+  }) async {
+    grantCalls.add('$proposalId|${echo['disclosure_version']}');
+    return ApiResult.success(
+      QgConsent(
+        state: 'GRANTED',
+        disclosure: const <String, dynamic>{},
+        consentId: 'consent-fixture',
+        maxAttempts: 1,
+      ),
+    );
+  }
+
+  @override
+  Future<ApiResult<ObjectiveAuthority>> objectiveAuthority({
+    required String assessmentId,
+    required String proposalId,
+    required String contextId,
+  }) async {
+    authorityCalls.add('$proposalId|$contextId');
+    return authorityResult ??
+        ApiResult.error(
+          const AssessmentFailure(
+            code: 'QG_OBJECTIVE_NOT_APPROVED',
+            message: 'No derived authority in this fixture.',
+          ),
+        );
   }
 
   @override
@@ -253,6 +343,10 @@ QgCandidate _candidate({
   String executionMode = 'SIMULATED',
   String modelProvider = 'simulated-qg-v1',
   String? runId,
+  String? proposalId,
+  String responseFormat = 'SINGLE_SELECT',
+  String? referencePeriod,
+  String? measurementId = 'P1-MEAS-O1-CONCEPT-INTEREST',
   String candidateState = 'VALIDATED',
   CandidateReview review = const CandidateReview(),
   List<CandidateOption> options = const [
@@ -275,7 +369,7 @@ QgCandidate _candidate({
   objectiveId: objectiveId,
   objectiveClassification: 'FIXED_O1_O6',
   question: question,
-  responseFormat: 'SINGLE_SELECT',
+  responseFormat: responseFormat,
   options: options,
   routing: const {},
   review: review,
@@ -286,12 +380,14 @@ QgCandidate _candidate({
   fieldingAuthorized: false,
   scientificallyAccepted: false,
   objectiveAdmissionId: 'ea8d9d6b-0000-4000-8000-000000000001',
-  measurementId: 'P1-MEAS-O1-CONCEPT-INTEREST',
+  proposalId: proposalId,
+  measurementId: measurementId,
   measurementVersion: '0.1-CAND',
   runId: runId,
   contractVersion: 'sitewise-qg-candidate/1',
   adapterVersion: 'qg-candidate-adapter/1',
   promptVersion: 'qg-prompt/1',
+  referencePeriod: referencePeriod,
   structuralStatus: 'PASS',
   semanticStatus: 'PASS',
   provenanceStatus: 'PASS',
@@ -521,6 +617,8 @@ void main() {
       await tester.pump();
       await tester.pump();
 
+      // The legacy per-objective version chain keeps its explicit button; only
+      // the Direct-QG card folds the expectation into the option row.
       await tester.click(find.ancestor(
         of: find.text('Expect A'),
         matching: find.tag('button'),
@@ -552,12 +650,72 @@ void main() {
       await tester.pump();
       await tester.pump();
 
+      // The state is named in the same words Stage 3 uses, and the server's own
+      // refusal code is preserved rather than paraphrased away.
       expect(
-        find.textContaining('Admission HELD (M2_UNCERTAINTY_LINK_REQUIRED)'),
+        find.textContaining('held by the server (M2_UNCERTAINTY_LINK_REQUIRED)'),
         findsOneComponent,
+      );
+      expect(find.textContaining('Held'), findsOneComponent);
+      // The wire token is never printed as if it were a state the reader could
+      // act on, and the raw state is never the whole message.
+      expect(find.text('HELD'), findsNothing);
+      // A held admission is not attributed to an owner action that cannot
+      // change it: the previous sentence told the owner to record that the gap
+      // was worth researching even when the server had refused for policy.
+      expect(
+        find.textContaining('not recorded that this gap is worth researching'),
+        findsNothing,
       );
       expect(port.historyCalls, isEmpty);
     });
+
+    testComponents(
+      'a policy refusal is shown as the server worded it, not as a missing '
+      'owner step',
+      (tester) async {
+        // Exactly the shape `objective_admission._state` returns for a
+        // BUSINESS_DECISION_REQUIRED disposition: NOT_ADMISSIBLE, a coded
+        // reason, and a pending_requirement that says outright that this is a
+        // policy result rather than an unfinished owner action.
+        port.admissionValue = const ProposalAdmission(
+          state: 'NOT_ADMISSIBLE',
+          reason: 'ADMISSION_NOT_RESEARCH_SUITABLE_BUSINESS_DECISION_REQUIRED',
+          pendingRequirement:
+              'The candidate policy classifies this gap as '
+              'BUSINESS_DECISION_REQUIRED; a customer survey is not the '
+              'instrument that can answer it, so no objective admission is '
+              'available. This is a policy result, not a missing owner action.',
+          policyDisposition: 'BUSINESS_DECISION_REQUIRED',
+        );
+        final proposals = _FakeProposalPort([
+          _proposal(
+            id: 'p1',
+            objective: 'To investigate the trading area.',
+            state: BdjReviewState.approved,
+          ),
+        ]);
+        tester.pumpComponent(stageFour(proposals));
+        await tester.pump();
+        await tester.pump();
+
+        // The server's sentence is used verbatim.
+        expect(
+          find.textContaining('This is a policy result, not a missing owner'),
+          findsOneComponent,
+        );
+        // No "UNKNOWN" placeholder and no empty reason bracket: the two
+        // symptoms the owner reported.
+        expect(find.textContaining('UNKNOWN'), findsNothing);
+        expect(find.textContaining('()'), findsNothing);
+        // The badge is a sentence fragment, not the wire enum.
+        expect(
+          find.text('ADMISSION_NOT_RESEARCH_SUITABLE_'
+              'BUSINESS_DECISION_REQUIRED'),
+          findsNothing,
+        );
+      },
+    );
   });
 
   group('Stage 4 — Direct-QG candidate readback', () {
@@ -745,7 +903,7 @@ void main() {
       await tester.pump();
 
       await tester.click(find.ancestor(
-        of: find.text('Expect INTERESTED'),
+        of: find.text('Interested'),
         matching: find.tag('button'),
       ));
       await tester.pump();
@@ -753,6 +911,52 @@ void main() {
 
       expect(port.expectedAnswerCalls.single, 'cand-1|INTERESTED|$_revision');
       expect(port.candidateReviewCalls, isEmpty);
+    });
+
+    testComponents('eligibility is reported once per objective, not per candidate', (
+      tester,
+    ) async {
+      // A retry leaves two candidate rows on the same objective. The
+      // requirements are a property of the objective, so printing them under
+      // both rows would read as two separate assessments of the same gate.
+      port.candidateValue = [
+        _candidate(candidateId: 'cand-1'),
+        _candidate(candidateId: 'cand-2'),
+        _candidate(candidateId: 'cand-3', objectiveId: 'O2'),
+      ];
+      port.eligibilityValue = const QgEligibility(
+        prepareStatus: 'UNVERIFIED',
+        prepareRefusal: 'MEASUREMENT_SYNTHETIC_SCOPE_ONLY',
+        dispatchStatus: 'UNVERIFIED',
+        dispatchRefusal: 'QG_LIVE_AUTHORIZATION_NOT_BOUND_TO_ASSESSMENT',
+        fieldingAuthorized: false,
+        scientificallyAccepted: false,
+        dispatchesModel: false,
+        checks: [
+          EligibilityCheck(
+            checkId: 'MV-10',
+            title: 'Measurement is scientifically approved',
+            status: 'UNVERIFIED',
+            reasonCode: 'MEASUREMENT_SYNTHETIC_SCOPE_ONLY',
+          ),
+        ],
+      );
+      tester.pumpComponent(stageFour());
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+
+      // O1 has two rows and O2 one, so the report is rendered twice overall —
+      // once for O1 and once for O2 — and the suppressed row says where it went
+      // rather than dropping the block silently.
+      expect(
+        find.text('Generation requirements, in the order the server checks them:'),
+        findsComponents,
+      );
+      expect(
+        find.textContaining('reported once, under its first question above'),
+        findsOneComponent,
+      );
     });
 
     testComponents('a candidate with no options cannot be reviewed as closed', (
@@ -768,6 +972,336 @@ void main() {
         find.textContaining('records no answer options'),
         findsOneComponent,
       );
+    });
+  });
+
+  // The card's reading order is the review's reasoning order. These tests exist
+  // because the previous card put the objective and the question at the same
+  // weight, tagged the owner's expectation with a lowercase fragment on the
+  // option row, and left every gap for the reviewer to notice unaided.
+  group('Stage 4 — generated question card', () {
+    late _FakeStagePort port;
+
+    setUp(() => port = _FakeStagePort());
+
+    Component stageFour({List<BdjObjectiveProposal> proposals = const []}) =>
+        StageFourQuestionReview(
+          m2AssessmentId: _assessmentId,
+          expectedRevision: _revision,
+          contextId: _contextId,
+          api: port,
+          proposalApi: _FakeProposalPort(proposals),
+        );
+
+    testComponents('the objective is labelled as not being the question', (
+      tester,
+    ) async {
+      const objective =
+          'Establish whether a collection-only coffee offer at RM 9.50 is '
+          'acceptable to buyers in the target area.';
+      // The shape the database actually holds for a contract-2.1 candidate: no
+      // admission row, no `proposal_id`, and the objective identity is the
+      // derived `proposal:<id>`.
+      port.candidateValue = [
+        _candidate(objectiveId: 'proposal:prop-1', proposalId: null),
+      ];
+      tester.pumpComponent(
+        stageFour(
+          proposals: [
+            _proposal(
+              id: 'prop-1',
+              objective: objective,
+              state: BdjReviewState.approved,
+            ),
+          ],
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+
+      // Both strings are present, and the objective carries its own label.
+      expect(find.text('Research objective'), findsOneComponent);
+      // Twice: once in the objective panel and once, labelled, on the card.
+      // That duplication is the point — the card has to carry the aim it is
+      // serving, or a reviewer judges the wording against nothing.
+      expect(find.text(objective), findsComponents);
+      expect(
+        find.textContaining('Not a questionnaire question'),
+        findsOneComponent,
+      );
+      // The generated wording is labelled as the generated wording.
+      expect(find.text('Generated question'), findsOneComponent);
+      expect(
+        find.text('How interested would you be in this concept?'),
+        findsOneComponent,
+      );
+    });
+
+    testComponents('an absent objective wording is stated, not reconstructed', (
+      tester,
+    ) async {
+      port.candidateValue = [_candidate()];
+      tester.pumpComponent(stageFour());
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        find.textContaining('carries the objective identity but not its wording'),
+        findsOneComponent,
+      );
+    });
+
+    testComponents('the intended answer is a named field, not a row tag', (
+      tester,
+    ) async {
+      port.candidateValue = [
+        _candidate(
+          review: const CandidateReview(expectedOptionCode: 'INTERESTED'),
+        ),
+      ];
+      tester.pumpComponent(stageFour());
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Your intended answer'), findsOneComponent);
+      // Named with the code and the label the record holds.
+      expect(
+        find.text('You expect respondents to choose INTERESTED — Interested.'),
+        findsOneComponent,
+      );
+      // And still denied any evidentiary status, in the same box.
+      expect(
+        find.textContaining('never counted in a CQ or EE-01 calculation'),
+        findsOneComponent,
+      );
+      expect(find.text('intended answer'), findsOneComponent);
+    });
+
+    testComponents('an unrecorded intended answer says so rather than blank', (
+      tester,
+    ) async {
+      port.candidateValue = [_candidate()];
+      tester.pumpComponent(stageFour());
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.textContaining('None recorded'), findsOneComponent);
+      expect(find.text('Your intended answer'), findsOneComponent);
+    });
+
+    testComponents('the gaps in the record are listed before the decision', (
+      tester,
+    ) async {
+      // The default fixture offers no PREFER_NOT_TO_ANSWER, which is visible on
+      // the record, so it is stated rather than left to be noticed.
+      port.candidateValue = [_candidate()];
+      tester.pumpComponent(stageFour());
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        find.text('What this record does not establish'),
+        findsOneComponent,
+      );
+      expect(find.textContaining('No opt-out option'), findsOneComponent);
+      // A bound measurement is not reported as a gap.
+      expect(
+        find.textContaining('No measurement bound to this question'),
+        findsNothing,
+      );
+      // The format and the absent period are read out once, under the wording,
+      // as what the answer can and cannot support.
+      expect(
+        find.textContaining('One choice only. No reference period is confirmed'),
+        findsOneComponent,
+      );
+      // Stated once: the reading note carries the period, so the gap list does
+      // not repeat it.
+      expect(
+        find.textContaining('No reference period'),
+        findsOneComponent,
+      );
+    });
+
+    testComponents('a question with an opt-out raises no opt-out gap', (
+      tester,
+    ) async {
+      port.candidateValue = [
+        _candidate(
+          options: const [
+            CandidateOption(
+              code: 'INTERESTED',
+              label: 'Interested',
+              order: 0,
+              orderSource: 'MEASUREMENT',
+            ),
+            CandidateOption(
+              code: 'PREFER_NOT_TO_ANSWER',
+              label: 'Prefer not to answer',
+              order: 1,
+              orderSource: 'GOVERNED_CORE',
+            ),
+          ],
+        ),
+      ];
+      tester.pumpComponent(stageFour());
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.textContaining('No opt-out option'), findsNothing);
+      expect(find.text('PREFER_NOT_TO_ANSWER'), findsOneComponent);
+    });
+
+    testComponents('the three authorities are stated as one strip', (
+      tester,
+    ) async {
+      port.candidateValue = [_candidate()];
+      tester.pumpComponent(stageFour());
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Fielding not authorised'), findsOneComponent);
+      expect(find.text('Scientific acceptance not given'), findsOneComponent);
+      expect(find.text('Measurement P1-MEAS-O1-CONCEPT-INTEREST'), findsOneComponent);
+    });
+
+    testComponents('a "not specified" period is not read as a period', (
+      tester,
+    ) async {
+      // `qg_live_candidate` writes a sentence into `reference_period` when no
+      // window is confirmed, so the field is non-null and says nothing. Reading
+      // it as a period would let the card imply a frequency it cannot support.
+      port.candidateValue = [
+        _candidate(
+          responseFormat: 'SINGLE_CHOICE',
+          referencePeriod:
+              'Not specified - no reference period is confirmed for this '
+              'objective; the item is framed as occasion-neutral.',
+          measurementId: null,
+        ),
+      ];
+      tester.pumpComponent(stageFour());
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        find.textContaining('One choice only. No reference period is confirmed'),
+        findsOneComponent,
+      );
+      // The unbound measurement is named as a gap, and as an authority chip.
+      expect(
+        find.textContaining('No measurement bound to this question'),
+        findsOneComponent,
+      );
+      expect(find.text('No measurement bound'), findsOneComponent);
+    });
+  });
+
+  group('Stage 4 — eligibility contract v2', () {
+    // The shape `qg_generation_eligibility.build_report` actually returns
+    // (`sitewise-qg-generation-eligibility/2`), copied field for field. The
+    // projection used to read `checks` / `prepare_status` / `dispatch_status`,
+    // which are v1 names, so every real report rendered as two UNVERIFIED
+    // badges with an empty requirement list while the payload held the refusal.
+    Map<String, dynamic> v2Payload() => {
+      'contract_version': 'sitewise-qg-generation-eligibility/2',
+      'assessment_id': _assessmentId,
+      'objective_id': 'proposal:5a6b77a1-45ae-56e8-b6d3-e5f254f000c4',
+      'objective_kind': 'ADDITIONAL_ASSESSMENT_OBJECTIVE',
+      'generation_status': 'FAIL',
+      'generation_refusal': 'QG_OBJECTIVE_NOT_RESEARCH_SUITABLE',
+      'scientific_status': 'FAIL',
+      'scientific_refusal': 'MEASUREMENT_NOT_FOUND',
+      'generation_checks': [
+        {
+          'check_id': 'G-01',
+          'title': 'Objective approved by the owner',
+          'status': 'PASS',
+          'reason_code': '',
+          'sources': ['8666de6d-e497-4d4b-8281-fb5069ccd658'],
+          'evidence': {'decision': 'APPROVED'},
+          'policy_version': '',
+        },
+        {
+          'check_id': 'G-05S',
+          'title': 'Objective is not explicitly unsuitable for customer research',
+          'status': 'FAIL',
+          'reason_code': 'QG_OBJECTIVE_NOT_RESEARCH_SUITABLE',
+          'sources': [],
+          'evidence': {},
+          'policy_version': '',
+        },
+      ],
+      'scientific_checks': [
+        {
+          'check_id': 'MV-01',
+          'title': 'Measurement exists for this objective',
+          'status': 'FAIL',
+          'reason_code': 'MEASUREMENT_NOT_FOUND',
+        },
+      ],
+      'scientifically_approved': false,
+      'dispatches_model': false,
+      'publication_authorized': false,
+      'fielding_authorized': false,
+    };
+
+    test('the v2 axes and checks are read, not defaulted to UNVERIFIED', () {
+      final report = QgEligibility.fromJson(v2Payload());
+      expect(report.contractVersion, 'sitewise-qg-generation-eligibility/2');
+      expect(report.objectiveKind, 'ADDITIONAL_ASSESSMENT_OBJECTIVE');
+      // `generation` is what the v1 field called `prepare`.
+      expect(report.prepareStatus, 'FAIL');
+      expect(report.prepareRefusal, 'QG_OBJECTIVE_NOT_RESEARCH_SUITABLE');
+      // `scientific` is what the v1 field called `dispatch`.
+      expect(report.dispatchStatus, 'FAIL');
+      expect(report.dispatchRefusal, 'MEASUREMENT_NOT_FOUND');
+      expect(report.checks.length, 2);
+      expect(report.checks.first.checkId, 'G-01');
+      expect(report.checks.first.status, 'PASS');
+      expect(report.firstBlocker?.checkId, 'G-05S');
+      expect(report.scientificChecks.single.reasonCode, 'MEASUREMENT_NOT_FOUND');
+      // A report is never an authority, whatever it says.
+      expect(report.fieldingAuthorized, isFalse);
+      expect(report.scientificallyAccepted, isFalse);
+      expect(report.dispatchesModel, isFalse);
+    });
+
+    test('the v1 field names still parse, so an older payload cannot regress', () {
+      final report = QgEligibility.fromJson({
+        'prepare_status': 'PASS',
+        'prepare_refusal': '',
+        'dispatch_status': 'UNVERIFIED',
+        'dispatch_refusal': 'MEASUREMENT_SYNTHETIC_SCOPE_ONLY',
+        'checks': [
+          {
+            'check_id': 'MV-10',
+            'title': 'Measurement is scientifically approved',
+            'status': 'UNVERIFIED',
+            'reason_code': 'MEASUREMENT_SYNTHETIC_SCOPE_ONLY',
+          },
+        ],
+      });
+      expect(report.prepareStatus, 'PASS');
+      expect(report.dispatchStatus, 'UNVERIFIED');
+      expect(report.dispatchRefusal, 'MEASUREMENT_SYNTHETIC_SCOPE_ONLY');
+      expect(report.checks.single.checkId, 'MV-10');
+    });
+
+    test('a report with no checks claims nothing', () {
+      final report = QgEligibility.fromJson({'objective_id': 'O1'});
+      expect(report.prepareStatus, 'UNVERIFIED');
+      expect(report.dispatchStatus, 'UNVERIFIED');
+      expect(report.checks, isEmpty);
+      expect(report.scientificChecks, isEmpty);
     });
   });
 

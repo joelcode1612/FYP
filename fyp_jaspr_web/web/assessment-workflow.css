@@ -529,3 +529,630 @@ a.sw-assessment-journey__control:hover
   font-weight: 700;
   color: var(--text-muted, #5b6b85);
 }
+
+/* --- Stage 4: generated-question cards -----------------------------------
+   A candidate card leads with the question it is asking. Provenance, the
+   eligibility report and the 21 audit fields all sit below it, because the
+   thing being judged is the wording — the previous layout printed the audit
+   grid open and it outweighed the question by roughly four to one.
+   Nothing here implies acceptance: the decision buttons post a review record,
+   and fielding stays unauthorised regardless of what they record. */
+.s4-card {
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e3e9f2);
+  border-radius: var(--radius-md, 14px);
+  padding: 14px 16px 15px;
+  margin-bottom: 12px;
+  min-width: 0;
+}
+
+.s4-card__head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+/* The id is a server value and must stay legible in full: two candidates that
+   differ in their last character are two different records. */
+.s4-id {
+  flex: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--accent-soft, #eef2fe);
+  color: var(--action, #1d4ed8);
+  border-radius: 6px;
+  padding: 2px 7px;
+  overflow-wrap: anywhere;
+}
+
+.s4-card__meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--text-muted, #5b6b85);
+}
+
+.s4-card__spacer {
+  flex: 1 1 auto;
+}
+
+.s4-pill {
+  flex: none;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .03em;
+  border-radius: var(--radius-pill, 999px);
+  padding: 2px 9px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.s4-pill--done {
+  background: #eef7f5;
+  color: #0f766e;
+}
+
+/* A simulated candidate is a simulator artifact that looks identical to a live
+   one apart from this pill, so it is the loudest thing on the card. */
+.s4-pill--risk {
+  background: #fffbeb;
+  color: #92400e;
+  border: 1px solid #f0d9a8;
+}
+
+.s4-pill--live {
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.s4-q {
+  margin: 0 0 10px;
+  font-size: 14.5px;
+  font-weight: 700;
+  line-height: 1.45;
+  letter-spacing: -.1px;
+  color: var(--text, #15233b);
+  overflow-wrap: anywhere;
+}
+
+/* --- options: the row is the expectation control -------------------------- */
+.s4-opts {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 6px;
+}
+
+.s4-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  border: 1px solid var(--border, #e3e9f2);
+  border-radius: var(--radius-sm, 8px);
+  padding: 6px 9px;
+  background: #fafbfd;
+  color: inherit;
+  cursor: pointer;
+}
+
+.s4-opt:hover {
+  border-color: #dbe4f2;
+}
+
+.s4-opt:focus-visible {
+  outline: 2px solid var(--action, #1d4ed8);
+  outline-offset: 1px;
+}
+
+.s4-opt.is-chosen {
+  border-color: #bcd0f7;
+  background: var(--accent-soft, #eef2fe);
+}
+
+.s4-opt__radio {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 1.5px solid #c3cddd;
+  background: #fff;
+  position: relative;
+}
+
+.s4-opt.is-chosen .s4-opt__radio {
+  border-color: var(--action, #1d4ed8);
+  background: var(--action, #1d4ed8);
+}
+
+.s4-opt.is-chosen .s4-opt__radio::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.s4-opt__code {
+  flex: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted, #5b6b85);
+}
+
+.s4-opt__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text, #15233b);
+  overflow-wrap: anywhere;
+}
+
+.s4-opt__mark {
+  flex: none;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--action, #1d4ed8);
+}
+
+.s4-opts__hint {
+  margin: 0 0 10px;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: #8492a6;
+}
+
+/* --- execution provenance ------------------------------------------------- */
+.s4-exec {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted, #5b6b85);
+  border: 1px solid var(--border, #e3e9f2);
+  border-radius: var(--radius-sm, 8px);
+  background: #fafbfd;
+  padding: 7px 10px;
+  margin-bottom: 10px;
+  overflow-wrap: anywhere;
+}
+
+.s4-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #cbd5e1;
+  margin-top: 5px;
+}
+
+.s4-dot.is-live {
+  background: var(--success, #0d9488);
+}
+
+.s4-dot.is-risk {
+  background: var(--warning, #b45309);
+}
+
+/* --- a recorded review ---------------------------------------------------- */
+.s4-record {
+  border-left: 3px solid var(--success, #0d9488);
+  background: #f6fbfa;
+  border-radius: 0 var(--radius-sm, 8px) var(--radius-sm, 8px) 0;
+  padding: 8px 11px;
+  margin-bottom: 10px;
+}
+
+.s4-record__label {
+  margin: 0 0 2px;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: #0f766e;
+}
+
+.s4-record__body {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text, #15233b);
+  overflow-wrap: anywhere;
+}
+
+/* A muted fact line. Never a number the page invented — every string here is
+   a server field printed as it arrived. */
+.s4-muted {
+  margin: 0 0 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted, #5b6b85);
+  overflow-wrap: anywhere;
+}
+
+/* --- decision controls ---------------------------------------------------- */
+.s4-decide {
+  margin-top: 10px;
+}
+
+.s4-decide__btns {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.s4-btn {
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  border: 1px solid var(--border-strong, #cfd8e6);
+  border-radius: var(--radius-sm, 8px);
+  background: var(--surface, #fff);
+  color: var(--text, #15233b);
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.s4-btn:focus-visible {
+  outline: 2px solid var(--action, #1d4ed8);
+  outline-offset: 1px;
+}
+
+.s4-btn--primary {
+  background: var(--action, #1d4ed8);
+  border-color: var(--action, #1d4ed8);
+  color: #fff;
+}
+
+.s4-btn--ghost {
+  border-style: dashed;
+  color: var(--text-muted, #5b6b85);
+}
+
+.s4-btn[disabled] {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+.s4-decide__note {
+  margin: 7px 0 0;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: #8492a6;
+}
+
+/* --- provenance disclosure ------------------------------------------------ */
+.s4-aud {
+  margin-top: 11px;
+  border-top: 1px solid var(--border, #e3e9f2);
+  padding-top: 9px;
+}
+
+.s4-aud__toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-muted, #5b6b85);
+  cursor: pointer;
+  list-style: none;
+}
+
+.s4-aud__toggle::-webkit-details-marker {
+  display: none;
+}
+
+.s4-aud__toggle::before {
+  content: "";
+  width: 0;
+  height: 0;
+  border-left: 4px solid #94a3b8;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform .15s;
+}
+
+.s4-aud[open] .s4-aud__toggle::before {
+  transform: rotate(90deg);
+}
+
+.s4-aud__n {
+  margin-left: auto;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+/* Provenance values are never truncated. Two ids differing in their last
+   character would render identically under an ellipsis, so long values wrap
+   instead. */
+.s4-aud__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 14px;
+  margin-top: 9px;
+  border: 1px solid var(--border, #e3e9f2);
+  border-radius: var(--radius-sm, 8px);
+  padding: 9px 11px;
+  background: #fafbfd;
+}
+
+.s4-aud__cell {
+  display: flex;
+  gap: 7px;
+  min-width: 0;
+  padding: 2px 0;
+}
+
+.s4-aud__k {
+  flex: none;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.s4-aud__v {
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  line-height: 1.4;
+  color: #334155;
+  overflow-wrap: anywhere;
+}
+
+.s4-aud__v.is-empty {
+  color: #b6c0cf;
+  font-style: italic;
+}
+
+@media (max-width: 720px) {
+  .s4-aud__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+
+/* The progress contract's own blocker, under the step it belongs to.
+
+   Only the selected step renders it, so the five-column tracker keeps its
+   shape; the sentence is clamped here because the full text is also printed in
+   the workspace notice and carried in the control's title/aria-label. Colour
+   matches the blocked circle so the reason and the badge read as one state. */
+.sw-assessment-journey__step-reason {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  max-width: 20ch;
+  margin-top: 2px;
+  color: #8a641f;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+/* --- Stage 4: the generated question card --------------------------------
+   The order on the card is the order the judgement is made in: what the
+   question is for (subdued), the question itself (the loudest text), the
+   options, the owner's intended answer, the execution that produced it, the
+   gaps the record leaves, then the decision. The objective reference used to
+   be a peer of the question in a separate panel at the same weight, and the
+   two were read as the same thing. */
+
+/* The objective is context, not content: quieter than the question in every
+   dimension, and labelled so it cannot be read as respondent-facing wording. */
+.s4-objref {
+  border-left: 3px solid var(--border, #e3e9f2);
+  padding: 1px 0 1px 10px;
+  margin: 0 0 12px;
+}
+
+.s4-objref__head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.s4-objref__k {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-muted, #5b6b85);
+}
+
+.s4-objref__text {
+  margin: 0 0 3px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #46536b;
+  overflow-wrap: anywhere;
+}
+
+.s4-objref__text--absent {
+  font-style: italic;
+  color: #8492a6;
+}
+
+.s4-objref__note {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.45;
+  color: #8492a6;
+}
+
+.s4-qhead__label {
+  flex: none;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--action, #1d4ed8);
+}
+
+/* The wording is the thing being judged, so it is the largest text on the
+   card. It used to match the objective paragraph in weight and size. */
+.s4-q {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.42;
+  margin: 0 0 6px;
+}
+
+.s4-qhint {
+  margin: 0 0 10px;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: #8492a6;
+}
+
+/* The chosen option is marked, but the mark is a marker, not the label: the
+   named field below carries the meaning. */
+.s4-opt__mark {
+  flex: none;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .02em;
+  text-transform: none;
+  color: var(--action, #1d4ed8);
+  background: #fff;
+  border: 1px solid #bcd0f7;
+  border-radius: var(--radius-pill, 999px);
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+
+/* --- the owner's intended answer -----------------------------------------
+   Warning-tinted on purpose. This is the one control on the card that writes
+   something about the owner's own belief, and it must not be mistaken for a
+   respondent answer or for a review decision. */
+.s4-answer {
+  border: 1px solid #f0d9a8;
+  background: #fffbeb;
+  border-radius: var(--radius-sm, 8px);
+  padding: 8px 10px;
+  margin: 0 0 10px;
+}
+
+.s4-answer__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+
+.s4-answer__k {
+  flex: 1 1 auto;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: #92400e;
+}
+
+.s4-answer__clear {
+  flex: none;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  color: #92400e;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.s4-answer__v {
+  margin: 0 0 3px;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: #7c3a06;
+  overflow-wrap: anywhere;
+}
+
+.s4-answer__note {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.5;
+  color: #92400e;
+}
+
+/* --- gaps the record leaves ---------------------------------------------- */
+.s4-flags {
+  border-left: 3px solid var(--warning, #b45309);
+  background: #fffdf7;
+  border-radius: 0 var(--radius-sm, 8px) var(--radius-sm, 8px) 0;
+  padding: 7px 11px;
+  margin: 0 0 10px;
+}
+
+.s4-flags__k {
+  margin: 0 0 3px;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: #92400e;
+}
+
+.s4-flags__i {
+  margin: 0 0 4px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #6b4a12;
+  overflow-wrap: anywhere;
+}
+
+.s4-flags__i:last-child {
+  margin-bottom: 0;
+}
+
+/* --- the three authorities this card does not carry ----------------------- */
+.s4-auth {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 0 0 10px;
+}
+
+.s4-auth__i {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  border-radius: var(--radius-pill, 999px);
+  padding: 2px 9px;
+  background: #f6f8fb;
+  color: #6b7a90;
+  border: 1px solid var(--border, #e3e9f2);
+  white-space: nowrap;
+}
+
+/* Set only when the server reported authority it is not supposed to have. */
+.s4-auth__i.is-on {
+  background: #fef2f2;
+  color: #b91c1c;
+  border-color: #f3c9c9;
+}
+
+.s4-auth__i.is-off {
+  background: #fffbeb;
+  color: #92400e;
+  border-color: #f0d9a8;
+}

@@ -51,6 +51,7 @@ from dataclasses import dataclass
 from sqlalchemy import text
 
 from sitewise.project1 import measurement_library as ml
+from sitewise.project1 import qg_attempt
 from sitewise.project1 import qg_authorization
 from sitewise.project1 import source_currentness
 from sitewise.project1.contracts import WorkflowHeld, digest
@@ -146,17 +147,26 @@ SIMULATED_RECEIPT = ExecutionReceipt(
 
 
 def facts_from_objective(packet: dict, *, objective_id: str,
-                         objective_text: str, admission_id: str) -> ConfirmedFacts:
+                         objective_text: str, admission_id: str | None = None,
+                         authority_ref: str | None = None) -> ConfirmedFacts:
     """Assemble ``ConfirmedFacts`` for the M2 V2 -> BDJ objective path.
 
     ``qg_contract.facts_from_packet`` expects a ``confirmed_uncertainty`` block.
     A BCB 1.2.1 packet built from a confirmed M2 V2 revision has
     ``confirmed_uncertainty = null`` — the M2 V2 contract has no confirmed
-    uncertainty object at all. The anchor in this path is the **admitted
+    uncertainty object at all. The anchor in this path is the **authorised
     objective**, so that is what is bound, and the substitution is recorded in
     ``uncertainty_source`` rather than being passed off as a confirmed
     uncertainty.
+
+    ``authority_ref`` names that anchor in contract 2.1 (``decision:<uuid>``),
+    where no admission row exists. ``admission_id`` remains for the legacy path.
+    Exactly one must be supplied; a candidate whose provenance names neither
+    cannot be traced back to the thing that authorised it.
     """
+    anchor = authority_ref or (f'admission:{admission_id}' if admission_id else None)
+    if anchor is None:
+        raise WorkflowHeld('QG_CONFIRMED_FACTS_INCOMPLETE')
     answers = packet.get('m2_answers') or []
     revision_ids = [str(a['answer_revision_id']) for a in answers
                     if a.get('answer_revision_id')]
@@ -190,7 +200,7 @@ def facts_from_objective(packet: dict, *, objective_id: str,
                       for s in packet.get('supporting_sources') or []
                       if isinstance(s, dict) and s.get('id')})
     sources.append(f'objective:{objective_id}')
-    sources.append(f'admission:{admission_id}')
+    sources.append(anchor)
 
     # A confirmed ``amount_myr`` is a decimal in MYR by the item's own type, so
     # rendering it as ``RM<amount>`` restates the confirmed value rather than
@@ -218,7 +228,7 @@ def facts_from_objective(packet: dict, *, objective_id: str,
         # Named for what it is: the admitted objective, not a confirmed
         # uncertainty. A reader must not have to infer that from context.
         uncertainty_id=objective_id,
-        uncertainty_version=str(admission_id),
+        uncertainty_version=anchor,
         uncertainty_text=objective_text,
         bcb_version=str(packet.get('context_version')
                         or packet.get('schema_version')
@@ -349,8 +359,25 @@ class QgCandidateAdapter:
                 source_fingerprint, context_id, context_packet_hash,
                 objective_id, objective_text, proposal_id, packet,
                 stimulus: dict, authorization_id, prompt_version,
-                prompt_sha256, population: str | None = None) -> dict:
-        """Run the gated attempt. Returns an envelope, never a bare candidate."""
+                prompt_sha256, population: str | None = None,
+                authority: dict | None = None,
+                response_format: str | None = None) -> dict:
+        """Run the gated attempt. Returns an envelope, never a bare candidate.
+
+        ``authority`` is the contract 2.1 relationship derived from the owner's
+        approval (``qg_generation_eligibility.derive_objective_authority``).
+        Supplying it replaces the legacy admission gate: the owner has already
+        said this objective is worth researching, and asking again through a
+        separate admission row is the step the directive removes. When it is
+        absent the legacy admission path runs unchanged, because historical rows
+        and the operator script still depend on it.
+
+        ``response_format`` is only consulted when the basis is
+        ``PROPOSED_NOT_CONFIRMED``: with no approved specification there is no
+        format to inherit, so the drafting caller must name one and it is
+        validated against the five supported formats. Naming it is a drafting
+        choice; the row still records that no measurement was approved.
+        """
         envelope = {
             'adapter_version': ADAPTER_VERSION,
             'fixed_option_contract': FIXED_OPTION_CONTRACT,
@@ -384,26 +411,71 @@ class QgCandidateAdapter:
             })
             return envelope
         if not reusable:
-            envelope.update({
-                'outcome': 'HELD_NO_APPROVED_MEASUREMENT',
-                'dispatched': False,
-                'candidate_persisted': False,
-                'authorization_consumed': False,
-                'proposed_extension_allowed': True,
-                'abstention_reason': measurement['reason'],
-            })
-            return envelope
+            if authority is None:
+                envelope.update({
+                    'outcome': 'HELD_NO_APPROVED_MEASUREMENT',
+                    'dispatched': False,
+                    'candidate_persisted': False,
+                    'authorization_consumed': False,
+                    'proposed_extension_allowed': True,
+                    'abstention_reason': measurement['reason'],
+                })
+                return envelope
+            # Contract 2.1: an approved *objective* may be drafted against a
+            # proposed measurement. This is the only way a candidate can be
+            # produced without a scientifically approved specification, and the
+            # row says so: PROPOSED_NOT_CONFIRMED travels into
+            # m2_qg_candidates.measurement_basis and into the envelope, so no
+            # reader can mistake it for an approval.
+            if response_format not in ml.CANDIDATE_FORMATS:
+                raise WorkflowHeld('QG_PROPOSED_MEASUREMENT_FORMAT_REQUIRED')
+            envelope['measurement']['measurement_basis'] = qg_authorization.BASIS_PROPOSED
+            envelope['measurement']['response_format'] = response_format
 
-        admission = self.require_admitted(
-            proposal_id, source_fingerprint=source_fingerprint,
-            objective_id=objective_id)
-        envelope['admission'] = {
-            'admission_state': admission.get('admission_state'),
-            'admission_id': admission.get('admission_id'),
-            'admission_reason': admission.get('admission_reason'),
-            'objective_id': admission.get('objective_id'),
-            'qg_eligible': admission.get('qg_eligible'),
-        }
+        if authority is not None:
+            decision = authority.get('decision') or {}
+            objective_decision_id = str(decision.get('decision_id') or '')
+            if not objective_decision_id:
+                raise WorkflowHeld('QG_AUTHORITY_DECISION_REQUIRED')
+            objective_kind = str(authority.get('objective_kind') or '')
+            if objective_kind not in qg_authorization.OBJECTIVE_KINDS:
+                raise WorkflowHeld('QG_AUTHORITY_KIND_REQUIRED')
+            measurement_basis = (qg_authorization.BASIS_APPROVED if reusable
+                                 else qg_authorization.BASIS_PROPOSED)
+            admission_id = None
+            authority_ref = f'decision:{objective_decision_id}'
+            envelope['authority'] = {
+                'authority_basis': qg_authorization.AUTHORITY_DECISION,
+                'objective_decision_id': objective_decision_id,
+                'objective_kind': objective_kind,
+                'measurement_basis': measurement_basis,
+                'decided_by': (None if decision.get('decided_by') is None
+                               else str(decision.get('decided_by'))),
+                'decided_at': decision.get('decided_at'),
+                # Recorded as a value, not implied by an empty field: the
+                # relationship was derived, and a reader should not have to
+                # infer that no owner action is outstanding.
+                'requires_separate_owner_action': False,
+                'objective_id': authority.get('objective_id'),
+                'confirmation_id': authority.get('confirmation_id'),
+                'confirmation_revision': authority.get('confirmation_revision'),
+            }
+        else:
+            admission = self.require_admitted(
+                proposal_id, source_fingerprint=source_fingerprint,
+                objective_id=objective_id)
+            admission_id = admission['admission_id']
+            authority_ref = f'admission:{admission_id}'
+            objective_decision_id = None
+            objective_kind = None
+            measurement_basis = None
+            envelope['admission'] = {
+                'admission_state': admission.get('admission_state'),
+                'admission_id': admission.get('admission_id'),
+                'admission_reason': admission.get('admission_reason'),
+                'objective_id': admission.get('objective_id'),
+                'qg_eligible': admission.get('qg_eligible'),
+            }
 
         # The admission says the owner once decided this. It does not say the
         # snapshot that decision cites is still the workflow's source. Checked
@@ -434,11 +506,14 @@ class QgCandidateAdapter:
             context_id=context_id,
             context_packet_hash=context_packet_hash,
             objective_id=objective_id,
-            objective_admission_id=admission['admission_id'],
+            objective_admission_id=admission_id,
             measurement_id=measurement['measurement_id'],
             measurement_version=measurement['measurement_version'],
             prompt_version=prompt_version,
             prompt_sha256=prompt_sha256,
+            objective_decision_id=objective_decision_id,
+            objective_kind=objective_kind,
+            measurement_basis=measurement_basis,
         )
         envelope['authorization'] = {
             'authorization_id': authorization['authorization_id'],
@@ -448,10 +523,45 @@ class QgCandidateAdapter:
 
         facts = facts_from_objective(
             packet, objective_id=objective_id, objective_text=objective_text,
-            admission_id=admission['admission_id'])
+            admission_id=admission_id, authority_ref=authority_ref)
 
-        approved_population = population or measurement['population']
-        approved_format = measurement['response_format']
+        # With a proposed basis there is no approved population to inherit, so
+        # the generator is given whatever the caller supplied and validation
+        # checks only that the candidate declares one.
+        approved_population = (population
+                               or measurement.get('population')
+                               or '')
+        approved_format = (response_format if measurement_basis
+                           == qg_authorization.BASIS_PROPOSED
+                           else measurement['response_format'])
+
+        # With a proposed basis there is no approved specification to enforce, and
+        # the registered prompt explicitly lets the model choose: "response_format
+        # is exactly one of SINGLE_CHOICE, BINARY_CHOICE, ORDERED_SCALE,
+        # NUMERIC_RANGE_OPTIONS, MULTIPLE_CHOICE". Constraining validation to the
+        # caller's hint therefore refused a single-choice answer to a single-choice
+        # question with UNSUPPORTED_FORMAT — a disagreement between the request
+        # default and the prompt, not a defect in the answer. A proposed basis
+        # accepts any registered format; an approved basis still enforces exactly
+        # its own, because there the format *is* part of the specification.
+        allowed_formats = (
+            frozenset(ml.CANDIDATE_FORMATS)
+            if measurement_basis == qg_authorization.BASIS_PROPOSED
+            else frozenset({approved_format}))
+
+        # Spend the attempt before the socket opens. Both records that authorise
+        # it — the single-use authorization and the owner's consent grant — are
+        # reserved in one transaction here, so a failed or unknown-outcome call
+        # is still recorded as an attempt and cannot be replayed. Doing this
+        # after persistence, as it used to be, meant a successful provider call
+        # whose write failed left the authorization looking unspent.
+        reservation = qg_attempt.reserve(
+            self.engine, actor_id=self.actor_id,
+            authorization_id=authorization_id,
+            assessment_id=assessment_id,
+            confirmation_id=confirmation_id,
+            assessment_revision=assessment_revision,
+            objective_decision_id=objective_decision_id)
 
         # Dispatch happens only now, after every gate above has passed.
         self.dispatch_calls += 1
@@ -468,9 +578,30 @@ class QgCandidateAdapter:
 
         candidate = validate_fixed_candidate(
             raw, facts,
-            supported_formats=frozenset({approved_format}),
+            supported_formats=allowed_formats,
             approved_population=approved_population,
-            period_required=False)
+            period_required=False,
+            population_basis=(measurement_basis
+                              or qg_authorization.BASIS_APPROVED))
+
+        # The row must describe the question that was actually drafted. Under a
+        # proposed basis the candidate may legitimately choose a format other than
+        # the one the caller hinted, and recording the hint would make the row
+        # claim a format the question does not have.
+        #
+        # An abstention has no measurement at all — the contract forbids one —
+        # so there is no drafted format to read. Reading it unconditionally
+        # raised ``AttributeError: 'NoneType' object has no attribute
+        # 'response_format'`` *after* the provider had answered and the attempt
+        # had been spent, which surfaced as a 500 and left no candidate row
+        # (ledger reason RETURNED_NOT_PERSISTED). The column is NOT NULL and
+        # CHECK-constrained to the five formats, so an abstention records the
+        # format the attempt was aimed at; ``candidate_state = 'ABSTAINED'`` and
+        # ``structural_status = 'ABSTAINED'`` are what say no question exists.
+        if candidate.fixed_measurement is not None:
+            recorded_format = candidate.fixed_measurement.response_format
+        else:
+            recorded_format = approved_format
 
         candidate_json = candidate.model_dump(mode='json')
         output_digest = digest(candidate_json)
@@ -485,15 +616,21 @@ class QgCandidateAdapter:
 
         candidate_id = uuid.uuid5(uuid.NAMESPACE_URL, '|'.join([
             'qg-fixed-candidate', str(assessment_id), str(objective_id),
-            str(admission['admission_id']),
+            # The authority reference, not a legacy admission id: a 2.1 attempt
+            # has no admission, and hashing 'None' would collide across
+            # different approvals.
+            authority_ref,
             str(measurement['measurement_id']),
             str(measurement['measurement_version']),
             output_digest, ADAPTER_VERSION]))
 
         request_digest = digest({
             'facts': facts.model_dump(mode='json'),
-            'measurement': measurement['measurement_id'] + '@' +
-                           measurement['measurement_version'],
+            'measurement': ('PROPOSED@' + str(approved_format)
+                            if measurement_basis
+                            == qg_authorization.BASIS_PROPOSED
+                            else str(measurement['measurement_id']) + '@' +
+                                 str(measurement['measurement_version'])),
             'objective_id': objective_id,
             'prompt_version': prompt_version,
             'prompt_sha256': prompt_sha256,
@@ -506,22 +643,22 @@ class QgCandidateAdapter:
             assessment_revision=assessment_revision,
             source_fingerprint=source_fingerprint, context_id=context_id,
             context_packet_hash=context_packet_hash, objective_id=objective_id,
-            admission_id=admission['admission_id'],
+            admission_id=admission_id, decision_id=objective_decision_id,
+            objective_kind=objective_kind, measurement_basis=measurement_basis,
             measurement=measurement, authorization_id=authorization_id,
             prompt_version=prompt_version, prompt_sha256=prompt_sha256,
             request_digest=request_digest, output_digest=output_digest,
-            response_format=approved_format, state=state,
+            response_format=recorded_format, state=state,
             structural=structural, candidate_json=candidate_json,
             receipt=receipt)
 
-        # The authorization is spent by *this attempt*, not by the row being new.
-        # Persistence is idempotent (a byte-identical candidate keeps its id), so
-        # keying consumption off ``created`` would leave a spent attempt looking
-        # unspent and let the same authorization be replayed.
-        qg_authorization.consume(
-            self.engine, actor_id=self.actor_id,
-            authorization_id=authorization_id, candidate_id=candidate_id)
-        consumed = True
+        # The attempt was spent before dispatch (see ``qg_attempt.reserve``), so
+        # there is nothing left to consume here. The candidate names the
+        # authorization it came from, which is the same link in the other
+        # direction; ``consumed_candidate_id`` stays NULL because the candidate
+        # did not exist when the attempt was reserved, and inventing a
+        # post-dispatch second write would break the single-transition guard.
+        consumed = bool(reservation.get('reserved'))
 
         envelope.update({
             'outcome': 'ABSTAINED_BY_MODEL' if abstained else 'CANDIDATE_VALIDATED',
@@ -532,9 +669,18 @@ class QgCandidateAdapter:
             'candidate_persisted': persisted['created'],
             'candidate_already_existed': not persisted['created'],
             'authorization_consumed': consumed,
+            # Where the spend happened, and whether the owner's consent grant
+            # was the record that paid for it. ``consent_id`` is null only for a
+            # grant read from the legacy snapshot location, which has no row to
+            # reserve.
+            'attempt_reservation': {
+                'reserved_before_dispatch': bool(
+                    reservation.get('reserved_before_dispatch')),
+                'consent_id': reservation.get('consent_id'),
+            },
             'output_sha256': output_digest,
             'request_sha256': request_digest,
-            'response_format': approved_format,
+            'response_format': recorded_format,
             'execution': {
                 'execution_mode': receipt.execution_mode,
                 'model_provider': receipt.model_provider,
@@ -559,7 +705,9 @@ class QgCandidateAdapter:
                  context_packet_hash, objective_id, admission_id, measurement,
                  authorization_id, prompt_version, prompt_sha256,
                  request_digest, output_digest, response_format, state,
-                 structural, candidate_json, receipt: ExecutionReceipt) -> dict:
+                 structural, candidate_json, receipt: ExecutionReceipt,
+                 decision_id=None, objective_kind=None,
+                 measurement_basis=None) -> dict:
         from sitewise.repositories.m2_context_bindings import bind_restricted_principal
         from sitewise.services.business_context_v1 import ContextRefused
         with self.engine.begin() as conn:
@@ -578,7 +726,8 @@ class QgCandidateAdapter:
                     model_provider, model_requested, model_returned,
                     response_format, candidate_state, structural_status,
                     semantic_status, provenance_status, contract_version,
-                    adapter_version, candidate_json, owner_user_id)
+                    adapter_version, candidate_json, owner_user_id,
+                    objective_decision_id, objective_kind, measurement_basis)
                 VALUES (
                     :candidate, :assessment, :confirmation, :revision, :source,
                     :context, :context_hash, :objective, :admission,
@@ -587,7 +736,8 @@ class QgCandidateAdapter:
                     :output_sha, :mode, :provider, :model_requested,
                     :model_returned, :format,
                     :state, :structural, 'UNDER_REVIEW', 'SOURCE_BOUND',
-                    :contract, :adapter, CAST(:body AS jsonb), :owner)
+                    :contract, :adapter, CAST(:body AS jsonb), :owner,
+                    :decision, :kind, :basis)
                 ON CONFLICT (candidate_id) DO NOTHING
             """), {
                 'candidate': str(candidate_id), 'assessment': str(assessment_id),
@@ -595,7 +745,8 @@ class QgCandidateAdapter:
                 'revision': int(assessment_revision),
                 'source': source_fingerprint, 'context': str(context_id),
                 'context_hash': context_packet_hash, 'objective': objective_id,
-                'admission': str(admission_id),
+                'admission': (None if admission_id is None
+                              else str(admission_id)),
                 'measurement': measurement['measurement_id'],
                 'measurement_version': measurement['measurement_version'],
                 'authorization': str(authorization_id),
@@ -614,6 +765,8 @@ class QgCandidateAdapter:
                 'contract': FIXED_OPTION_CONTRACT, 'adapter': ADAPTER_VERSION,
                 'body': json.dumps(candidate_json, ensure_ascii=False),
                 'owner': str(self.actor_id),
+                'decision': (None if decision_id is None else str(decision_id)),
+                'kind': objective_kind, 'basis': measurement_basis,
             }).rowcount
         return {'created': inserted == 1}
 
@@ -635,7 +788,8 @@ def read_candidates(engine, *, actor_id, assessment_id, limit: int = 50) -> list
                    execution_mode, model_provider, model_returned,
                    response_format, candidate_state, structural_status,
                    semantic_status, provenance_status, contract_version,
-                   adapter_version, owner_user_id, created_at
+                   adapter_version, owner_user_id, created_at,
+                   objective_decision_id, objective_kind, measurement_basis
             FROM public.m2_qg_candidates
             WHERE assessment_id = :a
             ORDER BY created_at DESC, candidate_id

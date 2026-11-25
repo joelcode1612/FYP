@@ -86,7 +86,8 @@ def receipt_from_execution(execution: dict | None, *, prompt) -> ExecutionReceip
 
 
 def live_fixed_option_generator(runner, *, policy_version: str,
-                                prompt_key: str = PROMPT_KEY):
+                                prompt_key: str = PROMPT_KEY,
+                                attempt_slot: int = 1):
     """Build the ``generate`` callable the adapter expects.
 
     The returned callable raises rather than degrading. A provider failure is the
@@ -101,7 +102,12 @@ def live_fixed_option_generator(runner, *, policy_version: str,
     def generate(payload: dict) -> GenerationResult:
         facts = payload['facts']
         qg_input = build_qg_input(facts, policy_version=policy_version)
-        raw = runner('QG', qg_input, FixedOptionCandidate, prompt_key=prompt_key)
+        # The slot is passed ONLY when one is actually asked for, so the ordinary
+        # call shape stays exactly what it was and every existing runner double
+        # keeps working. A retry is a deliberate act, not a default (DD-054).
+        slot = {'attempt_slot': attempt_slot} if attempt_slot != 1 else {}
+        raw = runner('QG', qg_input, FixedOptionCandidate, prompt_key=prompt_key,
+                     **slot)
         receipt = receipt_from_execution(runner.last_execution, prompt=prompt)
         return GenerationResult(output=raw, receipt=receipt)
 

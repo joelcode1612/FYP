@@ -48,24 +48,37 @@ class CustomerQuestionnaireService:
         return release,manifest,policy,grant
 
     def manifest(self,rid,actor):
-        with self.store.open() as unit:
+        with self.store.open(actor) as unit:
             release,manifest,_,grant=self._release(unit,rid,actor,'manifest')
             return {'contract_version':'cq-release/1','release_id':rid,'manifest_hash':release['manifest_hash'],
                 'execution_scope':grant.scope,'production_fielding_authorized':grant.production_fielding_authorized,
                 'manifest':manifest}
 
     def create_campaign(self,aid,rid,actor):
-        with self.store.open() as unit:
-            assessment=unit.m2.get_assessment_for_update(aid,actor)
-            if assessment is None: raise CqRefused('CQ_ASSESSMENT_NOT_FOUND',404)
-            self._release(unit,rid,actor,'campaign')
+        with self.store.open(actor) as unit:
+            # Ownership is answered by a SECURITY DEFINER predicate, not by
+            # reading m2_assessments: this transaction runs as the CQ write
+            # principal, which holds no privilege on the M2 tables.
+            if not unit.assessment_owned(aid): raise CqRefused('CQ_ASSESSMENT_NOT_FOUND',404)
+            # The campaign row is inserted BEFORE the release is validated,
+            # because a release is only visible through a campaign that
+            # references it (`cq_manifest_releases` SELECT is
+            # `id IN (SELECT release_id FROM cq_campaigns)`). Validating first
+            # was a deadlock: `_release` could never see the row it was asked
+            # to validate, so every campaign creation returned
+            # CQ_MANIFEST_NOT_FOUND. (DD-CQ-21)
+            #
+            # Nothing is committed by the insert. `PostgresCqStore.open` rolls
+            # the whole block back on any refusal and `commit()` is the last
+            # statement, so a release that fails validation leaves no campaign.
             row=unit.create_campaign(aid,actor,rid)
+            self._release(unit,rid,actor,'campaign')
             if row['release_id']!=rid or row['owner_user_id']!=actor:
                 raise CqRefused('CQ_ASSESSMENT_ALREADY_HAS_CAMPAIGN')
             unit.commit();return row
 
     def invite(self,cid,respondent,actor):
-        with self.store.open() as unit:
+        with self.store.open(actor) as unit:
             campaign=unit.campaign(cid)
             if campaign is None or campaign['owner_user_id']!=actor: raise CqRefused('CQ_CAMPAIGN_NOT_FOUND',404)
             self._release(unit,campaign['release_id'],actor,'invite')
@@ -73,7 +86,7 @@ class CustomerQuestionnaireService:
             return {'campaign_id':cid,'respondent_id':respondent}
 
     def invitations(self,actor):
-        with self.store.open() as unit:
+        with self.store.open(actor) as unit:
             result=[];held=False
             for row in unit.invitations(actor):
                 try: release,m,_,grant=self._release(unit,row['release_id'],actor,'participate')
@@ -91,7 +104,7 @@ class CustomerQuestionnaireService:
                 'invitations':result}
 
     def start(self,cid,manifest_hash,locale,actor):
-        with self.store.open() as unit:
+        with self.store.open(actor) as unit:
             campaign=unit.campaign(cid)
             if campaign is None or not unit.participant(cid,actor): raise CqRefused('CQ_CAMPAIGN_NOT_FOUND',404)
             release,m,p,g=self._release(unit,campaign['release_id'],actor,'participate')
@@ -175,11 +188,11 @@ class CustomerQuestionnaireService:
                 else consent_notice.build_notice(self.contract,scope=g.scope))}
 
     def read(self,sid,actor):
-        with self.store.open() as unit:
+        with self.store.open(actor) as unit:
             return self._view(unit,*self._load(unit,sid,actor))
 
     def consent(self,sid,actor,*,revision,manifest_hash,request_id,consented,version):
-        with self.store.open() as unit:
+        with self.store.open(actor) as unit:
             s,release,m,p,g=self._load(unit,sid,actor,True)
             if not consented: raise CqRefused('CQ_USE_WITHDRAWAL_ENDPOINT',422)
             body=digest([revision,manifest_hash,consented,version]);retry=unit.consent_retry(sid,request_id)
@@ -196,7 +209,7 @@ class CustomerQuestionnaireService:
             result=self._view(unit,s,release,m,p,g);unit.commit();return result
 
     def expose(self,sid,actor,*,revision,manifest_hash,kind):
-        with self.store.open() as unit:
+        with self.store.open(actor) as unit:
             s,release,m,p,g=self._load(unit,sid,actor,True)
             self._active(s,revision,manifest_hash,release)
             before=self._view(unit,s,release,m,p,g)
@@ -214,7 +227,7 @@ class CustomerQuestionnaireService:
         return decision
 
     def present(self,sid,actor,*,revision,manifest_hash,edit_slot_id=None):
-        with self.store.open() as unit:
+        with self.store.open(actor) as unit:
             s,release,m,p,g=self._load(unit,sid,actor,True)
             self._active(s,revision,manifest_hash,release)
             view=self._view(unit,s,release,m,p,g)
@@ -231,7 +244,7 @@ class CustomerQuestionnaireService:
             unit.commit();return view
 
     def answer(self,sid,actor,*,revision,manifest_hash,request_id,display_id,slot_id,value):
-        with self.store.open() as unit:
+        with self.store.open(actor) as unit:
             s,release,m,p,g=self._load(unit,sid,actor,True)
             if not s['consented'] or s['state']!='ACTIVE': raise CqRefused('CQ_SESSION_CLOSED')
             body=digest([revision,manifest_hash,str(display_id),slot_id,value]);retry=unit.answer_retry(sid,request_id)
@@ -266,7 +279,7 @@ class CustomerQuestionnaireService:
             unit.commit();return result
 
     def submit(self,sid,actor,*,revision,manifest_hash,request_id):
-        with self.store.open() as unit:
+        with self.store.open(actor) as unit:
             s,release,m,p,g=self._load(unit,sid,actor,True)
             prior=unit.receipt(sid)
             if prior:
@@ -294,13 +307,13 @@ class CustomerQuestionnaireService:
             result=self._view(unit,s,release,m,p,g);unit.commit();return result
 
     def history(self,sid,actor):
-        with self.store.open() as unit:
+        with self.store.open(actor) as unit:
             self._load(unit,sid,actor)
             return {'contract_version':'cq-history/1','session_id':sid,'answers':unit.history(sid)}
 
     def lifecycle(self,sid,actor,*,action,revision,manifest_hash,request_id):
         if action not in {'PAUSE','RESUME'}: raise CqRefused('CQ_LIFECYCLE_ACTION_INVALID',422)
-        with self.store.open() as unit:
+        with self.store.open(actor) as unit:
             s,release,m,p,g=self._load(unit,sid,actor,True)
             body=digest([revision,manifest_hash,action]);retry=unit.lifecycle_retry(sid,request_id)
             if retry:
@@ -316,7 +329,7 @@ class CustomerQuestionnaireService:
             result=self._view(unit,s,release,m,p,g);unit.commit();return result
 
     def rendered(self,sid,actor,*,revision,manifest_hash,display_id):
-        with self.store.open() as unit:
+        with self.store.open(actor) as unit:
             s,release,m,p,g=self._load(unit,sid,actor,True)
             self._active(s,revision,manifest_hash,release)
             d=unit.display(display_id)
@@ -335,7 +348,7 @@ class CustomerQuestionnaireService:
     def withdraw(self,sid,actor,*,revision,manifest_hash,request_id):
         # Withdrawal stays available to the owning respondent after authority
         # revocation. It never returns or activates an unapproved instrument.
-        with self.store.open() as unit:
+        with self.store.open(actor) as unit:
             s=unit.owned_session(sid,actor,True)
             if s is None: raise CqRefused('CQ_SESSION_NOT_FOUND',404)
             release=unit.release(s['release_id'])

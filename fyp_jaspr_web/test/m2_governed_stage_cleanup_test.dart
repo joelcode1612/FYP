@@ -2,6 +2,7 @@ import 'package:jaspr_test/jaspr_test.dart';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:jaspr/dom.dart';
+import 'package:jaspr/jaspr.dart' show DomElement;
 import 'package:shared_logic/shared_logic.dart';
 import 'package:sitewise_jaspr_web/features/assessment/presentation/components/project1_research_stage_panel.dart';
 import 'package:sitewise_jaspr_web/core/di/app_locator.dart';
@@ -31,44 +32,89 @@ class GovernedClient extends fixture.SaveClient {
     final packet = <String, dynamic>{
       'schema_version': 'business-context-package/1.1',
       'identity': {'assessment_id': fixture.mid},
-      'confirmation': {'id': confirmationId, 'revision': revision, 'status': 'CURRENT_CONFIRMED'},
+      'confirmation': {
+        'id': confirmationId,
+        'revision': revision,
+        'status': 'CURRENT_CONFIRMED',
+      },
       'confirmed_uncertainty': {'id': objectiveId},
       'geography': null,
       'permissions': {'qj_execution': false, 'qg_execution': false},
     };
-    packet['packet_hash'] = sha256.convert(utf8.encode(canonicalBusinessContextJson(packet))).toString();
+    packet['packet_hash'] = sha256
+        .convert(utf8.encode(canonicalBusinessContextJson(packet)))
+        .toString();
     if (withVerifiedCandidate && path.endsWith('/business-context-status')) {
       calls.add('GET $path');
-      return {'assessment_id': fixture.mid, 'confirmation_id': confirmationId,
-        'assessment_revision': revision, 'source_is_current': true, 'status': 'PERSISTED',
-        'attempt_count': 1, 'context_id': contextId};
+      return {
+        'assessment_id': fixture.mid,
+        'confirmation_id': confirmationId,
+        'assessment_revision': revision,
+        'source_is_current': true,
+        'status': 'PERSISTED',
+        'attempt_count': 1,
+        'context_id': contextId,
+      };
     }
-    if (withVerifiedCandidate && path.endsWith('/business-contexts/$contextId')) {
+    if (withVerifiedCandidate &&
+        path.endsWith('/business-contexts/$contextId')) {
       calls.add('GET $path');
-      return {'contract_version': 'persisted-business-context/1', 'assessment_id': fixture.mid,
-        'confirmation_id': confirmationId, 'assessment_revision': revision,
-        'lifecycle_status': 'PERSISTED', 'context_id': contextId, 'replayed': false,
-        'created_at': '2026-01-01T00:00:00Z', 'qj_execution_authorized': false,
-        'qg_execution_authorized': false, 'packet': packet};
+      return {
+        'contract_version': 'persisted-business-context/1',
+        'assessment_id': fixture.mid,
+        'confirmation_id': confirmationId,
+        'assessment_revision': revision,
+        'lifecycle_status': 'PERSISTED',
+        'context_id': contextId,
+        'replayed': false,
+        'created_at': '2026-01-01T00:00:00Z',
+        'qj_execution_authorized': false,
+        'qg_execution_authorized': false,
+        'packet': packet,
+      };
     }
-    const options = [{'code': 'A', 'label': 'Synthetic option A', 'eligible': true},
-                     {'code': 'B', 'label': 'Synthetic option B', 'eligible': true}];
+    const options = [
+      {'code': 'A', 'label': 'Synthetic option A', 'eligible': true},
+      {'code': 'B', 'label': 'Synthetic option B', 'eligible': true},
+    ];
     if (withVerifiedCandidate && path.endsWith('/research-questions')) {
       calls.add('GET $path');
-      return {'objective_id': objectiveId, 'objective': 'Synthetic objective', 'versions': [
-        {'version': candidateId, 'question': 'Synthetic candidate question?', 'options': options, 'status': decision},
-      ]};
+      return {
+        'objective_id': objectiveId,
+        'objective': 'Synthetic objective',
+        'versions': [
+          {
+            'version': candidateId,
+            'question': 'Synthetic candidate question?',
+            'options': options,
+            'status': decision,
+          },
+        ],
+      };
     }
     if (withVerifiedCandidate && path.endsWith('/entrepreneur-review')) {
       calls.add('GET $path');
-      return {'id': candidateId, 'objective_id': objectiveId, 'question': 'Synthetic candidate question?',
-        'options': options, 'option_code': prediction};
+      return {
+        'id': candidateId,
+        'objective_id': objectiveId,
+        'question': 'Synthetic candidate question?',
+        'options': options,
+        'option_code': prediction,
+      };
     }
-    if (withVerifiedCandidate && path.endsWith('/research-questions/$candidateId')) {
+    if (withVerifiedCandidate &&
+        path.endsWith('/research-questions/$candidateId')) {
       calls.add('GET $path');
-      return {'version': candidateId, 'objective_id': objectiveId, 'question': 'Synthetic candidate question?',
-        'options': options, 'status': decision, 'contract_version': 'P1-QG-FIXED-OPTION-1.0',
-        'fixed_measurement': {'response_format': 'BINARY_CHOICE'}, 'source_fingerprint': packet['packet_hash']};
+      return {
+        'version': candidateId,
+        'objective_id': objectiveId,
+        'question': 'Synthetic candidate question?',
+        'options': options,
+        'status': decision,
+        'contract_version': 'P1-QG-FIXED-OPTION-1.0',
+        'fixed_measurement': {'response_format': 'BINARY_CHOICE'},
+        'source_fingerprint': packet['packet_hash'],
+      };
     }
     if (path.endsWith('/bdj/current') && withBdj) {
       calls.add('GET $path');
@@ -212,7 +258,10 @@ class GovernedClient extends fixture.SaveClient {
   }
 
   @override
-  Future<Map<String, dynamic>> put(String path, Map<String, dynamic> body) async {
+  Future<Map<String, dynamic>> put(
+    String path,
+    Map<String, dynamic> body,
+  ) async {
     if (withVerifiedCandidate && path.endsWith('/desired-option')) {
       calls.add('PUT $path');
       prediction = body['option_code'] as String?;
@@ -375,23 +424,96 @@ void main() {
     },
   );
 
-  testComponents('Stage 4 renders source-bound synthetic candidate and choices', (tester) async {
-    client.savedObjective = 'Synthetic objective';
-    client.withVerifiedCandidate = true;
-    tester.pumpComponent(const Project1ResearchStagePanel(
-      marketplaceAssessmentId: fixture.mid, propertyId: 'SYNTHETIC', stageNumber: 4));
-    await tester.pump();
-    await tester.pump();
-    expect(find.text('Synthetic candidate question?'), findsOneComponent);
-    expect(find.text('Synthetic option A'), findsComponents);
-    expect(find.text('Request revision'), findsOneComponent);
-    expect(client.calls.where((call) => !call.startsWith('GET ')), isEmpty);
-    await tester.click(find.ancestor(of: find.text('Request revision'), matching: find.tag('button')));
-    await tester.pump();
-    await tester.pump();
-    expect(client.decision, 'REQUEST_REVISION');
-    expect(client.lastReviewBody?['rationale'], 'No rationale provided by reviewer.');
-    expect(client.calls.any((call) => call.endsWith('/owner-review')), isTrue);
-    expect(find.text('Generate revised candidate'), findsOneComponent);
-  });
+  testComponents(
+    'Stage 4 opens on the governed core and switches sets without re-reading',
+    (tester) async {
+      client.withObjective = true;
+      tester.pumpComponent(
+        const Project1ResearchStagePanel(
+          marketplaceAssessmentId: fixture.mid,
+          propertyId: 'SYNTHETIC',
+          stageNumber: 4,
+        ),
+      );
+      await tester.pump();
+
+      // Both columns stay mounted, so text alone cannot tell the views apart —
+      // the grid modifier is the state that actually decides what is on screen.
+      Finder panelIn(String view) => find.byElementPredicate(
+        (element) =>
+            element is DomElement &&
+            (element.component.classes ?? '')
+                .split(' ')
+                .contains('p1-s4two--$view'),
+        description: 'the two-set panel in the $view view',
+      );
+
+      // Basic is the default: the governed core is what the owner can act on,
+      // and the generated set is empty until an objective is approved.
+      expect(panelIn('basic'), findsOneComponent);
+      expect(panelIn('extra'), findsNothing);
+      // There is no combined view left to return to.
+      expect(find.text('Combined'), findsNothing);
+      final reads = client.calls.length;
+
+      await tester.click(
+        find.ancestor(of: find.text('Extra'), matching: find.tag('button')),
+      );
+      await tester.pump();
+      expect(panelIn('extra'), findsOneComponent);
+      expect(panelIn('basic'), findsNothing);
+      expect(find.text('Generated questions'), findsOneComponent);
+      expect(find.text('Additional question candidates'), findsOneComponent);
+
+      await tester.click(
+        find.ancestor(of: find.text('Basic'), matching: find.tag('button')),
+      );
+      await tester.pump();
+      expect(panelIn('basic'), findsOneComponent);
+      expect(panelIn('extra'), findsNothing);
+
+      // A view change is presentation only: the same mounted tree is re-laid
+      // out, so nothing is fetched again and no recorded decision is lost.
+      expect(client.calls.length, reads);
+    },
+  );
+
+  testComponents(
+    'Stage 4 renders source-bound synthetic candidate and choices',
+    (tester) async {
+      client.savedObjective = 'Synthetic objective';
+      client.withVerifiedCandidate = true;
+      tester.pumpComponent(
+        const Project1ResearchStagePanel(
+          marketplaceAssessmentId: fixture.mid,
+          propertyId: 'SYNTHETIC',
+          stageNumber: 4,
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('Synthetic candidate question?'), findsOneComponent);
+      expect(find.text('Synthetic option A'), findsComponents);
+      expect(find.text('Request revision'), findsOneComponent);
+      expect(client.calls.where((call) => !call.startsWith('GET ')), isEmpty);
+      await tester.click(
+        find.ancestor(
+          of: find.text('Request revision'),
+          matching: find.tag('button'),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(client.decision, 'REQUEST_REVISION');
+      expect(
+        client.lastReviewBody?['rationale'],
+        'No rationale provided by reviewer.',
+      );
+      expect(
+        client.calls.any((call) => call.endsWith('/owner-review')),
+        isTrue,
+      );
+      expect(find.text('Generate revised candidate'), findsOneComponent);
+    },
+  );
 }

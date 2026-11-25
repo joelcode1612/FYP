@@ -329,3 +329,16 @@ def audit_run(run_id: UUID, user: Admin, response: Response):
 # objective-specific disclosure and attempt-ledger composition is approved.
 from sitewise.api.v1.project1_objective_proposals import router as objective_proposals_router
 router.include_router(objective_proposals_router)
+
+# Stage 4 preview of the governed Q01-Q13 core questionnaire. Read-only and
+# explicitly non-authoritative: it populates wording from the owner's own M2
+# declarations and never claims an approval, a bank equivalence or fielding.
+from sitewise.api.v1.project1_stage4_preview import router as stage4_preview_router
+router.include_router(stage4_preview_router)
+
+# Stage 5 composed questionnaire: the governed core plus every additional
+# question that is already approved and eligible. Same composition service as
+# the Stage 4 preview, so the two stages cannot describe different documents.
+# Read-only; adds no approval verb and grants no authority.
+from sitewise.api.v1.project1_stage5_composed import router as stage5_composed_router
+router.include_router(stage5_composed_router)

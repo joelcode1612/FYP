@@ -1,6 +1,8 @@
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 
+import 'package:sitewise_jaspr_web/features/assessment/application/stage_labels.dart';
+import 'package:sitewise_jaspr_web/features/assessment/application/stage_reason_copy.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/assessment_api.dart';
 import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart';
 
@@ -122,6 +124,12 @@ class AssessmentJourneyStepper extends StatelessComponent {
       _ => 'Not started',
     };
 
+    // The server's own blocker, in words. A complete stage has nothing to
+    // explain; every other state shows the reason it is not complete, so the
+    // badge and the count cannot be read as "you have not done your part" when
+    // the hold is a contract the reader cannot clear.
+    final reason = stage.isComplete ? null : stageReasonCopy(stage.blockerReason);
+
     final contents = <Component>[
       span(classes: 'sw-assessment-journey__circle', [
         Component.text(state == 'complete' ? '✓' : '${stage.number}'),
@@ -129,13 +137,21 @@ class AssessmentJourneyStepper extends StatelessComponent {
       span(classes: 'sw-assessment-journey__step-title', [
         Component.text(label),
       ]),
+      // Only the step on screen carries the sentence. Repeating it under all
+      // five would turn the compact tracker into a paragraph, and four of the
+      // five reasons are the previous stage's anyway.
+      if (reason != null && isSelected)
+        span(classes: 'sw-assessment-journey__step-reason', [
+          Component.text(reason.message),
+        ]),
     ];
 
     final attrs = <String, String>{
-      'aria-label': 'Step ${stage.number}: $label — $statusLabel',
+      'aria-label': reason == null
+          ? 'Step ${stage.number}: $label — $statusLabel'
+          : 'Step ${stage.number}: $label — $statusLabel. ${reason.message}',
       if (isSelected) 'aria-current': 'step',
-      if (stage.isUnavailable && stage.unavailableReason != null)
-        'title': stage.unavailableReason!,
+      if (reason != null) 'title': reason.message,
     };
 
     final classes = 'sw-assessment-journey__control';
@@ -169,12 +185,10 @@ class AssessmentJourneyStepper extends StatelessComponent {
   /// redesign (research question review), and the label for
   /// `assessment_report` follows the step-5 redesign (publish questionnaire),
   /// so the stepper, the breadcrumb and the step heading agree.
-  static String displayLabel(String key, String serverLabel) => switch (key) {
-    'select_property' => 'Select property',
-    'business_requirements' => 'Business preferences',
-    'location_evidence' => 'Business review and research goals',
-    'ai_explanation' => 'Question review',
-    'assessment_report' => 'Questionnaire preview',
-    _ => serverLabel,
-  };
+  ///
+  /// The map itself lives in `application/stage_labels.dart`, because the
+  /// blocker sentences ("Complete the business review and research goals stage
+  /// first") have to name the same step the same way.
+  static String displayLabel(String key, String serverLabel) =>
+      stageDisplayLabel(key, serverLabel);
 }

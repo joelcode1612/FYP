@@ -43,6 +43,12 @@ CONFLICT_CODES = frozenset({
     'QG_CANDIDATE_REVISION_STALE',
 })
 
+#: How an additional objective is spelled as an objective identity. A registry
+#: objective keeps its ``O``-code; an additional one is identified by the
+#: proposal the owner approved, so it never has to be forced into a mandatory
+#: code (DD-036). Must match ``qg_generation_eligibility.objective_identity``.
+_PROPOSAL_PREFIX = 'proposal:'
+
 #: Refusal codes that mean "the request itself is not acceptable".
 INVALID_CODES = frozenset({
     'QG_CANDIDATE_REVIEW_DECISION_INVALID',
@@ -127,18 +133,64 @@ def read_qg_eligibility(
         proposal_id: Annotated[UUID | None, Query()] = None):
     """Why Direct-QG can or cannot run, requirement by requirement.
 
-    Read-only. A ``dispatch_status`` of PASS is not an authorization: the live
-    runner re-verifies every condition against the real request before it opens a
-    socket.
+    **Contract 2.1 is authoritative for Direct-QG.** When the caller names a
+    proposal — explicitly, or by passing the ``proposal:<uuid>`` objective
+    identity that Stage 4 derives from it — the report is produced by
+    ``qg_generation_eligibility``: the owner's approval *is* the authority, and
+    no objective-admission row is required. Reporting ``ADMISSION_NOT_FOUND``
+    for such an objective described the removal of a step as a failure.
+
+    The legacy ``sitewise-qg-eligibility/1`` report is still served for an
+    ``O1..O6`` objective, because that path is genuinely bound by an admission
+    row; publishing it under 2.1 would claim an authority the record does not
+    carry. ``contract_version`` in the response states which one was returned,
+    so a consumer never has to guess which vocabulary it is reading.
+
+    Read-only in both cases. A ``PASS`` here is not an authorization: the live
+    runner re-verifies every condition against the real request before it opens
+    a socket.
     """
     from sitewise.project1 import qg_eligibility
+    from sitewise.project1 import qg_generation_eligibility as generation
 
     response.headers.update(NO_STORE)
+
+    resolved_proposal = proposal_id
+    if resolved_proposal is None and objective_id:
+        if objective_id.startswith(_PROPOSAL_PREFIX):
+            try:
+                resolved_proposal = UUID(objective_id[len(_PROPOSAL_PREFIX):])
+            except ValueError:
+                raise failure(
+                    422, 'QG_ELIGIBILITY_IDENTITY_INVALID',
+                    f'The objective identity {objective_id!r} names a proposal '
+                    'that is not a UUID.') from None
+
+    if resolved_proposal is not None:
+        engine = _engine(session)
+        try:
+            # Derived once so G-06 can be answered rather than declined: the
+            # objective identity is what an authorization is keyed on.
+            authority = generation.derive_objective_authority(
+                engine, actor_id=user.user_id, assessment_id=assessment_id,
+                proposal_id=resolved_proposal)
+            present = generation.live_authorization(
+                engine, actor_id=user.user_id, assessment_id=assessment_id,
+                objective_id=authority['objective_id'])
+            return generation.evaluate(
+                engine, actor_id=user.user_id, assessment_id=assessment_id,
+                proposal_id=resolved_proposal, authorization_present=present)
+        except WorkflowHeld as exc:
+            _raise_for(exc)
+        except SQLAlchemyError:
+            raise failure(503, 'QG_ELIGIBILITY_UNAVAILABLE',
+                          'The eligibility report could not be produced.') from None
+
     try:
         with session.connection() as conn:
             return qg_eligibility.evaluate(
                 conn, actor_id=user.user_id, assessment_id=assessment_id,
-                objective_id=objective_id, proposal_id=proposal_id)
+                objective_id=objective_id, proposal_id=None)
     except WorkflowHeld as exc:
         _raise_for(exc)
     except SQLAlchemyError:

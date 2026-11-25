@@ -135,8 +135,32 @@ router.include_router(ml_predictions.router, prefix="/ml", tags=["ml_predictions
 from sitewise.core.config import settings
 if settings.project1_workflow_enabled:
     from sitewise.api.v1 import project1_workflow
+    # Questionnaire Preview and the composed questionnaire are the fixed-path
+    # release surface. They were implemented but never registered, so the client
+    # (``stage4_preview_api.dart`` / ``stage5_composed_api.dart``, both on
+    # ``/api/v1/project1-workflow``) received 404 for a route that exists. The
+    # fixed Q01-Q13 path must be reachable without any optional AI execution, so
+    # these are mounted beside the workflow router they belong to.
+    from sitewise.api.v1 import project1_stage4_preview
+    from sitewise.api.v1 import project1_stage5_composed
+    # Governed BDJ objective proposals. Same defect class as the two routers
+    # above: the module, its persistence adapter and its complete Dart client
+    # (``bdj_objective_proposal_api.dart``, base ``/api/v1/project1-workflow/
+    # assessments``) all existed, but the router was never registered, so every
+    # objective request answered 404. Without it the Stage 3 objective panel
+    # cannot execute, review, approve or reject anything -- and an approved
+    # objective is the only route by which an additional question can become
+    # eligible for Section B.
+    from sitewise.api.v1 import project1_objective_proposals
     router.include_router(project1_workflow.router, prefix="/project1-workflow",
                           tags=["project1_candidate_review"])
+    router.include_router(project1_stage4_preview.router, prefix="/project1-workflow",
+                          tags=["project1_stage4_preview"])
+    router.include_router(project1_stage5_composed.router, prefix="/project1-workflow",
+                          tags=["project1_stage5_composed"])
+    router.include_router(project1_objective_proposals.router,
+                          prefix="/project1-workflow",
+                          tags=["project1_objective_proposals"])
 
 if settings.project1_cp07_enabled:
     from sitewise.api.v1 import project1_cp07
@@ -158,13 +182,34 @@ if settings.m2_upstream_enabled:
     # the candidates the Stage 4 readback reads, so mounting it separately would
     # allow a reviewer surface with nothing that can produce a candidate.
     from sitewise.api.v1 import qg_candidate_live
+    # The authorization the generation route requires. Mounted on the same gate
+    # as the route that spends it: an authorization surface without the ability
+    # to generate would be a permission nobody can use, and the generation
+    # route without this is the dead end DD-040 recorded.
+    from sitewise.api.v1 import qg_authorization_live
+    from sitewise.api.v1 import ai_execution_status_live
     router.include_router(m2.router, prefix="/m2", tags=["m2_upstream"])
     router.include_router(m2_business_context.router, prefix="/m2", tags=["m2_business_context"])
     router.include_router(qg_candidate.router, prefix="/m2", tags=["m2_qg_candidate"])
-    router.include_router(qg_candidate_read.router, prefix="/m2",
-                          tags=["m2_qg_candidate_read"])
+    # Order is load-bearing. ``qg_candidate_live`` declares the literal
+    # ``/qg-candidates/recovery``, and ``qg_candidate_read`` declares
+    # ``/qg-candidates/{candidate_id}``. FastAPI matches in include order, so
+    # mounting the parameterised router first made ``recovery`` parse as a UUID
+    # and the endpoint answered 422 instead of reporting recovery state. The
+    # literal router must therefore be included first; its other paths
+    # (``/qg-candidates``, ``/qg-candidates/generate``) do not collide with any
+    # ``{candidate_id}`` shape, so nothing is shadowed in return.
     router.include_router(qg_candidate_live.router, prefix="/m2",
                           tags=["m2_qg_candidate_live"])
+    router.include_router(qg_candidate_read.router, prefix="/m2",
+                          tags=["m2_qg_candidate_read"])
+    router.include_router(qg_authorization_live.router, prefix="/m2",
+                          tags=["m2_qg_authorization_live"])
+    # Real execution progress for the existing AI Execution Status card, read
+    # from the ledger that already records it. Mounted beside the QG routes for
+    # the same reason they are grouped: the card reports on the same attempts.
+    router.include_router(ai_execution_status_live.router, prefix="/m2",
+                          tags=["m2_ai_execution_status"])
 
 # Additive OPTIONAL selected research PU model (Layer-1 alternate). Mounted
 # BESIDE the default /ml routes — nothing existing is replaced. Same

@@ -244,3 +244,52 @@ def test_finish_outcome_validation_unchanged(monkeypatch):
     with pytest.raises(WorkflowHeld, match='MODEL_RECEIPT_OUTCOME_INVALID'):
         _ledger().finish(1, 'bogus', None)
     assert session.calls == []
+
+
+# -- DD-055: the receipt records which model answered -----------------------
+
+def _receipt_insert(session):
+    rows = [(sql, p) for sql, p in session.inserts
+            if 'attempt_receipts' in sql]
+    assert len(rows) == 1, rows
+    return rows[0]
+
+
+def test_finish_records_model_and_status_when_supplied(monkeypatch):
+    """The two existing receipt columns must actually be written (DD-055)."""
+    session = RecordingSession()
+    _install(monkeypatch, session)
+    _ledger().finish(1, 'rejected', None,
+                     model_returned='deepseek-v4.1-flash-1017',
+                     provider_response_status=200)
+    sql, params = _receipt_insert(session)
+    assert 'model_returned' in sql and 'provider_response_status' in sql
+    assert params['model'] == 'deepseek-v4.1-flash-1017'
+    assert params['status'] == 200
+
+
+def test_finish_without_metadata_still_writes_nulls(monkeypatch):
+    """Three-argument callers keep working and record "not recorded"."""
+    session = RecordingSession()
+    _install(monkeypatch, session)
+    _ledger().finish(1, 'returned', _HEX)
+    _, params = _receipt_insert(session)
+    assert params['model'] is None and params['status'] is None
+
+
+@pytest.mark.parametrize('bad', [0, 99, 600, -1, True, '200', 200.0, object()])
+def test_implausible_status_is_not_stored(monkeypatch, bad):
+    session = RecordingSession()
+    _install(monkeypatch, session)
+    _ledger().finish(1, 'rejected', None, provider_response_status=bad)
+    _, params = _receipt_insert(session)
+    assert params['status'] is None
+
+
+@pytest.mark.parametrize('bad', ['x' * 129, 123, object()])
+def test_implausible_model_label_is_not_stored(monkeypatch, bad):
+    session = RecordingSession()
+    _install(monkeypatch, session)
+    _ledger().finish(1, 'rejected', None, model_returned=bad)
+    _, params = _receipt_insert(session)
+    assert params['model'] is None

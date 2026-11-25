@@ -98,4 +98,125 @@ void main() {
     expect(p.title, 'SOMETHING_NEW');
     expect(p.summary, contains('Persisted M2 metadata at revision 3.'));
   });
+
+  // --- Governance-history kinds (BDJ objectives, QG candidates/reviews) ---
+  //
+  // These sources are metadata-only projections. The assertions below pin the
+  // two things that must never drift: a proposal is not an admission, and a
+  // candidate is not an approved questionnaire item.
+
+  test('a proposal is not presented as an established objective', () {
+    final e = base('OBJECTIVE_PROPOSED')
+      ..['status'] = 'CANDIDATE'
+      ..['recommendation_status'] = 'SUGGESTED'
+      ..['source_version'] = 'bdj-objective-proposal-bound/1';
+    final p = presentActivityEvent(e);
+    expect(p.title, 'Objective proposed');
+    expect(p.summary, contains('CANDIDATE'));
+    expect(p.summary, contains('only established once an admission'));
+    expect(p.engineVersion, 'bdj-objective-proposal-bound/1');
+    expect(p.summary, isNot(contains('admitted')));
+  });
+
+  test('an admission names its objective and stored disposition', () {
+    final e = base('OBJECTIVE_ADMITTED', revision: 19)
+      ..['status'] = 'WORTH_RESEARCHING'
+      ..['objective_id'] = 'O1';
+    final p = presentActivityEvent(e);
+    expect(p.title, 'Objective admitted');
+    expect(p.summary, contains('for O1'));
+    expect(p.summary, contains('WORTH_RESEARCHING'));
+  });
+
+  test('a candidate is never rendered as an approved item', () {
+    final e = base('QG_CANDIDATE_RECORDED', revision: 19)
+      ..['status'] = 'VALIDATED'
+      ..['structural_status'] = 'PASS'
+      ..['semantic_status'] = 'PASS'
+      ..['provenance_status'] = 'PASS'
+      ..['objective_id'] = 'O1'
+      ..['source_version'] = '0.1-SYNTH';
+    final p = presentActivityEvent(e);
+    expect(p.title, 'Question candidate recorded');
+    // The stored state is reported verbatim...
+    expect(p.summary, contains('VALIDATED'));
+    // ...and the sentence that prevents misreading it as approval is present.
+    expect(p.summary, contains('Not an approved questionnaire item.'));
+    expect(p.summary, isNot(contains('is approved')));
+  });
+
+  test('a review with no stored decision says so instead of guessing', () {
+    final e = base('QG_REVIEW_RECORDED', revision: 19)..['status'] = null;
+    final p = presentActivityEvent(e);
+    expect(p.title, 'Candidate review recorded');
+    expect(p.summary, contains('with no stored decision'));
+  });
+
+  test('a review reports its decision and expected option', () {
+    final e = base('QG_REVIEW_RECORDED', revision: 19)
+      ..['status'] = 'REJECT'
+      ..['expected_option_code'] = 'LIKELY'
+      ..['objective_id'] = 'O1';
+    final p = presentActivityEvent(e);
+    expect(p.summary, contains('REJECT'));
+    expect(p.summary, contains('LIKELY'));
+  });
+
+  test('a record from an earlier revision is marked historical', () {
+    final e = base('OBJECTIVE_PROPOSED', revision: 21)
+      ..['status'] = 'CANDIDATE'
+      ..['source_is_current'] = false;
+    final p = presentActivityEvent(e);
+    expect(p.summary, contains('earlier revision'));
+    // The stored status is still shown; the note is appended, not substituted.
+    expect(p.summary, contains('CANDIDATE'));
+  });
+
+  test('a current record carries no historical suffix', () {
+    final e = base('OBJECTIVE_ADMITTED', revision: 19)
+      ..['status'] = 'WORTH_RESEARCHING'
+      ..['source_is_current'] = true;
+    expect(
+      presentActivityEvent(e).summary,
+      isNot(contains('earlier revision')),
+    );
+  });
+
+  test('a publication names the release facts it actually stores', () {
+    final e = base('QUESTIONNAIRE_PUBLISHED', revision: 23)
+      ..['module'] = 'CQ'
+      ..['status'] = 'PUBLISHED'
+      ..['source_version'] = 'CQ-ENTREP-abc-r23-cq-manifest-1'
+      ..['question_count'] = 13
+      ..['authorized_question_count'] = 7
+      ..['source_is_current'] = true;
+    final p = presentActivityEvent(e);
+    expect(p.title, 'Questionnaire published');
+    expect(p.summary, contains('revision 23'));
+    expect(p.summary, contains('CQ-ENTREP-abc-r23-cq-manifest-1'));
+    expect(p.summary, contains('13 questions'));
+    expect(p.summary, contains('7 authorized'));
+    // Publication must never be presented as an open fielding authorization.
+    expect(p.summary, contains('not an open fielding authorization'));
+  });
+
+  test('a publication with no stored counts does not invent them', () {
+    final e = base('QUESTIONNAIRE_PUBLISHED', revision: 23)
+      ..['module'] = 'CQ'
+      ..['status'] = 'PUBLISHED';
+    final p = presentActivityEvent(e);
+    expect(p.summary, isNot(contains('questions')));
+    expect(p.summary, isNot(contains('authorized')));
+    expect(p.summary, contains('revision 23'));
+  });
+
+  test('a publication built for an earlier revision is marked historical', () {
+    final e = base('QUESTIONNAIRE_PUBLISHED', revision: 23)
+      ..['module'] = 'CQ'
+      ..['source_is_current'] = false;
+    expect(
+      presentActivityEvent(e).summary,
+      contains('earlier revision'),
+    );
+  });
 }

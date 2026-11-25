@@ -114,7 +114,7 @@ void main() {
       expect(find.text('Page 2 of 2'), findsOneComponent);
       expect(find.text('receipt-0').evaluate().length, greaterThan(0));
       expect(
-        find.text('Latest BCB status snapshots — not attempt history'),
+        find.text('Current state snapshots — publication, measurement, BCB'),
         findsOneComponent,
       );
       expect(

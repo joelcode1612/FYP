@@ -6,7 +6,7 @@
 
    Why this file exists: those two views were written in Dart against a class
    vocabulary (`asw-entry`, `asw-ecard`, `asw-ehero`, `asw-emeta`,
-   `asw-eprogress`, `asw-ekpi`, `asw-ecallout`, `asw-erents`) that had **no CSS
+   `asw-eprogress`, `asw-ecallout`, `asw-erents`) that had **no CSS
    anywhere** — 53 class references, 0 rules. The page therefore rendered as
    unstyled stacked divs. This file supplies the missing rules and nothing else.
 
@@ -501,57 +501,101 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* --------------------------------------------------------- finished progress
+   Both bars painted `--action` whatever the value, so a finished assessment and
+   a barely-started one were the same blue. "Done" now takes `--success` — the
+   token the journey stepper's completed step already uses — so the card, the
+   details panel and the stepper agree on one colour for one state.
+
+   The modifier is declared once per bar (on the track) and the fill and the
+   figures are reached through it, so a bar cannot end up with a green fill and
+   a blue percentage, or vice versa. Unfinished stays `--action`: an assessment
+   that is merely far along must not read as done. */
+
+.asw-ecard__track--complete .asw-ecard__fill,
+.asw-eprogress__track--complete .asw-eprogress__fill {
+  background: var(--success, #0d9488);
+}
+
+.asw-ecard__track--complete ~ .asw-ecard__stages,
+.asw-eprogress__track--complete + strong {
+  color: var(--success-text, #0f766e);
+}
+
 .asw-eprogress__stage {
   margin: 0;
   font-size: 12px;
   color: var(--muted);
 }
 
-/* Five input tiles. Counts are server-owned; an unknown count renders "—" in
-   the same slot, so the strip never changes shape between records. */
-.asw-ekpis {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 8px;
-}
+/* --------------------------------------------------------------- respondents
+   A read-only figure: the count the server holds for this assessment. There is
+   no editor, so there is no editor's chrome — no head row, no field, no meta
+   line. The row is one value and one sentence saying what the value is. */
 
-.asw-ekpi {
+.asw-rtarget {
   display: grid;
-  justify-items: center;
-  gap: 4px;
-  padding: 11px 6px 9px;
-  text-align: center;
+  gap: 9px;
+  padding: 12px 13px 11px;
   background: var(--surface);
   border: 1px solid #e3ebf6;
   border-radius: var(--radius-sm);
-  min-width: 0;
 }
 
-.asw-ekpi__icon {
+.asw-rtarget--summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.asw-rtarget__icon {
+  flex: 0 0 auto;
   display: grid;
   place-items: center;
   color: var(--action);
+  margin-top: 1px;
 }
 
-.asw-ekpi__icon svg {
+.asw-rtarget__icon svg {
   width: 16px;
   height: 16px;
 }
 
-.asw-ekpi__value {
+.asw-rtarget__copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.asw-rtarget__copy strong {
   font-family: var(--font-display);
-  font-size: 19px;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.asw-rtarget__copy span {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.asw-rtarget__figure {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.asw-rtarget__value {
+  font-family: var(--font-display);
+  font-size: 20px;
   font-weight: 800;
   line-height: 1.1;
   color: var(--ink);
   font-variant-numeric: tabular-nums;
-}
-
-.asw-ekpi__label {
-  font-size: 10.5px;
-  line-height: 1.25;
-  color: var(--muted);
-  overflow-wrap: anywhere;
 }
 
 /* ----------------------------------------------------------------- callout */
@@ -839,10 +883,6 @@
     grid-column: 1 / -1;
   }
 
-  .asw-ekpis {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
   .asw-ecard__foot {
     align-items: flex-start;
     flex-direction: column;
@@ -859,10 +899,6 @@
   .asw-entry__cards,
   .asw-entry__controls {
     padding-inline: 14px;
-  }
-
-  .asw-ekpis {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .asw-eprogress__head {

@@ -139,6 +139,27 @@ void main() {
       expect(decision.admission.summary, contains('Not admissible'));
     });
 
+    test('ADMITTED is its own state and still grants nothing downstream', () {
+      // The server has always emitted `ADMITTED` for a recorded admission.
+      // This enum had no member for it, so the Stage 3 card reported
+      // "Admission unreadable" for an objective that was in fact admitted.
+      final decision = BdjObjectiveDecision.fromJson(
+        decisionPayload(
+          decision: 'APPROVED',
+          admissionState: 'ADMITTED',
+          admissionReason: 'ADMISSION_RECORDED',
+        ),
+      );
+      expect(decision.admission.state, BdjAdmissionState.admitted);
+      expect(decision.admission.summary, contains('admitted for question generation'));
+      expect(decision.admission.summary, contains('not a fielding'));
+      // Admission is not a permission. If this ever becomes true, the whole
+      // separation between admission and authority has been lost.
+      expect(decision.admission.state.grantsDownstreamAuthority, isFalse);
+      expect(decision.admission.qgExecution, isFalse);
+      expect(decision.admission.fieldingAuthorized, isFalse);
+    });
+
     test('a repeated identical decision is reported as not newly created', () {
       final decision = BdjObjectiveDecision.fromJson(
         decisionPayload(

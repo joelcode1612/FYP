@@ -31,6 +31,9 @@ import hashlib
 import json
 from uuid import UUID
 
+from sitewise.modules.decision_engine.domain.geo_catalogue import (
+    GEO_V1_DISTRICT_COUNTS, GEO_V1_JURISDICTIONS,
+)
 from sitewise.modules.decision_engine.domain.m2_rules import missing_required_items, validate_m2_answer, resolve_m2_items, derived_m2_selections
 from sitewise.services.bcb_sections import build_sections
 from sitewise.services.instrument_authorization import instrument_is_usable
@@ -70,8 +73,11 @@ CONTRACTS = {
     SECTIONS_CONTEXT_VERSION: (SECTIONS_SCHEMA_VERSION, False),
 }
 PURPOSES = frozenset({"EXPLANATION", "QJ_CONTEXT", "EE01_CONTEXT"})
-JURISDICTIONS = {"1": "Johor", "7": "Pulau Pinang", "10": "Selangor", "14": "W.P. Kuala Lumpur"}
-DISTRICT_COUNTS = {"1": 10, "7": 5, "10": 9, "14": 1}
+#: GEO_V1's tables now live in one place. ``domain.geo_catalogue`` holds the
+#: authority and projects it for M2 ``GEO`` items; these aliases keep this
+#: module's validation reading exactly as it did, against the same values.
+JURISDICTIONS = GEO_V1_JURISDICTIONS
+DISTRICT_COUNTS = GEO_V1_DISTRICT_COUNTS
 
 
 class ContextRefused(ValueError):
