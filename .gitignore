@@ -130,3 +130,22 @@ deliverables/
 artifacts/
 backend/tests/
 
+# Owner decision 2026-11-25: local-only test fixtures, evidence bundles,
+# backups, analysis dumps and agent/workspace state. These paths are untracked
+# (git rm -r --cached) and ignored so `git add -A` cannot re-add them.
+# Files remain on disk; this affects the index only.
+.sitewise_patch_backups/
+.sitewise_provider_ui_backup_20261121_025715/
+.workbuddy-ai/
+analysis_output/
+BDJ_V1_4_EVIDENCE/
+docs/
+N01_EVIDENCE/
+N01_EXPORTS/
+out/
+
+# Local browser-probe scratch output: screenshots and network captures
+# produced by the one-off CDP probe scripts. Regenerated on every run.
+fyp_jaspr_web/tool/backend/
+fyp_jaspr_web/tool/*_capture.json
+

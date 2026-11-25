@@ -1,1 +1,0 @@
-{"name":"RecommendationsPage","id":["sitewise_jaspr_web","lib/pages/entrepreneur/recommendations_page.dart"],"import":"package:sitewise_jaspr_web/pages/entrepreneur/recommendations_page.dart","params":[{"name":"initialPropertyId","isNamed":true,"decoder":"p['initialPropertyId'] as String?","encoder":"c.initialPropertyId"}]}
