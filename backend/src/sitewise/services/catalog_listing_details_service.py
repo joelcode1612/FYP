@@ -21,7 +21,10 @@ SELECT p.id, p.description, p.floor_level, p.floor_description,
        p.bathrooms, p.furnishing, p.tenure, p.frontage_ft, p.depth_ft,
        p.land_area_sqft, p.built_up_sqft, p.unit_position, p.facing_direction,
        p.availability, p.availability_verified_at, p.updated_at,
-       p.has_parking, p.is_corner_lot, p.is_freehold
+       p.lease_duration_months, p.lease_duration_negotiable,
+       p.available_from, p.rental_deposit_myr, p.title_type,
+       p.landlord_fnb_permission,
+       p.has_parking, p.parking_owner_declared, p.is_corner_lot, p.is_freehold
 FROM fyp.property_subject_links AS l
 JOIN fyp.rental_properties AS p ON p.id = l.property_id
 WHERE l.sitewise_property_id = :pid
@@ -37,9 +40,9 @@ SELECT p.source_data,
 FROM fyp.catalogue_properties AS p
 LEFT JOIN LATERAL (
     SELECT s.other_features
-    FROM sitewise_analytics.subject_features AS s
+    FROM fyp.property_inference_features AS s
     WHERE s.canonical_property_id = p.id
-      AND btrim(s.sample_class) = 'U'
+
     ORDER BY s.imported_at DESC NULLS LAST
     LIMIT 1
 ) AS f ON TRUE
@@ -135,6 +138,13 @@ class CatalogListingDetailsService:
             "is_freehold": _flag(extra, "property_is_freehold", "is_freehold"),
             "availability": None,
             "availability_verified_at": None,
+            "lease_duration_months": None,
+            "lease_duration_negotiable": None,
+            "available_from": None,
+            "rental_deposit_myr": None,
+            "title_type": None,
+            "landlord_fnb_permission": None,
+            "floor_description": None,
             # Not the same as regulatory permission to operate F&B.
             "is_fnb_suitable": None,
         }
@@ -164,11 +174,33 @@ class CatalogListingDetailsService:
                 "facing_direction": _text(p, "facing_direction"),
                 "availability": _text(p, "availability"),
                 "availability_verified_at": _date(p.get("availability_verified_at")),
+                "lease_duration_months": _integer(p, "lease_duration_months"),
+                "lease_duration_negotiable": p.get("lease_duration_negotiable"),
+                "available_from": _date(p.get("available_from")),
+                "rental_deposit_myr": _number(p, "rental_deposit_myr"),
+                "title_type": _text(p, "title_type"),
+                "landlord_fnb_permission": _text(p, "landlord_fnb_permission"),
+                "floor_description": _text(p, "floor_description"),
             }
             # fyp flags have legacy 0 defaults. Only 1 is explicit support;
             # a default 0 is not conclusive evidence of absence.
-            for key in ("has_parking", "is_corner_lot", "is_freehold"):
-                published[key] = True if p.get(key) in (1, True) else None
+            raw_parking = p.get("has_parking")
+            if p.get("parking_owner_declared") is True:
+                fields["has_parking"] = (
+                    None if raw_parking is None else bool(raw_parking)
+                )
+            elif p.get("parking_owner_declared") is False:
+                fields["has_parking"] = None
+            else:
+                # Existing 0 values were also database defaults and have no
+                # provenance; preserve the old conservative interpretation.
+                fields["has_parking"] = True if raw_parking in (1, True) else None
+            for key in ("is_corner_lot", "is_freehold"):
+                raw_flag = p.get(key)
+                published[key] = (
+                    None if raw_flag is None
+                    else bool(raw_flag)
+                )
             for key, val in published.items():
                 if val is not None:
                     fields[key] = val

@@ -1,0 +1,7 @@
+-- SQL executed by the SiteWise runtime calculators (verbatim templates).
+-- road_geometry / population_rings: backend/src/sitewise/ml/coordinate_features.py
+-- isochrone_population: backend/src/sitewise/ml/expanded64_network.py
+-- Parameter values are the original subject coordinates; see the handoff document
+-- for the fully expanded statements and class lists.
+-- Calculator groups selected: road_geometry, population_rings, isochrone_population.
+-- Every statement executed inside SET TRANSACTION READ ONLY.

@@ -45,7 +45,9 @@ class SpherePanoramaScreen extends StatelessWidget {
                 fit: BoxFit.cover,
                 errorBuilder: (_, _, _) => const Center(
                   child: Text(
-                    'The panorama could not be decoded.',
+                    'Unable to display this panorama. Regenerate it from the '
+                    'capture screen.',
+                    textAlign: TextAlign.center,
                     style: TextStyle(color: CaptureColors.mutedOnDark),
                   ),
                 ),

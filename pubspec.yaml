@@ -27,3 +27,18 @@ workspace:
   - fyp_jaspr_web
   - shared_logic
 
+# dartcv4 native asset options belong to the root of this pub workspace.
+# Its include_modules value replaces dartcv4's default module list, so keep
+# the image modules as well as the panorama registration/stitching modules.
+hooks:
+  user_defines:
+    dartcv4:
+      parallel_jobs: 4
+      include_modules:
+        - imgproc
+        - imgcodecs
+        - stitching
+        - features2d
+        - flann
+        - calib3d
+

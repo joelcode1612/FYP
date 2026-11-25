@@ -1,11 +1,13 @@
 
 
 import logging
+from datetime import date
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Literal
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator
 from sqlalchemy import text
 from sqlmodel import Session
 
@@ -17,6 +19,11 @@ from sitewise.repositories.agent_assignment_repository import (
     AgentAssignmentRepository,
 )
 from sitewise.repositories.fyp_property_repository import FypPropertyRepository
+from sitewise.services.address_preview_service import (
+    canonical_address_hash,
+    preview_address,
+    verify_confirmation_token,
+)
 from sitewise.services.address_validation_service import (
     AddressValidationRejected,
     AddressValidationUnavailable,
@@ -39,11 +46,6 @@ logger = logging.getLogger("sitewise.properties")
 COMMERCIAL_PROPERTY_TYPES = (
     "Shoplot",
     "Retail Space",
-    "Ground Floor Shop",
-    "Corner Shoplot",
-    "Retail Unit",
-    "Kiosk",
-    "Commercial F&B Premise",
 )
 
 #: Legacy spellings still present in existing rows / older clients. They are
@@ -53,11 +55,11 @@ _LEGACY_PROPERTY_TYPES = {
     "shop lot": "Shoplot",
     "shophouse": "Shoplot",
     "shoplot / shophouse": "Shoplot",
-    "ground floor retail": "Ground Floor Shop",
-    "corner retail unit": "Corner Shoplot",
-    "shopping mall unit": "Retail Unit",
-    "commercial kiosk": "Kiosk",
-    "standalone commercial": "Retail Unit",
+    "ground floor retail": "Shoplot",
+    "corner retail unit": "Shoplot",
+    "shopping mall unit": "Retail Space",
+    "commercial kiosk": "Retail Space",
+    "standalone commercial": "Retail Space",
 }
 
 
@@ -102,19 +104,25 @@ class OwnerListingRequest(BaseModel):
     city: str = Field(min_length=2, max_length=80)
     state: str = Field(min_length=2, max_length=80)
     postcode: str = Field(pattern=r"^\d{5}$")
-    # Coordinates are optional: the wizard no longer geocodes, and the
-    # backend's enrichment/admin review resolves the location afterwards.
-    latitude: float | None = Field(default=None, ge=-90, le=90)
-    longitude: float | None = Field(default=None, ge=-180, le=180)
+    # Coordinates are deliberately server-owned; draft forms cannot replace
+    # the geocoded location when changing rental/property information.
     rental_price: float = Field(gt=0, le=10_000_000)
     size_sqft: float = Field(gt=0, le=10_000_000)
     property_type: str = Field(default="Shoplot", max_length=60)
     description: str | None = Field(default=None, max_length=4000)
     availability: str | None = Field(default=None, max_length=60)
-    floor_level: str | None = Field(default=None, max_length=60)
+    floor_level: float | None = Field(default=None, ge=-1, le=10000)
+    floor_description: str | None = Field(default=None, max_length=40)
     frontage_ft: float | None = Field(default=None, ge=0, le=10_000)
-    has_parking: bool = False
-    is_fnb_suitable: bool = False
+    furnishing: str | None = Field(default=None, max_length=40)
+    tenure: str | None = Field(default=None, max_length=20)
+    unit_position: str | None = Field(default=None, max_length=40)
+    has_parking: bool | None = None
+    lease_duration_months: int | None = Field(default=None, ge=1, le=360)
+    lease_duration_negotiable: bool | None = None
+    available_from: date | None = None
+    rental_deposit_myr: float | None = Field(default=None, ge=0, le=10_000_000)
+    title_type: str | None = Field(default=None, max_length=30)
 
     @field_validator("name", "address", "city", "state")
     @classmethod
@@ -128,6 +136,36 @@ class OwnerListingRequest(BaseModel):
     @classmethod
     def _commercial_type(cls, value: str) -> str:
         return normalize_property_type(value)
+
+    @field_validator("availability")
+    @classmethod
+    def _valid_availability(cls, value: str | None) -> str | None:
+        return _choice(value, {"Ready to move in", "Available from a specific date", "By arrangement"}, "availability")
+
+    @field_validator("floor_description")
+    @classmethod
+    def _valid_floor_description(cls, value: str | None) -> str | None:
+        return _choice(value, {"Basement", "Ground floor", "First floor", "Second floor", "Third floor or above", "Multiple floors"}, "floor level")
+
+    @field_validator("furnishing")
+    @classmethod
+    def _valid_furnishing(cls, value: str | None) -> str | None:
+        return _choice(value, {"Bare unit", "Partially fitted", "Fully fitted", "Existing F&B fit-out", "Not sure"}, "furnishing condition")
+
+    @field_validator("tenure")
+    @classmethod
+    def _valid_tenure(cls, value: str | None) -> str | None:
+        return _choice(value, {"Freehold", "Leasehold", "Not sure"}, "land tenure")
+
+    @field_validator("unit_position")
+    @classmethod
+    def _valid_unit_position(cls, value: str | None) -> str | None:
+        return _choice(value, {"Intermediate unit", "Corner unit", "End lot", "Standalone unit", "Not sure"}, "unit position")
+
+    @field_validator("title_type")
+    @classmethod
+    def _valid_title_type(cls, value: str | None) -> str | None:
+        return _choice(value, {"Individual title", "Strata title", "Master title", "Not sure"}, "property title type")
 
 
 def _run_enrichment(repo: FypPropertyRepository, property_row: dict) -> dict:
@@ -342,12 +380,25 @@ def _owner_field_changed(existing: object, new: object, column: str) -> bool:
         def number(value: object):
             if value is None or value == '':
                 return None
+            if isinstance(value, bool):
+                return int(value)
             try:
                 return Decimal(str(value))
             except (InvalidOperation, TypeError, ValueError):
                 return str(value)
         return number(existing) != number(new)
-    return str(existing or '').strip() != str(new or '').strip()
+    if column == 'lease_duration_negotiable':
+        return existing is not new
+    return str(existing if existing is not None else '').strip() != str(new if new is not None else '').strip()
+
+
+def _choice(value: str | None, allowed: set[str], label: str) -> str | None:
+    if value is None or not value.strip():
+        return None
+    normalized = value.strip()
+    if normalized not in allowed:
+        raise ValueError(f"Choose a valid {label} option.")
+    return normalized
 
 
 class OwnerDraftRequest(BaseModel):
@@ -363,29 +414,112 @@ class OwnerDraftRequest(BaseModel):
     city: str | None = Field(default=None, max_length=80)
     state: str | None = Field(default=None, max_length=80)
     postcode: str | None = Field(default=None, pattern=r"^\d{5}$")
-    latitude: float | None = Field(default=None, ge=-90, le=90)
-    longitude: float | None = Field(default=None, ge=-180, le=180)
-    rental_price: float | None = Field(default=None, gt=0, le=10_000_000)
-    size_sqft: float | None = Field(default=None, gt=0, le=10_000_000)
+    # Coordinates are server-generated and are not writable through drafts.
+    rental_price: Decimal | None = Field(default=None, gt=0, le=10_000_000)
+    size_sqft: Decimal | None = Field(default=None, gt=0, le=10_000_000)
     availability: str | None = Field(default=None, max_length=60)
-    floor_level: str | None = Field(default=None, max_length=60)
-    frontage_ft: float | None = Field(default=None, ge=0, le=10_000)
-    has_parking: bool = False
-    is_fnb_suitable: bool = False
+    floor_level: Decimal | None = Field(default=None, ge=-1, le=Decimal("9999.9"))
+    floor_description: str | None = Field(default=None, max_length=40)
+    frontage_ft: Decimal | None = Field(default=None, ge=0, le=10_000)
+    furnishing: str | None = Field(default=None, max_length=40)
+    tenure: str | None = Field(default=None, max_length=20)
+    unit_position: str | None = Field(default=None, max_length=40)
+    has_parking: bool | None = None
+    lease_duration_months: int | None = Field(default=None, ge=1, le=360)
+    lease_duration_negotiable: bool | None = None
+    available_from: date | None = None
+    rental_deposit_myr: Decimal | None = Field(default=None, ge=0, le=10_000_000)
+    title_type: str | None = Field(default=None, max_length=30)
+    # Signed evidence from POST /address-preview: the server-obtained verdict
+    # for the EXACT address, confirmed by the user on the map. Coordinates are
+    # derived from the token (server-controlled), never from client lat/lng.
+    address_confirmation_token: str | None = Field(default=None, max_length=4096)
 
-    @field_validator('floor_level')
+    @field_validator("*", mode="before")
     @classmethod
-    def _valid_floor_level(cls, value: str | None) -> str | None:
-        from math import isfinite
+    def _valid_database_text(cls, value):
+        if isinstance(value, str) and "\x00" in value:
+            raise ValueError("Remove null characters.")
+        return value
+
+    @field_validator("name")
+    @classmethod
+    def _draft_name(cls, value: str | None) -> str:
         if value is None or not value.strip():
-            return None
-        try:
-            floor = float(value)
-        except ValueError as exc:
-            raise ValueError('Floor level must be a number.') from exc
-        if not isfinite(floor) or floor < 0 or floor > 10000:
-            raise ValueError('Floor level must be between 0 and 10,000.')
+            raise ValueError("Enter a property title.")
         return value.strip()
+
+    @field_validator("property_type")
+    @classmethod
+    def _commercial_type(cls, value: str | None) -> str:
+        return normalize_property_type(value)
+
+    @field_validator("rental_price", "size_sqft", "floor_level", "frontage_ft", "rental_deposit_myr")
+    @classmethod
+    def _normalize_numeric(cls, value: Decimal | None, info: ValidationInfo) -> Decimal | None:
+        if value is None:
+            return None
+        precision = Decimal("0.1") if info.field_name == "floor_level" else Decimal("0.01")
+        rounded = value.quantize(precision, rounding=ROUND_HALF_UP)
+        if info.field_name in ("rental_price", "size_sqft") and rounded == 0:
+            raise ValueError("Enter a value of at least 0.01 after rounding.")
+        return rounded
+
+    @field_validator("availability")
+    @classmethod
+    def _valid_availability(cls, value: str | None) -> str | None:
+        return _choice(value, {"Ready to move in", "Available from a specific date", "By arrangement"}, "availability")
+
+    @field_validator("floor_description")
+    @classmethod
+    def _valid_floor_description(cls, value: str | None) -> str | None:
+        return _choice(value, {"Basement", "Ground floor", "First floor", "Second floor", "Third floor or above", "Multiple floors"}, "floor level")
+
+    @field_validator("furnishing")
+    @classmethod
+    def _valid_furnishing(cls, value: str | None) -> str | None:
+        return _choice(value, {"Bare unit", "Partially fitted", "Fully fitted", "Existing F&B fit-out", "Not sure"}, "furnishing condition")
+
+    @field_validator("tenure")
+    @classmethod
+    def _valid_tenure(cls, value: str | None) -> str | None:
+        return _choice(value, {"Freehold", "Leasehold", "Not sure"}, "land tenure")
+
+    @field_validator("unit_position")
+    @classmethod
+    def _valid_unit_position(cls, value: str | None) -> str | None:
+        return _choice(value, {"Intermediate unit", "Corner unit", "End lot", "Standalone unit", "Not sure"}, "unit position")
+
+    @field_validator("title_type")
+    @classmethod
+    def _valid_title_type(cls, value: str | None) -> str | None:
+        return _choice(value, {"Individual title", "Strata title", "Master title", "Not sure"}, "property title type")
+
+
+def _draft_field_error(field: str, message: str) -> None:
+    raise HTTPException(status_code=422, detail=[
+        {"loc": ["body", field], "msg": message, "type": "value_error"},
+    ])
+
+
+def _validate_draft_values(fields: dict, existing: dict | None = None) -> None:
+    current = existing or {}
+    if {"lease_duration_months", "lease_duration_negotiable"} & fields.keys():
+        months = fields.get("lease_duration_months", current.get("lease_duration_months"))
+        negotiable = fields.get("lease_duration_negotiable", current.get("lease_duration_negotiable"))
+        if months is not None and negotiable is True:
+            _draft_field_error("lease_duration_months", "Choose a fixed or negotiable rental period, or clear the fixed months.")
+
+    if {"rental_price", "size_sqft"} & fields.keys():
+        price = fields.get("rental_price", current.get("rental_price"))
+        size = fields.get("size_sqft", current.get("size_sqft"))
+        if price is not None and size is not None and price > 0 and size > 0:
+            psf = (price / size).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            field = "size_sqft" if "size_sqft" in fields else "rental_price"
+            if psf == 0:
+                _draft_field_error(field, "Rent and area produce a price per square foot that rounds to zero.")
+            if psf > Decimal("999999.99"):
+                _draft_field_error(field, "Rent and area produce a price per square foot above 999,999.99.")
 
 
 def _agent_id_for(session: Session, user_id) -> int | None:
@@ -456,6 +590,90 @@ def _owned_listing_or_error(
     )
 
 
+def _queue_expanded64(session: Session, property_id: int) -> None:
+    """Queue the informational location measurements for one listing.
+
+    Valid latitude/longitude is the only precondition. The address verdict is
+    NOT a gate: it describes how confidently the location was matched, and is
+    reported alongside the measurements (``address_validation_status``), but a
+    listing whose match was never confirmed still has a real coordinate and
+    therefore still has real surroundings worth measuring. Requiring a
+    server-confirmed verdict here left every catalogue listing unmeasured,
+    which blocked Location Intelligence entirely.
+
+    Model eligibility is a separate concern: ``enqueue`` writes every
+    measurement it can, and only the inputs allowlisted for the active model
+    variant enter the scoring vector. So queueing here never widens what the
+    recommendation model consumes.
+    """
+    # A migration/source failure must not break the ownership draft workflow.
+    try:
+        from sitewise.services.expanded64_enrichment import enqueue
+
+        with session.begin_nested():
+            queued = enqueue(session, property_id)
+        if not queued:
+            logger.info(
+                "Location intelligence not queued for listing %s: no valid "
+                "coordinates, or the categories are already current.",
+                property_id,
+            )
+    except Exception as exc:
+        logger.warning("Expanded64 enqueue failed for listing %s (%s)", property_id, type(exc).__name__)
+
+
+def _apply_address_confirmation(
+    session: Session,
+    repo: FypPropertyRepository,
+    property_id: int,
+    token_value: str | None,
+    listing: dict,
+) -> dict:
+    """Apply signed preview evidence to a saved draft. Server-controlled.
+
+    The token was issued by the read-only preview after the server itself
+    called the provider, so the coordinates written here are SERVER-derived
+    (draft requests accept no client lat/lng at all). Evidence is bound to
+    the canonical address: if the stored address differs from the confirmed
+    one, the evidence is rejected as outdated and the draft still saves
+    unverified — Save Draft never depends on the maps service.
+    """
+    if not token_value:
+        return {"applied": False, "reason": "not_provided"}
+    evidence = verify_confirmation_token(token_value)
+    if evidence is None:
+        return {"applied": False, "reason": "invalid_or_expired"}
+    stored_hash = canonical_address_hash(
+        listing.get("address"),
+        listing.get("city"),
+        listing.get("state"),
+        listing.get("postcode"),
+    )
+    if stored_hash != evidence["ah"]:
+        return {"applied": False, "reason": "address_changed"}
+    # Precise premise-level verdicts count as validated; approximate or
+    # ambiguous results stay partially_validated — user confirmation is NOT
+    # ownership proof or administrator verification.
+    status = "validated" if evidence["mc"] == "precise" else "partially_validated"
+    repo.set_address_validation(
+        property_id,
+        status=status,
+        formatted_address=evidence["fa"],
+        latitude=evidence["la"],
+        longitude=evidence["lo"],
+    )
+    logger.info(
+        "Address confirmation applied to listing %s (match=%s provider=%s)",
+        property_id, evidence["mc"], evidence.get("pv"),
+    )
+    return {
+        "applied": True,
+        "status": status,
+        "match_class": evidence["mc"],
+        "provider": evidence.get("pv"),
+    }
+
+
 @router.post("/listings/drafts", status_code=201)
 def create_owner_draft(
     payload: OwnerDraftRequest,
@@ -467,10 +685,11 @@ def create_owner_draft(
     outside the admin queue."""
     if not rbac.has_role(current.role, (rbac.ROLE_OWNER, rbac.ROLE_AGENT)):
         raise ForbiddenError("Only a Property Owner or assigned Agent account may create a draft.")
-    if not (payload.name or "").strip():
-        raise HTTPException(
-            status_code=422, detail="A draft property needs at least a name."
-        )
+    if payload.name is None:
+        _draft_field_error("name", "Enter a property title.")
+    fields = payload.model_dump(
+        exclude_unset=True, exclude={"draft_request_id", "address_confirmation_token"}
+    )
     repo = FypPropertyRepository(session)
     # An agent creates the record ON BEHALF OF a provider, so the row is not
     # given an owner it cannot prove. It is scoped to the agent through an
@@ -495,9 +714,10 @@ def create_owner_draft(
         if existing_id is not None:
             row = _owned_listing_or_error(repo, int(existing_id), current)
         else:
+            _validate_draft_values(fields)
             row = repo.create_owner_draft(
                 owner_user_id=None if agent_id is not None else current.user_id,
-                payload=payload.model_dump(exclude={"draft_request_id"}),
+                payload=fields,
                 commit=False,
             )
             if request_key is not None:
@@ -509,6 +729,12 @@ def create_owner_draft(
                     int(row["id"]), agent_id, assigned_by=None, commit=False
                 )
                 row = repo.owner_listing(int(row["id"])) or row
+        # Location evidence lands BEFORE the enrichment queue reads the row,
+        # so a confirmed location immediately drives new measurements.
+        confirmation = _apply_address_confirmation(
+            session, repo, int(row["id"]), payload.address_confirmation_token, row
+        )
+        _queue_expanded64(session, int(row["id"]))
         session.commit()
     except Exception:
         session.rollback()
@@ -516,11 +742,30 @@ def create_owner_draft(
     return {
         "data": row,
         "meta": {
+            "replayed": existing_id is not None,
             "verification_status": row["verification_status"],
             "is_published": row["is_published"],
+            "address_confirmation": confirmation,
             "note": "Draft saved. Submit for verification when complete.",
         },
     }
+
+
+@router.get("/listings/drafts/{request_id}")
+def recover_owner_draft(
+    request_id: UUID,
+    session: Session = Depends(get_db),
+    current: AuthenticatedUser = Depends(require_property_owner),
+):
+    request_key = str(uuid5(NAMESPACE_URL, f"sitewise/draft/{current.user_id}/{request_id}"))
+    # Wait for an in-flight create using the same transaction-scoped key.
+    session.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"), {"key": request_key})
+    property_id = session.execute(text("""
+        SELECT id FROM fyp.rental_properties WHERE draft_request_key = :key
+    """), {"key": request_key}).scalar_one_or_none()
+    if property_id is None:
+        raise HTTPException(status_code=404, detail="No saved draft for this request.")
+    return get_own_listing(property_id, session, current)
 
 
 @router.get("/listings/{property_id}")
@@ -554,18 +799,29 @@ def update_own_listing(
     cannot be invalidated; draft, rejected and corrections-requested states
     remain editable, and a repeat save updates the SAME row."""
     from sitewise.db.models.property_verification import can_resubmit
-    from sitewise.services.property_verification_service import (
-        listing_completeness_errors,
-        verification_row,
-    )
+    from sitewise.services.property_verification_service import verification_row
 
-    _owner_write_only(current)
     repo = FypPropertyRepository(session)
-    _owned_listing_or_error(repo, property_id, current)
-    listing = _owned_listing_or_error(repo, property_id, current, for_update=True)
-    provider_scope.require_mutable_listing(
-        session, listing_id=property_id, role=current.role
-    )
+    agent_id = _provider_agent_id(session, current)
+    if agent_id is None:
+        listing = _owned_listing_or_error(repo, property_id, current, for_update=True)
+    else:
+        # Scope the initial lookup before locking a property. Recheck against
+        # the locked assignment below in case it changed during this request.
+        if not provider_scope.agent_is_assigned(session, listing_id=property_id, agent_id=agent_id):
+            raise ForbiddenError("Only the currently assigned Agent may edit this draft.")
+        listing = repo.owner_listing(property_id, for_update=True)
+        if listing is None:
+            raise HTTPException(status_code=404, detail="Property not found.")
+    assignment = session.execute(text("""
+        SELECT agent_id, workflow_status FROM fyp.agent_listing_assignment
+         WHERE listing_id=:pid FOR UPDATE
+    """), {"pid": property_id}).mappings().one_or_none()
+    if agent_id is not None and (
+        assignment is None or assignment["agent_id"] != agent_id
+        or assignment["workflow_status"] not in ("requested", "accepted", "needs_correction", "submitted")
+    ):
+        raise ForbiddenError("Only the currently assigned Agent may edit this draft.")
     if listing.get("is_published") or listing.get("verification_status") not in ("draft", "rejected"):
         raise HTTPException(status_code=409, detail="The property is locked for review or published.")
     verification = verification_row(session, property_id)
@@ -578,53 +834,62 @@ def update_own_listing(
             detail="This property is awaiting or has passed review; "
             "its details can no longer be edited.",
         )
-    fields = payload.model_dump(exclude_unset=True, exclude={"draft_request_id"})
-    if fields.get("name") is None:
-        # A null name must not null out the NOT NULL column: keep the
-        # existing draft name.
-        fields.pop("name", None)
-    if fields:
-        missing = listing_completeness_errors(listing | fields, require_availability=False)
-        if missing and session.execute(text("""
-            SELECT EXISTS (
-                SELECT 1 FROM fyp.agent_listing_assignment
-                 WHERE listing_id=:pid
-                   AND workflow_status IN ('requested','accepted','needs_correction')
-            )
-        """), {"pid": property_id}).scalar():
+    fields = payload.model_dump(
+        exclude_unset=True, exclude={"draft_request_id", "address_confirmation_token"}
+    )
+    _validate_draft_values(fields, listing)
+    # Once inspection starts, changes go through its correction workflow.
+    if assignment and assignment["workflow_status"] in ("accepted", "needs_correction", "submitted"):
+        changed = [
+            key for key, value in fields.items()
+            if key in FypPropertyRepository._OWNER_WRITABLE
+            and _owner_field_changed(listing.get(key), value, key)
+        ]
+        if changed and assignment["workflow_status"] == "needs_correction" and rbac.has_role(
+            current.role, (rbac.ROLE_OWNER,)
+        ):
+            correction = session.execute(text("""
+                SELECT reason FROM fyp.verification_audit WHERE property_id=:id
+                  AND action IN ('property_rejected','property_information_requested','property_approved')
+                ORDER BY created_at DESC LIMIT 1
+            """), {"id": property_id}).scalar()
+            if correction and correction.startswith("Property:"):
+                # Require the Agent to reconfirm amended facts. Keep the submitted
+                # panorama ID and all unrelated evidence linked to the property.
+                session.execute(text("""
+                    UPDATE fyp.agent_listing_assignment
+                    SET inspection_updated_at=NULL, updated_at=now()
+                    WHERE listing_id=:id
+                """), {"id": property_id})
+                if set(changed).intersection(("address", "city", "state", "postcode")):
+                    session.execute(text("""
+                        UPDATE fyp.panoramas SET verification_status='rejected',
+                            review_reason='Listing address changed; submit a panorama of the current site.',
+                            updated_at=now()
+                        WHERE panorama_id=(SELECT panorama_id FROM fyp.agent_listing_assignment WHERE listing_id=:id)
+                    """), {"id": property_id})
+                changed = []
+        if changed:
             raise HTTPException(
                 status_code=409,
-                detail="Complete these property details for the active Agent request: "
-                + ", ".join(missing) + ".",
+                detail=("An Agent inspection is active. These property details "
+                        "must be corrected through the Agent workflow to "
+                        "preserve the saved checklist and 360° tour: "
+                        + ", ".join(changed)),
             )
-        # An editable property draft can still have an active Agent.
-        # A routine save must NEVER silently delete that Agent's checklist,
-        # uploaded panorama or audit timestamps. If factual values change,
-        # require an explicit correction workflow instead of discarding data.
-        active_agent = session.execute(text("""
-            SELECT workflow_status FROM fyp.agent_listing_assignment
-             WHERE listing_id=:pid
-               AND workflow_status IN ('accepted','needs_correction')
-             FOR UPDATE
-        """), {"pid": property_id}).scalar_one_or_none()
-        if active_agent is not None:
-            changed = [
-                key for key, value in fields.items()
-                if key in FypPropertyRepository._OWNER_WRITABLE
-                and _owner_field_changed(listing.get(key), value, key)
-            ]
-            if changed:
-                raise HTTPException(
-                    status_code=409,
-                    detail=("An Agent inspection is active. These property details "
-                            "must be corrected through the Agent workflow to "
-                            "preserve the saved checklist and 360° tour: "
-                            + ", ".join(changed)),
-                )
-    row = repo.update_owner_listing(property_id, fields)
+    row = repo.update_owner_listing(property_id, fields, commit=False)
     if row is None:
         raise HTTPException(status_code=404, detail="Property not found.")
-    return {"data": row}
+    # Fresh evidence must be applied AFTER the update: an edited address first
+    # invalidates the previous confirmation inside update_owner_listing, then
+    # a valid token re-establishes it for the NEW address in the same
+    # transaction. Without a token the draft simply saves unverified.
+    confirmation = _apply_address_confirmation(
+        session, repo, property_id, payload.address_confirmation_token, row
+    )
+    _queue_expanded64(session, property_id)
+    session.commit()
+    return {"data": row, "meta": {"address_confirmation": confirmation}}
 
 
 # ---------------------------------------------------------------------------
@@ -656,9 +921,6 @@ async def upload_listing_photo(
     _owner_write_only(current)
     repo = FypPropertyRepository(session)
     listing = _owned_listing_or_error(repo, property_id, current)
-    provider_scope.require_mutable_listing(
-        session, listing_id=property_id, role=current.role
-    )
     if listing.get("is_published") or listing.get("verification_status") not in ("draft", "rejected"):
         raise HTTPException(status_code=409, detail="Photos are locked for review or publication.")
     verification = verification_row(session, property_id)
@@ -684,9 +946,19 @@ async def upload_listing_photo(
     except PhotoStorageUnavailable as exc:
         # 503 with the exact reason; the draft is untouched.
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    photo = repo.add_listing_photo(
-        property_id, url, (caption or "").strip()[:200], is_primary
-    )
+    try:
+        photo = repo.add_listing_photo(
+            property_id, url, (caption or "").strip()[:200], is_primary, commit=False
+        )
+    except Exception:
+        try:
+            session.rollback()
+        finally:
+            photo_storage.delete_photo(url)
+        raise
+    # If commit itself fails, its outcome may be unknown. Keep the object
+    # rather than risk deleting a photo referenced by a committed row.
+    session.commit()
     return {"data": photo}
 
 
@@ -714,9 +986,6 @@ def delete_listing_photo(
     _owned_listing_or_error(repo, property_id, current)
     _owner_write_only(current)
     listing = _owned_listing_or_error(repo, property_id, current)
-    provider_scope.require_mutable_listing(
-        session, listing_id=property_id, role=current.role
-    )
     if listing.get("is_published") or listing.get("verification_status") not in ("draft", "rejected"):
         raise HTTPException(status_code=409, detail="Photos are locked for review or publication.")
     deleted = repo.delete_listing_photo(property_id, photo_id)
@@ -737,9 +1006,6 @@ def set_primary_listing_photo(
     _owned_listing_or_error(repo, property_id, current)
     _owner_write_only(current)
     listing = _owned_listing_or_error(repo, property_id, current)
-    provider_scope.require_mutable_listing(
-        session, listing_id=property_id, role=current.role
-    )
     if listing.get("is_published") or listing.get("verification_status") not in ("draft", "rejected"):
         raise HTTPException(status_code=409, detail="Photos are locked for review or publication.")
     if not repo.set_primary_listing_photo(property_id, photo_id):
@@ -857,8 +1123,10 @@ def enrichment_state(
     must not trigger work by looking.
     """
     _require_owned_listing(session, property_id, current)
+    # Schema is provisioned by Alembic (0015/0016), not by a read request.
+    # Calling ensure_schema() here issued DDL from a GET and failed under
+    # read-only production grants.
     service = PropertyEnrichmentService(session)
-    service.ensure_schema()
     return {"data": service.summary(property_id), "meta": {"property_id": property_id}}
 
 
@@ -875,6 +1143,23 @@ def retry_enrichment_category(
     four PostGIS categories to be recomputed.
     """
     _require_owned_listing(session, property_id, current)
+    if category == "operational25":
+        # Same durable queue, separate model: re-queue only this property and
+        # reuse its existing row on retry (no duplicate records).
+        from sitewise.services.operational25_enrichment import CATEGORY, enqueue, persisted
+
+        listing = session.execute(
+            text("SELECT latitude, longitude FROM fyp.rental_properties WHERE id=:id"),
+            {"id": property_id},
+        ).mappings().first()
+        if listing is None:
+            raise HTTPException(status_code=404, detail="Property not found.")
+        enqueue(session, property_id, force=True)
+        session.commit()
+        return {
+            "data": persisted(session, property_id, listing.latitude, listing.longitude),
+            "meta": {"property_id": property_id, "category": CATEGORY, "status": "queued"},
+        }
     service = PropertyEnrichmentService(session)
     try:
         summary = service.retry(property_id, category)
@@ -952,9 +1237,6 @@ def validate_saved_property_address(
     _owner_write_only(current)
     repository = FypPropertyRepository(session)
     listing = _owned_listing_or_error(repository, property_id, current)
-    provider_scope.require_mutable_listing(
-        session, listing_id=property_id, role=current.role
-    )
     if listing["is_published"] or listing["verification_status"] not in ("draft", "rejected"):
         raise HTTPException(status_code=409, detail="The property is locked for address edits.")
     keys = ("address", "city", "state", "postcode", "latitude", "longitude")
@@ -989,5 +1271,74 @@ def validate_saved_property_address(
         latitude=result["latitude"],
         longitude=result["longitude"],
     )
+    _queue_expanded64(session, property_id)
     session.commit()
     return {"data": repository.owner_listing(property_id), "address_validation": result}
+
+
+class AddressPreviewRequest(BaseModel):
+    """The typed address exactly as the Add Property form expresses it.
+
+    Only the fields the existing forms store are accepted (street address,
+    city, state, 5-digit postcode) so the confirmation evidence hash always
+    matches the saved draft address. Matching is restricted to Malaysia.
+    """
+
+    address: str = Field(min_length=3, max_length=300)
+    city: str = Field(min_length=1, max_length=80)
+    state: str = Field(min_length=1, max_length=80)
+    postcode: str = Field(pattern=r"^\d{5}$")
+
+    @field_validator("address", "city", "state")
+    @classmethod
+    def _strip(cls, value: str) -> str:
+        if "\x00" in value:
+            raise ValueError("Remove null characters.")
+        return value.strip()
+
+
+@router.post("/address-preview")
+def preview_property_address(
+    payload: AddressPreviewRequest,
+    current: AuthenticatedUser = Depends(require_property_owner),
+) -> dict:
+    """Authenticated, READ-ONLY address preview for the Add Property wizards.
+
+    Resolves the typed address through the existing provider chain (Google
+    Address Validation first, then the Malaysian fallback geocoder),
+    classifies the match against the typed components, and returns an
+    HMAC-signed confirmation token bound to the canonical address. Nothing is
+    persisted: no temporary property row, no verdict write. Save Draft stays
+    fully usable when this endpoint reports the service unavailable.
+    """
+    if not rbac.has_role(current.role, (rbac.ROLE_OWNER, rbac.ROLE_AGENT)):
+        raise ForbiddenError(
+            "Only a Property Owner or assigned Agent account may preview an address."
+        )
+    result = preview_address(
+        address_line1=payload.address,
+        city=payload.city,
+        state=payload.state,
+        postcode=payload.postcode,
+    )
+    return {
+        "data": result,
+        "meta": {
+            "region": "MY",
+            "confirmation_note": (
+                "Confirming only records that the displayed location was "
+                "accepted for THIS address; it is not ownership proof or "
+                "administrator verification."
+            ),
+            # Licensing/attribution surface for client display.
+            "attribution": {
+                "google_address_validation": (
+                    "Matched by Google Address Validation; Google-derived "
+                    "content is used transiently for this preview."
+                ),
+                "openstreetmap_nominatim": (
+                    "Geocoding (c) OpenStreetMap contributors (ODbL)."
+                ),
+            },
+        },
+    }

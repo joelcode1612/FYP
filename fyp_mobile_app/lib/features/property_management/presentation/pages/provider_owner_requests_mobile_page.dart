@@ -119,6 +119,13 @@ class _OwnerRequestsState
 
   Future<void> requestAgent(ProviderListing property) async {
     if (busy) return; // SITEWISE_AGENT_DETAILS_COMPLETION_V1
+    if (proofStatuses[property.id] != 'active' ||
+        !const {'pending', 'under_review', 'verified'}.contains(
+          ownershipReviewStatuses[property.id],
+        )) {
+      setState(() => requestError = 'Upload and submit ownership proof before requesting an Agent.');
+      return;
+    }
     final selected = await showModalBottomSheet<String>(
       context: context,
       useSafeArea: true,
@@ -535,7 +542,7 @@ class _OwnerRequestsState
     if (property.stage == ProviderStage.rejected) {
       return 'Review the feedback and update ownership proof if needed.';
     }
-    return 'Upload proof if needed, then request an inspection.';
+    return 'Upload and submit ownership proof, then request an inspection.';
   }
 
   Widget _nextStepHint(String text) => Container(
@@ -633,8 +640,12 @@ class _OwnerRequestsState
       ],
     );
     if (outstanding) return proofActions;
+    final proofReady = proofStatuses[property.id] == 'active' &&
+        const {'pending', 'under_review', 'verified'}.contains(ownershipStatus);
     final requestButton = FilledButton.icon(
-      onPressed: busy || missing == null ? null : () => requestAgent(property),
+      onPressed: busy || missing == null || !proofReady
+          ? null
+          : () => requestAgent(property),
       icon: const Icon(Icons.assignment_ind_outlined, size: 18),
       label: const Text('Request Agent', maxLines: 1),
       style: FilledButton.styleFrom(

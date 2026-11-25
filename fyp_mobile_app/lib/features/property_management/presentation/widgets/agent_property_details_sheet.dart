@@ -54,11 +54,6 @@ class _AgentPropertyDetailsSheetState extends State<AgentPropertyDetailsSheet> {
   static const _typeChoices = <String>[
     'Shoplot',
     'Retail Space',
-    'Ground Floor Shop',
-    'Corner Shoplot',
-    'Retail Unit',
-    'Kiosk',
-    'Commercial F&B Premise',
   ];
 
   final Map<String, TextEditingController> _values = {

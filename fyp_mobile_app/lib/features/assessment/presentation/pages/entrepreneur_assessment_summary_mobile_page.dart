@@ -377,7 +377,17 @@ class _DemandAnalysisCardState extends State<_DemandAnalysisCard> {
                   ),
                 ),
               ] else ...[
-                SitewiseEvidenceScore(score: a.suitabilityScore),
+                if (a.hasMeasuredScore)
+                  SitewiseEvidenceScore(score: a.measuredScore!)
+                else
+                  const Text(
+                    'Location score not measured — no value is inferred.',
+                    style: TextStyle(
+                      fontFamily: kFontFamily,
+                      fontSize: 11.5,
+                      color: SitewiseM3.rowDesc,
+                    ),
+                  ),
                 const SizedBox(height: 12),
                 Text(
                   a.demandSummary,
@@ -389,7 +399,17 @@ class _DemandAnalysisCardState extends State<_DemandAnalysisCard> {
                   ),
                 ),
                 const SizedBox(height: 10),
-                M3Tag(label: '${a.competitorCount} competitors'),
+                if (a.measuredCompetitorCount != null)
+                  M3Tag(label: '${a.measuredCompetitorCount} competitors')
+                else
+                  const Text(
+                    'Competitor count not measured',
+                    style: TextStyle(
+                      fontFamily: kFontFamily,
+                      fontSize: 11.5,
+                      color: SitewiseM3.rowDesc,
+                    ),
+                  ),
                 const SizedBox(height: 6),
                 for (final f in a.factors) SitewiseFactorRow(factor: f),
                 if (AppConfig.usesDemoData) ...[

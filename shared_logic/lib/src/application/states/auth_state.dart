@@ -20,6 +20,10 @@ enum AuthStatus {
   /// A verified session with a backend-assigned, active profile.
   authenticated,
 
+  /// A verified pending Owner/Agent session restricted to MFA and invitation
+  /// onboarding. This is not an authenticated workspace session.
+  staffOnboarding,
+
   /// Registration succeeded but the address must be confirmed first; no
   /// session exists yet.
   emailConfirmationRequired,
@@ -75,7 +79,8 @@ enum AuthErrorKind {
 class AuthState {
   final AuthStatus status;
 
-  /// Present only for [AuthStatus.authenticated].
+  /// Present for [AuthStatus.authenticated] and restricted
+  /// [AuthStatus.staffOnboarding] sessions.
   final SitewiseUser? user;
 
   /// Safe, user-facing explanation of a non-authenticated state. Never a raw
@@ -100,7 +105,8 @@ class AuthState {
     status: AuthStatus.initializing,
   );
 
-  bool get isAuthenticated => status == AuthStatus.authenticated && user != null;
+  bool get isAuthenticated =>
+      status == AuthStatus.authenticated && user != null;
 
   /// The backend-assigned role, or null while there is no verified session.
   ///

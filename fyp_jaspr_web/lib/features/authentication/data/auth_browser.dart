@@ -9,6 +9,8 @@ external _AuthBridge get _bridge;
 extension type _AuthBridge(JSObject _) implements JSObject {
   external JSPromise<JSAny?> get ready;
   external JSString snapshot();
+  external JSString? draftRequestId();
+  external void rememberDraftRequestId(JSString? id);
   external JSPromise<JSAny?> google(JSBoolean remember);
   external JSPromise<JSAny?> password(
     JSString email,
@@ -64,6 +66,10 @@ extension type _AuthBridge(JSObject _) implements JSObject {
 }
 
 abstract final class WebAuth {
+  static String? get draftRequestId => _bridge.draftRequestId()?.toDart;
+  static void rememberDraftRequestId(String? id) =>
+      _bridge.rememberDraftRequestId(id?.toJS);
+
   // Development Demo Mode: answer every getter from an in-memory snapshot so
   // the app never needs `sitewiseAuth` (auth_bundle.js) or a Supabase session.
   // Without this, `_bridge.snapshot()` would throw on an unconfigured page.
@@ -226,9 +232,7 @@ abstract final class WebAuth {
   /// the backend's message on failure, mirroring [request]'s contract.
   static Future<List<int>> download(String path) async {
     final decoded =
-        jsonDecode(
-              (await _bridge.download(path.toJS).toDart).toDart,
-            )
+        jsonDecode((await _bridge.download(path.toJS).toDart).toDart)
             as Map<String, dynamic>;
     if (decoded['ok'] == true && decoded['dataBase64'] is String) {
       return base64Decode(base64Url.normalize(decoded['dataBase64'] as String));

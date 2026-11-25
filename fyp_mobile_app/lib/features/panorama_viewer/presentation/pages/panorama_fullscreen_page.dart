@@ -26,10 +26,7 @@ class PanoramaFullscreenPage extends StatelessWidget {
         foregroundColor: Colors.white,
         title: const Text('360° full screen'),
       ),
-      body: SafeArea(
-        top: false,
-        child: MobileSwipePanorama(bytes: bytes),
-      ),
+      body: SafeArea(top: false, child: MobileSwipePanorama(bytes: bytes)),
     );
   }
 }

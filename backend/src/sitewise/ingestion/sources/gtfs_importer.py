@@ -598,7 +598,7 @@ _INSERTS = {
         "stop_times",
     ),
     "calendar": (
-        "INSERT INTO fyp_features.gtfs_calendar (feed, service_id, mon, tue, wed, thu, fri, sat, sun, start, end) "
+        "INSERT INTO fyp_features.gtfs_calendar (feed, service_id, mon, tue, wed, thu, fri, sat, sun, start, \"end\") "
         "VALUES (:feed, :service_id, :mon, :tue, :wed, :thu, :fri, :sat, :sun, :start, :end)",
         "calendar",
     ),

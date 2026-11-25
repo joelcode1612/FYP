@@ -19,12 +19,66 @@ const List<CommercialPropertyType> commercialPropertyTypes =
     <CommercialPropertyType>[
       CommercialPropertyType('Shoplot', 'Shoplot'),
       CommercialPropertyType('Retail Space', 'Retail Space'),
-      CommercialPropertyType('Ground Floor Shop', 'Ground Floor Shop'),
-      CommercialPropertyType('Corner Shoplot', 'Corner Shoplot'),
-      CommercialPropertyType('Retail Unit', 'Retail Unit'),
-      CommercialPropertyType('Kiosk', 'Kiosk'),
-      CommercialPropertyType('Commercial F&B Premise', 'Commercial F&B Premise'),
     ];
+
+const propertyFloorOptions = <String>[
+  'Basement',
+  'Ground floor',
+  'First floor',
+  'Second floor',
+  'Third floor or above',
+  'Multiple floors',
+];
+
+const propertyUnitPositions = <String>[
+  'Intermediate unit',
+  'Corner unit',
+  'End lot',
+  'Standalone unit',
+  'Not sure',
+];
+
+const propertyFurnishingOptions = <String>[
+  'Bare unit',
+  'Partially fitted',
+  'Fully fitted',
+  'Existing F&B fit-out',
+  'Not sure',
+];
+
+const propertyParkingOptions = <String>[
+  'Available',
+  'Not available',
+  'Not sure',
+];
+
+const propertyAvailabilityOptions = <String>[
+  'Ready to move in',
+  'Available from a specific date',
+  'By arrangement',
+];
+
+const propertyLeaseOptions = <String>[
+  '6 months',
+  '1 year',
+  '2 years',
+  '3 years',
+  'Other duration',
+  'Negotiable',
+];
+
+const propertyTenureOptions = <String>['Freehold', 'Leasehold', 'Not sure'];
+
+const propertyTitleTypeOptions = <String>[
+  'Individual title',
+  'Strata title',
+  'Master title',
+  'Not sure',
+];
+
+// Landlord F&B permission is no longer a selectable form answer: SiteWise
+// assumes F&B use eligibility for every new listing, and the backend
+// defaults `fyp.rental_properties.landlord_fnb_permission` to 'Yes'.
 
 /// Display labels only (for choice grids / dropdowns).
 List<String> get commercialPropertyTypeLabels =>
@@ -55,13 +109,16 @@ String? normalizeCommercialPropertyType(String? value) {
     }
   }
   final lower = raw.toLowerCase();
-  if (lower.contains('corner')) return 'Corner Shoplot';
-  if (lower.contains('kiosk')) return 'Kiosk';
-  if (lower.contains('f&b') || lower.contains('fnb') || lower.contains('food')) {
-    return 'Commercial F&B Premise';
+  if (lower.contains('corner')) return 'Shoplot';
+  if (lower.contains('kiosk')) return 'Retail Space';
+  if (lower.contains('f&b') ||
+      lower.contains('fnb') ||
+      lower.contains('food')) {
+    return 'Retail Space';
   }
-  if (lower.contains('ground')) return 'Ground Floor Shop';
-  if (lower.contains('mall') || lower.contains('retail unit')) return 'Retail Unit';
+  if (lower.contains('ground')) return 'Shoplot';
+  if (lower.contains('mall') || lower.contains('retail unit'))
+    return 'Retail Space';
   if (lower.contains('shop') || lower.contains('shophouse')) return 'Shoplot';
   if (lower.contains('retail')) return 'Retail Space';
   return null;
@@ -102,6 +159,55 @@ abstract final class PropertyFormRules {
     return null;
   }
 
+  static String? optionError(
+    String? value,
+    List<String> options,
+    String label, {
+    bool required = true,
+  }) {
+    final text = (value ?? '').trim();
+    if (text.isEmpty) return required ? 'Select $label.' : null;
+    return options.contains(text) ? null : 'Choose a valid $label option.';
+  }
+
+  static String? floorNumberError(String? description, String? value) {
+    final floor = (value ?? '').trim();
+    final needsNumber = description == 'Third floor or above';
+    if (needsNumber && floor.isEmpty) {
+      return 'Enter the floor number.';
+    }
+    if (floor.isEmpty) return null;
+    final parsed = double.tryParse(floor);
+    if (parsed == null || !parsed.isFinite || parsed < -1 || parsed > 10000) {
+      return 'Enter a valid floor number.';
+    }
+    if (needsNumber && parsed < 3) {
+      return 'Enter floor 3 or above.';
+    }
+    return null;
+  }
+
+  static String? leaseDurationError(String? choice, String? otherMonths) {
+    final selected = (choice ?? '').trim();
+    if (selected.isEmpty) return 'Select the minimum rental period.';
+    if (!propertyLeaseOptions.contains(selected)) {
+      return 'Choose a valid minimum rental period.';
+    }
+    if (selected != 'Other duration') return null;
+    final months = int.tryParse((otherMonths ?? '').trim());
+    if (months == null || months < 1 || months > 360) {
+      return 'Enter a duration between 1 and 360 months.';
+    }
+    return null;
+  }
+
+  static String? availableDateError(String? availability, String? date) {
+    if (availability != 'Available from a specific date') return null;
+    return (date ?? '').trim().isEmpty
+        ? 'Choose the available-from date.'
+        : null;
+  }
+
   static String? rentError(String? value) {
     final text = (value ?? '').trim();
     if (text.isEmpty) return 'Enter the monthly rental.';
@@ -124,7 +230,8 @@ abstract final class PropertyFormRules {
 
   static String? addressError(String? value) {
     final text = (value ?? '').trim();
-    if (text.isEmpty) return 'Enter the building/unit number and street address.';
+    if (text.isEmpty)
+      return 'Enter the building/unit number and street address.';
     if (text.length < 5) {
       return 'Enter a complete building/unit number and street address.';
     }
@@ -150,11 +257,7 @@ abstract final class PropertyFormRules {
   /// Five digits, and — when [state] and [city] are supplied — a postcode the
   /// dataset actually publishes for that locality. Format plus locality keep
   /// obvious typos out of the form; existence is established by admin review.
-  static String? postcodeError(
-    String? value, {
-    String? state,
-    String? city,
-  }) {
+  static String? postcodeError(String? value, {String? state, String? city}) {
     final text = (value ?? '').trim();
     if (text.isEmpty) return 'Enter the postcode.';
     if (!RegExp(r'^\d{5}$').hasMatch(text)) {
@@ -170,7 +273,9 @@ abstract final class PropertyFormRules {
 
   static String? coordinateError(double? value, {required bool latitude}) {
     if (value == null || !value.isFinite) {
-      return latitude ? 'Latitude is not a valid number.' : 'Longitude is not a valid number.';
+      return latitude
+          ? 'Latitude is not a valid number.'
+          : 'Longitude is not a valid number.';
     }
     final min = latitude ? -90.0 : -180.0;
     final max = latitude ? 90.0 : 180.0;
@@ -250,10 +355,14 @@ class AddressValidationResult {
   bool get confirmed => status == 'validated';
 
   bool get hasCoordinates =>
-      latitude != null && longitude != null &&
-      latitude!.isFinite && longitude!.isFinite &&
-      latitude! >= -90 && latitude! <= 90 &&
-      longitude! >= -180 && longitude! <= 180;
+      latitude != null &&
+      longitude != null &&
+      latitude!.isFinite &&
+      longitude!.isFinite &&
+      latitude! >= -90 &&
+      latitude! <= 90 &&
+      longitude! >= -180 &&
+      longitude! <= 180;
 
   factory AddressValidationResult.fromData(Map<String, dynamic> data) =>
       AddressValidationResult(

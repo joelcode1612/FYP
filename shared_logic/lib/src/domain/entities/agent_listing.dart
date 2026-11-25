@@ -75,7 +75,18 @@ class AgentListingFacts {
   final double? psf;
   final String? availability;
   final double? floorLevel;
-  final bool hasParking;
+  final String? floorDescription;
+  final double? frontageFt;
+  final String? furnishing;
+  final String? tenure;
+  final String? unitPosition;
+  final bool? hasParking;
+  final int? leaseDurationMonths;
+  final bool? leaseDurationNegotiable;
+  final String? availableFrom;
+  final double? rentalDepositMyr;
+  final String? titleType;
+  final String? landlordFnbPermission;
   final bool isFnbSuitable;
 
   /// Backend wire value: `draft` | `pending` | `approved` | `rejected`.
@@ -91,7 +102,6 @@ class AgentListingFacts {
     required this.id,
     required this.name,
     required this.verificationStatus,
-    required this.hasParking,
     required this.isFnbSuitable,
     required this.isPublished,
     this.propertyType,
@@ -105,6 +115,18 @@ class AgentListingFacts {
     this.psf,
     this.availability,
     this.floorLevel,
+    this.floorDescription,
+    this.frontageFt,
+    this.furnishing,
+    this.tenure,
+    this.unitPosition,
+    this.hasParking,
+    this.leaseDurationMonths,
+    this.leaseDurationNegotiable,
+    this.availableFrom,
+    this.rentalDepositMyr,
+    this.titleType,
+    this.landlordFnbPermission,
     this.rejectionReason,
     this.ownerUserId,
     this.updatedAt,
@@ -125,7 +147,20 @@ class AgentListingFacts {
         psf: _numFromJson(row['psf']),
         availability: row['availability']?.toString(),
         floorLevel: _numFromJson(row['floor_level']),
-        hasParking: row['has_parking'] == true || row['has_parking'] == 1,
+        floorDescription: row['floor_description']?.toString(),
+        frontageFt: _numFromJson(row['frontage_ft']),
+        furnishing: row['furnishing']?.toString(),
+        tenure: row['tenure']?.toString(),
+        unitPosition: row['unit_position']?.toString(),
+        hasParking: row['has_parking'] == null
+            ? null
+            : row['has_parking'] == true || row['has_parking'] == 1,
+        leaseDurationMonths: (row['lease_duration_months'] as num?)?.toInt(),
+        leaseDurationNegotiable: row['lease_duration_negotiable'] as bool?,
+        availableFrom: row['available_from']?.toString(),
+        rentalDepositMyr: _numFromJson(row['rental_deposit_myr']),
+        titleType: row['title_type']?.toString(),
+        landlordFnbPermission: row['landlord_fnb_permission']?.toString(),
         isFnbSuitable:
             row['is_fnb_suitable'] == true || row['is_fnb_suitable'] == 1,
         verificationStatus: '${row['verification_status'] ?? ''}',

@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SiteWise address preview map</title>
+  <!-- Self-hosted Leaflet 1.9.4 (the same vendored copy the other SiteWise
+       maps use): no CDN dependency, no API key, single first-party marker.
+       The address preview shows ONLY the matched property location — no
+       business layers, no analysis overlays. -->
+  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
+  <style>
+    html,body{margin:0;height:100%;background:#edf2f9;color:#172b4d;font-family:Inter,system-ui,-apple-system,Segoe UI,Arial,sans-serif;overflow:hidden}
+    #map{width:100%;height:100%}
+    .leaflet-container{font-family:inherit;background:#dfe7f2}
+    .sw-frame-actions{position:absolute;top:10px;right:10px;z-index:900}
+    .iconbtn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:7px;border:1px solid #d5dfed;background:#fff;color:#36516e;font-size:14px;line-height:1;cursor:pointer;box-shadow:0 1px 3px rgba(15,23,42,.15)}
+    .iconbtn:hover{background:#eef3fb}
+    .sw-pin{display:inline-flex;flex-direction:column;align-items:center;filter:drop-shadow(0 2px 3px rgba(15,23,42,.35))}
+    .leaflet-popup-content{max-width:280px;overflow-wrap:anywhere;font-size:12px;line-height:1.5}
+    .sw-popup__title{font-weight:800;font-size:12px;color:#172b4d}
+    .sw-popup__hint{font-size:10.5px;color:#64748b;margin-top:3px}
+  </style>
+</head>
+<body>
+  <div id="map" role="region" aria-label="Address preview map"></div>
+  <div class="sw-frame-actions">
+    <button class="iconbtn" id="fullscreen" type="button" aria-label="Toggle fullscreen map" title="Fullscreen">&#9974;</button>
+  </div>
+  <script src="/vendor/leaflet/leaflet.js"></script>
+  <script>
+    (function () {
+      var params = new URLSearchParams(location.search);
+      var map = L.map('map', { zoomControl: true, attributionControl: true });
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      }).addTo(map);
+      var mapEl = document.getElementById('map');
+      document.getElementById('fullscreen').addEventListener('click', function () {
+        if (document.fullscreenElement) { document.exitFullscreen(); }
+        else if (mapEl.requestFullscreen) { mapEl.requestFullscreen(); }
+      });
+
+      // Teardrop pin drawn inline so no marker image assets are needed.
+      var pinIcon = L.divIcon({
+        className: 'sw-pin',
+        html: '<svg width="30" height="42" viewBox="0 0 30 42" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+              '<path d="M15 1C7.8 1 2 6.8 2 14c0 9.4 11.3 21.4 12.3 22.4a1 1 0 0 0 1.4 0C16.7 35.4 28 23.4 28 14 28 6.8 22.2 1 15 1Z" fill="#1d4ed8" stroke="#fff" stroke-width="2"/>' +
+              '<circle cx="15" cy="14" r="5" fill="#fff"/></svg>',
+        iconSize: [30, 42],
+        iconAnchor: [15, 40],
+        popupAnchor: [0, -40]
+      });
+      var marker = null;
+      function setLocation(lat, lon, label) {
+        var point = L.latLng(lat, lon);
+        if (!marker) {
+          marker = L.marker(point, { icon: pinIcon, draggable: false }).addTo(map);
+        } else {
+          marker.setLatLng(point);
+        }
+        marker.unbindPopup();
+        marker.bindPopup(
+          '<div class="sw-popup__title">Matched property location</div>' +
+          '<div class="sw-popup__hint">' + escapeHtml(label || '') + '</div>'
+        );
+        map.setView(point, Math.max(map.getZoom(), 16), { animate: true });
+      }
+      function escapeHtml(text) {
+        return String(text).replace(/[&<>"']/g, function (ch) {
+          return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+        });
+      }
+      var qLat = parseFloat(params.get('lat'));
+      var qLon = parseFloat(params.get('lon'));
+      if (isFinite(qLat) && isFinite(qLon)) {
+        setLocation(qLat, qLon, params.get('label') || '');
+      } else {
+        map.setView([4.2, 102.0], 6); // Malaysia overview before a match exists
+      }
+
+      // The wizard pushes updated coordinates with postMessage so a live
+      // preview never has to reload the frame.
+      var PREFIX = 'sitewiseAddressPreview:';
+      window.addEventListener('message', function (event) {
+        if (event.origin !== window.location.origin) return;
+        if (typeof event.data !== 'string' || event.data.indexOf(PREFIX) !== 0) return;
+        try {
+          var payload = JSON.parse(event.data.slice(PREFIX.length));
+          var lat = Number(payload.lat), lon = Number(payload.lon);
+          if (isFinite(lat) && isFinite(lon)) setLocation(lat, lon, String(payload.label || ''));
+        } catch (error) { /* malformed message: ignore, keep the current pin */ }
+      });
+    })();
+  </script>
+</body>
+</html>

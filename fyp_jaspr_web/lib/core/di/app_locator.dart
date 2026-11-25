@@ -104,8 +104,12 @@ abstract final class AppLocator {
   /// The unified listing/ownership verification workflow — submitter actions
   /// and the admin review queue both ride this one repository over
   /// `/api/v1/properties/verification/*` and `/api/v1/staff/properties/*`.
-  static final PropertyVerificationRepository propertyVerificationRepo =
+  static final ApiPropertyVerificationRepository propertyVerificationRepo =
       ApiPropertyVerificationRepository(const WebApiClient());
+
+  /// Owner listing drafts and edits use the authenticated property API.
+  static final OwnerListingRepository ownerListings =
+      ApiOwnerListingRepository(const WebApiClient());
 
   /// Staff/audit/properties reads and writes for the five administrator
   /// operations pages (Ownership, Agents, Campaigns, Activity, Surveys).

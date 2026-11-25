@@ -63,6 +63,7 @@ class _ProviderListingsMobilePageState
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     ServiceLocator.listingsRevision.removeListener(_reloadOnMutation);
     WidgetsBinding.instance.removeObserver(this);
     _search.dispose();
@@ -77,6 +78,12 @@ class _ProviderListingsMobilePageState
 
   void _reloadOnMutation() {
     if (mounted) _load();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // An administrator may approve while this screen is backgrounded.
+    if (state == AppLifecycleState.resumed && mounted) _load();
   }
 
   Future<void> _load() async {

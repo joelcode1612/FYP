@@ -46,6 +46,7 @@ from sqlmodel import Session
 
 from sitewise.core.exceptions import ModelUnavailableError
 from sitewise.core.logging import logger
+from sitewise.ml.expanded64_feature_definitions import DEFINITIONS_VERSION as DEFINITION_VERSION
 from sitewise.ml.feature_bridge import FeatureCoverage, bridge_row_for, merge_bridge_features
 from sitewise.ml.model_loader import ModelLoader
 from sitewise.ml.property_features import (
@@ -56,7 +57,21 @@ from sitewise.ml.property_features import (
 from sitewise.ml.pu_learning import PULearning
 
 EXPANDED_MODEL_NAME = "sitewise_pu_64_expanded"
+EXPANDED64_V2_MODEL_NAME = "Expanded64_v2"
 EXPANDED_COORDINATE_VERSION = "expanded64-coordinate-v2"
+
+#: The six inputs standardised for the independent Expanded64_v2 retraining.
+#: They are measured for every property today, but are admitted to the scoring
+#: vector only when the validated v2 artifact is active. The original artifact
+#: was trained on the older definitions and must never receive them.
+STANDARDIZED_V2_FEATURES = (
+    "road_length_density_500m_km_km2",
+    "osm_walkway_length_density_500m_km_km2",
+    "pop_2000m",
+    "pop_3000m",
+    "walk_isochrone_area_10min_km2",
+    "worldpop_walk_reachable_10min",
+)
 
 EXPANDED_BRIDGE_CSV = (
     Path(__file__).resolve().parents[3] / "ml_reference" / "training_expanded_bridge_1796.csv"
@@ -261,11 +276,12 @@ def _score_property(
     features: dict[str, float | None],
     *,
     missing: list[str],
+    model_name: str = EXPANDED_MODEL_NAME,
 ) -> dict[str, Any]:
-    """Run the expanded model over one resolved vector (shared by 1 and N)."""
+    """Run the active expanded artifact over one resolved vector (shared by 1 and N)."""
     _expanded_policy_check(missing)
     observed = {name: value for name, value in features.items() if value is not None}
-    result = PULearning(model_name=EXPANDED_MODEL_NAME).predict_or_report(
+    result = PULearning(model_name=model_name).predict_or_report(
         property_id, observed, allow_model_imputation=True
     )
     result["feature_coverage"] = {
@@ -276,13 +292,136 @@ def _score_property(
         "imputed_features": list(missing),
     }
     result["inference_state"] = "ready" if result.get("available") else "expanded64_inference_unavailable"
-    result["layer1_model"] = EXPANDED_MODEL_NAME
+    result["layer1_model"] = model_name
     result["gating"] = {
         "production_ready": False,
         "research_only": True,
         "expanded_bridge_only": True,
     }
     return result
+
+
+# None denotes a group whose names are all eligible under its coverage rules.
+# This is the ORIGINAL Expanded64 contract; it stays unchanged while that
+# artifact is the active model.
+VALIDATED_COORDINATE_INPUTS = {
+    "population_rings": {"pop_500m", "pop_1000m"},
+    "road_geometry": {"road_length_density_1km_km_km2"},
+    "transit_accessibility": {"transit_stops_500m_walk", "transit_stops_1km_walk"},
+    "drive_isochrone": {"drive_isochrone_area_10min_km2"},
+    "demand_generator_pois": None,
+    "residential_density": None,
+}
+
+#: The v2 contract adds the six standardised inputs. ChatGPT must recalculate
+#: the historical training features with the same definitions (see
+#: deliverables/expanded64_v2_runtime_feature_handoff.md) before these become
+#: safe to score against Expanded64_v2.
+VALIDATED_COORDINATE_INPUTS_V2 = {
+    **VALIDATED_COORDINATE_INPUTS,
+    "population_rings": {"pop_500m", "pop_1000m", "pop_2000m", "pop_3000m"},
+    "road_geometry": {
+        "road_length_density_1km_km_km2",
+        "road_length_density_500m_km_km2",
+        "osm_walkway_length_density_500m_km_km2",
+    },
+    "isochrone_population": {
+        "walk_isochrone_area_10min_km2", "worldpop_walk_reachable_10min",
+    },
+}
+
+
+def active_expanded_model_name() -> str:
+    """Return the artifact the single existing Expanded64 engine must load.
+
+    The original production artifact remains active by default. The v2 name
+    is used only when explicitly configured and its validated artifact is on
+    disk, so a partially delivered retraining cannot change live scoring.
+    """
+    from sitewise.core.config import settings
+
+    configured = str(
+        getattr(settings, "sitewise_expanded64_v2_model_name", "") or ""
+    ).strip()
+    if not configured:
+        return EXPANDED_MODEL_NAME
+    if configured != EXPANDED64_V2_MODEL_NAME:
+        raise ModelUnavailableError(
+            "SITEWISE_EXPANDED64_V2_MODEL_NAME may only name the validated "
+            f"artifact {EXPANDED64_V2_MODEL_NAME!r}, got {configured!r}"
+        )
+    try:
+        ModelLoader()._find_artifact(configured)
+    except ModelUnavailableError:
+        logger.warning(
+            "Expanded64_v2 is configured but its artifact is not present; "
+            "keeping the original Expanded64 artifact active"
+        )
+        return EXPANDED_MODEL_NAME
+    return configured
+
+
+def uses_v2_feature_definitions(model_name: str | None = None) -> bool:
+    """Whether the named artifact was trained on the standardised definitions."""
+    return (model_name or active_expanded_model_name()) == EXPANDED64_V2_MODEL_NAME
+
+
+def _v2_coverage_guard(group: str, name: str, notes: dict) -> bool:
+    """Explicit source-coverage check for the six recovered v2 inputs.
+
+    A missing raster, an empty buffer or a non-polygonal hull leaves the value
+    unvalidated; it is never replaced with zero.
+    """
+    from sitewise.ml.expanded64_feature_definitions import DEFINITIONS_VERSION
+
+    if notes.get("definition_version") not in (None, DEFINITIONS_VERSION):
+        return False
+    if group == "population_rings" and name in ("pop_2000m", "pop_3000m"):
+        pixels = notes.get(f"worldpop_valid_pixels_{name.removeprefix('pop_')}")
+        return isinstance(pixels, int) and pixels > 0
+    if group == "road_geometry" and name in STANDARDIZED_V2_FEATURES:
+        measured = {
+            "road_length_density_500m_km_km2": "road_m_500",
+            "osm_walkway_length_density_500m_km_km2": "walkway_m_500",
+        }.get(name)
+        return bool(
+            measured
+            and notes.get("definition_version") == DEFINITIONS_VERSION
+            and isinstance(notes.get(measured), (int, float))
+        )
+    if group == "isochrone_population" and name in STANDARDIZED_V2_FEATURES:
+        nodes = notes.get("hull_nodes_10min", notes.get("nodes"))
+        if not isinstance(nodes, int) or nodes < 3:
+            return False
+        if name == "worldpop_walk_reachable_10min":
+            coverage = notes.get("worldpop_hull_coverage_pct")
+            return isinstance(coverage, (int, float)) and coverage > 0
+        return True
+    return True
+
+
+def coordinate_input_validated(
+    group: str, name: str, notes: dict, *, model_name: str | None = None
+) -> bool:
+    """Admit a measured input to a scoring vector.
+
+    ``model_name=None`` deliberately keeps the original Expand64 allowlist so
+    existing callers and tests never silently receive newly standardised
+    values. Runtime paths pass the active artifact explicitly.
+    """
+    active = model_name or EXPANDED_MODEL_NAME
+    v2 = uses_v2_feature_definitions(active)
+    allowed = VALIDATED_COORDINATE_INPUTS_V2 if v2 else VALIDATED_COORDINATE_INPUTS
+    if group not in allowed:
+        return False
+    eligible = allowed[group]
+    if not (eligible is None or name in eligible):
+        return False
+    if group == "transit_accessibility" and not bool(notes.get("gtfs_coordinate_covered")):
+        return False
+    if v2 and not _v2_coverage_guard(group, name, notes):
+        return False
+    return True
 
 
 def collect_expanded_coordinates(
@@ -297,8 +436,7 @@ def collect_expanded_coordinates(
 ) -> dict[str, Any]:
     """Collect model inputs from current coordinates and report rejected candidates."""
     from sitewise.ml.coordinate_features import (
-        GROUP_DRIVE, GROUP_POI, GROUP_POPULATION, GROUP_RESIDENTIAL, GROUP_ROAD, GROUP_TRANSIT,
-        STATUS_PARTIAL, STATUS_READY,
+        GROUP_ISO, STATUS_PARTIAL, STATUS_READY,
     )
     from sitewise.ml.expanded64_network import Expanded64CoordinateExtractor
     from sitewise.services.age_band_raster_service import (
@@ -311,17 +449,16 @@ def collect_expanded_coordinates(
     if not _valid_coordinates(latitude, longitude):
         raise FeatureResolutionError("Property needs finite latitude and longitude in range")
     latitude, longitude = float(latitude), float(longitude)
-    loaded = ModelLoader().load_cached(EXPANDED_MODEL_NAME)
+    model_name = active_expanded_model_name()
+    loaded = ModelLoader().load_cached(model_name)
     values = dict.fromkeys(loaded.feature_names)
     sources = {}
     candidates = {}
-    eligible_features = {
-        GROUP_POPULATION: {"pop_500m", "pop_1000m"},
-        GROUP_ROAD: {"road_length_density_1km_km_km2"},
-        GROUP_TRANSIT: {"transit_stops_500m_walk", "transit_stops_1km_walk"},
-        GROUP_DRIVE: {"drive_isochrone_area_10min_km2"},
-    }
-    eligible_groups = {GROUP_POI, GROUP_RESIDENTIAL, *eligible_features}
+    eligible_groups = set(
+        VALIDATED_COORDINATE_INPUTS_V2
+        if uses_v2_feature_definitions(model_name)
+        else VALIDATED_COORDINATE_INPUTS
+    ) | ({GROUP_ISO} if uses_v2_feature_definitions(model_name) else set())
     groups = Expanded64CoordinateExtractor(session).extract(
         latitude, longitude, selected=None if diagnostics else eligible_groups
     )
@@ -334,9 +471,9 @@ def collect_expanded_coordinates(
             if observation.status not in {STATUS_READY, STATUS_PARTIAL}:
                 continue
             if (
-                group not in eligible_groups
-                or (group in eligible_features and name not in eligible_features[group])
-                or (group == GROUP_TRANSIT and not observation.notes.get("gtfs_coordinate_covered"))
+                not coordinate_input_validated(
+                    group, name, observation.notes, model_name=model_name
+                )
             ):
                 candidates[name] = value
                 continue
@@ -374,8 +511,11 @@ def collect_expanded_coordinates(
         "property_id": property_id,
         "available": False,
         "score": None,
-        "model_version": loaded.meta.get("model_variant") or EXPANDED_MODEL_NAME,
-        "layer1_model": EXPANDED_MODEL_NAME,
+        "model_version": loaded.meta.get("model_variant") or model_name,
+        "layer1_model": model_name,
+        "uses_v2_feature_definitions": uses_v2_feature_definitions(model_name),
+        "standardized_features": STANDARDIZED_V2_FEATURES,
+        "definition_version": DEFINITION_VERSION,
         "research_only": True,
         "feature_count": len(values),
         "available_features": len(sources),
@@ -398,7 +538,7 @@ def collect_expanded_coordinates(
         )
         return result
 
-    result.update(_score_property(property_id, values, missing=missing))
+    result.update(_score_property(property_id, values, missing=missing, model_name=model_name))
     result["gating"]["expanded_bridge_only"] = False
     if explain and result["available"]:
         from sitewise.ml.shap_explainer import ShapExplainer
@@ -410,7 +550,7 @@ def collect_expanded_coordinates(
             loaded.feature_names, _background_path("expanded64")
         )
         try:
-            explanation = ShapExplainer(model_name=EXPANDED_MODEL_NAME).explain(
+            explanation = ShapExplainer(model_name=model_name).explain(
                 values, background=background, allowed_missing=frozenset(imputable)
             )
             reconstructed = explanation["baseline_association"] + math.fsum(
@@ -449,7 +589,8 @@ def expanded_prediction(analytics_session: Session, property_id: str) -> dict[st
     failures are explicit (``available: false`` names the exact missing
     features) and successful results are cached per (model version, property).
     """
-    loaded = ModelLoader().load_cached(EXPANDED_MODEL_NAME)
+    model_name = active_expanded_model_name()
+    loaded = ModelLoader().load_cached(model_name)
     model_version = str(loaded.meta.get("model_variant") or "unknown")
     cache_key = (model_version, str(property_id))
     with _SCORE_CACHE_LOCK:
@@ -472,7 +613,7 @@ def expanded_prediction(analytics_session: Session, property_id: str) -> dict[st
             "score_meaning": "research_positive_label_association_NOT_business_success_probability",
             "research_only": True,
             "inference_state": "expanded64_inference_unavailable",
-            "layer1_model": EXPANDED_MODEL_NAME,
+            "layer1_model": model_name,
             "feature_coverage": {
                 "feature_count": 64,
                 "available_features": 0,
@@ -491,7 +632,7 @@ def expanded_prediction(analytics_session: Session, property_id: str) -> dict[st
             "score_meaning": "research_positive_label_association_NOT_business_success_probability",
             "research_only": True,
             "inference_state": "expanded64_inference_unavailable",
-            "layer1_model": EXPANDED_MODEL_NAME,
+            "layer1_model": model_name,
             "feature_coverage": {
                 "feature_count": 64,
                 "available_features": 0,
@@ -505,7 +646,7 @@ def expanded_prediction(analytics_session: Session, property_id: str) -> dict[st
     missing = list(coverage.missing_features)
     try:
         result = _score_property(
-            str(property_id), dict(coverage.values), missing=missing
+            str(property_id), dict(coverage.values), missing=missing, model_name=model_name
         )
         result["feature_coverage"].update({
             "value_sources": dict(coverage.sources),
@@ -520,7 +661,7 @@ def expanded_prediction(analytics_session: Session, property_id: str) -> dict[st
             "score_meaning": "research_positive_label_association_NOT_business_success_probability",
             "research_only": True,
             "inference_state": "expanded64_inference_unavailable",
-            "layer1_model": EXPANDED_MODEL_NAME,
+            "layer1_model": model_name,
             "feature_coverage": {
                 "feature_count": 64,
                 "available_features": sum(v is not None for v in coverage.values.values()),
@@ -578,7 +719,8 @@ def expanded_scores_many(
     """
     if not property_ids:
         return {}
-    loaded = ModelLoader().load_cached(EXPANDED_MODEL_NAME)
+    model_name = active_expanded_model_name()
+    loaded = ModelLoader().load_cached(model_name)
     expected = loaded.feature_names
 
     # Reuse previously resolved predictions AND feature vectors; the
@@ -623,14 +765,14 @@ def expanded_scores_many(
         if row["subject_id"]:
             subject_of[str(row["catalogue_id"])] = str(row["subject_id"])
     # Fallback for imported U rows without a verified rental link.
-    unmapped = [pid for pid in ids if pid not in found]
+    unmapped = [pid for pid in ids if pid not in subject_of]
     if unmapped:
         for row in analytics_session.execute(
             sql_text("""
                 SELECT f.canonical_property_id AS catalogue_id, f.subject_id
-                FROM sitewise_analytics.subject_features f
+                FROM fyp.property_inference_features f
                 WHERE f.canonical_property_id = ANY(:ids)
-                  AND btrim(f.sample_class) = 'U'
+
             """),
             {"ids": unmapped},
         ).mappings().all():
@@ -644,7 +786,7 @@ def expanded_scores_many(
     if subjects:
         for row in analytics_session.execute(
             sql_text(
-                "SELECT subject_id, to_jsonb(f) AS doc FROM sitewise_analytics.subject_features f "
+                "SELECT subject_id, to_jsonb(f) AS doc FROM fyp.property_inference_features f "
                 "WHERE subject_id = ANY(:ids)"
             ),
             {"ids": subjects},
@@ -681,7 +823,7 @@ def expanded_scores_many(
         if not subject_id:
             return None
         sf = sf_docs.get(subject_id)
-        if not sf or str(sf.get("sample_class") or "").strip() != "U":
+        if not sf:
             return None
         extra = sf.get("other_features") or {}
         if not isinstance(extra, dict):
@@ -692,8 +834,8 @@ def expanded_scores_many(
         if sf.get("analysis_status") != "COMPLETED":
             flags.append("Analysis status: " + str(sf.get("analysis_status")))
         candidates: tuple[tuple[str, Any], ...] = (
-            ("sitewise_analytics.subject_features", sf),
-            ("sitewise_analytics.subject_features.other_features", extra),
+            ("fyp.property_inference_features", sf),
+            ("fyp.property_inference_features.other_features", extra),
             ("demand_gen.features", demand),
             ("fyp_features.property_population_spatial", worldpop),
         )
@@ -782,7 +924,7 @@ def expanded_scores_many(
                 "score_meaning": "research_positive_label_association_NOT_business_success_probability",
                 "research_only": True,
                 "inference_state": "expanded64_inference_unavailable",
-                "layer1_model": EXPANDED_MODEL_NAME,
+                "layer1_model": model_name,
                 "gating": {"production_ready": False, "research_only": True, "expanded_bridge_only": True},
             }
             continue
@@ -811,7 +953,7 @@ def expanded_scores_many(
                 "score_meaning": "research_positive_label_association_NOT_business_success_probability",
                 "research_only": True,
                 "inference_state": "expanded64_inference_unavailable",
-                "layer1_model": EXPANDED_MODEL_NAME,
+                "layer1_model": model_name,
                 "feature_coverage": {
                     "feature_count": 64,
                     "available_features": sum(v is not None for v in values.values()),
@@ -861,7 +1003,7 @@ def expanded_scores_many(
                     "score_meaning": "research_positive_label_association_NOT_business_success_probability",
                     "research_only": True,
                     "inference_state": "expanded64_inference_unavailable",
-                    "layer1_model": EXPANDED_MODEL_NAME,
+                    "layer1_model": model_name,
                     "feature_coverage": {
                         "feature_count": 64,
                         "available_features": sum(v is not None for v in values.values()),
@@ -896,7 +1038,7 @@ def expanded_scores_many(
                         "flags": flags,
                     },
                     "inference_state": "ready",
-                    "layer1_model": EXPANDED_MODEL_NAME,
+                    "layer1_model": model_name,
                     "gating": {"production_ready": False, "research_only": True, "expanded_bridge_only": True},
                 }
                 with _SCORE_CACHE_LOCK:

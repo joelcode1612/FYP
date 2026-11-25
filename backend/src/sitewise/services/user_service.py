@@ -186,19 +186,19 @@ class UserService:
         role: str,
         account_status: str,
     ) -> User:
-        """Create-or-update the local enforcement mirror for a provisioned
-        staff account (trusted backend operation, never client-driven).
+        """Create-or-update the local enforcement mirror for an invited
+        Owner or Agent (trusted backend operation, never client-driven).
 
         The authoritative role/status live in the Supabase identity row; this
         mirror is what the auth dependencies read on every request.
 
         Identity collisions are NEVER resolved automatically using an email
-        match. A staff account with a different Supabase UUID must be reviewed
-        through an explicit, audited administrator recovery workflow.
+        match. An invited account with a different Supabase UUID must be
+        reviewed through an explicit, audited administrator recovery workflow.
         """
         role = rbac.canonical_role(role)
-        if role not in rbac.STAFF_ROLES or not rbac.is_valid_status(account_status):
-            raise ValueError("Invalid staff role or account status")
+        if role not in rbac.INVITED_PROVIDER_ROLES or not rbac.is_valid_status(account_status):
+            raise ValueError("Invalid invited provider role or account status")
         existing = self.repo.get_by_id(user_id)
         collision = self.repo.get_by_email(email)
         if collision is not None and collision.user_id != user_id:

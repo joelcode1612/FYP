@@ -20,27 +20,38 @@ from sitewise.ml.property_features import FeatureResolutionError
 from sitewise.ml.pu_expanded import collect_expanded_coordinates, expanded_rental_prediction
 
 
-
-def replay_training(session, path, groups, per_stratum):
+def replay_training(session, path, groups, per_stratum, subject_ids=(), *, parking_points=False):
     """Replay the collector against frozen training coordinates and measurements."""
     strata = defaultdict(list)
     with path.open(encoding="utf-8-sig", newline="") as stream:
         for row in csv.DictReader(stream):
-            strata[row["sample_class"], row["state_dosm"]].append(row)
+            if not subject_ids or row["subject_id"] in subject_ids:
+                strata[row["sample_class"], row["state_dosm"]].append(row)
+
+    if subject_ids:
+        found = {row["subject_id"] for records in strata.values() for row in records}
+        if missing := set(subject_ids) - found:
+            raise FeatureResolutionError(f"Training subject IDs not found: {', '.join(sorted(missing))}")
 
     if not strata:
         raise FeatureResolutionError("The training reference CSV has no records")
 
     extractor = Expanded64CoordinateExtractor(session)
     selected = set(groups)
+    if parking_points:
+        selected.remove(GROUP_PARKING)
     rows = []
     for (sample_class, state), records in sorted(strata.items()):
         records.sort(key=lambda row: row["subject_id"])
-        count = min(per_stratum, len(records))
+        count = len(records) if subject_ids else min(per_stratum, len(records))
         for index in range(count):
             row = records[(2 * index + 1) * len(records) // (2 * count)]
             lat, lon = float(row["latitude"]), float(row["longitude"])
             groups_found = extractor.extract(lat, lon, selected=selected)
+            if parking_points:
+                groups_found[GROUP_PARKING] = extractor.parking_facilities(
+                    lat, lon, archive_point_inventory=True,
+                )
             rows.append({
                 "subject_id": row["subject_id"],
                 "sample_class": sample_class,
@@ -51,6 +62,7 @@ def replay_training(session, path, groups, per_stratum):
                         "status": result.status,
                         "reason": result.reason,
                         "notes": result.notes,
+                        "sources": result.sources,
                         "features": {
                             name: compare_training_value(row.get(name), value)
                             for name, value in result.values.items() if name in row
@@ -87,11 +99,25 @@ def main() -> int:
         help="Collection group to replay against the frozen training CSV; repeat to select multiple",
     )
     parser.add_argument("--per-stratum", type=int, default=1)
+    parser.add_argument(
+        "--replay-subject", action="append", default=[], metavar="ID",
+        help="Replay a named training subject instead of sampling; repeat to select more",
+    )
+    parser.add_argument(
+        "--replay-parking-points", action="store_true",
+        help="Compare the archived U parking point-inventory recipe",
+    )
     parser.add_argument("--age-raster-dir", help="Override SITEWISE_AGE_RASTER_DIR for this run")
     parser.add_argument("--explain", action="store_true", help="Run SHAP if inference succeeds")
     args = parser.parse_args()
     if args.replay_training is not None and (not args.replay_group or args.per_stratum < 1):
         parser.error("--replay-training requires --replay-group and a positive --per-stratum")
+    if args.replay_subject and args.replay_training is None:
+        parser.error("--replay-subject requires --replay-training")
+    if args.replay_parking_points and (
+        args.replay_training is None or GROUP_PARKING not in args.replay_group
+    ):
+        parser.error("--replay-parking-points requires a parking_facilities training replay")
     options = {
         "age_raster_dir": args.age_raster_dir,
         "diagnostics": True,
@@ -103,7 +129,8 @@ def main() -> int:
             session.connection().exec_driver_sql("SET LOCAL statement_timeout = '20s'")
             if args.replay_training is not None:
                 result = replay_training(
-                    session, args.replay_training, args.replay_group, args.per_stratum
+                    session, args.replay_training, args.replay_group, args.per_stratum,
+                    set(args.replay_subject), parking_points=args.replay_parking_points,
                 )
             elif args.property_id is not None:
                 result = expanded_rental_prediction(session, args.property_id, **options)

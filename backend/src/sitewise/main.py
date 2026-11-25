@@ -101,15 +101,15 @@ async def lifespan(app: FastAPI):
         logger.info("Panorama worker: %s", stitcher_status)
     except Exception:  # noqa: BLE001 - the API must start even if the worker cannot
         logger.exception("Panorama worker could not start; queued jobs wait for the next start")
-    from sitewise.services import assignment_sync_worker
-    try:
-        logger.info("Agent assignment mirror: %s", assignment_sync_worker.startup())
-    except Exception as exc:
-        logger.error("Agent assignment mirror unavailable: %s", type(exc).__name__)
+    # Assignments are consolidated into local fyp.agent_listing_assignment.
+    # The Supabase mirror/outbox worker has been retired; no runtime replication.
+    from sitewise.services.expanded64_worker import start as start_expanded64
+
+    stop_expanded64, _ = start_expanded64()
     try:
         yield
     finally:
-        assignment_sync_worker.shutdown()
+        stop_expanded64.set()
 
 
 app = FastAPI(title="SiteWise API", version="0.1.0", lifespan=lifespan)
@@ -275,6 +275,39 @@ def health_v1() -> dict:
         "panorama_worker": "running" if panorama_ok else "unavailable",
         "explanation_worker": "running" if explanation_ok else "unavailable",
     }
+
+
+@app.get("/auth-config.json", include_in_schema=False)
+def public_auth_config() -> JSONResponse:
+    """Expose only browser-safe Supabase settings from the backend environment."""
+    from urllib.parse import urlsplit
+
+    url = settings.supabase_url.strip().rstrip("/")
+    key = settings.supabase_publishable_key.strip()
+    # Preserve the former generator's publishable-key-only security boundary.
+    try:
+        parsed = urlsplit(url)
+        valid_url = (
+            parsed.scheme in {"http", "https"}
+            and bool(parsed.hostname)
+            and parsed.username is None
+            and parsed.password is None
+            and not parsed.query
+            and not parsed.fragment
+            and not any(char.isspace() for char in url)
+        )
+    except ValueError:
+        valid_url = False
+    if not valid_url or not re.fullmatch(r"sb_publishable_[A-Za-z0-9_-]+", key):
+        return JSONResponse(
+            status_code=503,
+            content={"configured": False, "detail": "Public authentication configuration is unavailable."},
+            headers={"Cache-Control": "no-store"},
+        )
+    return JSONResponse(
+        content={"configured": True, "supabaseUrl": url, "supabasePublishableKey": key},
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 # Serve the compiled Jaspr frontend (static assets + SPA fallback) on this

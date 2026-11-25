@@ -1,0 +1,85 @@
+{
+  "generated_at_utc": "2026-11-25T13:28:21.546791+00:00",
+  "definition_version": "expanded64-feature-definitions-v1",
+  "database": "Final_Location_Analysis",
+  "server": "localhost:5432",
+  "subjects_expected": 1796,
+  "subjects_recalculated": 1796,
+  "subjects_missing_from_checkpoint": [],
+  "sample_classes": {
+    "U": 916,
+    "P": 880
+  },
+  "measurements_expected": 10776,
+  "measurements_recalculated": 10731,
+  "per_feature": {
+    "road_length_density_500m_km_km2": {
+      "recalculated_non_null": 1796,
+      "original_non_null": 1796,
+      "exact_matches": 0,
+      "tolerance_matches": 0,
+      "mean_absolute_difference": 12.637236240567958,
+      "pearson_r": 0.6865325752753823,
+      "spearman_r": 0.6426225868046439
+    },
+    "osm_walkway_length_density_500m_km_km2": {
+      "recalculated_non_null": 1751,
+      "original_non_null": 1796,
+      "exact_matches": 25,
+      "tolerance_matches": 75,
+      "mean_absolute_difference": 0.49853729208931175,
+      "pearson_r": 0.9932200964124311,
+      "spearman_r": 0.9614896550958161
+    },
+    "pop_2000m": {
+      "recalculated_non_null": 1796,
+      "original_non_null": 1796,
+      "exact_matches": 1763,
+      "tolerance_matches": 1763,
+      "mean_absolute_difference": 0.9626948775055537,
+      "pearson_r": 0.9999999674182483,
+      "spearman_r": 0.9999998363599737
+    },
+    "pop_3000m": {
+      "recalculated_non_null": 1796,
+      "original_non_null": 1796,
+      "exact_matches": 1750,
+      "tolerance_matches": 1750,
+      "mean_absolute_difference": 1.2398106904232136,
+      "pearson_r": 0.9999999904547752,
+      "spearman_r": 0.9999999585721451
+    },
+    "walk_isochrone_area_10min_km2": {
+      "recalculated_non_null": 1796,
+      "original_non_null": 1796,
+      "exact_matches": 1677,
+      "tolerance_matches": 1677,
+      "mean_absolute_difference": 0.001591202672605791,
+      "pearson_r": 0.9991245887064647,
+      "spearman_r": 0.9986873079439454
+    },
+    "worldpop_walk_reachable_10min": {
+      "recalculated_non_null": 1796,
+      "original_non_null": 1796,
+      "exact_matches": 1676,
+      "tolerance_matches": 1676,
+      "mean_absolute_difference": 9.405650334075725,
+      "pearson_r": 0.999550879245939,
+      "spearman_r": 0.9994696916433855
+    }
+  },
+  "source_issues": [
+    "roads_v2: 28 duplicate geometry groups (29 rows); no invalid geometry; not altered.",
+    "road_junctions_v2 extent is Peninsular Malaysia only (100.25-104.23E, 1.38-5.54N) while roads_v2 covers 99.66-119.26E; junction density is out of scope for the six features.",
+    "worldpop_2025_constrained: 2677 tiles, 100 m, SRID 4326, nodata -99999, extent covers Malaysia.",
+    "psense_edges: 1,592,732 edges, all cost fields present; 1,576,859 edges in a walk component; 17,999 motorway/motorway_link edges excluded from walking.",
+    "ur_walknode: 326,850 nodes with component ids; psense_verts: 2,317,897 vertices.",
+    "Routing connectivity and raster availability are recorded per subject in the recalculated CSV; failures stay NULL with reasons."
+  ],
+  "governance": {
+    "model_retrained": false,
+    "expanded64_v2_activated": false,
+    "production_records_modified": false,
+    "original_training_dataset_modified": false
+  }
+}

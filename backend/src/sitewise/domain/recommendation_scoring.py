@@ -478,8 +478,6 @@ def eligibility_failures(
     status = (candidate.availability_status or "").strip().lower()
     if status in _UNAVAILABLE_STATUSES:
         failures.append("listing_explicitly_unavailable")
-    if (candidate.sample_class or "").strip().upper() not in {"", "U"}:
-        failures.append("not_an_unlabeled_commercial_property")
     if candidate.analysis_status and candidate.analysis_status.strip().upper() != "COMPLETED":
         failures.append("analysis_not_completed")
     if candidate.verification.get("verified") is False:

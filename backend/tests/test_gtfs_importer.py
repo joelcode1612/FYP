@@ -14,7 +14,7 @@ from __future__ import annotations
 import io
 import json
 import zipfile
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -234,10 +234,14 @@ def test_status_records_attempts_and_preserves_last_success_on_failure(tmp_path,
 
 def test_staleness_flags_every_core_feed_stale(tmp_path, monkeypatch):
     monkeypatch.setenv("GTFS_DATA_DIR", str(tmp_path))
-    today = date(2026, 11, 16)
+    today = datetime.now(UTC).date()
 
     fresh = {"provider": "KTMB", "endpoint": "x", "last_success": today.isoformat()}
-    stale = {"provider": "KTMB", "endpoint": "x", "last_success": "2026-11-01"}
+    stale = {
+        "provider": "KTMB",
+        "endpoint": "x",
+        "last_success": (today - timedelta(days=gtfs.STALE_AFTER_DAYS + 1)).isoformat(),
+    }
     never = {"provider": "KTMB", "endpoint": "x", "last_success": None}
 
     gtfs.write_status({"feeds": {"gtfs_ktmb": stale, "gtfs_mybas": fresh}})

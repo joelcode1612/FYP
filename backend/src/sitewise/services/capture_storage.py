@@ -11,18 +11,25 @@ Object paths are deterministic and property-scoped:
     properties/{property_id}/sessions/{session_id}/frames/{target_index}.jpg
     properties/{property_id}/sessions/{session_id}/panorama.jpg
 
-Determinism is what makes uploads retry-safe: the same frame re-uploaded
-after a network failure overwrites the same object (the client sends
-``x-upsert: true``), and the frame-confirm endpoint can verify the object it
-is about to register actually exists.
+Determinism is what makes uploads retry-safe: the same frame always resolves
+to the same object, so an interrupted attempt leaves a path that a resume can
+verify and confirm instead of uploading again. Supabase refuses to mint an
+upload token for an occupied path unless the caller explicitly asks to
+replace it (``x-upsert: true``), so "already stored" is reported as its own
+condition ([ObjectAlreadyStored]) and only an authorized replacement request
+overwrites bytes.
 """
 
 from __future__ import annotations
 
 import hashlib
+import logging
 from dataclasses import dataclass
 
 from sitewise.core.config import settings
+from sitewise.core.exceptions import ValidationError
+
+logger = logging.getLogger(__name__)
 
 BUCKET = "property-panoramas"
 UPLOAD_URL_TTL_SECONDS = 900
@@ -37,6 +44,21 @@ class CaptureStorageUnavailable(Exception):
 
 class ObjectMissing(Exception):
     """The object the caller referenced does not exist in the bucket."""
+
+
+class ObjectAlreadyStored(Exception):
+    """The target path already holds an object and no upsert was requested.
+
+    Supabase Storage refuses to mint an upload token for an occupied path
+    (``409 Duplicate / The resource already exists``). That is a RESUME
+    signal, not an outage: the bytes the device wanted to send are usually
+    already there from an interrupted attempt, so the caller should confirm
+    the existing object instead of uploading again.
+    """
+
+    def __init__(self, storage_path: str) -> None:
+        super().__init__(storage_path)
+        self.storage_path = storage_path
 
 
 @dataclass(frozen=True)
@@ -58,6 +80,16 @@ def panorama_object_path(property_id: int | str, session_id: str) -> str:
 def enhanced_panorama_object_path(property_id: int | str, session_id: str) -> str:
     """The SEPARATE derived enhancement object; never the canonical path."""
     return f"properties/{property_id}/sessions/{session_id}/panorama_enhanced.jpg"
+
+
+def panorama_candidate_object_path(
+    property_id: int | str, session_id: str, attempt_id: str
+) -> str:
+    """Unique, non-destructive artifact path for replacing an existing draft."""
+    return (
+        f"properties/{property_id}/sessions/{session_id}/panorama-candidates/"
+        f"{attempt_id}.jpg"
+    )
 
 
 def sha256_hex(data: bytes) -> str:
@@ -118,28 +150,116 @@ def _absolute(url: str) -> str:
     return f"{settings.supabase_url.rstrip('/')}{url}"
 
 
+def _log_refusal(operation: str, storage_path: str, exc: Exception) -> None:
+    """Log the storage API's own code and message — never a URL or a token.
+
+    ``StorageApiError`` carries ``status``, ``code`` and ``message``; the
+    signed upload URL itself embeds a JWT and must never reach a log line.
+    The object path is derived from ids the caller already supplied, so it is
+    safe to record and is what makes a duplicate diagnosable.
+    """
+    logger.warning(
+        "Supabase storage refused %s for %s: status=%s code=%s message=%s",
+        operation,
+        storage_path,
+        getattr(exc, "status", None),
+        getattr(exc, "code", None),
+        getattr(exc, "message", None) or str(exc),
+    )
+
+
+def _is_duplicate(exc: Exception) -> bool:
+    """True when the storage API rejected the path because it is occupied.
+
+    Supabase answers ``409`` with ``code=Duplicate`` and the message
+    ``The resource already exists``; older storage-api builds answer ``400``
+    with ``KeyAlreadyExists``. Both are the same condition and both are
+    recoverable by confirming the stored object.
+    """
+    code = str(getattr(exc, "code", "") or "").strip().lower()
+    status = getattr(exc, "status", None)
+    message = str(getattr(exc, "message", "") or exc).lower()
+    if code in {"duplicate", "keyalreadyexists", "resourcealreadyexists"}:
+        return True
+    return status in (400, 409) and (
+        "already exists" in message or "duplicate" in message
+    )
+
+
+def _signed_upload_options(upsert: bool):
+    """The SDK's upsert option, or ``None`` for the default create-only mode.
+
+    ``storage3`` 2.34.1 (installed) supports
+    ``create_signed_upload_url(path, options)`` with
+    ``CreateSignedUploadUrlOptions(upsert="true")``, which forwards
+    ``x-upsert: true``. Older builds did not accept the argument at all, so
+    an authorized replacement reports a clear error instead of silently
+    issuing a create-only URL that the storage API would refuse.
+    """
+    if not upsert:
+        return None
+    try:
+        from storage3.types import CreateSignedUploadUrlOptions
+    except ImportError as exc:  # pragma: no cover - pinned SDK always has it
+        raise CaptureStorageUnavailable(
+            "This server's storage client cannot replace an existing "
+            "photograph. Please retry later."
+        ) from exc
+    return CreateSignedUploadUrlOptions(upsert="true")
+
+
 def signed_upload_url(
-    *, storage_path: str, target_index: int
+    *, storage_path: str, target_index: int, upsert: bool = False
 ) -> SignedUpload:
     """A short-lived, path-pinned upload permission for one frame.
 
     Supabase fixes the server-side lifetime of signed upload URLs (one hour);
     the client-facing TTL promised in responses is the shorter
     ``UPLOAD_URL_TTL_SECONDS`` so the device re-requests long before expiry.
+
+    ``upsert=True`` is the EXPLICIT replacement path: it is only used when an
+    authorized retry must overwrite the object (a stale or corrupt object for
+    the same deterministic path). A create-only request that hits an existing
+    object raises [ObjectAlreadyStored] so the caller can confirm the stored
+    bytes instead of failing the whole batch.
     """
     _ensure_once()
     client = _client()
     try:
-        result = client.storage.from_(BUCKET).create_signed_upload_url(storage_path)
+        result = client.storage.from_(BUCKET).create_signed_upload_url(
+            storage_path, options=_signed_upload_options(upsert)
+        )
     except Exception as exc:  # noqa: BLE001
+        if not upsert and _is_duplicate(exc):
+            # Expected on resume: the object from an interrupted attempt is
+            # still there. Log the API's own words at info level (no token,
+            # no URL) so a repeated 409 is diagnosable without being an alarm.
+            logger.info(
+                "Supabase storage reported an existing object for %s: "
+                "status=%s code=%s message=%s (resumed upload)",
+                storage_path,
+                getattr(exc, "status", None),
+                getattr(exc, "code", None),
+                getattr(exc, "message", None) or str(exc),
+            )
+            raise ObjectAlreadyStored(storage_path) from exc
+        _log_refusal(
+            f"create_signed_upload_url(upsert={upsert})", storage_path, exc
+        )
         raise CaptureStorageUnavailable(
             "The upload URL could not be issued. The capture frames are "
             "kept on the device; please retry later."
         ) from exc
+    url = result.get("signedUrl") or result.get("signed_url")
+    if not url:
+        raise CaptureStorageUnavailable(
+            "The upload URL could not be issued. The capture frames are "
+            "kept on the device; please retry later."
+        )
     return SignedUpload(
         target_index=target_index,
         storage_path=storage_path,
-        upload_url=_absolute(result["signedUrl"]),
+        upload_url=_absolute(url),
         expires_at=None,
     )
 
@@ -190,6 +310,29 @@ def download(storage_path: str) -> bytes:
             "downloaded. Please retry later."
         ) from exc
     return bytes(data)
+
+
+def decode_panorama(data: bytes) -> tuple[int, int]:
+    """Decode the stored bytes as a JPEG and return ``(width, height)``.
+
+    A corrupt, truncated or non-image payload decodes to ``None`` and is
+    rejected before any canonical row can reference it. cv2 is imported
+    lazily: the router is imported at startup and the vision stack must not
+    pay for that.
+    """
+    if not data.startswith(b"\xff\xd8\xff"):
+        raise ValidationError("The stored panorama must be a JPEG image.")
+
+    import cv2
+    import numpy as np
+
+    decoded = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
+    if decoded is None:
+        raise ValidationError(
+            "The panorama is not a readable JPEG image; upload it again."
+        )
+    height, width = decoded.shape[:2]
+    return int(width), int(height)
 
 
 def upload_bytes(storage_path: str, data: bytes, content_type: str = "image/jpeg") -> None:

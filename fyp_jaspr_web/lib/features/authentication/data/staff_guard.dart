@@ -29,11 +29,14 @@ import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:shelf/shelf.dart' as shelf;
 
-import 'package:sitewise_jaspr_web/features/authentication/data/auth_stub.dart' show kSessionCookie, kTokenCookie;
+import 'package:sitewise_jaspr_web/features/authentication/data/auth_stub.dart'
+    show kSessionCookie, kTokenCookie;
 import 'package:sitewise_jaspr_web/features/authentication/data/dev_auth_bypass.dart';
 
 /// MFA screens (/staff/*) are excluded to avoid an enrollment redirect loop.
-final RegExp _workspacePath = RegExp(r'^/(admin|agent|entrepreneur|owner)(/|$)');
+final RegExp _workspacePath = RegExp(
+  r'^/(admin|agent|entrepreneur|owner)(/|$)',
+);
 
 const Set<String> _staffRoles = {'agent', 'admin'};
 
@@ -86,8 +89,11 @@ shelf.Middleware createStaffGuard(Uri backend, {http.Client? client}) {
 
       // Root-relative return target avoids losing the destination in the
       // browser bridge and never allows an external redirect.
-      final target = request.requestedUri.path +
-          (request.requestedUri.hasQuery ? '?${request.requestedUri.query}' : '');
+      final target =
+          request.requestedUri.path +
+          (request.requestedUri.hasQuery
+              ? '?${request.requestedUri.query}'
+              : '');
       final login = '/login?next=${Uri.encodeComponent(target)}';
       final token = _parseCookies(request.headers['cookie'])[kTokenCookie];
       // No bearer token: the unsigned session cookie alone never admits staff.
@@ -98,15 +104,16 @@ shelf.Middleware createStaffGuard(Uri backend, {http.Client? client}) {
       if (identity == null) return _redirect(login);
 
       final role = _canonicalRole(identity['role'] as String?);
-      final status = (identity['account_status'] as String? ?? '').toLowerCase();
+      final status = (identity['account_status'] as String? ?? '')
+          .toLowerCase();
       final aal = identity['assurance_level'] as String?;
       if (role.isEmpty || status != 'active') return _redirect(login);
       if (!{'entrepreneur', 'owner', ..._staffRoles}.contains(role)) {
         return _redirect(login);
       }
       // Every staff account needs AAL2 irrespective of which UI it requests.
-      if (_staffRoles.contains(role) && aal != 'aal2') {
-        return _redirect('/staff/verify');
+      if ((_staffRoles.contains(role) || role == 'owner') && aal != 'aal2') {
+        return _redirect('/staff/verify?next=${Uri.encodeComponent(target)}');
       }
       final isAdminPath = path == '/admin' || path.startsWith('/admin/');
       final isAgentPath = path == '/agent' || path.startsWith('/agent/');
@@ -134,11 +141,12 @@ shelf.Middleware createStaffGuard(Uri backend, {http.Client? client}) {
         kSessionCookie,
         _encodeSession(identity),
       );
-      final response = await inner(request.change(headers: {'cookie': rewritten}));
-      return response.change(headers: {
-        ...response.headers,
-        'cache-control': 'private, no-store',
-      });
+      final response = await inner(
+        request.change(headers: {'cookie': rewritten}),
+      );
+      return response.change(
+        headers: {...response.headers, 'cache-control': 'private, no-store'},
+      );
     };
   };
 }

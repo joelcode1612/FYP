@@ -28,6 +28,8 @@ from sitewise.services.agent_inspection_policy import (
     guard_enrichment_before_submit,
     agent_submission_readiness,
     completed_agent_panorama,
+    ownership_proof_state,
+    require_submitted_ownership_proof,
 )
 from sitewise.services.property_verification_service import (
     PropertyVerificationService,
@@ -141,6 +143,11 @@ def owner_assignment(property_id: int, session: Db, user: Provider) -> dict:
     ownership_status = session.execute(text("""
         SELECT ownership_status FROM fyp.property_verification WHERE property_id=:pid
     """), {'pid': property_id}).scalar()
+    available, count = ownership_proof_state(session, property_id)
+    if available:
+        proof_status = 'active'
+    elif count or proof_status == 'active':
+        proof_status = 'missing_file'
     summary = {
         'missing_required_fields': missing,
         'ownership_proof_status': proof_status,
@@ -174,12 +181,15 @@ def request_agent(property_id: int, payload: AgentRequest, session: Db, user: Pr
     agent = _agent_profile(session, payload.agent_user_id)
     # Lock the listing before checking the assignment, matching the owner edit path.
     _require_requestable_listing(_owner_property(session, property_id, user, for_update=True))
+    require_submitted_ownership_proof(session, property_id)
     current = session.execute(text("""
-        SELECT workflow_status FROM fyp.agent_listing_assignment
+        SELECT workflow_status, agent_id FROM fyp.agent_listing_assignment
          WHERE listing_id=:pid FOR UPDATE
-    """), {'pid': property_id}).scalar()
-    if current in ('requested','accepted','submitted'):
+    """), {'pid': property_id}).mappings().first()
+    if current and current['workflow_status'] in ('requested', 'accepted', 'submitted'):
         raise HTTPException(status_code=409, detail="A live Agent request already exists for this property.")
+    if current and current['workflow_status'] == 'needs_correction':
+        raise HTTPException(status_code=409, detail="The assigned Agent must complete the open correction.")
     # Existing assignment row is updated in place; never invent another listing.
     session.execute(text("""
         INSERT INTO fyp.agent_listing_assignment
@@ -192,9 +202,24 @@ def request_agent(property_id: int, payload: AgentRequest, session: Db, user: Pr
         ON CONFLICT (listing_id) DO UPDATE SET
           agent_id=excluded.agent_id, assigned_by_user_id=excluded.assigned_by_user_id,
           workflow_status='requested',requested_at=now(),responded_at=NULL,
-          inspection_data='{}'::jsonb,inspection_updated_at=NULL,
-          panorama_tour_id=NULL,panorama_uploaded_at=NULL,submitted_at=NULL,
-          decline_reason=NULL,updated_at=now()
+          -- Preserve compatible evidence for a repeat request to the same Agent.
+          inspection_data=CASE
+            WHEN fyp.agent_listing_assignment.agent_id=excluded.agent_id
+            THEN fyp.agent_listing_assignment.inspection_data
+            ELSE '{}'::jsonb END,
+          inspection_updated_at=CASE
+            WHEN fyp.agent_listing_assignment.agent_id=excluded.agent_id
+            THEN fyp.agent_listing_assignment.inspection_updated_at
+            ELSE NULL END,
+          panorama_tour_id=CASE
+            WHEN fyp.agent_listing_assignment.agent_id=excluded.agent_id
+            THEN fyp.agent_listing_assignment.panorama_tour_id
+            ELSE NULL END,
+          panorama_uploaded_at=CASE
+            WHEN fyp.agent_listing_assignment.agent_id=excluded.agent_id
+            THEN fyp.agent_listing_assignment.panorama_uploaded_at
+            ELSE NULL END,
+          submitted_at=NULL,decline_reason=NULL,updated_at=now()
     """), {'pid':property_id,'aid':agent['agent_id'],'uid':str(user.user_id)})
     session.commit()
     return {'data': {'property_id': property_id, 'assignment_status':'requested',
@@ -228,10 +253,7 @@ _AGENT_MISSING_FIELDS = {
     'size sqft': 'size_sqft',
     'a built-up area greater than zero': 'size_sqft',
 }
-_AGENT_ALLOWED_TYPES = {
-    'Shoplot', 'Retail Space', 'Ground Floor Shop', 'Corner Shoplot',
-    'Retail Unit', 'Kiosk', 'Commercial F&B Premise',
-}
+_AGENT_ALLOWED_TYPES = {'Shoplot', 'Retail Space'}
 
 
 def _agent_missing_detail_view(session: Session, property_id: int, agent) -> dict:

@@ -215,11 +215,24 @@ def explore_analysis(
     features are used when the row has them; otherwise competitor counts at
     500 m / 1 km are computed live from the indexed research geometry.
     Scores are labelled research indexes — never verified probabilities.
+
+    ``location_measurements`` carries the measured surroundings from the
+    existing Expanded64 enrichment pipeline. It is read-only and independent of
+    the model: a measurement that was calculated is reported even when its
+    definition is not approved as a model input, and an unavailable
+    measurement never prevents the rest of the analysis from rendering.
     """
+    from sitewise.services.expanded64_enrichment import informational_measurements
+
+    def measurements(property_id: int, latitude: float, longitude: float) -> dict:
+        return informational_measurements(analytics, property_id, latitude, longitude)
+
     result = service.analysis(
-        ref, catalogue_score=lambda property_id: expanded_display_scores(
+        ref,
+        catalogue_score=lambda property_id: expanded_display_scores(
             analytics, [property_id]
         ).get(property_id),
+        measurements=measurements,
     )
     if result is None:
         raise HTTPException(

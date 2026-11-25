@@ -75,6 +75,13 @@ dependencies:
   permission_handler: ^12.0.3
   # Foreground-only location fix when the entrepreneur enables nearby recommendations.
   geolocator: ^14.1.2
+  # Address preview map on Add Property: pure-Dart Leaflet-style widget over
+  # OpenStreetMap tiles — no native platform setup and no API key in client
+  # code (geocoding itself happens server-side through the existing Google
+  # / fallback services).
+  flutter_map: ^8.1.1
+  # Coordinate type used by flutter_map (kept explicit: the panel imports it).
+  latlong2: ^0.10.1
   file_selector: ^1.1.0
   # TOTP enrolment QR for the staff authenticator flow. Already resolved in
   # the pub cache; renders from the otpauth:// URI Supabase returns.
@@ -98,6 +105,17 @@ dependencies:
 # imgcodecs must be repeated even though they are defaults.
 # `integration_test/opencv_orb_native_test.dart` is the device-level
 # regression guard.
+hooks:
+  user_defines:
+    dartcv4:
+      parallel_jobs: 4
+      include_modules:
+        - imgproc
+        - imgcodecs
+        - stitching
+        - features2d
+        - flann
+        - calib3d
 
 dependency_overrides:
   permission_handler: ^12.0.3

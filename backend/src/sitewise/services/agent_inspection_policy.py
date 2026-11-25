@@ -104,6 +104,7 @@ def completed_agent_panorama(
            AND cs.status = 'completed'
            AND a.workflow_status IN ('accepted', 'needs_correction')
            AND (CAST(:panorama_id AS text) IS NULL OR CAST(p.panorama_id AS text) = :panorama_id)
+           AND p.verification_status IS DISTINCT FROM 'rejected'
            AND p.storage_path IS NOT NULL AND btrim(p.storage_path) <> ''
          ORDER BY p.created_at DESC LIMIT 1
     """), {"pid": int(property_id), "uid": str(user.user_id), "panorama_id": panorama_id}).scalar()
@@ -114,6 +115,7 @@ def require_ready_for_admin(
     session: Session, property_id: int, user, panorama_id: str | None = None
 ) -> dict:
     row = agent_assignment(session, property_id, user, writable=True)
+    require_submitted_ownership_proof(session, property_id)
     data = row["inspection_data"] or {}
     if not row.get("inspection_updated_at") or any(data.get(key) is not True for key in REQUIRED_INSPECTION):
         raise HTTPException(status_code=409, detail="Save the four on-site verification checks before submitting.")
@@ -193,6 +195,42 @@ def guard_enrichment_before_submit(
         )
 
 
+def ownership_proof_state(session: Session, property_id: int) -> tuple[bool, int]:
+    """An active ownership record is not evidence unless its file is readable."""
+    from sitewise.services import verification_storage
+    from sitewise.core.exceptions import ModelUnavailableError
+
+    keys = session.execute(text("""
+        SELECT storage_key FROM fyp.verification_document
+         WHERE property_id=:pid AND verification_type='ownership'
+           AND status='active' ORDER BY uploaded_at DESC
+    """), {'pid': property_id}).scalars().all()
+    for key in keys:
+        try:
+            path, size = verification_storage.open_document(str(key))
+            if size > 0:
+                with path.open('rb') as stream:
+                    if stream.read(1):
+                        return True, len(keys)
+        except (ModelUnavailableError, OSError):
+            continue
+    return False, len(keys)
+
+
+def ownership_submission_status(session: Session, property_id: int) -> str:
+    return session.execute(text("""
+        SELECT ownership_status FROM fyp.property_verification WHERE property_id=:pid
+    """), {'pid': property_id}).scalar() or 'not_submitted'
+
+
+def require_submitted_ownership_proof(session: Session, property_id: int) -> None:
+    available, _ = ownership_proof_state(session, property_id)
+    if not available:
+        raise HTTPException(409, 'Upload a readable ownership proof before continuing.')
+    if ownership_submission_status(session, property_id) not in ('pending', 'under_review', 'verified'):
+        raise HTTPException(409, 'Submit the ownership evidence for verification before continuing.')
+
+
 def agent_submission_readiness(
     session: Session, property_id: int,
     assignment: dict, listing: dict, panorama_id: str | None,
@@ -205,23 +243,8 @@ def agent_submission_readiness(
     ]
     missing_fields = listing_completeness_errors(listing, require_availability=False)
 
-    # Ownership proof is separate from inspection photos and the 360 tour.
-    # Local document storage has to contain the file, not just a stale DB row.
-    keys = session.execute(text("""
-        SELECT storage_key FROM fyp.verification_document
-         WHERE property_id=:pid AND verification_type='ownership'
-           AND status='active' ORDER BY uploaded_at DESC
-    """), {'pid': property_id}).scalars().all()
-    from sitewise.services import verification_storage
-    proof_available = False
-    for key in keys:
-        try:
-            verification_storage.open_document(str(key))
-            proof_available = True
-            break
-        except Exception:
-            # Preserve evidence metadata; report missing/unreachable storage.
-            continue
+    proof_available, proof_count = ownership_proof_state(session, property_id)
+    ownership_status = ownership_submission_status(session, property_id)
 
     enrichment = dict(session.execute(text("""
         SELECT category, status FROM fyp.property_enrichment_category
@@ -246,6 +269,10 @@ def agent_submission_readiness(
         blockers.append('Save inspection checks: ' + ', '.join(
             labels.get(key, key) for key in missing_checks
         ) + '.')
+    if not proof_available:
+        blockers.append('The Owner must upload readable ownership proof.')
+    elif ownership_status not in ('pending', 'under_review', 'verified'):
+        blockers.append('The Owner must submit ownership evidence for verification.')
     if not panorama_id:
         blockers.append(
             'Finish 360 capture and sync the panorama to SiteWise (server confirmed).'
@@ -258,7 +285,7 @@ def agent_submission_readiness(
         'missing_property_fields': missing_fields,
         'missing_inspection_checks': missing_checks,
         'ownership_proof_uploaded': proof_available,
-        'ownership_proof_record_count': len(keys),
+        'ownership_proof_record_count': proof_count,
         'panorama_confirmed': bool(panorama_id),
         'enrichment_running': running,
         'population_acknowledgement_required': population_ack,

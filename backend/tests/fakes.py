@@ -11,6 +11,7 @@ exact side effects the real adapter must produce.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 
 
 class FakeSupabaseAdmin:
@@ -31,6 +32,7 @@ class FakeSupabaseAdmin:
         self.removed_factors: list[tuple[str, str]] = []
         self.factors: dict[str, list[dict]] = {}  # auth_user_id -> factors
         self.invite_calls: list[str] = []
+        self.resend_calls: list[str] = []
         self._next_agent_id = 1
         self._next_company_id = 1
 
@@ -46,11 +48,14 @@ class FakeSupabaseAdmin:
                 return dict(user)
         return None
 
-    def invite_agent(self, *, email: str, full_name: str, phone_number: str | None = None) -> dict:
+    def invite_staff_user(self, *, email: str, full_name: str, phone_number: str | None = None) -> dict:
         uid = str(uuid.uuid4())
         self.auth_users[email.lower()] = {"id": uid, "email": email.lower()}
         self.invite_calls.append(email.lower())
         return {"id": uid, "email": email.lower()}
+
+    def resend_signup_confirmation(self, *, email: str) -> None:
+        self.resend_calls.append(email.lower())
 
     def admin_list_factors(self, auth_user_id: str) -> list[dict]:
         return list(self.factors.get(auth_user_id, []))
@@ -96,20 +101,74 @@ class FakeSupabaseAdmin:
         self.identity[str(user_id)] = row
         return dict(row)
 
+    def reconcile_invited_owner_profile(
+        self,
+        *,
+        user_id,
+        email: str,
+        full_name: str | None,
+        phone_number: str | None,
+    ) -> dict:
+        uid = str(user_id)
+        current = self.identity.get(uid)
+        if current is not None and (
+            current.get("email") != email
+            or (current.get("role"), current.get("account_status"))
+            not in {("entrepreneur", "pending"), ("owner", "pending")}
+        ):
+            from sitewise.core.exceptions import ConflictError
+
+            raise ConflictError("The Owner account changed during reconciliation.")
+        row = {"user_id": uid, "email": email, "role": "owner",
+               "account_status": "pending"}
+        if full_name is not None:
+            row["full_name"] = full_name
+        if phone_number is not None:
+            row["phone_number"] = phone_number
+        self.identity[uid] = row
+        return dict(row)
+
     def update_identity_profile(self, user_id, data: dict) -> None:
         self.identity.setdefault(str(user_id), {"user_id": str(user_id)}).update(data)
+
+    def update_identity_profile_if(
+        self,
+        user_id,
+        data: dict,
+        *,
+        expected_status: str,
+        expected_role: str,
+    ) -> dict | None:
+        row = self.identity.get(str(user_id))
+        if row is None or row.get("account_status") != expected_status or row.get("role") != expected_role:
+            return None
+        row.update(data)
+        return dict(row)
 
     # -- invitations + audit --------------------------------------------------
 
     def insert_invitation(self, *, invited_user_id, invited_email, invited_by_user_id,
-                          status: str = "sent", expires_at: str | None = None) -> dict:
+                          status: str = "sent", expires_at: str | None = None,
+                          invited_role: str = "agent") -> dict:
         row = {
             "invitation_id": str(uuid.uuid4()),
             "invited_user_id": None if invited_user_id is None else str(invited_user_id),
-            "invited_email": invited_email,
+            "invited_email": invited_email.lower(),
             "invited_by_user_id": str(invited_by_user_id),
             "invitation_status": status,
+            "invited_role": invited_role,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "expires_at": expires_at,
+            "provisioning_claimed_at": None,
         }
+        if any(
+            existing["invited_email"] == row["invited_email"]
+            and existing["invitation_status"] in {"pending", "sent"}
+            for existing in self.invitations
+        ):
+            from sitewise.core.exceptions import ConflictError
+
+            raise ConflictError("An open invitation already exists for this email.")
         self.invitations.append(row)
         return dict(row)
 
@@ -124,11 +183,19 @@ class FakeSupabaseAdmin:
                 return dict(row)
         return None
 
-    def update_invitation(self, invitation_id: str, data: dict) -> None:
+    def update_invitation(self, invitation_id: str, data: dict,
+                          *, expected_statuses: tuple[str, ...] | None = None,
+                          expected_fields: dict | None = None) -> dict | None:
         for row in self.invitations:
-            if row["invitation_id"] == str(invitation_id):
-                row.update(data)
-                return
+            if row["invitation_id"] != str(invitation_id):
+                continue
+            if expected_statuses and row.get("invitation_status") not in expected_statuses:
+                return None
+            if any(row.get(key) != value for key, value in (expected_fields or {}).items()):
+                return None
+            row.update(data)
+            return dict(row)
+        return None
 
     def insert_role_audit(self, *, affected_user_id, affected_email=None, performed_by_user_id,
                           performed_by_email, action: str, previous_role=None, new_role=None,

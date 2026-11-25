@@ -1,4 +1,3 @@
-
 // ## Wire-decoding compatibility boundary
 //
 // The `fromJson` factories in this library are retained for public API
@@ -29,6 +28,7 @@
 /// added backend column can never break a render.
 
 import 'recommendation_search.dart' show ListingManagement;
+
 // PostgreSQL NUMERIC/DECIMAL may arrive in JSON as either a number or a
 // decimal string (for example "32.00"). Decode at the transport boundary;
 // do not turn missing/invalid measurements into zero.
@@ -58,8 +58,11 @@ extension VerificationDimensionX on VerificationDimension {
   String get wire => name;
 }
 
-VerificationDimension? dimensionFromWire(Object? value) =>
-    switch (value) { 'listing' => VerificationDimension.listing, 'ownership' => VerificationDimension.ownership, _ => null };
+VerificationDimension? dimensionFromWire(Object? value) => switch (value) {
+  'listing' => VerificationDimension.listing,
+  'ownership' => VerificationDimension.ownership,
+  _ => null,
+};
 
 /// Status of one verification dimension. The same six-value vocabulary
 /// applies to the listing and the ownership dimension.
@@ -102,10 +105,7 @@ class DimensionStatuses {
   final PropertyVerificationStatus listing;
   final PropertyVerificationStatus ownership;
 
-  const DimensionStatuses({
-    required this.listing,
-    required this.ownership,
-  });
+  const DimensionStatuses({required this.listing, required this.ownership});
 
   PropertyVerificationStatus statusOf(VerificationDimension dimension) =>
       dimension == VerificationDimension.listing ? listing : ownership;
@@ -144,10 +144,8 @@ class PropertyVerification {
     this.updatedAt,
   });
 
-  DimensionStatuses get statuses => DimensionStatuses(
-    listing: listingStatus,
-    ownership: ownershipStatus,
-  );
+  DimensionStatuses get statuses =>
+      DimensionStatuses(listing: listingStatus, ownership: ownershipStatus);
 
   factory PropertyVerification.fromJson(Map<String, dynamic> row) =>
       PropertyVerification(
@@ -164,7 +162,9 @@ class PropertyVerification {
         publicationEligible: row['publication_eligible'] == true,
         latestNote: row['latest_note'] == null ? null : '${row['latest_note']}',
         version: _wireInt(row['version']) ?? 1,
-        submittedAt: row['submitted_at'] == null ? null : '${row['submitted_at']}',
+        submittedAt: row['submitted_at'] == null
+            ? null
+            : '${row['submitted_at']}',
         updatedAt: row['updated_at'] == null ? null : '${row['updated_at']}',
       );
 
@@ -281,7 +281,9 @@ class VerificationReviewEvent {
   /// Grouping label for the timeline (`listing_review_started` →
   /// `Listing review started`).
   String get label {
-    final words = action.split('_').map((w) => w.isEmpty ? w : w[0].toUpperCase() + w.substring(1));
+    final words = action
+        .split('_')
+        .map((w) => w.isEmpty ? w : w[0].toUpperCase() + w.substring(1));
     return words.join(' ');
   }
 
@@ -335,8 +337,18 @@ class VerificationProperty {
   final double? longitude;
   final String? availability;
   final String? floorLevel;
+  final String? floorDescription;
   final double? frontageFt;
   final bool? hasParking;
+  final String? furnishing;
+  final String? tenure;
+  final String? unitPosition;
+  final int? leaseDurationMonths;
+  final bool? leaseDurationNegotiable;
+  final String? availableFrom;
+  final double? rentalDepositMyr;
+  final String? titleType;
+  final String? landlordFnbPermission;
   final bool? isFnbSuitable;
   final bool? isPublished;
   final String? addressFormatted;
@@ -361,59 +373,78 @@ class VerificationProperty {
     this.longitude,
     this.availability,
     this.floorLevel,
+    this.floorDescription,
     this.frontageFt,
     this.hasParking,
+    this.furnishing,
+    this.tenure,
+    this.unitPosition,
+    this.leaseDurationMonths,
+    this.leaseDurationNegotiable,
+    this.availableFrom,
+    this.rentalDepositMyr,
+    this.titleType,
+    this.landlordFnbPermission,
     this.isFnbSuitable,
     this.isPublished,
     this.addressFormatted,
     this.addressValidationStatus,
   });
 
-  factory VerificationProperty.fromJson(Map<String, dynamic> row) =>
-      VerificationProperty(
-        propertyId: _wireInt(row['property_id']) ?? 0,
-        title: '${row['title'] ?? ''}'.trim(),
-        description: row['description'] == null ? null : '${row['description']}',
-        propertyType: row['property_type'] == null
-            ? null
-            : '${row['property_type']}',
-        monthlyRent: _wireDouble(row['monthly_rent']),
-        builtUpAreaSqft: _wireDouble(row['built_up_area_sqft']),
-        landAreaSqft: _wireDouble(row['land_area_sqft']),
-        address: row['address'] == null ? null : '${row['address']}',
-        city: row['city'] == null ? null : '${row['city']}',
-        state: row['state'] == null ? null : '${row['state']}',
-        status: row['status'] == null ? null : '${row['status']}',
-        companyName: row['company_name'] == null
-            ? null
-            : '${row['company_name']}',
-        userId: row['user_id'] == null ? null : '${row['user_id']}',
-        postcode: row['postcode'] == null ? null : '${row['postcode']}',
-        latitude: _wireDouble(row['latitude']),
-        longitude: _wireDouble(row['longitude']),
-        availability: row['availability'] == null
-            ? null
-            : '${row['availability']}',
-        floorLevel: row['floor_level'] == null
-            ? null
-            : '${row['floor_level']}',
-        frontageFt: _wireDouble(row['frontage_ft']),
-        hasParking: row['has_parking'] is bool
-            ? row['has_parking'] as bool
-            : null,
-        isFnbSuitable: row['is_fnb_suitable'] is bool
-            ? row['is_fnb_suitable'] as bool
-            : null,
-        isPublished: row['is_published'] is bool
-            ? row['is_published'] as bool
-            : null,
-        addressFormatted: row['address_formatted'] == null
-            ? null
-            : '${row['address_formatted']}',
-        addressValidationStatus: row['address_validation_status'] == null
-            ? null
-            : '${row['address_validation_status']}',
-      );
+  factory VerificationProperty.fromJson(
+    Map<String, dynamic> row,
+  ) => VerificationProperty(
+    propertyId: _wireInt(row['property_id']) ?? 0,
+    title: '${row['title'] ?? ''}'.trim(),
+    description: row['description'] == null ? null : '${row['description']}',
+    propertyType: row['property_type'] == null
+        ? null
+        : '${row['property_type']}',
+    monthlyRent: _wireDouble(row['monthly_rent']),
+    builtUpAreaSqft: _wireDouble(row['built_up_area_sqft']),
+    landAreaSqft: _wireDouble(row['land_area_sqft']),
+    address: row['address'] == null ? null : '${row['address']}',
+    city: row['city'] == null ? null : '${row['city']}',
+    state: row['state'] == null ? null : '${row['state']}',
+    status: row['status'] == null ? null : '${row['status']}',
+    companyName: row['company_name'] == null ? null : '${row['company_name']}',
+    userId: row['user_id'] == null ? null : '${row['user_id']}',
+    postcode: row['postcode'] == null ? null : '${row['postcode']}',
+    latitude: _wireDouble(row['latitude']),
+    longitude: _wireDouble(row['longitude']),
+    availability: row['availability'] == null ? null : '${row['availability']}',
+    floorLevel: row['floor_level'] == null ? null : '${row['floor_level']}',
+    floorDescription: row['floor_description']?.toString(),
+    frontageFt: _wireDouble(row['frontage_ft']),
+    furnishing: row['furnishing']?.toString(),
+    tenure: row['tenure']?.toString(),
+    unitPosition: row['unit_position']?.toString(),
+    hasParking: row['has_parking'] is bool
+        ? row['has_parking'] as bool
+        : row['has_parking'] == null
+        ? null
+        : _wireInt(row['has_parking']) == 1,
+    leaseDurationMonths: _wireInt(row['lease_duration_months']),
+    leaseDurationNegotiable: row['lease_duration_negotiable'] is bool
+        ? row['lease_duration_negotiable'] as bool
+        : null,
+    availableFrom: row['available_from']?.toString(),
+    rentalDepositMyr: _wireDouble(row['rental_deposit_myr']),
+    titleType: row['title_type']?.toString(),
+    landlordFnbPermission: row['landlord_fnb_permission']?.toString(),
+    isFnbSuitable: row['is_fnb_suitable'] is bool
+        ? row['is_fnb_suitable'] as bool
+        : null,
+    isPublished: row['is_published'] is bool
+        ? row['is_published'] as bool
+        : null,
+    addressFormatted: row['address_formatted'] == null
+        ? null
+        : '${row['address_formatted']}',
+    addressValidationStatus: row['address_validation_status'] == null
+        ? null
+        : '${row['address_validation_status']}',
+  );
 
   /// Display title: the recorded title, falling back to the id so a
   /// title-less row stays addressable.
@@ -506,7 +537,9 @@ class VerificationStatusView {
           (row['property'] as Map<String, dynamic>?) ?? const {},
         ),
         verification: row['verification'] is Map<String, dynamic>
-            ? PropertyVerification.fromJson(row['verification'] as Map<String, dynamic>)
+            ? PropertyVerification.fromJson(
+                row['verification'] as Map<String, dynamic>,
+              )
             : null,
         documents: [
           for (final doc
@@ -636,14 +669,11 @@ class VerificationGeoFeatures {
       VerificationGeoFeatures(
         competitorCount500m: _wireNum(row['competitor_count_500m']),
         competitorCount1km: _wireNum(row['competitor_count_1km']),
-        competitorStatus:
-            row['competitor_status'] == null
-                ? null
-                : '${row['competitor_status']}',
-        demandGeneratorCount500m:
-            _wireNum(row['demand_generator_count_500m']),
-        demandGeneratorCount1km:
-            _wireNum(row['demand_generator_count_1km']),
+        competitorStatus: row['competitor_status'] == null
+            ? null
+            : '${row['competitor_status']}',
+        demandGeneratorCount500m: _wireNum(row['demand_generator_count_500m']),
+        demandGeneratorCount1km: _wireNum(row['demand_generator_count_1km']),
         demandStatus: row['demand_status'] == null
             ? null
             : '${row['demand_status']}',
@@ -921,11 +951,11 @@ class LocationCheck {
   });
 
   factory LocationCheck.fromJson(Map<String, dynamic> row) => LocationCheck(
-        id: row['id']?.toString() ?? '',
-        label: row['label']?.toString() ?? '',
-        status: row['status']?.toString() ?? '',
-        detail: row['detail']?.toString() ?? '',
-      );
+    id: row['id']?.toString() ?? '',
+    label: row['label']?.toString() ?? '',
+    status: row['status']?.toString() ?? '',
+    detail: row['detail']?.toString() ?? '',
+  );
 }
 
 /// Part B — the five measurement families. Each keeps its method/source and
@@ -1012,8 +1042,9 @@ class LocationPopulationFamily {
     this.landscanSourceYear,
   });
 
-  static const LocationPopulationFamily unavailable =
-      LocationPopulationFamily(available: false);
+  static const LocationPopulationFamily unavailable = LocationPopulationFamily(
+    available: false,
+  );
 
   static double? _d(dynamic v) => _wireDouble(v);
 
@@ -1103,16 +1134,16 @@ class LocationFnbFamily {
     this.ownerDeclaredFnbSuitable,
   });
 
-  static const LocationFnbFamily unavailable =
-      LocationFnbFamily(available: false);
+  static const LocationFnbFamily unavailable = LocationFnbFamily(
+    available: false,
+  );
 
   static double? _d(dynamic v) => _wireDouble(v);
 
   static Map<String, double?> _numMap(dynamic raw) => {
-        for (final entry
-            in ((raw as Map<String, dynamic>?) ?? const {}).entries)
-          entry.key: _d(entry.value),
-      };
+    for (final entry in ((raw as Map<String, dynamic>?) ?? const {}).entries)
+      entry.key: _d(entry.value),
+  };
 
   factory LocationFnbFamily.fromJson(Map<String, dynamic> row) =>
       LocationFnbFamily(
@@ -1174,10 +1205,9 @@ class LocationAccessibilityFamily {
   static double? _d(dynamic v) => _wireDouble(v);
 
   static Map<String, double?> _numMap(dynamic raw) => {
-        for (final entry
-            in ((raw as Map<String, dynamic>?) ?? const {}).entries)
-          entry.key: _d(entry.value),
-      };
+    for (final entry in ((raw as Map<String, dynamic>?) ?? const {}).entries)
+      entry.key: _d(entry.value),
+  };
 
   factory LocationAccessibilityFamily.fromJson(Map<String, dynamic> row) =>
       LocationAccessibilityFamily(
@@ -1203,46 +1233,136 @@ class LocationAccessibilityFamily {
 /// §5E — strict PU research assessment: never a business-success probability.
 class LocationResearchAssociation {
   final bool available;
+  final bool predictionPending;
+  final Map<String, dynamic> districtContext;
+  final Map<String, dynamic> explanation;
+  final String? explanationUnavailableReason;
   final double? score;
   final String? label;
   final String? modelVersion;
   final String scoreMeaning;
   final int? featureCount;
+  final int? modelFeatureCount;
+  final int? modelAvailableFeatures;
   final int? availableFeatures;
   final List<String> missingFeatures;
+  // SITEWISE_ADMIN_EXPANDED64_V1
+  final Map<String, double> featureValues;
+  final Map<String, String> featureSources;
+  final Map<String, String> featureMethods;
+  final List<String> unvalidatedFeatures;
+  final List<String> imputableFeatures;
   final String? unavailableReason;
+  final String calculationStatus;
+  final bool hasCoordinates;
+  final int calculatedFeatures;
+  final Map<String, String> featureStates;
+  final Map<String, Map<String, dynamic>> measurementCategories;
+  /// Server address verdict for the stored coordinates. ``validated`` and
+  /// ``partially_validated`` both carry provider-derived coordinates;
+  /// anything else means the location was never confirmed.
+  final String? addressValidationStatus;
 
   const LocationResearchAssociation({
     required this.available,
+    this.predictionPending = false,
+    this.districtContext = const {},
+    this.explanation = const {},
+    this.explanationUnavailableReason,
     this.score,
     this.label,
     this.modelVersion,
     this.scoreMeaning = '',
     this.featureCount,
+    this.modelFeatureCount,
+    this.modelAvailableFeatures,
     this.availableFeatures,
     this.missingFeatures = const [],
+    this.featureValues = const {},
+    this.featureSources = const {},
+    this.featureMethods = const {},
+    this.unvalidatedFeatures = const [],
+    this.imputableFeatures = const [],
     this.unavailableReason,
+    this.calculationStatus = 'not_calculated',
+    this.hasCoordinates = true,
+    this.calculatedFeatures = 0,
+    this.featureStates = const {},
+    this.measurementCategories = const {},
+    this.addressValidationStatus,
   });
 
   static const LocationResearchAssociation unavailable =
       LocationResearchAssociation(available: false);
 
-  factory LocationResearchAssociation.fromJson(Map<String, dynamic> row) =>
-      LocationResearchAssociation(
-        available: row['available'] == true,
-        score: _wireDouble(row['score']),
-        label: row['label']?.toString(),
-        modelVersion: row['model_version']?.toString(),
-        scoreMeaning: row['score_meaning']?.toString() ?? '',
-        featureCount: _wireInt(row['feature_count']),
-        availableFeatures: _wireInt(row['available_features']),
-        missingFeatures: [
-          for (final name
-              in (row['missing_features'] as List? ?? const []))
-            name.toString(),
-        ],
-        unavailableReason: row['unavailable_reason']?.toString(),
-      );
+  factory LocationResearchAssociation.fromJson(
+    Map<String, dynamic> row,
+  ) => LocationResearchAssociation(
+    districtContext:
+        (row['district_context'] as Map?)?.cast<String, dynamic>() ?? const {},
+    explanation:
+        (row['explanation'] as Map?)?.cast<String, dynamic>() ?? const {},
+    explanationUnavailableReason: row['explanation_unavailable_reason']
+        ?.toString(),
+    predictionPending: row['prediction_pending'] == true,
+    available: row['available'] == true,
+    score: _wireDouble(row['score']),
+    label: row['label']?.toString(),
+    modelVersion: row['model_version']?.toString(),
+    scoreMeaning: row['score_meaning']?.toString() ?? '',
+    modelFeatureCount: _wireInt(row['model_feature_count']),
+    modelAvailableFeatures: _wireInt(row['model_available_features']),
+    featureCount: _wireInt(row['feature_count']),
+    availableFeatures: _wireInt(row['available_features']),
+    missingFeatures: [
+      for (final name in (row['missing_features'] as List? ?? const []))
+        name.toString(),
+    ],
+    featureValues: {
+      for (final entry
+          in (row['feature_values'] is Map
+                  ? row['feature_values'] as Map
+                  : const {})
+              .entries)
+        if (entry.value is num && (entry.value as num).isFinite)
+          entry.key.toString(): (entry.value as num).toDouble(),
+    },
+    featureSources: {
+      for (final entry
+          in (row['feature_sources'] is Map
+                  ? row['feature_sources'] as Map
+                  : const {})
+              .entries)
+        if (entry.value != null) entry.key.toString(): entry.value.toString(),
+    },
+    featureMethods: {
+      for (final entry in (row['feature_methods'] as Map? ?? const {}).entries)
+        entry.key.toString(): entry.value.toString(),
+    },
+    unvalidatedFeatures: [
+      for (final name in (row['unvalidated_features'] as List? ?? const []))
+        name.toString(),
+    ],
+    imputableFeatures: [
+      for (final name in (row['imputable_features'] as List? ?? const []))
+        name.toString(),
+    ],
+    unavailableReason: row['unavailable_reason']?.toString(),
+    calculationStatus:
+        row['calculation_status']?.toString() ?? 'not_calculated',
+    hasCoordinates: row['has_coordinates'] != false,
+    calculatedFeatures: _wireInt(row['calculated_features']) ?? 0,
+    featureStates: {
+      for (final entry in (row['feature_states'] as Map? ?? const {}).entries)
+        entry.key.toString(): entry.value.toString(),
+    },
+    measurementCategories: {
+      for (final entry in (row['categories'] as Map? ?? const {}).entries)
+        if (entry.value is Map)
+          entry.key.toString(): Map<String, dynamic>.from(entry.value as Map),
+    },
+    addressValidationStatus: row['address_validation_status']?.toString(),
+  );
 }
 
 /// Part C — data confidence.
@@ -1280,23 +1400,25 @@ class LocationConfidencePart {
             name.toString(),
         ],
         missing: [
-          for (final gap in (row['missing'] as List? ?? const [])
-              .whereType<Map<String, dynamic>>())
+          for (final gap
+              in (row['missing'] as List? ?? const [])
+                  .whereType<Map<String, dynamic>>())
             LocationDataGap.fromJson(gap),
         ],
         outdated: [
-          for (final gap in (row['outdated'] as List? ?? const [])
-              .whereType<Map<String, dynamic>>())
+          for (final gap
+              in (row['outdated'] as List? ?? const [])
+                  .whereType<Map<String, dynamic>>())
             LocationDataGap.fromJson(gap),
         ],
         resolutionNotes: [
-          for (final note
-              in (row['resolution_notes'] as List? ?? const []))
+          for (final note in (row['resolution_notes'] as List? ?? const []))
             note.toString(),
         ],
         licences: [
-          for (final licence in (row['licences'] as List? ?? const [])
-              .whereType<Map<String, dynamic>>())
+          for (final licence
+              in (row['licences'] as List? ?? const [])
+                  .whereType<Map<String, dynamic>>())
             LocationLicence.fromJson(licence),
         ],
       );
@@ -1315,13 +1437,12 @@ class LocationDataGap {
     this.detail,
   });
 
-  factory LocationDataGap.fromJson(Map<String, dynamic> row) =>
-      LocationDataGap(
-        family: (row['family'] ?? row['what'])?.toString() ?? '',
-        reason: (row['reason'] ?? row['detail'])?.toString() ?? '',
-        status: row['status']?.toString(),
-        detail: row['detail']?.toString(),
-      );
+  factory LocationDataGap.fromJson(Map<String, dynamic> row) => LocationDataGap(
+    family: (row['family'] ?? row['what'])?.toString() ?? '',
+    reason: (row['reason'] ?? row['detail'])?.toString() ?? '',
+    status: row['status']?.toString(),
+    detail: row['detail']?.toString(),
+  );
 }
 
 class LocationLicence {
@@ -1330,11 +1451,10 @@ class LocationLicence {
 
   const LocationLicence({required this.source, this.licence});
 
-  factory LocationLicence.fromJson(Map<String, dynamic> row) =>
-      LocationLicence(
-        source: row['source']?.toString() ?? '',
-        licence: row['licence']?.toString(),
-      );
+  factory LocationLicence.fromJson(Map<String, dynamic> row) => LocationLicence(
+    source: row['source']?.toString() ?? '',
+    licence: row['licence']?.toString(),
+  );
 }
 
 /// §9 — recommendation with explicit policy separation.
@@ -1353,13 +1473,13 @@ class LocationRecommendation {
       LocationRecommendation(
         text: row['text']?.toString() ?? '',
         policySeparation: [
-          for (final item in (row['policy_separation'] as List? ?? const [])
-              .whereType<Map<String, dynamic>>())
+          for (final item
+              in (row['policy_separation'] as List? ?? const [])
+                  .whereType<Map<String, dynamic>>())
             LocationPolicyItem.fromJson(item),
         ],
         suggestedFocus: [
-          for (final item
-              in (row['suggested_focus'] as List? ?? const []))
+          for (final item in (row['suggested_focus'] as List? ?? const []))
             item.toString(),
         ],
       );
@@ -1391,6 +1511,7 @@ class LocationPolicyItem {
 
 class VerificationDetail {
   final VerificationProperty property;
+  final Map<String, dynamic> finalReview;
   final VerificationOwner? owner;
   final PropertyVerification verification;
   final List<VerificationDocument> documents;
@@ -1426,6 +1547,7 @@ class VerificationDetail {
 
   const VerificationDetail({
     required this.property,
+    this.finalReview = const {},
     this.owner,
     required this.verification,
     this.documents = const [],
@@ -1442,6 +1564,7 @@ class VerificationDetail {
 
   factory VerificationDetail.fromJson(Map<String, dynamic> row) =>
       VerificationDetail(
+        finalReview: (row['final_review'] as Map<String, dynamic>?) ?? const {},
         property: VerificationProperty.fromJson(
           (row['property'] as Map<String, dynamic>?) ?? const {},
         ),
@@ -1549,8 +1672,7 @@ class VerificationQueueFilters {
     this.limit = 20,
   });
 
-  const VerificationQueueFilters.initial()
-    : this();
+  const VerificationQueueFilters.initial() : this();
 
   VerificationQueueFilters copyWith({
     String? q,
@@ -1581,7 +1703,9 @@ class VerificationQueueFilters {
     ownershipStatus: clearOwnershipStatus
         ? null
         : (ownershipStatus ?? this.ownershipStatus),
-    propertyType: clearPropertyType ? null : (propertyType ?? this.propertyType),
+    propertyType: clearPropertyType
+        ? null
+        : (propertyType ?? this.propertyType),
     state: clearState ? null : (state ?? this.state),
     city: clearCity ? null : (city ?? this.city),
     submittedFrom: clearSubmittedFrom
@@ -1613,8 +1737,7 @@ class VerificationQueueFilters {
     'limit': '$limit',
   };
 
-  bool get isPristine =>
-      this == const VerificationQueueFilters();
+  bool get isPristine => this == const VerificationQueueFilters();
 }
 
 /// One row of the administrator queue (the flat SQL projection).
@@ -1664,47 +1787,42 @@ class VerificationQueueRow {
 
   String get displayName => title.isNotEmpty ? title : '#$propertyId';
 
-  factory VerificationQueueRow.fromJson(Map<String, dynamic> row) =>
-      VerificationQueueRow(
-        propertyId: _wireInt(row['property_id']) ?? 0,
-        title: '${row['title'] ?? ''}'.trim(),
-        normalizedAddress: row['normalized_address'] == null
-            ? null
-            : '${row['normalized_address']}',
-        propertyType: row['property_type_normalized'] == null
-            ? null
-            : '${row['property_type_normalized']}',
-        monthlyRent: _wireDouble(row['price']),
-        builtUpAreaSqft: _wireDouble(row['built_up_area_sqft']),
-        propertyStatus: row['property_status'] == null
-            ? null
-            : '${row['property_status']}',
-        companyName: row['company_name'] == null
-            ? null
-            : '${row['company_name']}',
-        city: row['city'] == null ? null : '${row['city']}',
-        state: row['state'] == null ? null : '${row['state']}',
-        verificationId: row['verification_id'] == null
-            ? null
-            : '${row['verification_id']}',
-        listingStatus:
-            verificationStatusFromWire(row['listing_status']) ??
-            PropertyVerificationStatus.notSubmitted,
-        ownershipStatus:
-            verificationStatusFromWire(row['ownership_status']) ??
-            PropertyVerificationStatus.notSubmitted,
-        publicationEligible: row['publication_eligible'] == true,
-        latestNote: row['latest_note'] == null ? null : '${row['latest_note']}',
-        submittedAt: row['submitted_at'] == null
-            ? null
-            : '${row['submitted_at']}',
-        updatedAt: row['updated_at'] == null ? null : '${row['updated_at']}',
-        management: row['management'] is Map<String, dynamic>
-            ? ListingManagement.fromJson(
-                row['management'] as Map<String, dynamic>,
-              )
-            : null,
-      );
+  factory VerificationQueueRow.fromJson(
+    Map<String, dynamic> row,
+  ) => VerificationQueueRow(
+    propertyId: _wireInt(row['property_id']) ?? 0,
+    title: '${row['title'] ?? ''}'.trim(),
+    normalizedAddress: row['normalized_address'] == null
+        ? null
+        : '${row['normalized_address']}',
+    propertyType: row['property_type_normalized'] == null
+        ? null
+        : '${row['property_type_normalized']}',
+    monthlyRent: _wireDouble(row['price']),
+    builtUpAreaSqft: _wireDouble(row['built_up_area_sqft']),
+    propertyStatus: row['property_status'] == null
+        ? null
+        : '${row['property_status']}',
+    companyName: row['company_name'] == null ? null : '${row['company_name']}',
+    city: row['city'] == null ? null : '${row['city']}',
+    state: row['state'] == null ? null : '${row['state']}',
+    verificationId: row['verification_id'] == null
+        ? null
+        : '${row['verification_id']}',
+    listingStatus:
+        verificationStatusFromWire(row['listing_status']) ??
+        PropertyVerificationStatus.notSubmitted,
+    ownershipStatus:
+        verificationStatusFromWire(row['ownership_status']) ??
+        PropertyVerificationStatus.notSubmitted,
+    publicationEligible: row['publication_eligible'] == true,
+    latestNote: row['latest_note'] == null ? null : '${row['latest_note']}',
+    submittedAt: row['submitted_at'] == null ? null : '${row['submitted_at']}',
+    updatedAt: row['updated_at'] == null ? null : '${row['updated_at']}',
+    management: row['management'] is Map<String, dynamic>
+        ? ListingManagement.fromJson(row['management'] as Map<String, dynamic>)
+        : null,
+  );
 }
 
 /// One server-computed page of the queue. `counts` holds the faceted
@@ -1732,11 +1850,9 @@ class VerificationQueuePage {
 
   factory VerificationQueuePage.fromJson(Map<String, dynamic> row) {
     Map<PropertyVerificationStatus, int> dimensionCounts(Object? raw) => {
-      for (final entry
-          in (raw as Map<String, dynamic>? ?? const {}).entries)
+      for (final entry in (raw as Map<String, dynamic>? ?? const {}).entries)
         if (verificationStatusFromWire(entry.key) != null)
-          verificationStatusFromWire(entry.key)!:
-              _wireInt(entry.value) ?? 0,
+          verificationStatusFromWire(entry.key)!: _wireInt(entry.value) ?? 0,
     };
     final counts = row['counts'] as Map<String, dynamic>? ?? const {};
     return VerificationQueuePage(
@@ -1753,9 +1869,7 @@ class VerificationQueuePage {
         if (counts['listing'] is Map<String, dynamic>)
           VerificationDimension.listing: dimensionCounts(counts['listing']),
         if (counts['ownership'] is Map<String, dynamic>)
-          VerificationDimension.ownership: dimensionCounts(
-            counts['ownership'],
-          ),
+          VerificationDimension.ownership: dimensionCounts(counts['ownership']),
       },
     );
   }

@@ -7,10 +7,9 @@ import { createClient } from '@supabase/supabase-js';
 // split-host deployment; the normal empty value means same-origin requests.
 const apiMeta = document.querySelector('meta[name="sitewise-api"]');
 const api = apiMeta ? apiMeta.content.trim().replace(/\/+$/, '') : '';
-// Same-origin public configuration generated from the intended backend's
-// .env by tool/gen_auth_config.js. Contains ONLY the project URL and the
-// publishable (client-safe) key — never the secret/service-role key. It lets
-// the sign-in/sign-up pages initialize Supabase even while the API boots.
+// Same-origin public configuration served dynamically by FastAPI from its
+// environment settings. Contains ONLY the project URL and the publishable
+// (client-safe) key — never the secret/service-role key.
 // Root-relative on purpose: this bundle also runs on /auth/callback, /login,
 // /signup, ... where a relative URL would resolve to /<route>/auth-config.json.
 const publicConfigUrl = '/auth-config.json';
@@ -184,7 +183,7 @@ function inspectTotpUri(uri, expectedEmail) {
 // Staff workspaces that require a completed-MFA (aal2) session to view. The
 // MFA routes themselves (/staff/*) are deliberately excluded so the verify and
 // enrollment screens never redirect to themselves.
-const STAFF_WORKSPACE = /^\/(admin|agent)(\/|$)/;
+const MFA_WORKSPACE = /^\/(admin|agent|owner)(\/|$)/;
 const storage = {
   getItem: key => sessionStorage.getItem(key) ?? localStorage.getItem(key),
   setItem(key, value) {
@@ -219,9 +218,16 @@ async function apiRequest(path, method = 'GET', body) {
   if (!response.ok) {
     // FastAPI error shape: {detail: string} or {detail: {code, message}}.
     const detail = payload.detail;
+    const validation = Array.isArray(detail) ? detail.filter(entry =>
+      typeof entry?.msg === 'string' && Array.isArray(entry.loc)
+    ).map(entry => {
+      const field = entry.loc.at(-1);
+      const label = field && field !== 'body' ? String(field).replaceAll('_', ' ') + ': ' : '';
+      return label + entry.msg.replace(/^Value error, /, '');
+    }).join(' ') : '';
     const message = typeof detail === 'string'
       ? detail
-      : detail?.message || 'The data service could not complete this request.';
+      : validation || detail?.message || 'The data service could not complete this request.';
     const err = new Error(message);
     err.code = typeof detail === 'object' ? detail?.code : undefined;
     err.status = response.status;
@@ -296,6 +302,10 @@ function assertActiveAccount(profile) {
 
 function isStaffRole(role) {
   return STAFF_ROLES.includes(role);
+}
+
+function requiresWorkspaceMfa(role) {
+  return canonicalRole(role) === 'owner' || isStaffRole(role);
 }
 
 // GoTrue returns TOTP factors with a `factor_type` field; some SDK shapes use
@@ -415,8 +425,17 @@ function goHome() {
   }
   const next = sessionStorage.getItem(nextKey);
   sessionStorage.removeItem(nextKey);
-  // Never allow a return URL to bypass the user's server-assigned role.
-  navigate(next && (next === home || next.startsWith(home + '/') || next.startsWith(home + '?')) ? next : home, 'role-home:' + home);
+  // Normalize the URL before checking its workspace so path traversal or
+  // cross-origin return URLs cannot escape the verified role's routes.
+  let destination = home;
+  if (next?.startsWith('/') && !next.startsWith('//')) {
+    const target = new URL(next, location.origin);
+    if (target.origin === location.origin &&
+        (target.pathname === home || target.pathname.startsWith(home + '/'))) {
+      destination = target.pathname + target.search + target.hash;
+    }
+  }
+  navigate(destination, 'role-home:' + home);
 }
 
 // Portal context passed by the sign-in forms ('entrepreneur' | 'staff'). It is
@@ -452,7 +471,7 @@ function assertPortalRole(expectedPortal) {
 // verified-factor list. Returns 'ok' (non-staff, or staff at aal2), 'enroll'
 // (no verified TOTP factor yet) or 'verify' (factor present, challenge owed).
 async function ensureStaffAssurance() {
-  if (!state.profile || !isStaffRole(state.profile.role)) return 'ok';
+  if (!state.profile || !requiresWorkspaceMfa(state.profile.role)) return 'ok';
   const { factor, aal } = await sessionStaffState();
   if (aal === 'aal2') return 'ok'; // verified session — never bounce back here
   if (!factor) return 'enroll'; // no verified TOTP factor on the account yet
@@ -464,13 +483,16 @@ async function ensureStaffAssurance() {
 // to re-verify (or enroll) so a stale staff page is never shown. Only staff
 // workspaces are enforced - /staff/*, /login and /entrepreneur are left alone.
 async function enforceStaffAssurance() {
-  if (!STAFF_WORKSPACE.test(location.pathname)) return;
-  if (!state.profile || !isStaffRole(state.profile.role)) return;
+  if (!MFA_WORKSPACE.test(location.pathname)) return;
+  if (!state.profile || !requiresWorkspaceMfa(state.profile.role)) return;
   let status;
   try {
     status = await ensureStaffAssurance();
   } catch (_) {
     status = 'verify'; // fail closed when assurance cannot be confirmed
+  }
+  if (status !== 'ok') {
+    sessionStorage.setItem(nextKey, location.pathname + (location.search || '') + (location.hash || ''));
   }
   if (status === 'enroll') navigate('/staff/mfa', 'enforceStaffAssurance:enroll');
   else if (status === 'verify') navigate('/staff/verify', 'enforceStaffAssurance:verify');
@@ -493,7 +515,7 @@ async function finishSignIn(expectedPortal) {
     // account keeps the original error, and the portal cross-check still
     // applies before continuing.
     await loadProfile();
-    if (!isStaffRole(state.profile?.role)) throw error;
+    if (!requiresWorkspaceMfa(state.profile?.role)) throw error;
     assertPortalRole(expectedPortal);
     await finishStaffOnboarding();
     return;
@@ -591,8 +613,8 @@ function friendlyFetchError(err, fallback) {
   return (typeof err?.message === 'string' && err.message) ? err.message : fallback;
 }
 
-// Load the public Supabase configuration, served by unified FastAPI as a
-// compiled static asset alongside its /api/v1 endpoints.
+// Load the public Supabase configuration from the unified FastAPI runtime
+// endpoint alongside its /api/v1 endpoints.
 // The old code probed `api + '/health'` here and then ignored the result;
 // readiness is now reported separately by probeBackend() below.
 async function loadConfig() {
@@ -608,10 +630,16 @@ async function loadConfig() {
     // echoed onto the dashboard. Report the real situation instead.
     throw new Error(friendlyFetchError(err, 'The authentication configuration is unavailable.'));
   }
+  if (response.status === 503) {
+    throw new Error('Authentication configuration is unavailable. Check SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY in backend/.env, then restart FastAPI.');
+  }
+  if (response.status === 404) {
+    throw new Error('Authentication configuration endpoint is missing on this origin. Check the unified FastAPI server and its /auth-config.json route.');
+  }
   if (!response.ok) throw new Error('The authentication configuration is unavailable.');
   const config = await response.json();
   if (!config.configured || !config.supabaseUrl || !config.supabasePublishableKey) {
-    throw new Error('The authentication configuration is incomplete. Run npm run gen-auth-config.');
+    throw new Error('The authentication configuration is incomplete. Check the backend public Supabase settings and restart FastAPI.');
   }
   return config;
 }
@@ -735,11 +763,11 @@ async function doInitialize() {
           .then(() => {
             const p = state.profile;
             const status = String(p?.account_status || '').toLowerCase();
-            if (p && status === 'pending' && isStaffRole(p.role)) {
+            if (p && status === 'pending' && requiresWorkspaceMfa(p.role)) {
               // Invitation onboarding: a pending staff account keeps its
               // session for the /staff/* enrollment screens (e.g. across a
               // token refresh mid-enrollment) but NEVER a workspace document.
-              if (STAFF_WORKSPACE.test(location.pathname)) {
+              if (MFA_WORKSPACE.test(location.pathname)) {
                 navigate('/staff/signin', 'session-refresh:pending-staff');
               }
               return undefined;
@@ -808,8 +836,8 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 const ready = (async () => {
   let lastError;
-  // Short burst of retries covers a slow first load of the static public
-  // config. Supabase initialization itself does NOT depend on the backend.
+  // Short burst of retries covers a slow first load of the runtime public
+  // config. Once loaded, Supabase handles client-side authentication.
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
       await initialize();
@@ -832,8 +860,8 @@ const ready = (async () => {
     try {
       await initialize();
       clearInterval(poll);
-    } catch (_) {
-      state.error = 'SiteWise API unavailable on this origin. Start the unified FastAPI server on port 8090 using run-sitewise.cmd; no separate Jaspr server is needed.';
+    } catch (error) {
+      state.error = error?.message || 'Authentication initialization failed.';
     } finally {
       polling = false;
     }
@@ -894,7 +922,7 @@ async function doComplete(next) {
     // with "awaiting administrator activation". Any other pending account
     // (e.g. a public signup) still stops here with the original error.
     await loadProfile();
-    if (!isStaffRole(state.profile?.role)) throw error;
+    if (!requiresWorkspaceMfa(state.profile?.role)) throw error;
     await finishStaffOnboarding();
     return;
   }
@@ -903,6 +931,17 @@ async function doComplete(next) {
 
 window.sitewiseAuth = {
   ready,
+  draftRequestId() {
+    const userId = state.profile?.user_id;
+    return userId ? localStorage.getItem('sitewise.draft-request.' + userId) : null;
+  },
+  rememberDraftRequestId(requestId) {
+    const userId = state.profile?.user_id;
+    if (!userId) throw new Error('Sign in before saving a draft.');
+    const key = 'sitewise.draft-request.' + userId;
+    if (requestId == null) localStorage.removeItem(key);
+    else localStorage.setItem(key, requestId);
+  },
   snapshot: () => JSON.stringify(state),
   async google(remember = true) {
     await ready;
@@ -947,6 +986,7 @@ window.sitewiseAuth = {
   // navigating from the password document to /staff/verify, so always obtain
   // a new factor/challenge using the valid Supabase AAL1 session.
   async mfaChallengeStart() {
+    rememberNext();
     await ready;
     const { data: sessionResult, error: sessionError } = await client.auth.getSession();
     if (sessionError || !sessionResult?.session) {
@@ -961,8 +1001,8 @@ window.sitewiseAuth = {
       // identity change). Preserve the message, tag the stage.
       throw authError('mfa_profile:' + (error?.code || 'error'), error?.message || 'Could not verify the account.', error);
     }
-    if (!isStaffRole(state.profile?.role)) {
-      throw authError('mfa_role', 'Staff role is required.', null);
+    if (!requiresWorkspaceMfa(state.profile?.role)) {
+      throw authError('mfa_role', 'A Provider or Administrator account is required.', null);
     }
     // Session-derived state only: the token's aal claim and the session's
     // verified factor — no per-document network snapshots.
@@ -1016,6 +1056,7 @@ window.sitewiseAuth = {
   // Native Supabase enrollment: the QR + secret come from Supabase, the
   // factor is only usable after a verified challenge. No custom storage.
   async mfaEnrollStart() {
+    rememberNext();
     await ready;
     if (!client) throw authError('mfa_config', state.error || 'Authentication is not configured.', null);
     const { data: session, error: sessionError } = await client.auth.getSession();
@@ -1029,8 +1070,8 @@ window.sitewiseAuth = {
     } catch (error) {
       throw authError('mfa_profile:' + (error?.code || 'error'), error?.message || 'Could not verify the account.', error);
     }
-    if (!isStaffRole(state.profile?.role)) {
-      throw authError('mfa_role', 'Staff role is required.', null);
+    if (!requiresWorkspaceMfa(state.profile?.role)) {
+      throw authError('mfa_role', 'A Provider or Administrator account is required.', null);
     }
     if (await hasVerifiedTotpFactor()) {
       // Returning user: NEVER generate a second QR code and NEVER delete or

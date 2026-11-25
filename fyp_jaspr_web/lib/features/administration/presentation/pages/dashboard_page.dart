@@ -64,7 +64,7 @@ class _DashboardPageState extends State<DashboardPage> {
     return AppLayout(
       role: AppRole.admin,
       currentRoute: '/admin',
-      title: 'Verification overview',
+      title: 'Dashboard',
       // The source dashboard has no page header — its first element is
       // `.bento-head`. Rendering both produced two competing titles, which
       // the source does not have.
@@ -121,10 +121,7 @@ class _Shells extends StatelessComponent {
       ]),
       p(classes: 'stat-note', [
         Component.text(
-          'Verification totals are computed by the backend over every '
-          'operational property and use the same definitions as the Listings '
-          'queue. Account counts are read from the authenticated user '
-          'directory. Activity is the server’s own audit trail.',
+          'Verification counts cover submitted properties, not the entire published catalogue.',
         ),
       ]),
     ]);
@@ -133,70 +130,63 @@ class _Shells extends StatelessComponent {
 
 // ------------------------------------------------------- scoped regions
 
-class _KpisRegion extends StatelessComponent {
+class _KpisRegion extends StatefulComponent {
   const _KpisRegion();
+
+  @override
+  State<_KpisRegion> createState() => _KpisRegionState();
+}
+
+class _KpisRegionState extends State<_KpisRegion> {
+  StaffSummary? _staff;
+  String? _error;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() { if (mounted) unawaited(_load()); });
+  }
+
+  Future<void> _load() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final result = await AppLocator.adminApi.summary();
+      if (!mounted) return;
+      setState(() { _staff = result; _loading = false; });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() { _staff = null; _error = AdminApi.message(error); _loading = false; });
+    }
+  }
 
   @override
   Component build(BuildContext context) {
     final summary = context.watch(adminNotifierProvider.select(_summaryOf));
     final page = summary.page;
-    if (page == null) {
-      final note = summary.error == null ? 'Loading…' : 'Unavailable';
-      return div(classes: 'bento-kpis', [
-        _kpi('Listings awaiting review', '—', note),
-        _kpi('Ownership awaiting review', '—', note),
-        _kpi('Approved listings', '—', note),
-        _kpi('Rejected reviews', '—', note),
-      ]);
-    }
-
-    final listingPending = _facet(
-      page,
-      VerificationDimension.listing,
-      PropertyVerificationStatus.pending,
-    );
-    final ownershipPending = _facet(
-      page,
-      VerificationDimension.ownership,
-      PropertyVerificationStatus.pending,
-    );
-    final approved = _facet(
-      page,
-      VerificationDimension.listing,
-      PropertyVerificationStatus.verified,
-    );
-    final rejected =
-        _facet(
-          page,
-          VerificationDimension.listing,
-          PropertyVerificationStatus.rejected,
-        ) +
-        _facet(
-          page,
-          VerificationDimension.ownership,
-          PropertyVerificationStatus.rejected,
-        );
-
-    return div(classes: 'bento-kpis', [
-      _kpi(
-        'Listings awaiting review',
-        '$listingPending',
-        'Listing dimension · ${PropertyVerificationStatus.pending.label}',
-      ),
-      _kpi(
-        'Ownership awaiting review',
-        '$ownershipPending',
-        'Ownership dimension · ${PropertyVerificationStatus.pending.label}',
-      ),
-      _kpi(
-        'Approved listings',
-        '$approved',
-        'Listing verified · ${page.total} submissions in total',
-      ),
-      _kpi('Rejected reviews', '$rejected', 'Listing + ownership decisions'),
+    final note = summary.error == null ? 'Loading…' : 'Unavailable';
+    String count(VerificationDimension dimension, PropertyVerificationStatus status) =>
+        page == null ? '—' : '${_facet(page, dimension, status)}';
+    String pending(VerificationDimension dimension) => page == null ? '—' :
+        '${_facet(page, dimension, PropertyVerificationStatus.pending) + _facet(page, dimension, PropertyVerificationStatus.underReview)}';
+    return div(classes: 'stack', [
+      div(classes: 'bento-kpis', [
+        _linkedKpi('Properties in verification', page == null ? '—' : '${page.total}', page == null ? note : 'Verification records', '/admin/listings'),
+        _linkedKpi('Approved listings', count(VerificationDimension.listing, PropertyVerificationStatus.verified), page == null ? note : 'Listing verification completed', '/admin/listings'),
+        _linkedKpi('Listings awaiting review', pending(VerificationDimension.listing), page == null ? note : 'Pending and under review', '/admin/listings'),
+        _linkedKpi('Registered agents', _staff == null || _loading ? '—' : '${_staff!.totalAgents}', _loading ? 'Loading…' : _error != null ? 'Unavailable' : '${_staff!.activeAgents} active', '/admin/agents'),
+      ]),
+      if (_error != null) ActionButton('Retry agent statistics', variant: 'secondary', onClick: _load),
     ]);
   }
 }
+
+Component _linkedKpi(String label, String value, String note, String route) =>
+    AppLink(to: route, classes: 'kpi', children: [
+      span(classes: 'k', [Component.text(label)]),
+      span(classes: 'v', [Component.text(value)]),
+      span(classes: 'n', [Component.text(note)]),
+    ]);
 
 /// Verification-health hero. Depends on the server totals only, so an account
 /// or audit emit never rebuilds it (or restarts the donut transition).
@@ -225,7 +215,7 @@ class _ListingQueueRegion extends StatelessComponent {
       summary,
       VerificationDimension.listing,
       'Listing verification',
-      'Decide each submitted listing against the evidence the owner provided.',
+      'Review submitted property details and supporting evidence.',
     );
   }
 }
@@ -240,8 +230,7 @@ class _OwnershipQueueRegion extends StatelessComponent {
       summary,
       VerificationDimension.ownership,
       'Ownership verification',
-      'Confirm the submitter may let this property, independently of the '
-          'listing decision.',
+      'Review evidence that the submitter is authorised to rent out the property.',
     );
   }
 }
@@ -281,7 +270,7 @@ class _AccountQueueRegion extends StatelessComponent {
     return _queueCard(
       'Account management',
       '${users.length}',
-      'Inspect owner, agent and administrator accounts and their status.',
+      'View and manage registered user accounts.',
       '/admin/users',
       pending: pending,
     );
@@ -300,13 +289,10 @@ class _Head extends StatelessComponent {
         span(classes: 'eyebrow-sm', [
           Component.text('Staff portal · administrator'),
         ]),
-        LetterRevealHeading.text('Verification overview', level: 1),
+        LetterRevealHeading.text('Dashboard', level: 1),
         p(classes: 'muted', [
           Component.text(
-            'Listing and ownership queues are counted by the verification '
-            'backend, so this page and the Listings queue always agree. '
-            'Privileged account actions are recorded in the server’s audit '
-            'trail with the acting administrator and a timestamp.',
+            'Manage properties, review submissions and oversee user accounts.',
           ),
         ]),
       ]),
@@ -333,14 +319,6 @@ class _Head extends StatelessComponent {
 
 // -------------------------------------------------------------------- KPIs
 
-Component _kpi(String k, String v, String n) {
-  return div(classes: 'kpi', [
-    span(classes: 'k', [Component.text(k)]),
-    span(classes: 'v', [Component.text(v)]),
-    span(classes: 'n', [Component.text(n)]),
-  ]);
-}
-
 // ----------------------------------------------------- verification health
 
 /// Dark hero card: the share of verification submissions whose listing
@@ -352,7 +330,7 @@ Component _healthCard(_Summary summary, void Function() onRetry) {
     final failed = summary.error != null;
     return div(classes: 'bento-hero', [
       div(classes: 'bento-card__head', [
-        h3([Component.text('Verification health')]),
+        h3([Component.text('Property verification overview')]),
         span(classes: 'hero-badge', [
           Component.text(failed ? 'Unavailable' : 'Loading'),
         ]),
@@ -383,7 +361,7 @@ Component _healthCard(_Summary summary, void Function() onRetry) {
   if (total == 0) {
     return div(classes: 'bento-hero', [
       div(classes: 'bento-card__head', [
-        h3([Component.text('Verification health')]),
+        h3([Component.text('Property verification overview')]),
         span(classes: 'hero-badge', [Component.text('No data')]),
       ]),
       div(classes: 'stack', [
@@ -413,7 +391,7 @@ Component _healthCard(_Summary summary, void Function() onRetry) {
 
   return div(classes: 'bento-hero', [
     div(classes: 'bento-card__head', [
-      h3([Component.text('Verification health')]),
+      h3([Component.text('Property verification overview')]),
       span(classes: 'hero-badge', [Component.text('$total submissions')]),
     ]),
     div(classes: 'donut-wrap', [
@@ -436,12 +414,12 @@ Component _healthCard(_Summary summary, void Function() onRetry) {
     ]),
     p(classes: 'hero-cap', [
       Component.text(
-        'Listing dimension — ${breakdown(VerificationDimension.listing)}.',
+        'Listing status: ${breakdown(VerificationDimension.listing)}.',
       ),
     ]),
     p(classes: 'hero-cap', [
       Component.text(
-        'Ownership dimension — ${breakdown(VerificationDimension.ownership)}.',
+        'Ownership status: ${breakdown(VerificationDimension.ownership)}.',
       ),
     ]),
     AppLink(
@@ -613,7 +591,7 @@ class _RecentActivityCardState extends State<_RecentActivityCard> {
         ]),
         p(classes: 'small muted', [
           Component.text(
-            'Newest ${_events.length} of the most recent 200 retained events.',
+            'Showing ${_events.length} recent events.',
           ),
         ]),
         AppLink(

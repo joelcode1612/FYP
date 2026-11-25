@@ -5,9 +5,12 @@ import 'dart:typed_data';
 /// quality metrics touch. Pure Dart — no Flutter, no OpenCV — so every metric
 /// below is asserted by the plain test suite against synthetic planes.
 class GrayscalePlane {
-  const GrayscalePlane({required this.width, required this.height, required this.luma})
-    : assert(luma.length == width * height),
-      assert(width > 0 && height > 0);
+  const GrayscalePlane({
+    required this.width,
+    required this.height,
+    required this.luma,
+  }) : assert(luma.length == width * height),
+       assert(width > 0 && height > 0);
 
   final int width;
   final int height;
@@ -59,7 +62,8 @@ double meanGradientMagnitude(GrayscalePlane plane) {
     final row = y * plane.width;
     for (var x = 1; x < plane.width - 1; x++) {
       final gx = plane.luma[row + x + 1] - plane.luma[row + x - 1];
-      final gy = plane.luma[row + plane.width + x] - plane.luma[row - plane.width + x];
+      final gy =
+          plane.luma[row + plane.width + x] - plane.luma[row - plane.width + x];
       total += math.sqrt((gx * gx + gy * gy).toDouble()) / 2;
       count++;
     }
@@ -80,7 +84,8 @@ double edgeDensity(GrayscalePlane plane, {double threshold = 24.0}) {
     final row = y * plane.width;
     for (var x = 1; x < plane.width - 1; x++) {
       final gx = plane.luma[row + x + 1] - plane.luma[row + x - 1];
-      final gy = plane.luma[row + plane.width + x] - plane.luma[row - plane.width + x];
+      final gy =
+          plane.luma[row + plane.width + x] - plane.luma[row - plane.width + x];
       if (math.sqrt((gx * gx + gy * gy).toDouble()) / 2 > threshold) edges++;
       count++;
     }

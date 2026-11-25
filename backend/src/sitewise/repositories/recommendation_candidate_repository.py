@@ -18,7 +18,7 @@ depth_ft                      ``property_*`` keys. Mapped only when recorded;
                               absent values stay ``None`` (unknown), never 0.
 population (500 m / 1 km)     ``fyp_features.property_population_spatial``
 F&B competitors               ``p.source_data->>'fnb_competitors_500m/1000m'``
-demand generators             ``sitewise_analytics.subject_features.other_features``
+demand generators             ``fyp.property_inference_features.other_features``
 transit / walkability         ``...other_features`` + typed subject columns
 parking                       ``...other_features`` + ``parking_status``
 PU association score          ``p.source_data->>'research_p_association_score'``
@@ -113,9 +113,9 @@ LEFT JOIN LATERAL (
 ) lk ON TRUE
 LEFT JOIN LATERAL (
     SELECT f.*
-    FROM sitewise_analytics.subject_features f
+    FROM fyp.property_inference_features f
     WHERE f.canonical_property_id = coalesce(lk.sitewise_property_id, rp.catalogue_id)
-      AND btrim(f.sample_class) = 'U'
+
     ORDER BY f.imported_at DESC NULLS LAST
     LIMIT 1
 ) sf ON TRUE
@@ -163,9 +163,9 @@ LEFT JOIN LATERAL (
 ) link ON TRUE
 LEFT JOIN LATERAL (
     SELECT f.*
-    FROM sitewise_analytics.subject_features f
+    FROM fyp.property_inference_features f
     WHERE f.canonical_property_id = p.id
-      AND btrim(f.sample_class) = 'U'
+
     ORDER BY f.imported_at DESC NULLS LAST
     LIMIT 1
 ) sf ON TRUE
@@ -464,7 +464,6 @@ class RecommendationCandidateRepository:
             "pu_feature_set": _first_text((source,), "model_feature_set"),
             "pu_score_type": _first_text((source,), "score_type"),
             "pu_score_source": "fyp.rental_properties.catalogue_source_data.research_p_association_score",
-            "sample_class": _first_text((source, subject), "sample_class"),
             "availability_status": availability,
             "analysis_status": _first_text((source, subject), "analysis_status"),
             "data_completeness_pct": _first_number((source,), "data_completeness_pct"),

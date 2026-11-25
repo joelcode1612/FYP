@@ -66,6 +66,20 @@ SELECT
     p.latitude,
     p.longitude,
     p.floor_level,
+    p.floor_description,
+    p.frontage_ft,
+    p.furnishing,
+    p.tenure,
+    p.unit_position,
+    CASE WHEN p.parking_owner_declared IS TRUE THEN p.has_parking
+         WHEN p.parking_owner_declared IS FALSE THEN NULL
+         WHEN p.has_parking = 1 THEN 1 ELSE NULL END AS has_parking,
+    p.lease_duration_months,
+    p.lease_duration_negotiable,
+    p.available_from,
+    p.rental_deposit_myr,
+    p.title_type,
+    p.landlord_fnb_permission,
     p.availability,
     p.is_published,
     p.verification_status,
@@ -161,7 +175,7 @@ def _task_projection(data: dict[str, Any]) -> dict[str, Any]:
 
 def _as_dict(row: Any) -> dict[str, Any]:
     data = dict(row)
-    for key in ("created_at", "updated_at", "correction_at", "verification_submitted_at"):
+    for key in ("created_at", "updated_at", "correction_at", "verification_submitted_at", "available_from"):
         value = data.get(key)
         if value is not None and hasattr(value, "isoformat"):
             data[key] = value.isoformat()
@@ -202,6 +216,24 @@ class AgentAssignmentRepository:
         rows = self.session.execute(text(sql), params).mappings().all()
         return [_as_dict(row) for row in rows]
 
+    def _lock_assignment_change(self, listing_id: int, *, replacing: bool = False) -> bool:
+        from sitewise.core.exceptions import ConflictError
+
+        row = self.session.execute(text("""
+            SELECT verification_status FROM fyp.rental_properties WHERE id=:id FOR UPDATE
+        """), {"id": listing_id}).first()
+        if row is None:
+            return False
+        state = self.session.execute(text("""
+            SELECT workflow_status FROM fyp.agent_listing_assignment
+            WHERE listing_id=:id FOR UPDATE
+        """), {"id": listing_id}).scalar()
+        if row[0] in ("approved", "verified", "pending", "under_review") or state in ("accepted", "needs_correction", "submitted"):
+            raise ConflictError("Inspection evidence is protected. Use the correction workflow.")
+        if replacing and state == "requested":
+            raise ConflictError("An Agent request is already pending. Cancel it before reassigning.")
+        return True
+
     def assign(
         self,
         listing_id: int,
@@ -213,12 +245,8 @@ class AgentAssignmentRepository:
         """Create/reassign one listing. Raises ValueError when the operational
         property does not exist - the FK would reject it anyway, but an
         explicit error is what the API needs to return 404."""
-        exists = self.session.execute(
-            text("SELECT 1 FROM fyp.rental_properties WHERE id = :lid"),
-            {"lid": int(listing_id)},
-        ).scalar()
-        if not exists:
-            raise ValueError("No operational property with this id.")
+        if not self._lock_assignment_change(listing_id, replacing=True):
+            raise ValueError("Property not found.")
         now = datetime.now(UTC)
         self.session.execute(
             text(
@@ -251,6 +279,8 @@ class AgentAssignmentRepository:
         return row
 
     def unassign(self, listing_id: int) -> bool:
+        if not self._lock_assignment_change(listing_id):
+            return False
         result = self.session.execute(
             text("DELETE FROM fyp.agent_listing_assignment WHERE listing_id = :lid"),
             {"lid": int(listing_id)},

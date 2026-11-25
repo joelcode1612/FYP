@@ -17,13 +17,22 @@ import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart';
 /// "no panorama yet", never as a placeholder image. Signed URLs expire, so a
 /// panel that fails on an old link reloads the metadata and mints a fresh
 /// one.
-@client
+// Mounted inside the client-side verification detail view.
 class CanonicalPanoramaPanel extends StatefulComponent {
   /// Operational property id (`fyp.rental_properties.id`), as a string from
   /// the admin route.
   final String propertyId;
+  final bool evidenceOnly;
+  final String? expectedPanoramaId;
+  final void Function()? onEvidenceReady;
 
-  const CanonicalPanoramaPanel({super.key, required this.propertyId});
+  const CanonicalPanoramaPanel({
+    super.key,
+    required this.propertyId,
+    this.evidenceOnly = false,
+    this.expectedPanoramaId,
+    this.onEvidenceReady,
+  });
 
   @override
   State<CanonicalPanoramaPanel> createState() => _CanonicalPanoramaPanelState();
@@ -39,6 +48,7 @@ class _CanonicalPanoramaPanelState extends State<CanonicalPanoramaPanel> {
   // actual status, never an optimistic guess.
   bool _busy = false;
   bool _rejecting = false;
+  bool _expandedViewer = false;
   String _reason = '';
 
   int? get _listingId => int.tryParse(component.propertyId);
@@ -89,6 +99,15 @@ class _CanonicalPanoramaPanelState extends State<CanonicalPanoramaPanel> {
       }
       final row = meta['body'] as Map<String, dynamic>;
       final panoramaId = row['panoramaId'];
+      if (component.evidenceOnly &&
+          panoramaId != component.expectedPanoramaId) {
+        setState(() {
+          _loading = false;
+          _error =
+              'The submitted panorama changed. Reload the property review.';
+        });
+        return;
+      }
       if (panoramaId is! String || panoramaId.isEmpty) {
         setState(() {
           _loading = false;
@@ -118,10 +137,10 @@ class _CanonicalPanoramaPanelState extends State<CanonicalPanoramaPanel> {
         if (url is String && url.isNotEmpty) {
           _viewUrl = url;
         } else {
-          _error =
-              'The viewing URL could not be created for this panorama.';
+          _error = 'The viewing URL could not be created for this panorama.';
         }
       });
+      if (_viewUrl != null) component.onEvidenceReady?.call();
     } on Object catch (err) {
       if (!mounted) return;
       setState(() {
@@ -186,15 +205,13 @@ class _CanonicalPanoramaPanelState extends State<CanonicalPanoramaPanel> {
       case 'pending':
         children.add(
           ActionButton(
-            'Approve',
+            'Approve panorama',
             variant: 'primary',
             onClick: _busy
                 ? null
                 : () => unawaited(
-                      _act('review', body: const {
-                        'decision': 'approved',
-                      }),
-                    ),
+                    _act('review', body: const {'decision': 'approved'}),
+                  ),
           ),
         );
         if (_rejecting) {
@@ -202,7 +219,7 @@ class _CanonicalPanoramaPanelState extends State<CanonicalPanoramaPanel> {
             SearchInput(
               placeholder: 'Rejection reason (required)',
               ariaLabel: 'Panorama rejection reason',
-              onInput: (value) => _reason = value,
+              onInput: (value) => setState(() => _reason = value),
             ),
           );
           children.add(
@@ -212,37 +229,38 @@ class _CanonicalPanoramaPanelState extends State<CanonicalPanoramaPanel> {
               onClick: (_busy || _reason.trim().isEmpty)
                   ? null
                   : () => unawaited(
-                        _act('review', body: {
+                      _act(
+                        'review',
+                        body: {
                           'decision': 'rejected',
                           'reason': _reason.trim(),
-                        }),
+                        },
                       ),
+                    ),
             ),
           );
         } else {
           children.add(
             ActionButton(
-              'Reject',
+              'Reject panorama',
               variant: 'danger-outline',
-              onClick: _busy
-                  ? null
-                  : () => setState(() => _rejecting = true),
+              onClick: _busy ? null : () => setState(() => _rejecting = true),
             ),
           );
         }
       case 'approved':
         children.add(
           published
-            ? ActionButton(
-                'Unpublish',
-                variant: 'danger-outline',
-                onClick: _busy ? null : () => unawaited(_act('unpublish')),
-              )
-            : ActionButton(
-                'Publish to buyers',
-                variant: 'primary',
-                onClick: _busy ? null : () => unawaited(_act('publish')),
-              ),
+              ? ActionButton(
+                  'Unpublish',
+                  variant: 'danger-outline',
+                  onClick: _busy ? null : () => unawaited(_act('unpublish')),
+                )
+              : ActionButton(
+                  'Publish to buyers',
+                  variant: 'primary',
+                  onClick: _busy ? null : () => unawaited(_act('publish')),
+                ),
         );
       case 'rejected':
         final reason = '${pano['reviewReason'] ?? ''}';
@@ -260,34 +278,60 @@ class _CanonicalPanoramaPanelState extends State<CanonicalPanoramaPanel> {
             onClick: _busy
                 ? null
                 : () => unawaited(
-                      _act('review', body: const {
-                        'decision': 'approved',
-                      }),
-                    ),
+                    _act('review', body: const {'decision': 'approved'}),
+                  ),
           ),
         );
     }
-    return div(classes: 'stack', children);
+    return div(
+      classes: 'admin-pano-review__actions${_rejecting ? ' is-rejecting' : ''}',
+      children,
+    );
   }
 
   @override
   Component build(BuildContext context) {
     final pano = _panorama;
     final status = '${pano?['verificationStatus'] ?? ''}';
-    return div(classes: 'card card-pad stack', [
-      span(classes: 'title', [Component.text('360° panorama (Sitewise)')]),
-      p(classes: 'body muted', [
-        Component.text(
-          'The canonical panorama the capture pipeline stitched on the '
-          'backend, served from private storage through a temporary '
-          'authorized URL. Publication to buyers still follows the ordinary '
-          'verification flow.',
-        ),
+    final statusLabel = switch (status) {
+      'pending' => 'Pending review',
+      'approved' => 'Approved',
+      'rejected' => 'Rejected',
+      '' => 'Not available',
+      _ => status,
+    };
+    final statusClass = switch (status) {
+      'approved' => 'is-approved',
+      'rejected' => 'is-rejected',
+      'pending' => 'is-pending',
+      _ => 'is-neutral',
+    };
+    return section(classes: 'card admin-pano-review', [
+      div(classes: 'admin-pano-review__header', [
+        div(classes: 'admin-pano-review__heading', [
+          span(classes: 'admin-pano-review__eyebrow', [
+            Component.text('Inspection evidence'),
+          ]),
+          h2(classes: 'admin-pano-review__title', [
+            Component.text('360° property inspection'),
+          ]),
+          p(classes: 'admin-pano-review__copy', [
+            Component.text(
+              'Review the submitted interior panorama before recording a decision.',
+            ),
+          ]),
+        ]),
+        if (!_loading && pano != null)
+          span(classes: 'admin-pano-review__status $statusClass', [
+            Component.text(statusLabel),
+          ]),
       ]),
       if (_loading)
-        p(classes: 'body muted', [Component.text('Reading the 360° panorama…')])
+        div(classes: 'admin-pano-review__empty', [
+          p([Component.text('Loading inspection panorama…')]),
+        ])
       else if (_error != null)
-        div(classes: 'notice notice-danger', [
+        div(classes: 'notice notice-danger stack', [
           Component.text(_error!),
           ActionButton(
             'Try again',
@@ -296,35 +340,89 @@ class _CanonicalPanoramaPanelState extends State<CanonicalPanoramaPanel> {
           ),
         ])
       else if (pano == null)
-        p(classes: 'body', [
-          Component.text(
-            'No 360° panorama exists for this listing yet. The owner may '
-            'still be capturing, or the backend may still be stitching — '
-            'reload later.',
+        div(classes: 'admin-pano-review__empty', [
+          span(classes: 'title', [Component.text('No panorama available')]),
+          p(classes: 'admin-pano-review__copy', [
+            Component.text(
+              'A capture has not been submitted or panorama processing is not complete.',
+            ),
+          ]),
+          ActionButton(
+            'Refresh',
+            variant: 'secondary',
+            onClick: () => unawaited(_load()),
           ),
         ])
       else if (_viewUrl != null) ...[
-        div(classes: 'stack', [
-          if (status.isNotEmpty)
-            p(classes: 'body muted', [
-              Component.text(
-                'Verification status: $status · '
-                '${pano['width'] ?? '?'}×${pano['height'] ?? '?'} px'
-                '${pano['publishedAt'] != null ? ' · published' : ''}',
-              ),
-            ]),
-          _reviewActions(pano),
-          div(classes: 'sw-pano__stage', [
-            SphericalPanoramaFrame(
-              imageUrl: _viewUrl!,
-              title: '360 degree panorama stitched by Sitewise. '
-                  'Swipe or drag to look around.',
+        div(classes: 'admin-pano-review__toolbar', [
+          p(classes: 'admin-pano-review__copy', [
+            Component.text(
+              'Drag to look around. Use the viewer controls to zoom or reset.',
             ),
           ]),
+          ActionButton(
+            _expandedViewer ? 'Reduce viewer' : 'Expand viewer',
+            variant: 'secondary',
+            onClick: () => setState(() => _expandedViewer = !_expandedViewer),
+          ),
         ]),
+        div(
+          classes:
+              'admin-pano-review__stage${_expandedViewer ? ' is-expanded' : ''}',
+          [
+            SphericalPanoramaFrame(
+              imageUrl: _viewUrl!,
+              title:
+                  '360 degree property inspection. Drag or use arrow keys to look around.',
+            ),
+          ],
+        ),
+        div(classes: 'admin-pano-review__meta', [
+          div(classes: 'admin-pano-review__fact', [
+            span(classes: 'admin-pano-review__label', [
+              Component.text('Resolution'),
+            ]),
+            span(classes: 'admin-pano-review__value', [
+              Component.text(
+                '${pano['width'] ?? '?'} × ${pano['height'] ?? '?'} px',
+              ),
+            ]),
+          ]),
+          div(classes: 'admin-pano-review__fact', [
+            span(classes: 'admin-pano-review__label', [
+              Component.text('Publication'),
+            ]),
+            span(classes: 'admin-pano-review__value', [
+              Component.text(
+                pano['publishedAt'] != null ? 'Published' : 'Not published',
+              ),
+            ]),
+          ]),
+        ]),
+        if (!component.evidenceOnly)
+          div(classes: 'admin-pano-review__decision', [
+            div(classes: 'admin-pano-review__heading', [
+              span(classes: 'title', [Component.text('Panorama review')]),
+              p(classes: 'admin-pano-review__copy', [
+                Component.text(
+                  'This decision is separate from listing and ownership verification.',
+                ),
+              ]),
+            ]),
+            if (!component.evidenceOnly) _reviewActions(pano),
+          ]),
       ] else
-        p(classes: 'body muted', [
-          Component.text('The panorama record exists but cannot be viewed.'),
+        div(classes: 'admin-pano-review__empty', [
+          p([
+            Component.text(
+              'The panorama exists but its viewing link is unavailable.',
+            ),
+          ]),
+          ActionButton(
+            'Refresh',
+            variant: 'secondary',
+            onClick: () => unawaited(_load()),
+          ),
         ]),
     ]);
   }

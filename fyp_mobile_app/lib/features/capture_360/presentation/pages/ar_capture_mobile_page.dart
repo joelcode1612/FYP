@@ -97,10 +97,6 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
   /// disk).
   String? _failureKind;
 
-  /// The stitcher's real stage text during a resume stitch — actual progress
-  /// wording from the pipeline, never a fabricated percentage.
-  String? _stitchStageLabel;
-
   /// The device-stitched panorama the draft workflow uploads. Set by the
   /// capture screen's `onPanoramaReady` callback or by the resume stitch;
   /// the canonical tour file is produced on this device, never on the server.
@@ -342,7 +338,6 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
         _processingPercent = null;
         _failure = null;
         _failureKind = null;
-        _stitchStageLabel = null;
       });
     }
     try {
@@ -354,8 +349,10 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
             records: records,
             total: kSphereTargetCount,
             onStage: (String stage) {
-              if (!mounted) return;
-              setState(() => _stitchStageLabel = stage);
+              // Diagnostic only. The stitcher's stage wording ("Matching
+              // overlaps: 12/38 pairs") is image-processing jargon; it is
+              // logged and the screen keeps one plain sentence.
+              CaptureLog.log('STITCH_STAGE: $stage');
             },
           );
       if (!result.success || result.panoramaPath == null) {
@@ -550,7 +547,6 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
         percent: _processingPercent,
         failure: _failure,
         failureKind: _failureKind,
-        stitchStageLabel: _stitchStageLabel,
         onRetry: _draftRunning || !MobileConfig.usesLiveApi
             ? null
             : _panoramaPath == null
@@ -598,7 +594,6 @@ class _HandoffStatusScreen extends StatelessWidget {
     this.percent,
     this.failure,
     this.failureKind,
-    this.stitchStageLabel,
     this.onRetry,
     this.onView,
     this.onBack,
@@ -615,8 +610,6 @@ class _HandoffStatusScreen extends StatelessWidget {
   /// failure retries the handoff (the panorama is already on disk).
   final String? failureKind;
 
-  /// The stitcher's real stage wording during on-device stitching.
-  final String? stitchStageLabel;
   final VoidCallback? onRetry;
   final VoidCallback? onView;
   final VoidCallback? onBack;
@@ -728,7 +721,7 @@ class _HandoffStatusScreen extends StatelessWidget {
                       stage == BackendHandoffStage.framesBackingUp
                           ? '$processed of $total photos backed up'
                           : stage == BackendHandoffStage.processing
-                          ? (stitchStageLabel ?? 'Stitching on this device')
+                          ? 'Creating the 360° panorama on this device'
                           : 'Sending to Sitewise',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodyMedium,

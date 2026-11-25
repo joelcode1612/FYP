@@ -11,7 +11,7 @@ the test folder at runtime.
 
 The row set is the 955 U-class commercial properties of
 ``SiteWise_PU_Property_Image_Scores_Merged``. The 894 P-class research rows in
-``sitewise_analytics.subject_features`` are model input, NOT listings, and are
+``fyp.property_inference_features`` are model input, NOT listings, and are
 deliberately absent here. ``suitability_score`` is the expanded64 association
 index on a 0-100 scale, or null when inference is unavailable.
 

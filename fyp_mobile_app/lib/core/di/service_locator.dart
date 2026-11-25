@@ -1,9 +1,11 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import 'package:fyp/core/utils/capture_log.dart';
 import 'package:fyp/features/capture_360/data/capture_frame_store.dart';
 import 'package:fyp/features/profile/data/api_user_preferences_repository.dart';
+import 'package:fyp/features/property_management/data/draft_request_store.dart';
 import 'package:fyp/core/utils/draft_local_data_source.dart';
 import 'package:fyp/features/onboarding/data/onboarding_local_data_source.dart';
 import 'package:fyp/features/capture_360/data/opencv_panorama_stitcher_stub.dart'
@@ -75,6 +77,8 @@ abstract final class ServiceLocator {
     apiClient,
     onMutated: () => listingsRevision.value++,
   );
+
+  static const draftRequests = DraftRequestStore(FlutterSecureStorage());
 
   /// Bumped whenever the signed-in owner's listings change (draft saved, photo
   /// uploaded or removed). Spaces watches it, so returning from Add Property

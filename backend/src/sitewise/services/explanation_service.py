@@ -6,7 +6,7 @@ property's actual 47 resolved features. Nothing here is synthesised:
 
 * the subject features come from ``PropertyFeatureRepository`` with per-value
   provenance;
-* the SHAP background comes from real ``sitewise_analytics.subject_features``
+* the SHAP background comes from a frozen export of real reference rows
   rows, never zero-filled or invented;
 * additivity (``base_value + sum(contributions) == model output``) is checked
   before the payload is returned, so an explanation that does not reconstruct
@@ -213,7 +213,7 @@ class ExplanationService:
         background = repo.background(loaded.feature_names, limit=50)
         if not background:
             raise AssessmentError(
-                "No complete analysed subject rows are available to build the "
+                "The frozen reference rows are unavailable for the "
                 "SHAP background matrix. Synthetic background data is never "
                 "substituted.",
                 code="shap_background_missing",

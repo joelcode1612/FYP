@@ -433,6 +433,10 @@ SCORE_MEANING = (
 )
 
 _SHAP_BACKGROUND_CSV = Path(__file__).resolve().parents[3] / "ml_reference" / "shap_background_47.csv"
+#: Operational25 is explained ONLY against the supplied 25-feature background.
+_SHAP_BACKGROUND_OPERATIONAL25_CSV = (
+    Path(__file__).resolve().parents[3] / "ml_reference" / "shap_background_operational25.csv"
+)
 #: The expanded 64-feature model is explained ONLY against the retrained
 #: package's own background (``SHAP_Background_PU_64.csv``: real P and U
 #: observations) — never the 47-feature file, and never the older derived file.
@@ -449,6 +453,8 @@ def _background_path(variant_key: str | None) -> Path:
     """The verified SHAP background for the active variant."""
     if variant_key == "expanded64":
         return _SHAP_BACKGROUND_64_CSV
+    if variant_key == "operational25":
+        return _SHAP_BACKGROUND_OPERATIONAL25_CSV
     return _SHAP_BACKGROUND_CSV
 
 #: Cache of computed explanations, keyed by (model_version, property_id) so a
@@ -895,23 +901,49 @@ class PropertyInsightsService:
         bundle = None
         coverage = None
         resolution_error: str | None = None
-        try:
-            bundle = repo.get(property_id, loaded.feature_names, source="catalog")
-            coverage = merge_bridge_features(bundle, expected_features=loaded.feature_names)
-            if variant.get("key") == "expanded64":
-                coverage = merge_expanded_bridge_features(
-                    coverage, expected_features=loaded.feature_names
-                )
-            values = dict(coverage.values)
-            base["feature_coverage"] = {
-                "available_features": coverage.available_count,
-                "feature_count": len(loaded.feature_names),
-                "missing_features": list(coverage.missing_features),
-                "unrecoverable_features": list(coverage.unrecoverable_features),
-                "value_sources": dict(coverage.sources),
-                "flags": list(coverage.flags),
-            }
+        op25_snapshot: dict[str, Any] | None = None
+        if variant.get("key") == "operational25":
+            # The 25-feature candidate is measured and persisted by the
+            # enrichment worker; research bridge files from other variants are
+            # never substituted for its own vector.
+            from sitewise.ml.feature_bridge import FeatureCoverage
+            from sitewise.services.operational25_enrichment import score_for_catalogue_id
+
+            op25_snapshot = score_for_catalogue_id(self.session, property_id)
+            measured = op25_snapshot.get("features") or {}
+            names = list(loaded.feature_names)
+            values = {name: float(measured[name]) for name in names if name in measured}
+            missing = [name for name in names if name not in values]
+            coverage = FeatureCoverage(
+                property_id=property_id,
+                subject_id=None,
+                values={name: values.get(name) for name in names},
+                sources=op25_snapshot.get("feature_coverage", {}).get("sources", {}),
+                missing_features=missing,
+                unrecoverable_features=[],
+                flags=["operational25 snapshot; research_only"],
+            )
+            base["feature_coverage"] = coverage.as_dict()
             base["map"] = {"layers": _layer_payloads(values)}
+            cache_version += f":coord:{op25_snapshot.get('coordinate_hash') or 'none'}"
+        try:
+            if op25_snapshot is None:
+                bundle = repo.get(property_id, loaded.feature_names, source="catalog")
+                coverage = merge_bridge_features(bundle, expected_features=loaded.feature_names)
+                if variant.get("key") == "expanded64":
+                    coverage = merge_expanded_bridge_features(
+                        coverage, expected_features=loaded.feature_names
+                    )
+                values = dict(coverage.values)
+                base["feature_coverage"] = {
+                    "available_features": coverage.available_count,
+                    "feature_count": len(loaded.feature_names),
+                    "missing_features": list(coverage.missing_features),
+                    "unrecoverable_features": list(coverage.unrecoverable_features),
+                    "value_sources": dict(coverage.sources),
+                    "flags": list(coverage.flags),
+                }
+                base["map"] = {"layers": _layer_payloads(values)}
         except FeatureResolutionError as exc:
             values = {}
             resolution_error = str(exc)
@@ -948,7 +980,13 @@ class PropertyInsightsService:
                 return {**base, **cached}, cached, None
 
         live_prediction: dict[str, Any] | None = None
-        if variant.get("key") == "expanded64":
+        if variant.get("key") == "operational25":
+            if op25_snapshot is not None and op25_snapshot.get("available"):
+                live_prediction = {
+                    "available": True,
+                    "score": float(op25_snapshot["pu_score"]),
+                }
+        elif variant.get("key") == "expanded64":
             if expanded_score is not None:
                 live_prediction = {"available": True, "score": expanded_score / 100.0}
         elif coverage is not None and not coverage.missing_features:
@@ -1411,7 +1449,7 @@ class PropertyInsightsService:
     def _variant(self) -> dict[str, Any]:
         """The expanded Layer-1 model used by the application."""
         try:
-            return resolve_variant(variant_key="expanded64").as_dict()
+            return resolve_variant().as_dict()
         except Exception:  # noqa: BLE001 - the page must still render
             return {
                 "key": "expanded64",

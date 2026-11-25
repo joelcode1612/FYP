@@ -196,6 +196,27 @@ def admin_update_user(
     target = service.get_user(user_id)
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
+    if user_id == current.user_id and data.get("account_status", rbac.STATUS_ACTIVE) != rbac.STATUS_ACTIVE:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "self_status_change_forbidden",
+                    "message": "You cannot disable your own administrator account."},
+        )
+    if (
+        rbac.canonical_role(target.role) == rbac.ROLE_OWNER
+        and target.account_status == rbac.STATUS_PENDING
+        and data.get("account_status") == rbac.STATUS_ACTIVE
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "onboarding_required",
+                "message": (
+                    "An invited Owner must complete verified email, MFA and "
+                    "invitation onboarding before the account can be activated."
+                ),
+            },
+        )
     previous_status = target.account_status
     email = target.email
 

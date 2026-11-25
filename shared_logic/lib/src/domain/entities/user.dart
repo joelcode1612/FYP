@@ -40,4 +40,12 @@ class SitewiseUser {
 
   /// The session already carries the assurance staff routes require.
   bool get hasStaffAssurance => assuranceLevel == 'aal2';
+
+  String get normalizedStatus => status.trim().toLowerCase();
+
+  bool get isActiveProfile => normalizedStatus == 'active';
+
+  bool get isPendingProvider =>
+      normalizedStatus == 'pending' &&
+      (role == AppRole.owner || role == AppRole.agent);
 }

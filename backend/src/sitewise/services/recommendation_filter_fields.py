@@ -75,9 +75,8 @@ SELECT DISTINCT ON (f.canonical_property_id)
        f.parking_facilities_500m,
        f.competitor_count_500m,
        f.other_features
-FROM sitewise_analytics.subject_features AS f
-WHERE btrim(f.sample_class) = 'U'
-  AND f.canonical_property_id = ANY(:ids)
+FROM fyp.property_inference_features AS f
+WHERE f.canonical_property_id = ANY(:ids)
 ORDER BY f.canonical_property_id, f.imported_at DESC NULLS LAST
 """)
 
@@ -89,8 +88,7 @@ SELECT DISTINCT ON (f.canonical_property_id)
        f.parking_facilities_500m,
        f.competitor_count_500m,
        f.other_features
-FROM sitewise_analytics.subject_features AS f
-WHERE btrim(f.sample_class) = 'U'
+FROM fyp.property_inference_features AS f
 ORDER BY f.canonical_property_id, f.imported_at DESC NULLS LAST
 """)
 

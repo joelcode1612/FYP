@@ -24,11 +24,11 @@ class ProviderAgentInspectionPanel extends StatefulWidget {
     this.readOnly = false,
   });
   final ProviderListing? listing;
-  final bool readOnly;
   final int propertyId;
   final Future<void> Function()? onSaved;
   final VoidCallback? onEdited;
   final AgentListingDetail? inspectionDetail;
+  final bool readOnly;
   @override
   State<ProviderAgentInspectionPanel> createState() => _InspectionState();
 }
@@ -594,69 +594,62 @@ class _InspectionState extends State<ProviderAgentInspectionPanel>
           ),
         ],
       ),
-      // A locked property has no save, submit or other mutation controls.
       bottomNavigationBar: propertyLocked
           ? null
           : SafeArea(
-              top: false,
-              child: Container(
-                decoration: const BoxDecoration(
-                  color: SitewiseM3.surface,
-                  border: Border(top: BorderSide(color: SitewiseM3.line)),
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: busy || loading || !editable
-                                ? null
-                                : () => save(),
-                            icon: const Icon(Icons.save_outlined, size: 18),
-                            label: const Text('Save draft'),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: loading ? null : previewSummary,
-                            icon: const Icon(
-                              Icons.visibility_outlined,
-                              size: 18,
-                            ),
-                            label: const Text('Review'),
-                          ),
-                        ),
-                      ],
+        top: false,
+        child: Container(
+          decoration: const BoxDecoration(
+            color: SitewiseM3.surface,
+            border: Border(top: BorderSide(color: SitewiseM3.line)),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: busy || loading || !editable
+                          ? null
+                          : () => save(),
+                      icon: const Icon(Icons.save_outlined, size: 18),
+                      label: const Text('Save draft'),
                     ),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        onPressed:
-                            busy ||
-                                loading ||
-                                !editable ||
-                                !allConfirmed ||
-                                missingPropertyDetails.isNotEmpty ||
-                                submissionBlockers.isNotEmpty ||
-                                panoramaId == null
-                            ? null
-                            : submitInspection,
-                        icon: const Icon(Icons.send_outlined, size: 18),
-                        label: const Text('Submit inspection to Admin'),
-                      ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: loading ? null : previewSummary,
+                      icon: const Icon(Icons.visibility_outlined, size: 18),
+                      label: const Text('Review'),
                     ),
-                  ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed:
+                      busy ||
+                          loading ||
+                          !editable ||
+                          !allConfirmed ||
+                          missingPropertyDetails.isNotEmpty ||
+                          submissionBlockers.isNotEmpty ||
+                          panoramaId == null
+                      ? null
+                      : submitInspection,
+                  icon: const Icon(Icons.send_outlined, size: 18),
+                  label: const Text('Submit inspection to Admin'),
                 ),
               ),
-            ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -878,6 +871,7 @@ class _InspectionOverview extends StatelessWidget {
         listing.imageUrl ??
         photos.firstOrNull?.url;
     final assignment = detail.assignment.raw;
+    final facts = detail.facts;
     final assignedAt = DateTime.tryParse(
       '${assignment['requested_at'] ?? assignment['created_at'] ?? ''}',
     );
@@ -936,6 +930,48 @@ class _InspectionOverview extends StatelessWidget {
                     _fact('Type', listing.propertyType ?? 'Not provided'),
                     _fact('Size', listing.sizeDisplay),
                     _fact('Monthly rent', listing.rentDisplay),
+                    _fact('Floor', facts?.floorDescription ?? 'Not provided'),
+                    _fact(
+                      'Unit position',
+                      facts?.unitPosition ?? 'Not provided',
+                    ),
+                    _fact(
+                      'Frontage',
+                      facts?.frontageFt == null
+                          ? 'Not provided'
+                          : '${facts!.frontageFt!.toStringAsFixed(1)} ft',
+                    ),
+                    _fact('Furnishing', facts?.furnishing ?? 'Not provided'),
+                    _fact(
+                      'Owner-declared parking',
+                      facts?.hasParking == null
+                          ? 'Not sure'
+                          : facts!.hasParking!
+                          ? 'Available'
+                          : 'Not available',
+                    ),
+                    _fact(
+                      'Availability (owner-provided)',
+                      facts?.availability ?? 'Not provided',
+                    ),
+                    _fact(
+                      'Minimum rental period (owner-provided)',
+                      facts?.leaseDurationNegotiable == true
+                          ? 'Negotiable'
+                          : facts?.leaseDurationMonths == null
+                          ? 'Not provided'
+                          : '${facts!.leaseDurationMonths} months',
+                    ),
+                    _fact(
+                      'Rental deposit (owner-provided)',
+                      facts?.rentalDepositMyr == null
+                          ? 'Not provided'
+                          : 'RM ${facts!.rentalDepositMyr!.toStringAsFixed(2)}',
+                    ),
+                    _fact(
+                      'Landlord F&B permission (owner-provided)',
+                      facts?.landlordFnbPermission ?? 'Not provided',
+                    ),
                   ],
                 ),
                 const Divider(height: 20),

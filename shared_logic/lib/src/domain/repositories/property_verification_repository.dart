@@ -71,6 +71,8 @@ abstract class PropertyVerificationRepository {
   /// Full review detail for one property.
   Future<VerificationDetail> adminDetail(String propertyId);
 
+  Future<void> finalDecision(String propertyId, Map<String, dynamic> decision);
+
   /// `pending` -> `under_review` on one dimension.
   Future<PropertyVerification> startReview(
     String propertyId,

@@ -25,6 +25,14 @@ import 'package:sitewise_jaspr_web/features/dashboard/presentation/pages/entrepr
     as e_dashboard;
 import 'package:sitewise_jaspr_web/features/property_management/presentation/pages/listing_management_denied_page.dart'
     as e_listing_denied;
+import 'package:sitewise_jaspr_web/features/property_management/presentation/pages/owner_add_property_page.dart'
+    as e_owner_add;
+import 'package:sitewise_jaspr_web/features/property_management/presentation/pages/owner_properties_page.dart'
+    as e_owner_properties;
+import 'package:sitewise_jaspr_web/features/property_management/presentation/pages/owner_property_detail_page.dart'
+    as e_owner_detail;
+import 'package:sitewise_jaspr_web/features/property_management/presentation/pages/owner_dashboard_page.dart'
+    as e_owner_dashboard;
 import 'package:sitewise_jaspr_web/features/recommendations/presentation/pages/explanation_page.dart'
     as e_explanation;
 import 'package:sitewise_jaspr_web/features/recommendations/presentation/pages/ai_recommendations_page.dart'
@@ -402,20 +410,10 @@ class SitewiseApp extends StatelessComponent {
             ),
           ),
 
-          // --- Owner (retired) -------------------------------------------------
-          // The Owner web workspace is retired. It never had an independent
-          // product: an owner is an entrepreneur holding the verified property
-          // capability, and that capability is exercised in the SiteWise mobile
-          // app, in the SAME Provider workspace agents use. Every former
-          // `/owner/*` path resolves to one explanatory page instead of the
-          // management screens, so an old bookmark cannot reach a listing
-          // record, a draft, a tour or a profile through the browser. No query
-          // parameter is read here and no role is inferred from the path.
+          // --- Owner -----------------------------------------------------------
+          // Listing drafts and details use the canonical owner API. Capture,
+          // tours and profile flows remain in the existing mobile workspace.
           for (final retiredOwnerPath in const [
-            '/owner',
-            '/owner/properties',
-            '/owner/property-detail',
-            '/owner/add-property',
             '/owner/tours',
             '/owner/tour-preview',
             '/owner/profile',
@@ -431,6 +429,42 @@ class SitewiseApp extends StatelessComponent {
                     'SiteWise mobile application.',
               ),
             ),
+          Route(
+            path: '/owner',
+            builder: (context, state) => _page(
+              const e_owner_dashboard.DashboardPage(),
+              title: 'Owner dashboard — Sitewise',
+              description:
+                  'Manage commercial property listings and their review status.',
+            ),
+          ),
+          Route(
+            path: '/owner/add-property',
+            builder: (context, state) => _page(
+              e_owner_add.AddPropertyPage(
+                key: ValueKey(state.queryParams['id']),
+                editingId: state.queryParams['id'],
+              ),
+              title: 'Add commercial property — Sitewise',
+              description: 'Create or update an owner property draft.',
+            ),
+          ),
+          Route(
+            path: '/owner/properties',
+            builder: (context, state) => _page(
+              const e_owner_properties.PropertiesPage(),
+              title: 'My commercial properties — Sitewise',
+            ),
+          ),
+          Route(
+            path: '/owner/property-detail',
+            builder: (context, state) => _page(
+              e_owner_detail.PropertyDetailPage(
+                id: state.queryParams['id'] ?? '',
+              ),
+              title: 'Property detail — Sitewise',
+            ),
+          ),
 
           // --- Entrepreneur ----------------------------------------------------
           Route(

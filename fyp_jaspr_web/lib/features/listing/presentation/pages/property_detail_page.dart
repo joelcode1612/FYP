@@ -1142,6 +1142,34 @@ class _DetailState extends State<_Detail> {
             : (property.isFreehold! ? 'Yes' : 'No'),
       ),
       ('Availability', text(property.availability)),
+      (
+        'Monthly rental',
+        'RM ${property.rentalRm.toStringAsFixed(2)}',
+      ),
+      (
+        'Rental per sq ft',
+        property.sizeSqft > 0
+            ? 'RM ${(property.rentalRm / property.sizeSqft).toStringAsFixed(2)} / sq ft'
+            : null,
+      ),
+      (
+        'Minimum rental period',
+        property.leaseDurationNegotiable == true
+            ? 'Negotiable'
+            : property.leaseDurationMonths == null
+                ? null
+                : '${property.leaseDurationMonths} months',
+      ),
+      ('Available from', text(property.availableFrom)),
+      (
+        'Rental deposit',
+        property.rentalDepositMyr == null
+            ? null
+            : 'RM ${property.rentalDepositMyr!.toStringAsFixed(2)}',
+      ),
+      ('Property title type', text(property.titleType)),
+      ('Landlord permission for F&B', text(property.landlordFnbPermission)),
+      ('Floor description', text(property.floorDescription)),
       if (property.availabilityVerifiedAt != null &&
           property.availabilityVerifiedAt!.trim().isNotEmpty)
         (
@@ -1151,6 +1179,11 @@ class _DetailState extends State<_Detail> {
     ].where(((row) => row.$2 != null && row.$2!.trim().isNotEmpty)).toList();
     final notice = text(property.listingDataNotice);
     return section(classes: 'sw-pd__details', [
+      p(classes: 'small text-muted', [
+        Component.text(
+          'Rental, parking and landlord permission details are owner declarations, not government licensing approval or a SiteWise suitability result.',
+        ),
+      ]),
       // The whole header row is the button: keyboard activation (Enter/Space)
       // comes free from the native <button>, and aria-expanded/aria-controls
       // expose the disclosure semantics to assistive technology.

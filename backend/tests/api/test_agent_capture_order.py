@@ -17,6 +17,7 @@ def test_capture_before_checklist_can_be_submitted(monkeypatch):
     checklist = dict.fromkeys(policy.REQUIRED_INSPECTION, False)
     assignment = {"inspection_data": checklist, "inspection_updated_at": None}
     monkeypatch.setattr(policy, "agent_assignment", lambda *args, **kwargs: assignment)
+    monkeypatch.setattr(policy, "require_submitted_ownership_proof", lambda *args: None)
 
     with Session(create_engine("sqlite://")) as session:
         session.connection().connection.driver_connection.create_function(
@@ -24,12 +25,12 @@ def test_capture_before_checklist_can_be_submitted(monkeypatch):
         )
         session.execute(text("ATTACH DATABASE ':memory:' AS fyp"))
         for statement in (
-            "CREATE TABLE fyp.panoramas (panorama_id, session_id, property_id, created_at, storage_path)",
+            "CREATE TABLE fyp.panoramas (panorama_id, session_id, property_id, created_at, storage_path, verification_status)",
             "CREATE TABLE fyp.capture_sessions (id, property_id, owner_id, status)",
             "CREATE TABLE fyp.agent_listing_assignment (listing_id, workflow_status, inspection_updated_at, inspection_data)",
             "INSERT INTO fyp.agent_listing_assignment VALUES (42, 'accepted', NULL, '{}')",
             "INSERT INTO fyp.capture_sessions VALUES ('session-a', '42', 'agent-a', 'completed')",
-            "INSERT INTO fyp.panoramas VALUES ('tour-a', 'session-a', '42', '2026-11-22', 'tour.jpg')",
+            "INSERT INTO fyp.panoramas VALUES ('tour-a', 'session-a', '42', '2026-11-22', 'tour.jpg', 'pending')",
         ):
             session.execute(text(statement))
 

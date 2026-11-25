@@ -16,6 +16,7 @@ import '../states/app_state.dart';
 import '../services/auth_service.dart';
 import '../services/property_service.dart';
 import '../services/property_verification_service.dart';
+import '../services/staff_onboarding_service.dart';
 import '../services/tour_service.dart';
 import '../services/verification_service.dart';
 
@@ -33,6 +34,12 @@ import '../services/verification_service.dart';
 final authServiceProvider = Provider<AuthService>(
   (ref) => throw UnimplementedError(
     'authServiceProvider must be overridden at the composition root.',
+  ),
+);
+
+final staffOnboardingServiceProvider = Provider<StaffOnboardingService>(
+  (ref) => throw UnimplementedError(
+    'staffOnboardingServiceProvider must be overridden at the composition root.',
   ),
 );
 
@@ -92,15 +99,15 @@ final recommendationSearchRepositoryProvider =
 
 /// Optional direct-comparison backend (`POST /api/v1/compare`).
 /// Null means the platform has no live comparison service.
-final propertyCompareRepositoryProvider =
-    Provider<PropertyCompareRepository?>((ref) => null);
+final propertyCompareRepositoryProvider = Provider<PropertyCompareRepository?>(
+  (ref) => null,
+);
 
 /// Write-back hook fired when the entrepreneur updates their preferences.
 /// The composition root decides where preferences persist (local file on
 /// mobile, nothing on web).
-final onPreferencesUpdatedProvider = Provider<void Function(BusinessPreferences)>(
-  (ref) => (_) {},
-);
+final onPreferencesUpdatedProvider =
+    Provider<void Function(BusinessPreferences)>((ref) => (_) {});
 
 final propertyServiceProvider = Provider<PropertyService>(
   (ref) => throw UnimplementedError(
@@ -127,19 +134,17 @@ final verificationServiceProvider = Provider<VerificationService>(
 final propertyVerificationRepositoryProvider =
     Provider<PropertyVerificationRepository?>((ref) => null);
 
-final propertyVerificationServiceProvider = Provider<PropertyVerificationService?>(
-  (ref) {
-    final repo = ref.watch(propertyVerificationRepositoryProvider);
-    return repo == null ? null : PropertyVerificationService(repo);
-  },
-);
+final propertyVerificationServiceProvider =
+    Provider<PropertyVerificationService?>((ref) {
+      final repo = ref.watch(propertyVerificationRepositoryProvider);
+      return repo == null ? null : PropertyVerificationService(repo);
+    });
 
-final adminPropertyReviewServiceProvider = Provider<AdminPropertyReviewService?>(
-  (ref) {
-    final repo = ref.watch(propertyVerificationRepositoryProvider);
-    return repo == null ? null : AdminPropertyReviewService(repo);
-  },
-);
+final adminPropertyReviewServiceProvider =
+    Provider<AdminPropertyReviewService?>((ref) {
+      final repo = ref.watch(propertyVerificationRepositoryProvider);
+      return repo == null ? null : AdminPropertyReviewService(repo);
+    });
 
 final userRepositoryProvider = Provider<UserRepository>(
   (ref) => throw UnimplementedError(

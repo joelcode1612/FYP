@@ -14,36 +14,36 @@ class MobileSwipePanorama extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Stack(
-        fit: StackFit.expand,
-        children: [
-          PanoramaViewer(
-            interactive: true,
-            sensorControl: SensorControl.none,
-            animSpeed: 0.0,
-            sensitivity: 1.0,
-            minZoom: 1.0,
-            maxZoom: 4.0,
-            child: Image.memory(bytes),
-          ),
-          const Positioned(
-            left: 12,
-            bottom: 12,
-            child: IgnorePointer(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: Color(0xBB0B0F19),
-                  borderRadius: BorderRadius.all(Radius.circular(18)),
-                ),
-                child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                  child: Text(
-                    'Swipe to look around · Pinch to zoom',
-                    style: TextStyle(color: Colors.white, fontSize: 11),
-                  ),
-                ),
+    fit: StackFit.expand,
+    children: [
+      PanoramaViewer(
+        interactive: true,
+        sensorControl: SensorControl.none,
+        animSpeed: 0.0,
+        sensitivity: 1.0,
+        minZoom: 1.0,
+        maxZoom: 4.0,
+        child: Image.memory(bytes),
+      ),
+      const Positioned(
+        left: 12,
+        bottom: 12,
+        child: IgnorePointer(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Color(0xBB0B0F19),
+              borderRadius: BorderRadius.all(Radius.circular(18)),
+            ),
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              child: Text(
+                'Swipe to look around · Pinch to zoom',
+                style: TextStyle(color: Colors.white, fontSize: 11),
               ),
             ),
           ),
-        ],
-      );
+        ),
+      ),
+    ],
+  );
 }

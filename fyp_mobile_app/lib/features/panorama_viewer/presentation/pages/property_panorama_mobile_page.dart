@@ -78,10 +78,9 @@ class _PropertyPanoramaMobilePageState
               '(server said ${response.statusCode}).';
         }
       } else {
-        bytes = await readPanoramaBytes(url).timeout(
-          _timeout,
-          onTimeout: () => null,
-        );
+        bytes = await readPanoramaBytes(
+          url,
+        ).timeout(_timeout, onTimeout: () => null);
         if (bytes == null) {
           _failure = 'The panorama file is missing from this device.';
         }
@@ -186,10 +185,7 @@ class _PropertyPanoramaMobilePageState
         fit: StackFit.expand,
         children: [
           PanoramaViewer(
-            child: Image.memory(
-              _bytes!,
-              filterQuality: FilterQuality.low,
-            ),
+            child: Image.memory(_bytes!, filterQuality: FilterQuality.low),
           ),
           Positioned(
             bottom: 16,

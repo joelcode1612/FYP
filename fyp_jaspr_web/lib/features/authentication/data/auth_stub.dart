@@ -30,6 +30,9 @@ const String kSessionCookie = 'sitewise_session';
 const String kTokenCookie = 'sitewise_token';
 
 abstract final class WebAuth {
+  static String? get draftRequestId => null;
+  static void rememberDraftRequestId(String? id) {}
+
   static Map<String, dynamic>? _profile;
   static String? _token;
   static bool _server = false;
@@ -152,18 +155,14 @@ abstract final class WebAuth {
     final request = http.MultipartRequest('POST', uri)
       ..fields.addAll(fields)
       ..files.add(
-        http.MultipartFile.fromBytes(
-          fileField,
-          bytes,
-          filename: filename,
-        ),
+        http.MultipartFile.fromBytes(fileField, bytes, filename: filename),
       );
     if (_token != null) {
       request.headers['Authorization'] = 'Bearer $_token';
     }
-    final streamed = await _client.send(request).timeout(
-      const Duration(seconds: 15),
-    );
+    final streamed = await _client
+        .send(request)
+        .timeout(const Duration(seconds: 15));
     final response = await http.Response.fromStream(streamed);
     if (response.statusCode >= 400) {
       throw StateError(_errorMessage(response) ?? 'The upload was rejected.');
@@ -243,7 +242,11 @@ abstract final class WebAuth {
       if (body != null) 'Content-Type': 'application/json',
     };
     return switch (method) {
-      'PUT' => _client.put(uri,headers:headers,body:body==null ? null : jsonEncode(body)),
+      'PUT' => _client.put(
+        uri,
+        headers: headers,
+        body: body == null ? null : jsonEncode(body),
+      ),
       'POST' => _client.post(
         uri,
         headers: headers,

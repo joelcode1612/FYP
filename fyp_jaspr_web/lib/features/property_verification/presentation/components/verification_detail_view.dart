@@ -1,3 +1,4 @@
+// SITEWISE_ADMIN_REVIEW_UI_V1
 import 'dart:async';
 import 'dart:js_interop';
 import 'dart:typed_data';
@@ -9,6 +10,7 @@ import 'package:shared_logic/shared_logic.dart';
 import 'package:universal_web/web.dart' as web;
 
 import 'package:sitewise_jaspr_web/core/di/app_locator.dart';
+import 'package:sitewise_jaspr_web/features/panorama_viewer/presentation/components/canonical_panorama_panel.dart';
 import 'package:sitewise_jaspr_web/shared/presentation/components/property_leaflet_map.dart';
 import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart';
 
@@ -19,19 +21,21 @@ import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart';
 ///
 /// Layout (converted from the `sitewise_admin_two_tab_review.html`
 /// prototype, themed with the Admin Blue Edition tokens): a property hero,
-/// EXACTLY TWO content tabs — Property Overview and Location Intelligence —
+/// Property overview, inspection, ownership and location intelligence tabs —
 /// and a decision sidebar that sits OUTSIDE the tabs. Decisions dispatch
 /// through [adminNotifierProvider] so the busy flag, the success notice and
 /// the automatic queue/detail refresh stay in the shared controller.
 /// Documents stream through the authenticated download endpoint
 /// (`AppLocator.propertyVerificationRepo`) — never a public URL. Display
 /// photos render from their permanent bucket URLs.
-/// Param-less shell so the `@client` codegen accepts this component (it only
-/// supports primitive constructor params); the detail arrives through
+/// The optional panorama flag is a primitive `@client` constructor parameter;
+/// the detail arrives through
 /// [adminNotifierProvider] and renders via [_VerificationDetailBody].
 @client
 class VerificationDetailView extends StatefulComponent {
-  const VerificationDetailView({super.key});
+  final bool showPanorama;
+
+  const VerificationDetailView({super.key, this.showPanorama = false});
 
   @override
   State<VerificationDetailView> createState() =>
@@ -48,6 +52,7 @@ class _VerificationDetailViewShellState extends State<VerificationDetailView> {
     return _VerificationDetailBody(
       key: ValueKey('verification-detail-${detail.property.propertyId}'),
       detail: detail,
+      showPanorama: component.showPanorama,
     );
   }
 }
@@ -58,7 +63,13 @@ class _VerificationDetailViewShellState extends State<VerificationDetailView> {
 class _VerificationDetailBody extends StatefulComponent {
   final VerificationDetail detail;
 
-  const _VerificationDetailBody({super.key, required this.detail});
+  final bool showPanorama;
+
+  const _VerificationDetailBody({
+    super.key,
+    required this.detail,
+    required this.showPanorama,
+  });
 
   @override
   State<_VerificationDetailBody> createState() =>
@@ -70,16 +81,30 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
   /// state so normal state refreshes (busy flags, notices, detail reloads)
   /// never bounce the admin back to the first tab.
   String _tab = 'overview';
+  bool _activityExpanded = false;
 
-  /// The reviewer confirmations of the listing checklist (under review).
   final Set<String> _checks = {};
-
-  /// The dimension whose reject / request-information form is open, if any.
-  VerificationDimension? _formFor;
-
-  /// `'reject'` or `'information'` — the two note-taking decisions.
-  String _formMode = 'reject';
+  String? _decisionForm;
+  String _affectedComponent = 'property';
   String _note = '';
+  bool _decisionBusy = false;
+  bool _panoramaReady = false;
+
+  @override
+  void didUpdateComponent(covariant _VerificationDetailBody oldComponent) {
+    super.didUpdateComponent(oldComponent);
+    if (oldComponent.detail.finalReview['token'] !=
+        component.detail.finalReview['token']) {
+      _checks.clear();
+      _decisionForm = null;
+      _note = '';
+    }
+    if (oldComponent.detail.finalReview['panorama_id'] !=
+        component.detail.finalReview['panorama_id']) {
+      _panoramaReady = false;
+    }
+  }
+
   final Set<String> _busyDocs = {};
   String? _downloadError;
 
@@ -90,7 +115,9 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
   web.EventListener? _tabKeyListener;
   web.Element? _tabListEl;
 
-  static const _tabIds = ['overview', 'intelligence'];
+  List<String> get _tabIds => component.showPanorama
+      ? const ['overview', 'panorama', 'ownership', 'intelligence']
+      : const ['overview', 'intelligence'];
 
   @override
   void initState() {
@@ -100,6 +127,7 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
 
   @override
   void dispose() {
+    _locationTimer?.cancel();
     _detachTabKeys();
     super.dispose();
   }
@@ -152,7 +180,6 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
   @override
   Component build(BuildContext context) {
     final detail = component.detail;
-    final verification = detail.verification;
     final notice = context.watch(
       adminNotifierProvider.select((state) => state.reviewNotice),
     );
@@ -160,31 +187,58 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
       adminNotifierProvider.select((state) => state.error),
     );
 
-    return div(classes: 'vd stack', [
-      if (notice != null)
-        div(classes: 'notice notice-info row', [
-          span(classes: 'grow', [Component.text(notice)]),
-          ActionButton(
-            'Dismiss',
-            variant: 'ghost',
-            onClick: () =>
-                context.read(adminNotifierProvider.notifier).clearReviewNotice(),
-          ),
+    return div(
+      classes: component.showPanorama ? 'vd stack vd--review-v3' : 'vd stack',
+      [
+        if (notice != null)
+          div(classes: 'notice notice-info row', [
+            span(classes: 'grow', [Component.text(notice)]),
+            ActionButton(
+              'Dismiss',
+              variant: 'ghost',
+              onClick: () => context
+                  .read(adminNotifierProvider.notifier)
+                  .clearReviewNotice(),
+            ),
+          ]),
+        if (error != null)
+          div(classes: 'notice notice-danger', [Component.text(error)]),
+        if (component.showPanorama) _hero(detail),
+        div(classes: 'vd-layout', [
+          div(classes: 'vd-main stack', [
+            if (!component.showPanorama) _hero(detail),
+            _tabShell(),
+            if (_tab == 'ownership')
+              _ownershipEvidencePanel(detail)
+            else if (_tab == 'overview')
+              _overviewPanel(detail)
+            else if (_tab == 'panorama' && component.showPanorama)
+              div(
+                id: 'vd-panel-panorama',
+                classes: 'vd-pano-tab',
+                attributes: {
+                  'role': 'tabpanel',
+                  'aria-labelledby': 'vd-tab-panorama',
+                },
+                [
+                  CanonicalPanoramaPanel(
+                    key: ValueKey(detail.finalReview['panorama_id']),
+                    evidenceOnly: true,
+                    onEvidenceReady: () =>
+                        setState(() => _panoramaReady = true),
+                    expectedPanoramaId:
+                        detail.finalReview['panorama_id'] as String?,
+                    propertyId: '${detail.property.propertyId}',
+                  ),
+                ],
+              )
+            else
+              _intelligencePanel(detail),
+          ]),
+          _reviewSidebar(detail),
         ]),
-      if (error != null)
-        div(classes: 'notice notice-danger', [Component.text(error)]),
-      div(classes: 'vd-layout', [
-        div(classes: 'vd-main stack', [
-          _hero(detail),
-          _tabShell(),
-          if (_tab == 'overview')
-            _overviewPanel(detail)
-          else
-            _intelligencePanel(detail),
-        ]),
-        _reviewSidebar(detail, verification),
-      ]),
-    ]);
+      ],
+    );
   }
 
   // --- Hero -------------------------------------------------------------------
@@ -197,7 +251,7 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
       div(classes: 'vd-hero__intro', [
         div(classes: 'vd-hero__label', [
           Component.text(
-            'Entrepreneur submission · Property #${property.propertyId}',
+            'Property submission · Property #${property.propertyId}',
           ),
         ]),
         h2(classes: 'vd-hero__title', [Component.text(property.displayName)]),
@@ -212,7 +266,9 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
             ),
           ]),
         div(classes: 'vd-hero__chips', [
-          _statusPill(verification.statuses.statusOf(VerificationDimension.listing)),
+          _statusPill(
+            verification.statuses.statusOf(VerificationDimension.listing),
+          ),
           if ((property.propertyType ?? '').trim().isNotEmpty)
             span(classes: 'chip', [Component.text(property.propertyType!)]),
           Pill(
@@ -261,13 +317,30 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
 
   // --- Tabs -------------------------------------------------------------------
 
+  Component _ownershipEvidencePanel(VerificationDetail detail) => section(
+    id: 'vd-panel-ownership',
+    classes: 'card card-pad vd-panel sw-admin-evidence',
+    attributes: {'role': 'tabpanel', 'aria-labelledby': 'vd-tab-ownership'},
+    [
+      h3([Component.text('Ownership evidence')]),
+      p(classes: 'body muted', [
+        Component.text(
+          'Review the submitted documents before recording an ownership decision.',
+        ),
+      ]),
+      _documents(detail),
+    ],
+  );
+
   Component _tabShell() {
     return div(
       classes: 'vd-tabs',
       attributes: {'role': 'tablist', 'aria-label': 'Property review detail'},
       [
-        _tabButton('overview', 'Property Overview'),
-        _tabButton('intelligence', 'Location Intelligence'),
+        _tabButton('overview', 'Property overview'),
+        if (component.showPanorama) _tabButton('panorama', '360° inspection'),
+        _tabButton('ownership', 'Ownership evidence'),
+        _tabButton('intelligence', 'Location intelligence'),
       ],
     );
   }
@@ -294,26 +367,49 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
 
   Component _overviewPanel(VerificationDetail detail) {
     final property = detail.property;
+    final inspection = detail.finalReview['inspection'] as Map? ?? const {};
+    final inspectionNotes =
+        detail.finalReview['inspection_notes'] as Map? ?? const {};
     return section(
       id: 'vd-panel-overview',
       classes: 'card card-pad vd-panel',
-      attributes: {
-        'role': 'tabpanel',
-        'aria-labelledby': 'vd-tab-overview',
-      },
+      attributes: {'role': 'tabpanel', 'aria-labelledby': 'vd-tab-overview'},
       [
         div(classes: 'vd-section-head', [
           div(classes: 'stack', [
             h3([Component.text('Property overview')]),
             p(classes: 'small muted', [
               Component.text(
-                'Property-detail information submitted by the entrepreneur.',
+                'Owner-declared listing information alongside evidence reviewed for verification.',
               ),
             ]),
           ]),
           span(classes: 'chip', [Component.text('Owner-provided')]),
         ]),
         div(classes: 'vd-overview-grid', [
+          if (inspection.isNotEmpty)
+            section(classes: 'vd-panel', [
+              h3([Component.text('Submitted Agent inspection checklist')]),
+              for (final (key, title) in const [
+                ('floor_area_verified', 'Floor area'),
+                ('condition_verified', 'Condition'),
+                ('parking_verified', 'Parking'),
+                ('accessibility_verified', 'Accessibility'),
+              ])
+                _infoRow(
+                  title,
+                  inspection[key] == true
+                      ? 'Verified on site'
+                      : 'Not confirmed',
+                ),
+            ]),
+          for (final (key, title) in const [
+            ('condition_notes', 'Condition notes'),
+            ('parking_notes', 'Parking notes'),
+            ('accessibility_notes', 'Accessibility notes'),
+          ])
+            if (inspectionNotes[key] case final String note)
+              _infoRow(title, note),
           _photos(detail),
           div(classes: 'stack', [
             h4(classes: 'vd-group-title', [
@@ -323,6 +419,8 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
               _infoRow('Property ID', '${property.propertyId}'),
               _infoRow('Property type', _orNotProvided(property.propertyType)),
               _infoRow('Floor level', _orNotProvided(property.floorLevel)),
+              _infoRow('Unit position', _orNotProvided(property.unitPosition)),
+              _infoRow('Furnishing', _orNotProvided(property.furnishing)),
               _infoRow(
                 'Frontage',
                 property.frontageFt == null
@@ -332,11 +430,37 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
               _infoRow('Parking', _parkingLabel(property.hasParking)),
               _infoRow('F&B suitability', _fnbLabel(property.isFnbSuitable)),
               _infoRow('Availability', _orNotProvided(property.availability)),
+              _infoRow(
+                'Available from',
+                _orNotProvided(property.availableFrom),
+              ),
+              _infoRow(
+                'Minimum rental period',
+                property.leaseDurationNegotiable == true
+                    ? 'Negotiable'
+                    : property.leaseDurationMonths == null
+                    ? 'Not provided'
+                    : '${property.leaseDurationMonths} months',
+              ),
+              _infoRow(
+                'Rental deposit',
+                property.rentalDepositMyr == null
+                    ? 'Not provided'
+                    : 'RM ${_num(property.rentalDepositMyr)}',
+              ),
+              _infoRow('Tenure', _orNotProvided(property.tenure)),
+              _infoRow('Title type', _orNotProvided(property.titleType)),
+              _infoRow(
+                'Landlord F&B permission (owner-declared)',
+                _orNotProvided(property.landlordFnbPermission),
+              ),
             ]),
           ]),
         ]),
         div(classes: 'vd-divider', []),
-        h4(classes: 'vd-group-title', [Component.text('Address & property facts')]),
+        h4(classes: 'vd-group-title', [
+          Component.text('Address & property facts'),
+        ]),
         div(classes: 'vd-info vd-info--two', [
           _infoRow('Street address', _orNotProvided(property.address)),
           _infoRow('City / district', _orNotProvided(property.city)),
@@ -363,10 +487,9 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
           _infoRow('Record status', _orNotProvided(property.status)),
         ]),
         h4(classes: 'vd-group-title', [Component.text('Description')]),
-        p(
-          classes: 'vd-description',
-          [Component.text(_orNotProvided(property.description))],
-        ),
+        p(classes: 'vd-description', [
+          Component.text(_orNotProvided(property.description)),
+        ]),
       ],
     );
   }
@@ -412,7 +535,21 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
     final property = detail.property;
     final geo = detail.geoFeatures;
     final research = detail.population;
-    final calculated = geo != null;
+    final location =
+        _liveLocation ?? detail.locationAnalysis.partB.researchAssociation;
+    final calculated = geo != null || location.calculatedFeatures > 0;
+    final state = _locationActive(location)
+        ? 'Calculating'
+        : location.calculationStatus == 'failed'
+        ? 'Analysis failed'
+        : location.calculatedFeatures == 64 &&
+              location.calculationStatus == 'current'
+        ? 'Calculated'
+        : location.calculatedFeatures > 0
+        ? 'Partially available'
+        : location.calculationStatus == 'stale'
+        ? 'Stale · recalculate'
+        : 'Not calculated';
 
     return section(
       id: 'vd-panel-intelligence',
@@ -425,25 +562,8 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
         div(classes: 'vd-section-head', [
           div(classes: 'stack', [
             h3([Component.text('Location intelligence')]),
-            p(classes: 'small muted', [
-              Component.text(
-                'Evidence from SiteWise geospatial features when this '
-                'property has been analysed.',
-              ),
-            ]),
           ]),
-          Pill(
-            calculated ? 'Calculated' : 'Not calculated',
-            tone: calculated ? 'action' : 'neutral',
-          ),
-        ]),
-        p(classes: 'vd-source', [
-          Component.text(
-            calculated
-                ? 'fyp.property_geospatial_features · calculated '
-                    '${_fmtDate(geo.calculatedAt)}'
-                : 'fyp.property_geospatial_features · No matched record',
-          ),
+          Pill(state, tone: calculated ? 'action' : 'neutral'),
         ]),
         // Data freshness (Phase 10/11). Read-only: the value comes from
         // fyp.property_feature_freshness, never recomputed on page load.
@@ -499,6 +619,12 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
               'figure is invented here.',
             ),
           ]),
+        h4(classes: 'vd-group-title', [
+          Component.text('PU location suitability'),
+        ]),
+        _researchAssociationPanel(location),
+        _analysisContext(location),
+        _expanded64Evidence(detail),
         _analysisReadiness(detail),
         h4(classes: 'vd-group-title', [Component.text('Property location')]),
         div(classes: 'vd-map-layout', [
@@ -529,69 +655,79 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
             _infoRow('Market segment', _orNotProvided(geo?.marketSegment)),
           ]),
         ]),
-        h4(classes: 'vd-group-title', [
-          Component.text('Market and catchment indicators'),
-        ]),
-        p(classes: 'small muted', [
-          Component.text(
-            calculated
-                ? 'Measured for this property in straight-line radii.'
-                : 'No verified analytical feature snapshot for this listing.',
-          ),
-        ]),
-        div(classes: 'vd-metrics', [
-          _metric(
-            'F&B competitors · 500 m',
-            geo?.competitorCount500m,
-            _countNote(geo, 'competitor_status', 'Straight-line research radius'),
-          ),
-          _metric(
-            'F&B competitors · 1 km',
-            geo?.competitorCount1km,
-            _countNote(geo, 'competitor_status', 'The 500 m set is included'),
-          ),
-          _metric(
-            'Population · 500 m',
-            research?.pop500m ?? geo?.population500m,
-            research != null
-                ? _populationNote(research)
-                : 'Modelled catchment estimate when sourced',
-          ),
-          _metric(
-            'Population · 1 km',
-            research?.pop1km ?? geo?.population1km,
-            research != null
-                ? _populationNote(research)
-                : 'Modelled catchment estimate when sourced',
-          ),
-          _metric(
-            'Demand generators · 500 m',
-            geo?.demandGeneratorCount500m,
-            _countNote(geo, 'demand_status', 'Nearby activity destinations'),
-          ),
-          _metric(
-            'Demand generators · 1 km',
-            geo?.demandGeneratorCount1km,
-            _countNote(geo, 'demand_status', 'Nearby activity destinations'),
-          ),
-          _metric(
-            'Accessibility score',
-            geo?.accessibilityScore,
-            _countNote(geo, 'accessibility_status', 'Backend-calculated index'),
-          ),
-          _metric(
-            'Nearest major road',
-            geo?.nearestMajorRoadM,
-            'Straight-line distance in metres',
-            suffix: ' m',
-          ),
-          _metric(
-            'District income',
-            geo?.incomeMedian,
-            'District median (RM); source and period vary',
-            prefix: 'RM ',
-          ),
-        ]),
+        if (location.calculatedFeatures == 0) ...[
+          h4(classes: 'vd-group-title', [
+            Component.text('Market and catchment indicators'),
+          ]),
+          p(classes: 'small muted', [
+            Component.text(
+              calculated
+                  ? 'Measured for this property in straight-line radii.'
+                  : 'No verified analytical feature snapshot for this listing.',
+            ),
+          ]),
+          div(classes: 'vd-metrics', [
+            _metric(
+              'F&B competitors · 500 m',
+              geo?.competitorCount500m,
+              _countNote(
+                geo,
+                'competitor_status',
+                'Straight-line research radius',
+              ),
+            ),
+            _metric(
+              'F&B competitors · 1 km',
+              geo?.competitorCount1km,
+              _countNote(geo, 'competitor_status', 'The 500 m set is included'),
+            ),
+            _metric(
+              'Population · 500 m',
+              research?.pop500m ?? geo?.population500m,
+              research != null
+                  ? _populationNote(research)
+                  : 'Modelled catchment estimate when sourced',
+            ),
+            _metric(
+              'Population · 1 km',
+              research?.pop1km ?? geo?.population1km,
+              research != null
+                  ? _populationNote(research)
+                  : 'Modelled catchment estimate when sourced',
+            ),
+            _metric(
+              'Demand generators · 500 m',
+              geo?.demandGeneratorCount500m,
+              _countNote(geo, 'demand_status', 'Nearby activity destinations'),
+            ),
+            _metric(
+              'Demand generators · 1 km',
+              geo?.demandGeneratorCount1km,
+              _countNote(geo, 'demand_status', 'Nearby activity destinations'),
+            ),
+            _metric(
+              'Accessibility score',
+              geo?.accessibilityScore,
+              _countNote(
+                geo,
+                'accessibility_status',
+                'Backend-calculated index',
+              ),
+            ),
+            _metric(
+              'Nearest major road',
+              geo?.nearestMajorRoadM,
+              'Straight-line distance in metres',
+              suffix: ' m',
+            ),
+            _metric(
+              'District income',
+              geo?.incomeMedian,
+              'District median (RM); source and period vary',
+              prefix: 'RM ',
+            ),
+          ]),
+        ],
         if (research != null) ...[
           h4(classes: 'vd-group-title', [
             Component.text('Research population snapshot'),
@@ -607,7 +743,10 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
               'Population within 500 m ring',
               _orNotCalculated(research.pop500m),
             ),
-            _infoRow('Population within 1 km', _orNotCalculated(research.pop1km)),
+            _infoRow(
+              'Population within 1 km',
+              _orNotCalculated(research.pop1km),
+            ),
             _infoRow(
               'Density (per km²)',
               _orNotCalculated(research.popDensityKm2),
@@ -621,22 +760,22 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
               [
                 if (research.source != null && research.source!.isNotEmpty)
                   research.source!,
-                if (research.sourceYear != null && research.sourceYear!.isNotEmpty)
+                if (research.sourceYear != null &&
+                    research.sourceYear!.isNotEmpty)
                   '(${research.sourceYear})',
               ].join(' ').trim(),
               fallback: 'Not recorded',
             ),
-            _infoRow(
-              'Quality flag',
-              _orNotProvided(research.qualityFlag),
-            ),
+            _infoRow('Quality flag', _orNotProvided(research.qualityFlag)),
           ]),
         ],
         h4(classes: 'vd-group-title', [
           Component.text('Nearby demand generators · within 1 km'),
         ]),
         _demandGenerators(detail),
-        h4(classes: 'vd-group-title', [Component.text('Surrounding amenities')]),
+        h4(classes: 'vd-group-title', [
+          Component.text('Surrounding amenities'),
+        ]),
         _amenities(detail.amenities),
         _analysisIntelligence(detail),
         _analysisReliability(detail),
@@ -662,7 +801,7 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
         body: component.detail.property.hasCoordinates
             ? 'No demand-generator records fall within 1 km of this listing.'
             : 'The listing has no usable coordinates, so no nearby search '
-                'can be performed.',
+                  'can be performed.',
       );
     }
     return div(classes: 'vd-demand', [
@@ -737,9 +876,7 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
         for (final check in partA.checks)
           div(classes: 'vd-row', [
             span(classes: 'vd-row__label', [Component.text(check.label)]),
-            strong(classes: 'vd-row__value', [
-              Component.text(check.detail),
-            ]),
+            strong(classes: 'vd-row__value', [Component.text(check.detail)]),
           ]),
       ]),
     ]);
@@ -761,10 +898,7 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
                 ('Population within 500 m', _num(partB.population.pop500m)),
                 ('Population within 1 km', _num(partB.population.pop1km)),
                 ('Population within 3 km', _num(partB.population.pop3km)),
-                (
-                  'Density per km² (1 km)',
-                  _num(partB.population.density1km),
-                ),
+                ('Density per km² (1 km)', _num(partB.population.density1km)),
                 (
                   'Estimated households · 1 km',
                   _num(partB.population.estimatedHouseholds1km),
@@ -787,12 +921,12 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
                   partB.population.rasterCoveragePct == null
                       ? null
                       : '${_num(partB.population.rasterCoveragePct)}% · '
-                          'quality ${_orNotProvided(partB.population.qualityFlag)}',
+                            'quality ${_orNotProvided(partB.population.qualityFlag)}',
                 ),
                 if (partB.population.landscanAmbient1km != null) ...[
                   (
                     'Ambient population · 1 km (LandScan '
-                    '${_orNotProvided(partB.population.landscanSourceYear)})',
+                        '${_orNotProvided(partB.population.landscanSourceYear)})',
                     _num(partB.population.landscanAmbient1km),
                   ),
                   (
@@ -801,8 +935,7 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
                   ),
                 ],
               ])
-                if (row.$2 != null)
-                  _infoRow(row.$1, row.$2!),
+                if (row.$2 != null) _infoRow(row.$1, row.$2!),
             ])
           : _unavailableNote(partB.population.unavailableReason),
       if (partB.population.available)
@@ -845,18 +978,24 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
                 ),
                 (
                   'Cafés · 500 m',
-                  _num(partB.fnbEnvironment.competitorBreakdown500m['cafes_500m']),
+                  _num(
+                    partB.fnbEnvironment.competitorBreakdown500m['cafes_500m'],
+                  ),
                 ),
                 (
                   'Restaurants · 500 m',
                   _num(
-                    partB.fnbEnvironment.competitorBreakdown500m['restaurants_500m'],
+                    partB
+                        .fnbEnvironment
+                        .competitorBreakdown500m['restaurants_500m'],
                   ),
                 ),
                 (
                   'Fast food · 500 m',
                   _num(
-                    partB.fnbEnvironment.competitorBreakdown500m['fast_food_500m'],
+                    partB
+                        .fnbEnvironment
+                        .competitorBreakdown500m['fast_food_500m'],
                   ),
                 ),
                 (
@@ -920,7 +1059,10 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
       partB.accessibility.available
           ? div(classes: 'vd-info', [
               for (final row in [
-                ('Accessibility index', _num(partB.accessibility.accessibilityScore)),
+                (
+                  'Accessibility index',
+                  _num(partB.accessibility.accessibilityScore),
+                ),
                 (
                   'Road length within 1 km',
                   partB.accessibility.roadKm1km == null
@@ -969,16 +1111,533 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
                 if (row.$2 != null) _infoRow(row.$1, row.$2!),
             ])
           : _unavailableNote(partB.accessibility.unavailableReason),
-      h4(classes: 'vd-group-title', [
-        Component.text('AI research assessment (experimental)'),
+    ]);
+  }
+
+  // SITEWISE_ADMIN_EXPANDED64_V1
+  LocationResearchAssociation? _liveLocation;
+  Timer? _locationTimer;
+  bool _locationRequest = false;
+  String? _locationError;
+  String? _locationNotice;
+
+  bool _locationActive(LocationResearchAssociation value) =>
+      value.predictionPending ||
+      value.calculationStatus == 'pending' ||
+      value.calculationStatus == 'running';
+
+  void _scheduleLocationRefresh() {
+    if (_tab != 'intelligence' ||
+        _locationTimer?.isActive == true ||
+        _locationRequest) {
+      return;
+    }
+    _locationTimer = Timer(const Duration(seconds: 2), _refreshLocation);
+  }
+
+  Future<void> _refreshLocation() async {
+    if (!mounted || _locationRequest) return;
+    _locationRequest = true;
+    try {
+      final value = await AppLocator.propertyVerificationRepo
+          .locationIntelligence(
+            component.detail.property.propertyId.toString(),
+          );
+      if (mounted) {
+        setState(() {
+          _liveLocation = value;
+          _locationError = null;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _locationError = 'Could not refresh measurements. Try again.',
+        );
+      }
+    } finally {
+      _locationRequest = false;
+      if (mounted &&
+          _locationError == null &&
+          _liveLocation != null &&
+          _locationActive(_liveLocation!)) {
+        _scheduleLocationRefresh();
+      }
+    }
+  }
+
+  /// Runs only the categories that are missing, failed or stale for the
+  /// current coordinates. [full] is the explicit full recalculation.
+  Future<void> _runAnalysis({bool full = false}) async {
+    if (_locationRequest) return;
+    setState(() {
+      _locationRequest = true;
+      _locationError = null;
+      _locationNotice = null;
+    });
+    try {
+      final notice = await AppLocator.propertyVerificationRepo
+          .analyzeLocationIntelligence(
+            component.detail.property.propertyId.toString(),
+            full: full,
+          );
+      if (mounted && notice != null) setState(() => _locationNotice = notice);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _locationError = 'Could not queue the calculation. Try again.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _locationRequest = false);
+    }
+    if (mounted && _locationError == null) await _refreshLocation();
+  }
+
+  Future<void> _queueLocation([String? category]) async {
+    if (_locationRequest) return;
+    setState(() {
+      _locationRequest = true;
+      _locationError = null;
+      _locationNotice = null;
+    });
+    try {
+      await AppLocator.propertyVerificationRepo.queueLocationIntelligence(
+        component.detail.property.propertyId.toString(),
+        category: category,
+      );
+      if (mounted && category != null) {
+        setState(() => _locationNotice = 'Queued $category for recalculation.');
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _locationError = 'Could not queue the calculation. Try again.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _locationRequest = false);
+    }
+    if (mounted && _locationError == null) await _refreshLocation();
+  }
+
+  Component _analysisContext(LocationResearchAssociation location) {
+    final context = location.districtContext;
+    return div(classes: 'vd-info', [
+      h4([Component.text('Household and income')]),
+      if (context['district'] != null)
+        _infoRow(
+          'DOSM district and release',
+          "${context['district']}, ${context['state']} · ${context['date'] ?? 'Release unavailable'}",
+        ),
+      _infoRow(
+        'Median household income · RM/month',
+        _num(context['income_median'] as num?),
+      ),
+      _infoRow(
+        'Mean household income · RM/month',
+        _num(context['income_mean'] as num?),
+      ),
+      h4([Component.text('Environmental and disaster information')]),
+      _infoRow(
+        'Flood and disaster evidence',
+        'Not available — no verified flood or disaster dataset is integrated, '
+            'so no value is inferred',
+      ),
+    ]);
+  }
+
+  String _addressVerdict(String? status) => switch (status) {
+    'validated' =>
+      'Location confirmed by the address check (precise premise-level match).',
+    'partially_validated' =>
+      'Location confirmed by the user from an approximate or ambiguous match. '
+          'Measurements use these confirmed coordinates.',
+    'invalid' || 'invalidated' =>
+      'The stored location is no longer confirmed. Re-verify the address before '
+          'relying on these measurements.',
+    _ =>
+      'No address confirmation is on record for this listing, so measurements '
+          'are not queued automatically. Use Run location analysis to measure '
+          'the stored coordinates explicitly.',
+  };
+
+  String _measurementStatus(String state) => switch (state) {
+    'pending' => 'Queued',
+    'running' => 'Calculating',
+    'current' => 'Calculated',
+    'validated' => 'Validated',
+    'calculated_unvalidated' => 'Calculated · parity unverified',
+    'stale' => 'Stale',
+    'failed' => 'Failed',
+    'unavailable' => 'Source unavailable',
+    _ => 'Not calculated',
+  };
+
+  final Set<String> _expanded64Groups = {'Nearby population'};
+
+  static const _locationGroups = <String, List<(String, String, String)>>{
+    'Nearby population': [
+      ('pop_500m', 'Population · 500 m', 'people'),
+      ('pop_1000m', 'Population · 1 km', 'people'),
+      ('pop_2000m', 'Population · 2 km', 'people'),
+      ('pop_3000m', 'Population · 3 km', 'people'),
+    ],
+    'Population by age': [
+      ('pop_age_0_14_500m', 'Age 0–14 · 500 m', 'people'),
+      ('pop_age_15_24_500m', 'Age 15–24 · 500 m', 'people'),
+      ('pop_age_25_34_500m', 'Age 25–34 · 500 m', 'people'),
+      ('pop_age_35_49_500m', 'Age 35–49 · 500 m', 'people'),
+      ('pop_age_50_64_500m', 'Age 50–64 · 500 m', 'people'),
+      ('pop_age_65_plus_500m', 'Age 65+ · 500 m', 'people'),
+      ('pop_age_0_14_1km', 'Age 0–14 · 1 km', 'people'),
+      ('pop_age_15_24_1km', 'Age 15–24 · 1 km', 'people'),
+      ('pop_age_25_34_1km', 'Age 25–34 · 1 km', 'people'),
+      ('pop_age_35_49_1km', 'Age 35–49 · 1 km', 'people'),
+      ('pop_age_50_64_1km', 'Age 50–64 · 1 km', 'people'),
+      ('pop_age_65_plus_1km', 'Age 65+ · 1 km', 'people'),
+    ],
+    'Residential surroundings': [
+      ('residential_building_count_500m', 'Residential building · 500 m', ''),
+      ('residential_building_count_1000m', 'Residential building · 1 km', ''),
+      (
+        'residential_building_density_500m_km2',
+        'Residential building density · 500 m',
+        'buildings/km²',
+      ),
+      (
+        'residential_building_density_1000m_km2',
+        'Residential building density · 1 km',
+        'buildings/km²',
+      ),
+      (
+        'residential_footprint_coverage_500m_pct',
+        'Residential footprint coverage · 500 m',
+        '%',
+      ),
+      (
+        'residential_footprint_coverage_1000m_pct',
+        'Residential footprint coverage · 1 km',
+        '%',
+      ),
+      (
+        'residential_landuse_coverage_500m_pct',
+        'Residential landuse coverage · 500 m',
+        '%',
+      ),
+      (
+        'residential_landuse_coverage_1000m_pct',
+        'Residential landuse coverage · 1 km',
+        '%',
+      ),
+    ],
+    'Nearby demand generators': [
+      ('office_pois_500m', 'Offices · 500 m', ''),
+      ('office_pois_1000m', 'Offices · 1 km', ''),
+      ('schools_count_500m', 'Schools · 500 m', ''),
+      ('schools_count_1000m', 'Schools · 1 km', ''),
+      (
+        'universities_colleges_count_500m',
+        'Universities and colleges · 500 m',
+        '',
+      ),
+      (
+        'universities_colleges_count_1000m',
+        'Universities and colleges · 1 km',
+        '',
+      ),
+      ('retail_pois_500m', 'Retail outlets · 500 m', ''),
+      ('retail_pois_1000m', 'Retail outlets · 1 km', ''),
+      ('malls_count_500m', 'Malls · 500 m', ''),
+      ('malls_count_1000m', 'Malls · 1 km', ''),
+      ('hospitals_count_500m', 'Hospitals · 500 m', ''),
+      ('hospitals_count_1000m', 'Hospitals · 1 km', ''),
+      ('supermarkets_count_500m', 'Supermarkets · 500 m', ''),
+      ('supermarkets_count_1000m', 'Supermarkets · 1 km', ''),
+    ],
+    'Food and beverage competition': [
+      ('fnb_competitors_500m', 'F&B competitors · 500 m', ''),
+      ('fnb_competitors_1000m', 'F&B competitors · 1 km', ''),
+      ('cafe_count_500m', 'Cafe · 500 m', ''),
+      ('cafe_count_1000m', 'Cafe · 1 km', ''),
+      ('restaurant_count_500m', 'Restaurant · 500 m', ''),
+      ('restaurant_count_1000m', 'Restaurant · 1 km', ''),
+      ('fast_food_count_500m', 'Fast food · 500 m', ''),
+      ('fast_food_count_1000m', 'Fast food · 1 km', ''),
+      (
+        'bakery_dessert_beverage_count_500m',
+        'Bakery, dessert and beverage outlets · 500 m',
+        '',
+      ),
+      (
+        'bakery_dessert_beverage_count_1000m',
+        'Bakery, dessert and beverage outlets · 1 km',
+        '',
+      ),
+    ],
+    'Public transport': [
+      ('nearest_transit_walk_m', 'Nearest transit stop (walking)', 'm'),
+      ('transit_stops_500m_walk', 'Transit stops · 500 m (walking)', ''),
+      ('transit_stops_1km_walk', 'Transit stops · 1 km (walking)', ''),
+      (
+        'weekday_transit_routes_1km_walk',
+        'Weekday transit routes · 1 km (walking)',
+        '',
+      ),
+      (
+        'weekday_departures_500m_walk_am',
+        'Weekday morning departures · 500 m (walking, AM)',
+        '',
+      ),
+    ],
+    'Road and network accessibility': [
+      ('nearest_major_road_m', 'Nearest major road', 'm'),
+      (
+        'road_intersection_density_500m_km2',
+        'Road intersection density · 500 m',
+        'intersections/km²',
+      ),
+      (
+        'road_length_density_500m_km_km2',
+        'Road length density · 500 m',
+        'km/km²',
+      ),
+      (
+        'osm_walkway_length_density_500m_km_km2',
+        'Walkway length density · 500 m',
+        'km/km²',
+      ),
+      (
+        'road_length_density_1km_km_km2',
+        'Road length density · 1 km',
+        'km/km²',
+      ),
+      (
+        'walk_isochrone_area_10min_km2',
+        'Walkable catchment area · 10 min',
+        'km²',
+      ),
+      (
+        'worldpop_walk_reachable_10min',
+        'Population reachable on foot · 10 min',
+        'people',
+      ),
+      (
+        'drive_isochrone_area_10min_km2',
+        'Drivable catchment area · 10 min',
+        'km²',
+      ),
+    ],
+    'Parking access': [
+      ('parking_facilities_500m', 'Parking facilities · 500 m', ''),
+      ('parking_facilities_1km', 'Parking facilities · 1 km', ''),
+      ('nearest_parking_distance_m', 'Nearest parking', 'm'),
+    ],
+  };
+
+  Component _expanded64Evidence(VerificationDetail detail) {
+    final research =
+        _liveLocation ?? detail.locationAnalysis.partB.researchAssociation;
+    final active = _locationActive(research);
+    if (active && _locationError == null) _scheduleLocationRefresh();
+    final observed = research.calculatedFeatures;
+    final coverageKnown = research.featureCount == 64;
+    const groups = _locationGroups;
+    const categoryKeys = [
+      'population',
+      'age',
+      'residential',
+      'demand',
+      'competition',
+      'transit',
+      'network',
+      'parking',
+    ];
+    final categories = Map.fromIterables(groups.keys, categoryKeys);
+    return div(classes: 'sw64-evidence', [
+      div(classes: 'sw64-head', [
+        div([
+          h3([Component.text('64 location features')]),
+          p(classes: 'small muted', [
+            Component.text(
+              'Measured from this listing\'s own coordinates at review time — '
+              'never carried over from the historical research dataset. '
+              'This evidence does not determine approval.',
+            ),
+          ]),
+        ]),
+        span(classes: 'sw64-count', [
+          Component.text(
+            coverageKnown
+                ? '$observed / 64 calculated · ${research.availableFeatures ?? 0} / 64 validated'
+                : 'Coverage unavailable',
+          ),
+        ]),
       ]),
       p(classes: 'small muted', [
+        Component.text(_measurementStatus(research.calculationStatus)),
+      ]),
+      if (!research.hasCoordinates)
+        p(classes: 'small muted', [
+          Component.text('Save a valid property location before calculating.'),
+        ]),
+      if (research.hasCoordinates)
+        p(classes: 'small muted', [
+          Component.text(_addressVerdict(research.addressValidationStatus)),
+        ]),
+      if (_locationError != null)
+        p(classes: 'small muted', [Component.text(_locationError!)]),
+      if (_locationError == null && _locationNotice != null)
+        p(classes: 'small muted', [Component.text(_locationNotice!)]),
+      button(
+        attributes: {
+          'type': 'button',
+          if (active || _locationRequest || !research.hasCoordinates)
+            'disabled': '',
+        },
+        events: events(onClick: () => unawaited(_runAnalysis())),
+        [
+          Component.text(
+            active
+                ? 'Analysis in progress'
+                : research.calculationStatus == 'failed'
+                ? 'Retry analysis'
+                : research.calculatedFeatures == 0
+                ? 'Run location analysis'
+                : 'Run missing measurements',
+          ),
+        ],
+      ),
+      button(
+        attributes: {
+          'type': 'button',
+          if (active ||
+              _locationRequest ||
+              !research.hasCoordinates ||
+              research.calculatedFeatures == 0)
+            'disabled': '',
+        },
+        events: events(onClick: () => unawaited(_runAnalysis(full: true))),
+        [Component.text('Recalculate everything')],
+      ),
+      button(events: events(onClick: () => unawaited(_refreshLocation())), [
+        Component.text('Refresh results'),
+      ]),
+      if (coverageKnown)
+        div(
+          classes: 'sw64-track',
+          attributes: {
+            'role': 'progressbar',
+            'aria-label': 'Calculated location features',
+            'aria-valuemin': '0',
+            'aria-valuemax': '64',
+            'aria-valuenow': '$observed',
+          },
+          [
+            div(attributes: {'style': 'width:${observed * 100 / 64}%'}, []),
+          ],
+        ),
+      if (!coverageKnown)
+        p(classes: 'small muted', [
+          Component.text(
+            'Measurements could not be resolved. Missing coordinates or unavailable sources may prevent analysis.',
+          ),
+        ]),
+      p(classes: 'small muted', [
         Component.text(
-          'A machine-learning score from the platform\'s research dataset. '
-          'It is experimental and is never used to verify a listing.',
+          'Zero is a measured value; unavailable and unvalidated inputs are never replaced with zero. '
+          'Open a group to view values, units and available source details.',
         ),
       ]),
-      _researchAssociationPanel(partB.researchAssociation),
+      for (final group in groups.entries) ...[
+        button(
+          classes: 'sw64-group',
+          attributes: {
+            'type': 'button',
+            'aria-expanded': '${_expanded64Groups.contains(group.key)}',
+          },
+          events: events(
+            onClick: () => setState(() {
+              if (!_expanded64Groups.remove(group.key)) {
+                _expanded64Groups.add(group.key);
+              }
+            }),
+          ),
+          [
+            span([Component.text(group.key)]),
+            span(classes: 'sw64-group-count', [
+              Component.text(
+                '${_measurementStatus(research.measurementCategories[categories[group.key]]?['status']?.toString() ?? '')} · '
+                '${group.value.where((row) => research.featureValues.containsKey(row.$1)).length}/${group.value.length} '
+                '${_expanded64Groups.contains(group.key) ? "−" : "+"}',
+              ),
+            ]),
+          ],
+        ),
+        if (_expanded64Groups.contains(group.key))
+          div(classes: 'sw64-rows', [
+            if (research.measurementCategories[categories[group.key]]
+                case final status?) ...[
+              if (status['last_success_at'] case final String timestamp)
+                p(classes: 'small muted', [
+                  Component.text(
+                    'Last successful calculation ${DateTime.tryParse(timestamp)?.toLocal() ?? timestamp}',
+                  ),
+                ]),
+              if (status['reason'] case final String reason)
+                p(classes: 'small muted', [Component.text(reason)]),
+              if (status['status'] == 'failed' ||
+                  status['status'] == 'unavailable' ||
+                  ((status['calculated'] as int? ?? 0) < group.value.length &&
+                      status['status'] == 'current'))
+                button(
+                  attributes: {
+                    'type': 'button',
+                    if (active || _locationRequest || !research.hasCoordinates)
+                      'disabled': '',
+                  },
+                  events: events(
+                    onClick: () =>
+                        unawaited(_queueLocation(categories[group.key])),
+                  ),
+                  [Component.text('Retry category')],
+                ),
+            ],
+            for (final row in group.value) _expanded64Row(research, row),
+          ]),
+      ],
+    ]);
+  }
+
+  Component _expanded64Row(
+    LocationResearchAssociation research,
+    (String, String, String) row,
+  ) {
+    final (key, label, unit) = row;
+    final value = research.featureValues[key];
+    final source = research.featureSources[key];
+    final method = research.featureMethods[key];
+    final status = _measurementStatus(research.featureStates[key] ?? '');
+    final imputable = research.imputableFeatures.contains(key);
+    final shown = value == null
+        ? status
+        : '${value == value.roundToDouble() ? value.toStringAsFixed(0) : value.toStringAsFixed(2)}${unit.isEmpty ? '' : ' $unit'}';
+    return div(classes: 'sw64-row', [
+      div([
+        span([Component.text(label)]),
+        if (source != null && source.isNotEmpty && value != null)
+          p(classes: 'sw64-source', [Component.text(source)]),
+        if (value != null && method != null)
+          p(classes: 'sw64-source', [Component.text(method)]),
+        if (value != null) p(classes: 'sw64-source', [Component.text(status)]),
+        if (value == null && imputable)
+          p(classes: 'sw64-source', [
+            Component.text('Model may impute; not measured'),
+          ]),
+      ]),
+      strong(classes: value == null ? 'sw64-missing' : 'sw64-value', [
+        Component.text(shown),
+      ]),
     ]);
   }
 
@@ -994,22 +1653,50 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
         ]),
       ]);
     }
+    final labels = {
+      for (final entries in _locationGroups.values)
+        for (final (key, label, _) in entries) key: label,
+    };
+    final contributions =
+        (research.explanation['contributions'] as Map? ?? const {}).entries
+            .where((entry) => entry.value is num)
+            .toList()
+          ..sort(
+            (left, right) =>
+                (right.value as num).abs().compareTo((left.value as num).abs()),
+          );
     return div(classes: 'stack', [
       div(classes: 'vd-info', [
         _infoRow(
-          'Research association score',
+          'PU location suitability · association score',
           _num(research.score),
         ),
+        h4([Component.text('Explainable AI')]),
+        if (contributions.isEmpty)
+          _unavailableNote(
+            research.explanationUnavailableReason ??
+                'No persisted SHAP explanation is available.',
+          ),
+        for (final feature in contributions.take(8))
+          _infoRow(
+            labels[feature.key] ?? feature.key.toString().replaceAll('_', ' '),
+            (feature.value as num).toStringAsFixed(4),
+          ),
+
         if ((research.label ?? '').trim().isNotEmpty)
           _infoRow('Model band', research.label!),
         _infoRow(
           'Model features available',
-          '${research.availableFeatures ?? 0} of ${research.featureCount ?? 0}',
+          research.modelAvailableFeatures != null &&
+                  research.modelFeatureCount != null
+              ? '${research.modelAvailableFeatures} of ${research.modelFeatureCount}'
+              : 'Coverage unavailable',
         ),
         if ((research.modelVersion ?? '').trim().isNotEmpty)
           _infoRow('Model version', research.modelVersion!),
       ]),
-      if (research.missingFeatures.isNotEmpty)
+      if (research.modelFeatureCount == research.featureCount &&
+          research.missingFeatures.isNotEmpty)
         div(classes: 'vd-note vd-note--warning', [
           span(classes: 'vd-note__symbol', [Component.text('!')]),
           Component.text(
@@ -1021,8 +1708,8 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
       p(classes: 'vd-source', [
         Component.text(
           'What this score means: ${research.scoreMeaning.isEmpty ? 'a '
-              'statistical association with positive examples in the research '
-              'dataset' : research.scoreMeaning}. It is not a probability of '
+                    'statistical association with positive examples in the research '
+                    'dataset' : research.scoreMeaning}. It is not a probability of '
           'business success.',
         ),
       ]),
@@ -1094,9 +1781,7 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
             span(classes: 'vd-row__label', [
               Component.text(_policyLabel(policy.domain)),
             ]),
-            strong(classes: 'vd-row__value', [
-              Component.text(policy.note),
-            ]),
+            strong(classes: 'vd-row__value', [Component.text(policy.note)]),
           ]),
       ]),
     ]);
@@ -1119,9 +1804,10 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
     'accessibility' => 'Accessibility',
     'research_association' => 'AI research assessment',
     'feature snapshot' => 'The feature snapshot',
-    final other => other.startsWith('measurement: ')
-        ? 'The ${other.substring('measurement: '.length).replaceAll('_', ' ')} measurement'
-        : other.replaceAll('_', ' '),
+    final other =>
+      other.startsWith('measurement: ')
+          ? 'The ${other.substring('measurement: '.length).replaceAll('_', ' ')} measurement'
+          : other.replaceAll('_', ' '),
   };
 
   static String _policyLabel(String domain) => switch (domain) {
@@ -1134,338 +1820,151 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
 
   // --- Review sidebar (OUTSIDE the tabs) -----------------------------------------
 
-  Component _reviewSidebar(
-    VerificationDetail detail,
-    PropertyVerification verification,
-  ) {
-    final busy = context.watch(
-      adminNotifierProvider.select((state) => state.busyAction),
-    );
-    final listingStatus =
-        verification.statuses.statusOf(VerificationDimension.listing);
-    final ownershipStatus =
-        verification.statuses.statusOf(VerificationDimension.ownership);
-    final hasOwnershipEvidence = detail.documents.any(
-      (doc) => doc.isActive && doc.verificationType == VerificationDimension.ownership,
-    );
-
-    return aside(classes: 'card vd-side', [
-      div(classes: 'vd-side__top', [
-        span(classes: 'eyebrow', [Component.text('Decision workspace')]),
-        h3([Component.text('Review listing details')]),
-        p(classes: 'small muted', [
-          Component.text(
-            'Evaluate the submitted listing information. Ownership '
-            'validation remains a separate, independent requirement.',
-          ),
-        ]),
-        div(classes: 'vd-steps', [
-          span(classes: 'vd-step is-active', []),
-          span(
-            classes:
-                'vd-step${listingStatus != PropertyVerificationStatus.pending ? ' is-active' : ''}',
-            [],
-          ),
-          span(
-            classes:
-                'vd-step${_isTerminal(listingStatus) ? ' is-active' : ''}',
-            [],
-          ),
-        ]),
-      ]),
-      div(classes: 'vd-side__body', [
-        _dimensionPanel(
-          dimension: VerificationDimension.listing,
-          status: listingStatus,
-          busy: busy,
-        ),
-      ]),
-      div(classes: 'vd-side__body vd-side__body--bordered', [
-        _dimensionPanel(
-          dimension: VerificationDimension.ownership,
-          status: ownershipStatus,
-          busy: busy,
-          hasEvidence: hasOwnershipEvidence,
-        ),
-        _documents(detail),
-      ]),
-      div(classes: 'vd-publication', [
-        strong([
-          Component.text(
-            verification.publicationEligible
-                ? 'Publication-eligible'
-                : 'Publication blocked',
-          ),
-        ]),
-        p([
-          Component.text(
-            verification.publicationEligible
-                ? 'Both dimensions are verified. Publishing remains a '
-                    'separate administrative action.'
-                : 'Listing review and ownership verification are not both '
-                    'complete. Do not publish the property.',
-          ),
-        ]),
-      ]),
-      _activity(detail),
-    ]);
-  }
-
-  bool _isTerminal(PropertyVerificationStatus status) =>
-      status == PropertyVerificationStatus.verified ||
-      status == PropertyVerificationStatus.rejected ||
-      status == PropertyVerificationStatus.informationRequested;
-
-  /// One dimension's decision panel: status line, guidance, (for listing)
-  /// the reviewer checklist, and the action bar. Both dimensions render here
-  /// in the sidebar — never inside the content tabs.
-  Component _dimensionPanel({
-    required VerificationDimension dimension,
-    required PropertyVerificationStatus status,
-    required String? busy,
-    bool hasEvidence = true,
-  }) {
-    final propertyId = '${component.detail.verification.propertyId}';
-    final listing = dimension == VerificationDimension.listing;
-    final note = _latestReason(
-      dimension,
-      status,
-      component.detail.history,
-    );
-    final checksReady =
-        listing && _checks.length == _checkItems.length && _checkItems.isNotEmpty;
-
-    final actions = switch (status) {
-      // Nothing is actionable while a dimension has not been submitted; the
-      // guidance line below explains why.
-      PropertyVerificationStatus.notSubmitted => <Component>[],
-      PropertyVerificationStatus.pending => <Component>[
-          ActionButton(
-            busy != null ? 'Starting…' : 'Start review',
-            onClick: busy != null ? null : () => _dispatch('start', dimension, propertyId),
-            icon: 'visibility',
-          ),
-        ],
-      PropertyVerificationStatus.underReview => <Component>[
-          if (listing) _checklist(),
-          ActionButton(
-            busy != null ? 'Approving…' : 'Approve',
-            onClick: busy != null || (listing && !checksReady)
-                ? null
-                : () => _dispatch('approve', dimension, propertyId),
-            icon: 'check',
-          ),
-          div(classes: 'vd-action-row', [
-            ActionButton(
-              'Request corrections',
-              variant: 'secondary',
-              onClick: busy != null
-                  ? null
-                  : () => setState(() {
-                      _formFor = dimension;
-                      _formMode = 'information';
-                      _note = '';
-                    }),
-            ),
-            ActionButton(
-              'Reject',
-              variant: 'secondary',
-              onClick: busy != null
-                  ? null
-                  : () => setState(() {
-                      _formFor = dimension;
-                      _formMode = 'reject';
-                      _note = '';
-                    }),
-            ),
-          ]),
-        ],
-      _ => <Component>[],
-    };
-
-    // Ownership may only be APPROVED with evidence on file — approving
-    // listing facts never verifies ownership, and this surface must not let
-    // a click imply it did. Reject / request-information stay available.
-    final ownershipBlocked =
-        !listing &&
-        status == PropertyVerificationStatus.underReview &&
-        !hasEvidence;
-
-    return div(classes: 'stack', [
-      div(classes: 'vd-decision-line', [
-        h4([Component.text(dimension.label)]),
-        _statusPill(status),
-      ]),
-      p(classes: 'small muted', [Component.text(_dimensionMessage(status, listing))]),
-      if (ownershipBlocked)
-        div(classes: 'vd-authority', [
-          span(classes: 'vd-authority__icon', [Component.text('!')]),
-          div([
-            strong([Component.text('No authorization evidence')]),
-            p([
-              Component.text(
-                'No ownership or agency document is on file. Approval stays '
-                'unavailable — request the document or reject the claim.',
-              ),
-            ]),
-          ]),
-        ]),
-      if (note != null) div(classes: 'owner-note', [Component.text(note)]),
-      if (_formFor == dimension)
-        _noteForm(dimension)
-      else
-        ...actions,
-      if (listing && status == PropertyVerificationStatus.underReview)
-        p(classes: 'small muted', [
-          Component.text(
-            'These checks are reviewer confirmations, not proof of ownership '
-            'or a physical inspection.',
-          ),
-        ]),
-    ]);
-  }
-
-  static const _checkItems = <(String, String)>[
-    (
-      'completeness',
-      'Property information reviewed for completeness and consistency',
-    ),
-    (
-      'address',
-      'Address and coordinates reviewed against available evidence',
-    ),
-    (
-      'media',
-      'Photos, facilities and any unknowns are acknowledged',
-    ),
-  ];
-
-  Component _checklist() {
-    return div(classes: 'vd-checks', [
-      for (final (id, checkLabel) in _checkItems)
-        label(classes: 'vd-check', [
-          input(
-            type: InputType.checkbox,
-            checked: _checks.contains(id),
-            events: events(
-              onClick: () => setState(() {
-                _checks.contains(id) ? _checks.remove(id) : _checks.add(id);
-              }),
-            ),
-          ),
-          span([Component.text(checkLabel)]),
-        ]),
-    ]);
-  }
-
-  String _dimensionMessage(PropertyVerificationStatus status, bool listing) {
-    final what = listing ? 'listing' : 'ownership dimension';
-    return switch (status) {
-      PropertyVerificationStatus.notSubmitted => listing
-          ? 'No listing submission is recorded for this property yet.'
-          : 'Ownership has not been submitted. It stays unverified until '
-              'evidence exists and a submission arrives.',
-      PropertyVerificationStatus.pending =>
-        'Submitted and waiting. Start the review to record that this '
-        '$what is being examined.',
-      PropertyVerificationStatus.underReview => listing
-          ? 'Confirm the checklist, then approve the listing details or '
-              'request changes.'
-          : 'Under review. Approval requires evidence on file.',
-      PropertyVerificationStatus.verified => listing
-          ? 'Listing information reviewed. Authorization remains a separate '
-              'requirement and publication stays blocked until both are '
-              'verified.'
-          : 'Ownership verified on the strength of the submitted evidence.',
-      PropertyVerificationStatus.rejected =>
-        'Rejected. The submitter must correct and resubmit.',
-      PropertyVerificationStatus.informationRequested =>
-        'Information requested. The submitter must respond and resubmit.',
-    };
-  }
-
-  void _dispatch(String kind, VerificationDimension dimension, String propertyId) {
+  Future<void> _finalDecision(String action) async {
+    if (_decisionBusy) return;
+    final detail = component.detail;
+    final token = detail.finalReview['token'];
+    if (token is! String) return;
     final notifier = context.read(adminNotifierProvider.notifier);
-    switch (kind) {
-      case 'start':
-        unawaited(notifier.startDimensionReview(propertyId, dimension));
-      case 'approve':
-        unawaited(notifier.approveDimension(propertyId, dimension));
+    setState(() => _decisionBusy = true);
+    try {
+      await notifier.finalDecision('${detail.property.propertyId}', {
+        'action': action,
+        'token': token,
+        'reviewed': _checks.toList(),
+        if (action == 'reject' || action == 'information') ...{
+          'component': _affectedComponent,
+          'reason': _note.trim(),
+        },
+      });
+    } finally {
+      if (mounted) setState(() => _decisionBusy = false);
     }
   }
 
-  Component _noteForm(VerificationDimension dimension) {
-    final rejecting = _formMode == 'reject';
-    final tooShort = rejecting && _note.trim().length < 8;
-    final empty = _note.trim().isEmpty;
-    final invalid = rejecting ? tooShort : empty;
-    final notifier = context.read(adminNotifierProvider.notifier);
-    final propertyId = '${component.detail.property.propertyId}';
-
-    return div(classes: 'reject-form stack', [
-      Field(
-        labelText: rejecting
-            ? 'Reason shown to the submitter'
-            : 'What the submitter must provide',
-        hint: rejecting ? 'Minimum 8 characters.' : 'Be specific and actionable.',
-        child: textarea(
-          [],
-          attributes: {
-            'rows': '3',
-            'placeholder': rejecting
-                ? 'Why is this being rejected?'
-                : 'What evidence or correction is needed?',
-            'aria-label': rejecting ? 'Rejection reason' : 'Information request',
-          },
-          // Rebuild on every keystroke so the confirm action's enabled state
-          // tracks the note (an untracked mutation left the button stuck on
-          // its stale disabled state).
-          events: events<String>(onInput: (v) => setState(() => _note = v)),
-        ),
-      ),
-      div(classes: 'vd-action-row', [
-        ActionButton(
-          rejecting ? 'Confirm reject' : 'Send request',
-          onClick: invalid
-              ? null
-              : () {
-                final note = _note.trim();
-                unawaited(
-                  (rejecting
-                          ? notifier.rejectDimension(propertyId, dimension, note)
-                          : notifier.requestInformation(
-                              propertyId,
-                              dimension,
-                              note,
-                            ))
-                      .whenComplete(() {
-                    if (mounted) {
-                      setState(() {
-                        _formFor = null;
-                        _note = '';
-                      });
-                    }
-                  }),
-                );
-              },
-        ),
-        ActionButton(
-          'Cancel',
-          variant: 'secondary',
-          onClick: () => setState(() {
-            _formFor = null;
-            _note = '';
-          }),
-        ),
+  Component _reviewSidebar(VerificationDetail detail) {
+    final review = detail.finalReview;
+    final blockers =
+        (review['blockers'] as List?)?.whereType<String>() ?? const <String>[];
+    final enabled = !_decisionBusy && review['token'] is String;
+    final published = review['published'] == true;
+    final approved = review['approved'] == true;
+    final ready = blockers.isEmpty && _checks.length == 3;
+    return aside(classes: 'card vd-side', [
+      div(classes: 'vd-side__top', [
+        h3([Component.text('Property decision')]),
       ]),
-      if (invalid)
-        p(classes: 'field__error', [
-          Component.text(
-            rejecting
-                ? 'Add at least 8 characters before rejecting.'
-                : 'Describe what the submitter must provide.',
+      div(classes: 'vd-side__body', [
+        if (!approved) ...[
+          for (final (id, tab, title) in const [
+            ('property', 'overview', 'Property information reviewed'),
+            ('ownership', 'ownership', 'Ownership evidence reviewed'),
+            ('panorama', 'panorama', '360-degree panorama reviewed'),
+          ])
+            label(classes: 'vd-check', [
+              input(
+                type: InputType.checkbox,
+                checked: _checks.contains(id),
+                disabled:
+                    !enabled ||
+                    _tab != tab ||
+                    (id == 'panorama' && !_panoramaReady),
+                events: events(
+                  onClick: () => setState(() {
+                    if (!_checks.add(id)) _checks.remove(id);
+                  }),
+                ),
+              ),
+              span([Component.text(title)]),
+            ]),
+          for (final blocker in blockers)
+            p(classes: 'small muted', [Component.text(blocker)]),
+          ActionButton(
+            'Approve & Publish Property',
+            onClick: enabled && ready
+                ? () => unawaited(_finalDecision('approve'))
+                : null,
           ),
-        ]),
+        ],
+        if (approved || published)
+          ActionButton(
+            published ? 'Unpublish Property' : 'Publish Property',
+            onClick: enabled && (published || blockers.isEmpty)
+                ? () => unawaited(
+                    _finalDecision(published ? 'unpublish' : 'publish'),
+                  )
+                : null,
+          ),
+        ActionButton(
+          'Reject Property',
+          variant: 'secondary',
+          onClick: enabled
+              ? () => setState(() => _decisionForm = 'reject')
+              : null,
+        ),
+        ActionButton(
+          'Request Additional Information',
+          variant: 'secondary',
+          onClick: enabled
+              ? () => setState(() => _decisionForm = 'information')
+              : null,
+        ),
+        if (_decisionForm != null) ...[
+          label([
+            Component.text('Affected evidence'),
+            select(
+              events: events<List<String>>(
+                onChange: (value) {
+                  if (value.isNotEmpty) {
+                    setState(() => _affectedComponent = value.first);
+                  }
+                },
+              ),
+              [
+                for (final (id, name) in const [
+                  ('property', 'Property information'),
+                  ('ownership', 'Ownership evidence'),
+                  ('inspection', 'Agent inspection'),
+                  ('panorama', '360-degree panorama'),
+                ])
+                  option(
+                    value: id,
+                    attributes: id == _affectedComponent
+                        ? {'selected': ''}
+                        : {},
+                    [Component.text(name)],
+                  ),
+              ],
+            ),
+          ]),
+          label([
+            Component.text('Reason'),
+            textarea(
+              events: events<String>(
+                onInput: (value) => setState(() => _note = value),
+              ),
+              [],
+            ),
+          ]),
+          ActionButton(
+            'Record decision',
+            onClick: enabled && _note.trim().isNotEmpty
+                ? () => unawaited(_finalDecision(_decisionForm!))
+                : null,
+          ),
+          ActionButton(
+            'Cancel',
+            variant: 'secondary',
+            onClick: _decisionBusy
+                ? null
+                : () => setState(() {
+                    _decisionForm = null;
+                    _note = '';
+                  }),
+          ),
+        ],
+      ]),
+      _activity(detail),
     ]);
   }
 
@@ -1481,9 +1980,7 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
           ),
         ])
       else
-        div(classes: 'stack', [
-          for (final doc in documents) _documentRow(doc),
-        ]),
+        div(classes: 'stack', [for (final doc in documents) _documentRow(doc)]),
       if (_downloadError != null)
         p(classes: 'field__error', [Component.text(_downloadError!)]),
     ]);
@@ -1516,20 +2013,45 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
   }
 
   Component _activity(VerificationDetail detail) {
-    final events = detail.history.reversed.take(8).toList();
+    final recentEvents = detail.history.reversed.take(8).toList();
     return div(classes: 'vd-activity', [
-      h4(classes: 'vd-group-title', [Component.text('Review activity')]),
-      if (events.isEmpty)
-        p(classes: 'small muted', [
-          Component.text(
-            'No events yet — submissions, decisions and evidence uploads '
-            'appear here.',
+      if (component.showPanorama)
+        button(
+          classes: 'vd-history-toggle',
+          attributes: {
+            'type': 'button',
+            'aria-expanded': '$_activityExpanded',
+            'aria-controls': 'vd-review-history',
+          },
+          events: events(
+            onClick: () =>
+                setState(() => _activityExpanded = !_activityExpanded),
           ),
-        ])
+          [
+            Component.text('Review activity (${recentEvents.length} recent)'),
+            Icon(_activityExpanded ? 'expand_less' : 'expand_more', size: 'sm'),
+          ],
+        )
       else
-        div(classes: 'stack', [
-          for (final event in events) _eventRow(event),
-        ]),
+        h4(classes: 'vd-group-title', [Component.text('Review activity')]),
+      div(
+        id: 'vd-review-history',
+        attributes: {
+          if (component.showPanorama && !_activityExpanded) 'hidden': '',
+        },
+        [
+          if (recentEvents.isEmpty)
+            p(classes: 'small muted', [
+              Component.text(
+                'No events yet — submissions, decisions and evidence uploads appear here.',
+              ),
+            ])
+          else
+            div(classes: 'stack', [
+              for (final event in recentEvents) _eventRow(event),
+            ]),
+        ],
+      ),
     ]);
   }
 
@@ -1596,7 +2118,11 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
 
   /// The method note for a count metric, surfacing the backend's own status
   /// flag when the value could not be computed cleanly.
-  static String _countNote(VerificationGeoFeatures? geo, String key, String fallback) {
+  static String _countNote(
+    VerificationGeoFeatures? geo,
+    String key,
+    String fallback,
+  ) {
     if (geo == null) return 'Not calculated for this property';
     final status = switch (key) {
       'competitor_status' => geo.competitorStatus,
@@ -1638,10 +2164,11 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
   Component _infoRow(String label, String value, {String? fallback}) =>
       div(classes: 'vd-row', [
         span(classes: 'vd-row__label', [Component.text(label)]),
-        strong(
-          classes: 'vd-row__value',
-          [Component.text(value.trim().isEmpty ? (fallback ?? 'Not provided') : value)],
-        ),
+        strong(classes: 'vd-row__value', [
+          Component.text(
+            value.trim().isEmpty ? (fallback ?? 'Not provided') : value,
+          ),
+        ]),
       ]);
 
   Component _statusPill(PropertyVerificationStatus status) => Pill(
@@ -1672,39 +2199,12 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
   }
 
   static String _fullAddress(VerificationProperty property) {
-    final parts = [
-      property.address,
-      property.city,
-      property.state,
-      property.postcode,
-    ]
-        .whereType<String>()
-        .map((part) => part.trim())
-        .where((part) => part.isNotEmpty);
+    final parts =
+        [property.address, property.city, property.state, property.postcode]
+            .whereType<String>()
+            .map((part) => part.trim())
+            .where((part) => part.isNotEmpty);
     return parts.isEmpty ? 'No address provided' : parts.join(', ');
-  }
-
-  /// The note the dimension is currently sitting on: the latest reject reason
-  /// or information request, surfaced only while the dimension still holds
-  /// that state — mirrors the backend's `_requested_corrections` rule.
-  String? _latestReason(
-    VerificationDimension dimension,
-    PropertyVerificationStatus status,
-    List<VerificationReviewEvent> history,
-  ) {
-    if (status != PropertyVerificationStatus.rejected &&
-        status != PropertyVerificationStatus.informationRequested) {
-      return null;
-    }
-    for (final event in history.reversed) {
-      if (event.verificationType != dimension) continue;
-      final isNote = event.action.endsWith('_rejected') ||
-          event.action.endsWith('_information_requested');
-      if (isNote && event.reason != null && event.reason!.isNotEmpty) {
-        return event.reason;
-      }
-    }
-    return null;
   }
 
   static String _fmtSize(int bytes) {
@@ -1759,10 +2259,7 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
   /// client only — the component is `@client` and this is called from a click
   /// handler.
   void _saveBytes(Uint8List bytes, String filename, String mime) {
-    final blob = web.Blob(
-      [bytes.toJS].toJS,
-      web.BlobPropertyBag(type: mime),
-    );
+    final blob = web.Blob([bytes.toJS].toJS, web.BlobPropertyBag(type: mime));
     final url = web.URL.createObjectURL(blob);
     web.HTMLAnchorElement()
       ..href = url

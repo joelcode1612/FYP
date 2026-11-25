@@ -24,6 +24,7 @@ import 'package:fyp/features/panorama_viewer/presentation/pages/entrepreneur_tou
 import 'package:fyp/features/panorama_viewer/presentation/pages/property_panorama_mobile_page.dart';
 import 'package:fyp/features/property_management/presentation/pages/sitewise_add_property_mobile_page.dart';
 import 'package:fyp/features/authentication/presentation/pages/provider_mfa_mobile_page.dart';
+import 'package:fyp/features/authentication/presentation/pages/provider_onboarding_mobile_page.dart';
 import 'package:fyp/features/property_management/presentation/pages/provider_property_detail_mobile_page.dart';
 import 'package:fyp/features/property_management/presentation/pages/provider_submission_success_page.dart';
 import 'package:fyp/features/property_verification/presentation/pages/provider_verification_mobile_page.dart';
@@ -32,7 +33,7 @@ import 'package:fyp/shared/presentation/layouts/provider_tab_host.dart';
 import 'package:fyp/shared/presentation/components/not_found_mobile_page.dart';
 import 'package:fyp/features/capture_360/presentation/pages/ar_capture_mobile_page.dart';
 import 'package:fyp/features/panorama_viewer/presentation/pages/tour_preview_mobile_page.dart';
-import 'package:fyp/presentation/mobile/entrepreneur/pages/research_question_mobile_page.dart';
+import 'package:fyp/features/assessment/presentation/pages/research_question_mobile_page.dart';
 
 /// Centralised route table for the Flutter app (mobile tree only).
 ///
@@ -210,9 +211,8 @@ abstract final class AppRoutes {
       // mobile Provider workspace, and an old deep link falls through to the
       // catch-all not-found page below instead of resurrecting a removed
       // screen. The backend enquiry endpoints and records are untouched.
-      // Account-level provider verification. Distinct from per-listing
-      // verification: this is the provider's own standing with SiteWise, and
-      // the screen renders the real server status rather than a placeholder.
+      // Agent account verification. Owner access is handled by invitation
+      // activation. Per-property verification uses its own routes.
       '/provider/verification' => (
         RouteAccess.workspace,
         () => const ProviderVerificationMobilePage(),
@@ -228,6 +228,10 @@ abstract final class AppRoutes {
               ? settings.arguments as MfaEntryRequest
               : null,
         ),
+      ),
+      '/provider/onboarding' => (
+        RouteAccess.workspace,
+        () => const ProviderOnboardingMobilePage(),
       ),
       // The single Add Property form for BOTH provider roles — same screen,
       // fields, validation and endpoints, and the same draft, photo,
@@ -289,16 +293,18 @@ abstract final class AppRoutes {
       assessmentQuestionnaire => (
         RouteAccess.workspace,
         () => switch (settings.arguments) {
-          final String id when id.trim().isNotEmpty =>
-            QuestionnaireScreen(assessmentId: id),
+          final String id when id.trim().isNotEmpty => QuestionnaireScreen(
+            assessmentId: id,
+          ),
           _ => const HomeScreen(),
         },
       ),
       assessmentReview => (
         RouteAccess.workspace,
         () => switch (settings.arguments) {
-          final String id when id.trim().isNotEmpty =>
-            ReviewScreen(assessmentId: id),
+          final String id when id.trim().isNotEmpty => ReviewScreen(
+            assessmentId: id,
+          ),
           _ => const HomeScreen(),
         },
       ),

@@ -1,0 +1,18 @@
+{
+  "modified": [
+    "backend/src/sitewise/services/property_verification_service.py",
+    "fyp_jaspr_web/lib/features/property_verification/presentation/components/verification_detail_view.dart",
+    "backend/src/sitewise/api/v1/users.py",
+    "backend/src/sitewise/api/v1/staff.py",
+    "fyp_jaspr_web/lib/features/administration/presentation/pages/user_detail_page.dart",
+    "backend/src/sitewise/services/agent_inspection_policy.py",
+    "backend/src/sitewise/api/v1/agent_only_flow.py",
+    "fyp_mobile_app/lib/features/property_management/presentation/pages/provider_owner_requests_mobile_page.dart",
+    "backend/src/sitewise/repositories/agent_assignment_repository.py",
+    "backend/tests/test_agent_inspection_entry.py",
+    "backend/tests/api/test_agent_capture_order.py"
+  ],
+  "created": [
+    "backend/tests/test_admin_workflow_completion.py"
+  ]
+}

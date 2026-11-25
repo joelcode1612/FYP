@@ -36,8 +36,10 @@ class OwnerListingResult {
   };
 
   factory OwnerListingResult.fromResponse(Map<String, dynamic> response) {
-    final data = (response['data'] as Map?)?.cast<String, dynamic>() ?? const {};
-    final enrichment = (response['enrichment'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final data =
+        (response['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final enrichment =
+        (response['enrichment'] as Map?)?.cast<String, dynamic>() ?? const {};
     final features = (enrichment['features'] as Map?)?.cast<String, dynamic>();
     return OwnerListingResult(
       propertyId: (data['id'] as num?)?.toInt() ?? 0,
@@ -67,9 +69,14 @@ class ApiPropertyRepository implements PropertyRepository {
     final properties = <CommercialProperty>[];
     const batchSize = 200;
     for (var start = 0; start < refs.length; start += batchSize) {
-      final query = refs.skip(start).take(batchSize)
-          .map((ref) => 'ids=${Uri.encodeQueryComponent(ref)}').join('&');
-      final response = await WebAuth.request('/api/v1/catalog/properties/by-ids?$query');
+      final query = refs
+          .skip(start)
+          .take(batchSize)
+          .map((ref) => 'ids=${Uri.encodeQueryComponent(ref)}')
+          .join('&');
+      final response = await WebAuth.request(
+        '/api/v1/catalog/properties/by-ids?$query',
+      );
       final rows = (response['data'] as List).cast<Map<String, dynamic>>();
       properties.addAll(rows.map(fromJson));
     }
@@ -107,31 +114,28 @@ class ApiPropertyRepository implements PropertyRepository {
 
     // A bounded worker pool overlaps HTTP latency. Each batch is written at
     // its offset, so response completion order cannot shuffle property cards.
-    final pages = List<List<CommercialProperty>?>.filled(
-      remainingPages,
-      null,
-    );
+    final pages = List<List<CommercialProperty>?>.filled(remainingPages, null);
     final workerCount = remainingPages < maxConcurrentPages
         ? remainingPages
         : maxConcurrentPages;
 
     Future<void> fetchWorker(int worker) async {
-      for (var pageIndex = worker;
-          pageIndex < remainingPages;
-          pageIndex += workerCount) {
+      for (
+        var pageIndex = worker;
+        pageIndex < remainingPages;
+        pageIndex += workerCount
+      ) {
         final offset = (pageIndex + 1) * pageSize;
         final response = await WebAuth.request(
           '/api/v1/catalog/properties?limit=$pageSize&offset=$offset',
         );
-        final rows = (response['data'] as List)
-            .cast<Map<String, dynamic>>();
+        final rows = (response['data'] as List).cast<Map<String, dynamic>>();
         pages[pageIndex] = rows.map(fromJson).toList(growable: false);
       }
     }
 
     await Future.wait([
-      for (var worker = 0; worker < workerCount; worker++)
-        fetchWorker(worker),
+      for (var worker = 0; worker < workerCount; worker++) fetchWorker(worker),
     ]);
     return List.unmodifiable([
       ...firstPage,
@@ -159,9 +163,7 @@ class ApiPropertyRepository implements PropertyRepository {
     // only here to satisfy the domain interface. This previously returned an
     // empty list, which left "My Properties" blank even for owners with real
     // listings; the owner-scoped endpoint is the authoritative source.
-    final response = await WebAuth.request(
-      '/api/v1/properties/listings/mine',
-    );
+    final response = await WebAuth.request('/api/v1/properties/listings/mine');
     final rows = (response['data'] as List? ?? const [])
         .whereType<Map<String, dynamic>>();
     return List.unmodifiable(rows.map(_ownerRowToProperty));
@@ -186,12 +188,14 @@ class ApiPropertyRepository implements PropertyRepository {
       city: '${row['city'] ?? ''}',
       state: '${row['state'] ?? ''}',
       postcode: '${row['postcode'] ?? ''}',
-      rentalRm: (row['rental_price'] as num?)?.toDouble() ?? 0,
-      sizeSqft: (row['size_sqft'] as num?)?.toDouble() ?? 0,
-      latitude: (row['latitude'] as num?)?.toDouble() ?? 0,
-      longitude: (row['longitude'] as num?)?.toDouble() ?? 0,
+      rentalRm: (row['rental_price'] as num?)?.toDouble(),
+      sizeSqft: (row['size_sqft'] as num?)?.toDouble(),
+      latitude: (row['latitude'] as num?)?.toDouble(),
+      longitude: (row['longitude'] as num?)?.toDouble(),
       propertyType: '${row['property_type'] ?? ''}',
-      verification: _ownerVerification('${row['verification_status'] ?? 'draft'}'),
+      verification: _ownerVerification(
+        '${row['verification_status'] ?? 'draft'}',
+      ),
       suitabilityScore: 0,
       hasSuitabilityScore: false,
       ownerId: '${row['owner_user_id'] ?? ''}',
@@ -230,7 +234,9 @@ class ApiPropertyRepository implements PropertyRepository {
   /// unpublished, then enriches it from the PostGIS data and reports that
   /// outcome separately. Errors propagate to the caller so the UI can show
   /// the backend's own message instead of pretending a save happened.
-  Future<OwnerListingResult> submitOwnerListing(Map<String, dynamic> body) async {
+  Future<OwnerListingResult> submitOwnerListing(
+    Map<String, dynamic> body,
+  ) async {
     final response = await WebAuth.request(
       '/api/v1/properties/listings',
       method: 'POST',
@@ -267,10 +273,7 @@ class ApiPropertyRepository implements PropertyRepository {
     final response = await WebAuth.request(
       '/api/v1/properties/listings/$propertyId/enrich',
       method: 'POST',
-      body: {
-        if (phase != null) 'phase': phase.wire,
-        if (force) 'force': true,
-      },
+      body: {if (phase != null) 'phase': phase.wire, if (force) 'force': true},
     );
     return PropertyEnrichmentSummary.fromJson(_enrichmentPayload(response));
   }
@@ -295,7 +298,9 @@ class ApiPropertyRepository implements PropertyRepository {
     return PropertyEnrichmentSummary.fromJson(_enrichmentPayload(response));
   }
 
-  static Map<String, dynamic> _enrichmentPayload(Map<String, dynamic> response) {
+  static Map<String, dynamic> _enrichmentPayload(
+    Map<String, dynamic> response,
+  ) {
     final data = response['data'];
     return data is Map<String, dynamic> ? data : response;
   }

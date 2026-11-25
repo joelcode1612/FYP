@@ -507,38 +507,87 @@ class _ActivityState extends State<AdminActivityPage> {
   }
 
   Component _detailsDialog(SecurityAuditEvent event) {
+    // SITEWISE_ACTIVITY_DETAILS_V1 — presentation only.
     String readable(String input) => input.replaceAll('_', ' ').replaceFirstMapped(
       RegExp(r'^[a-z]'), (match) => match.group(0)!.toUpperCase(),
     );
+    final details = event.details;
+    final hasRole = details.containsKey('previous_role') || details.containsKey('new_role');
+    final hasStatus = details.containsKey('previous_status') || details.containsKey('new_status');
+    final changeKeys = {'previous_role', 'new_role', 'previous_status', 'new_status'};
+    final otherDetails = details.entries.where((entry) => !changeKeys.contains(entry.key)).toList();
+    Component valueTile(String label, String? value, {bool current = false}) {
+      return div(classes: 'sa-dv-value${current ? ' sa-dv-value--current' : ''}', [
+        span(classes: 'sa-dv-label', [Component.text(label)]),
+        strong([Component.text(value == null || value.trim().isEmpty ? 'Not recorded' : value)]),
+      ]);
+    }
+    Component changeRow(String label, String? before, String? after) {
+      final unchanged = before != null && after != null && before == after;
+      return div(classes: 'sa-dv-change', [
+        div(classes: 'sa-dv-change-label', [
+          strong([Component.text(label)]),
+          if (unchanged) span(classes: 'sa-dv-unchanged', [const Component.text('Unchanged')]),
+        ]),
+        div(classes: 'sa-dv-change-values', [
+          valueTile('Previous', before),
+          span(classes: 'sa-dv-arrow', attributes: const {'aria-hidden': 'true'}, [const Icon('arrow_forward', size: 'sm')]),
+          valueTile('New', after, current: !unchanged && before != null && after != null),
+        ]),
+      ]);
+    }
     return SitewiseDialog(
-      title: 'Event details',
+      title: 'System activity — Event details',
       ariaLabel: 'System activity event details',
       wide: true,
+      panelClass: 'dialog--sa-event-details',
       onClose: () => setState(() => _selected = null),
-      body: div(classes: 'sa-dialog-body', [
-        div(classes: 'sa-dialog-intro', [
-          div(classes: 'sa-dialog-kicker', [
-            Component.text('${event.categoryLabel} · ${event.source}'),
+      body: div(classes: 'sa-dialog-body sa-dv-body', [
+        div(classes: 'sa-dv-summary', [
+          div(classes: 'sa-dv-symbol', [const Icon('shield', size: 'lg')]),
+          div(classes: 'sa-dv-summary-copy', [
+            div(classes: 'sa-dv-kicker', [Component.text('${event.categoryLabel} · ${event.source}')]),
+            h3([Component.text(event.title)]),
+            p([Component.text(event.summary)]),
           ]),
-          strong(classes: 'sa-dialog-title', [Component.text(event.title)]),
-          p(classes: 'sa-dialog-description', [Component.text(event.summary)]),
           StatusBadge(event.resultLabel, tone: _resultTone(event.result), dot: true),
         ]),
-        div(classes: 'sa-dialog-grid', [
-          InfoRow(icon: 'schedule', label: 'Recorded at', value: _when(event.createdAt)),
-          InfoRow(icon: 'person', label: 'Affected account', value: _account(event)),
-          InfoRow(icon: 'admin_panel_settings', label: 'Performed by', value: _actor(event)),
-          InfoRow(icon: 'badge', label: 'Account role', value: event.role ?? 'Not recorded'),
-          InfoRow(icon: 'bolt', label: 'Action', value: event.action),
-          InfoRow(icon: 'tag', label: 'Event ID', value: event.id),
-          for (final entry in event.details.entries)
-            InfoRow(icon: 'description', label: readable(entry.key), value: entry.value),
-        ]),
-        p(classes: 'sa-dialog-footnote', [
-          const Icon('shield', size: 'sm'),
-          const Component.text(
-            'Read-only audit record. Sensitive credentials and authentication tokens are not displayed.',
-          ),
+        div(classes: 'sa-dv-columns', [
+          div(classes: 'sa-dv-column', [
+            if (hasRole || hasStatus) div(classes: 'sa-dv-section', [
+              h3([const Icon('compare_arrows', size: 'sm'), const Component.text('Account changes')]),
+              if (hasRole) changeRow('Role', details['previous_role'], details['new_role']),
+              if (hasStatus) changeRow('Account status', details['previous_status'], details['new_status']),
+            ]),
+            div(classes: 'sa-dv-section', [
+              h3([const Icon('description', size: 'sm'), const Component.text('Audit information')]),
+              div(classes: 'sa-dv-fields', [
+                InfoRow(icon: 'bolt', label: 'Action', value: readable(event.action)),
+                InfoRow(icon: 'badge', label: 'Account role', value: event.role ?? 'Not recorded'),
+                for (final entry in otherDetails)
+                  InfoRow(icon: 'description', label: readable(entry.key), value: entry.value),
+              ]),
+            ]),
+          ]),
+          div(classes: 'sa-dv-column', [
+            div(classes: 'sa-dv-section', [
+              h3([const Icon('info', size: 'sm'), const Component.text('Event details')]),
+              div(classes: 'sa-dv-fields', [
+                InfoRow(icon: 'schedule', label: 'Recorded at', value: _when(event.createdAt)),
+                InfoRow(icon: 'person', label: 'Affected account', value: _account(event)),
+                InfoRow(icon: 'admin_panel_settings', label: 'Performed by', value: _actor(event)),
+                InfoRow(icon: 'tag', label: 'Event ID', value: event.id),
+                InfoRow(icon: 'source', label: 'Source', value: event.source),
+              ]),
+            ]),
+            div(classes: 'sa-dv-note', [
+              const Icon('shield', size: 'sm'),
+              div([
+                strong([const Component.text('Read-only audit record')]),
+                p([const Component.text('Sensitive credentials and authentication tokens are not displayed.')]),
+              ]),
+            ]),
+          ]),
         ]),
       ]),
       actions: [

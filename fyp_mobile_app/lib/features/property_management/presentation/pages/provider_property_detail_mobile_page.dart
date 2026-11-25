@@ -288,6 +288,83 @@ class _ProviderPropertyDetailMobilePageState
                           ? 'Not recorded'
                           : data.agent!.owner!.displayName,
                     ),
+                  _factRow('Built-up area', listing.sizeDisplay),
+                  _factRow(
+                    'Floor level',
+                    data.owner?.floorDescription ??
+                        data.agent?.facts?.floorDescription ??
+                        'Not provided',
+                  ),
+                  _factRow(
+                    'Unit position',
+                    data.owner?.unitPosition ??
+                        data.agent?.facts?.unitPosition ??
+                        'Not provided',
+                  ),
+                  _factRow(
+                    'Shop frontage',
+                    _feet(
+                      data.owner?.frontageFt ?? data.agent?.facts?.frontageFt,
+                    ),
+                  ),
+                  _factRow(
+                    'Furnishing',
+                    data.owner?.furnishing ??
+                        data.agent?.facts?.furnishing ??
+                        'Not provided',
+                  ),
+                  _factRow(
+                    'Owner-declared parking',
+                    _ownerParking(
+                      data.owner?.hasParking ?? data.agent?.facts?.hasParking,
+                    ),
+                  ),
+                  _factRow(
+                    'Availability',
+                    data.owner?.availability ??
+                        data.agent?.facts?.availability ??
+                        'Not provided',
+                  ),
+                  _factRow(
+                    'Minimum rental period',
+                    _lease(
+                      data.owner?.leaseDurationMonths ??
+                          data.agent?.facts?.leaseDurationMonths,
+                      data.owner?.leaseDurationNegotiable ??
+                          data.agent?.facts?.leaseDurationNegotiable,
+                    ),
+                  ),
+                  _factRow(
+                    'Available from',
+                    data.owner?.availableFrom ??
+                        data.agent?.facts?.availableFrom ??
+                        'Not provided',
+                  ),
+                  _factRow(
+                    'Rental deposit',
+                    _money(
+                      data.owner?.rentalDepositMyr ??
+                          data.agent?.facts?.rentalDepositMyr,
+                    ),
+                  ),
+                  _factRow(
+                    'Land tenure',
+                    data.owner?.tenure ??
+                        data.agent?.facts?.tenure ??
+                        'Not provided',
+                  ),
+                  _factRow(
+                    'Property title type',
+                    data.owner?.titleType ??
+                        data.agent?.facts?.titleType ??
+                        'Not provided',
+                  ),
+                  _factRow(
+                    'Landlord F&B permission (owner-declared)',
+                    data.owner?.landlordFnbPermission ??
+                        data.agent?.facts?.landlordFnbPermission ??
+                        'Not provided',
+                  ),
                   if (data.agent?.photos.isNotEmpty ?? false)
                     _factRow(
                       'Photographs',
@@ -529,6 +606,21 @@ class _ProviderPropertyDetailMobilePageState
       children: children,
     ),
   );
+
+  String _feet(double? value) =>
+      value == null ? 'Not provided' : '${value.toStringAsFixed(1)} ft';
+  String _money(double? value) =>
+      value == null ? 'Not provided' : 'RM ${value.toStringAsFixed(2)}';
+  String _ownerParking(bool? value) => value == null
+      ? 'Not sure'
+      : value
+      ? 'Available (owner-declared)'
+      : 'Not available (owner-declared)';
+  String _lease(int? months, bool? negotiable) => negotiable == true
+      ? 'Negotiable'
+      : months == null
+      ? 'Not provided'
+      : '$months months';
 
   Widget _factRow(String label, String value) => Padding(
     padding: const EdgeInsets.only(bottom: 14),

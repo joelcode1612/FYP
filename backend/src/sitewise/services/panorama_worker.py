@@ -23,6 +23,7 @@ matching this deployment's one-uvicorn-worker reality:
 from __future__ import annotations
 
 import logging
+import math
 import os
 import shutil
 import threading
@@ -32,7 +33,8 @@ from pathlib import Path
 
 from sitewise.db.session import Session, engine
 from sitewise.panorama.quality.registration_verification import RegistrationFrame
-from sitewise.panorama.stitcher import stitch_equirectangular
+from sitewise.panorama.stitcher import StitchOutcome, stitch_equirectangular
+from sitewise.panorama.sphere_math import Quat, UNIT_X, UNIT_Y
 from sitewise.services import capture_session_service as svc
 from sitewise.services import capture_storage, panorama_quality_service
 
@@ -84,7 +86,36 @@ def _report_progress(job_id: uuid.UUID, message: str) -> None:
         logger.warning("Progress update failed for job %s", job_id, exc_info=True)
 
 
-def _build_records(session_row, frames, frame_dir: Path) -> tuple[list[dict], list[str]]:
+def _plan_target(target_id: int, plan_version: str) -> tuple[float, float] | None:
+    """Return the documented yaw/pitch prior for a known 38-target plan."""
+    if not 1 <= target_id <= 38 or str(plan_version or "1") not in {"1", "2"}:
+        return None
+    middle = (0, 30, 60, 90, 120, 150, 180, -150, -120, -90, -60, -30)
+    upper = (-30, -60, -90, -120, -150, 180, 150, 120, 90, 60, 30, 0)
+    lower = middle
+    pitch = 35.0 if str(plan_version or "1") == "1" else 40.0
+    if target_id <= 12:
+        return float(middle[target_id - 1]), 0.0
+    if target_id == 13:
+        return 0.0, 90.0
+    if target_id <= 25:
+        return float(upper[target_id - 14]), pitch
+    if target_id <= 37:
+        return float(lower[target_id - 26]), -pitch
+    return 0.0, -90.0
+
+
+def _plan_orientation(yaw_deg: float, pitch_deg: float) -> Quat:
+    # Same right-handed +Y convention as sphere_math and the mobile target map.
+    return (
+        Quat.axis_angle(-yaw_deg, UNIT_Y)
+        * Quat.axis_angle(pitch_deg, UNIT_X)
+    ).normalized
+
+
+def _build_records(
+    session_row, frames, frame_dir: Path, *, use_measured: bool = True
+) -> tuple[list[dict], list[str]]:
     """Worker-side records for the stitcher, one per confirmed frame.
 
     ``capture_pose`` is the recorded device→world orientation; when the
@@ -94,29 +125,63 @@ def _build_records(session_row, frames, frame_dir: Path) -> tuple[list[dict], li
     """
     records: list[dict] = []
     problems: list[str] = []
+    plan = str(getattr(session_row, "capture_plan_version", "1") or "1")
+    measured: dict[int, Quat] = {}
+    for frame in frames:
+        if frame.upload_status != "confirmed":
+            continue
+        pose = frame.capture_pose
+        raw = pose if isinstance(pose, dict) else None
+        if raw is None and isinstance(pose, list) and len(pose) == 4:
+            raw = dict(zip(("x", "y", "z", "w"), pose))
+        if raw is None or not all(k in raw for k in ("x", "y", "z", "w")):
+            continue
+        try:
+            q = Quat(*(float(raw[k]) for k in ("x", "y", "z", "w")))
+            if all(math.isfinite(v) for v in (q.x, q.y, q.z, q.w)) and q.length > 1e-6:
+                measured[frame.target_index] = q.normalized
+        except (TypeError, ValueError):
+            continue
+
+    # A measured frame establishes the session's orientation origin. The plan
+    # supplies only missing poses; those inferred values remain transient and
+    # are explicitly labelled so they are never mistaken for sensor readings.
+    origin = Quat.identity()
+    if measured and use_measured:
+        anchor_id = min(measured)
+        anchor_target = _plan_target(anchor_id, plan)
+        if anchor_target is not None:
+            origin = measured[anchor_id] * _plan_orientation(*anchor_target).conjugate
+            origin = origin.normalized
     for frame in frames:
         if frame.upload_status != "confirmed":
             continue
         path = frame_dir / f"frame_{frame.target_index:02d}.jpg"
         pose = frame.capture_pose
+        metadata = pose if isinstance(pose, dict) else {}
+        yaw_pitch = _plan_target(frame.target_index, plan)
+        inferred = False
         if isinstance(pose, dict):
-            orientation = [
-                float(pose.get("x", 0.0)),
-                float(pose.get("y", 0.0)),
-                float(pose.get("z", 0.0)),
-                float(pose.get("w", 1.0)),
-            ]
+            q = measured.get(frame.target_index) if use_measured else None
             source_w = int(pose.get("sourceImageWidth") or 0)
             source_h = int(pose.get("sourceImageHeight") or 0)
             crop_x = int(pose.get("cropOffsetX") or 0)
             crop_y = int(pose.get("cropOffsetY") or 0)
         elif isinstance(pose, list) and len(pose) == 4:
-            orientation = [float(v) for v in pose]
+            q = measured.get(frame.target_index) if use_measured else None
             source_w = source_h = 0
             crop_x = crop_y = 0
         else:
-            problems.append(f"frame {frame.target_index} has no recorded pose")
-            continue
+            q = None
+            source_w = source_h = 0
+            crop_x = crop_y = 0
+        if q is None:
+            if yaw_pitch is None:
+                problems.append(f"frame {frame.target_index} has no usable capture-plan target")
+                continue
+            q = origin * _plan_orientation(*yaw_pitch)
+            inferred = True
+        orientation = [q.x, q.y, q.z, q.w]
         records.append(
             {
                 "targetId": frame.target_index,
@@ -128,6 +193,13 @@ def _build_records(session_row, frames, frame_dir: Path) -> tuple[list[dict], li
                 "sourceImageHeight": source_h,
                 "cropOffsetX": crop_x,
                 "cropOffsetY": crop_y,
+                "poseSource": "capture_plan_prior" if inferred else "measured_camera_orientation",
+                "targetYawDegrees": metadata.get("targetYawDegrees", yaw_pitch[0] if yaw_pitch else None),
+                "targetPitchDegrees": metadata.get("targetPitchDegrees", yaw_pitch[1] if yaw_pitch else None),
+                "focalLengthXPx": metadata.get("focalLengthXPx"),
+                "focalLengthYPx": metadata.get("focalLengthYPx"),
+                "principalPointXPx": metadata.get("principalPointXPx"),
+                "principalPointYPx": metadata.get("principalPointYPx"),
             }
         )
     return records, problems
@@ -147,6 +219,18 @@ def process_job(job_id: uuid.UUID, worker_id: str) -> None:
         session_id = session_row.id
         property_id = session_row.property_id
         frames = svc.list_capture_frames(db, session_id)
+        prior_panorama = svc.panorama_for_session(db, session_id)
+        if prior_panorama is not None and (
+            prior_panorama.published_at is not None
+            or str(prior_panorama.verification_status).lower()
+            in {"approved", "published", "verified"}
+        ):
+            svc.fail_job(
+                db,
+                job_id=job_id,
+                message="An approved panorama is read-only and was preserved.",
+            )
+            return
     _report_progress(job_id, f"Loading capture manifest: {len(frames)} frames…")
 
     confirmed = [f for f in frames if f.upload_status == "confirmed"]
@@ -190,14 +274,63 @@ def process_job(job_id: uuid.UUID, worker_id: str) -> None:
             _fail(job_id, f"The capture manifest is unusable: {detail}.")
             return
 
-        outcome = stitch_equirectangular(
-            records=records,
-            out_dir=out_dir,
-            width=STITCH_WIDTH,
-            refine_registration=True,
-            strict_photo_coverage=True,
-            progress=lambda message: _report_progress(job_id, message),
+        has_measured_poses = any(
+            r["poseSource"] == "measured_camera_orientation" for r in records
         )
+        try:
+            outcome = stitch_equirectangular(
+                records=records,
+                out_dir=out_dir,
+                width=STITCH_WIDTH,
+                refine_registration=True,
+                strict_photo_coverage=True,
+                progress=lambda message: _report_progress(job_id, message),
+            )
+        except Exception:
+            if not has_measured_poses:
+                raise
+            logger.exception(
+                "Measured-pose stitch raised for job %s; trying plan fallback",
+                job_id,
+            )
+            outcome = StitchOutcome(
+                ok=False,
+                message="Measured-pose stitch failed; capture-plan fallback will be attempted.",
+            )
+        if not outcome.ok and has_measured_poses:
+            # A camera-pose run can fail on noisy or inconsistent metadata.
+            # Retry through the established capture-plan registration path;
+            # each attempt gets its own output directory and leaves all source
+            # frames and any existing panorama untouched.
+            logger.warning(
+                "Measured-pose stitch failed for job %s; retrying capture-plan fallback: %s",
+                job_id,
+                outcome.message,
+            )
+            fallback_records, fallback_problems = _build_records(
+                session_row, confirmed, frame_dir, use_measured=False
+            )
+            fallback_dir = work_dir / "fallback_out"
+            fallback_dir.mkdir(parents=True, exist_ok=True)
+            fallback = stitch_equirectangular(
+                records=fallback_records,
+                out_dir=fallback_dir,
+                width=STITCH_WIDTH,
+                refine_registration=True,
+                strict_photo_coverage=True,
+                progress=lambda message: _report_progress(job_id, message),
+            )
+            if fallback.ok:
+                records, problems, outcome = fallback_records, fallback_problems, fallback
+                stored_attempt = "capture_plan_fallback"
+            else:
+                logger.error(
+                    "Capture-plan fallback also failed for job %s: %s",
+                    job_id,
+                    fallback.message,
+                )
+        else:
+            stored_attempt = "measured_pose" if has_measured_poses else "capture_plan_legacy"
         if not outcome.ok:
             _fail(job_id, outcome.message)
             return
@@ -210,6 +343,11 @@ def process_job(job_id: uuid.UUID, worker_id: str) -> None:
         # the stored coverage report, never gating the job, never altering
         # a byte. A verifier failure keeps the plain stitcher report.
         stored_report = dict(outcome.report)
+        stored_report["stitchingMethod"] = stored_attempt
+        stored_report["poseSources"] = {
+            "measured": sum(r["poseSource"] == "measured_camera_orientation" for r in records),
+            "capturePlanPrior": sum(r["poseSource"] == "capture_plan_prior" for r in records),
+        }
         _report_progress(job_id, "Verifying capture quality…")
         try:
             audit_frames = [
@@ -239,7 +377,14 @@ def process_job(job_id: uuid.UUID, worker_id: str) -> None:
             )
 
         _report_progress(job_id, "Uploading panorama to storage…")
-        storage_path = capture_storage.panorama_object_path(property_id, str(session_id))
+        if prior_panorama is None:
+            storage_path = capture_storage.panorama_object_path(
+                property_id, str(session_id)
+            )
+        else:
+            storage_path = capture_storage.panorama_candidate_object_path(
+                property_id, str(session_id), str(job_id)
+            )
         capture_storage.upload_bytes(storage_path, panorama_bytes)
 
         _report_progress(job_id, "Recording the canonical panorama…")

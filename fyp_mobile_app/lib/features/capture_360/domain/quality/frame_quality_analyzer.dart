@@ -212,7 +212,10 @@ class FrameQualityAnalyzer {
               'The photograph has an unusual shape (width/height '
               '${ratio.toStringAsFixed(2)}, expected about '
               '${target.toStringAsFixed(2)}). It is saved and still usable.',
-          evidence: <String, double>{'measured_ratio': ratio, 'target_ratio': target},
+          evidence: <String, double>{
+            'measured_ratio': ratio,
+            'target_ratio': target,
+          },
         ),
       );
     }
@@ -337,7 +340,8 @@ class FrameQualityAnalyzer {
         ),
       );
     }
-    if (stats.clippedHighlightFraction > thresholds.clippedHighlightFractionMax) {
+    if (stats.clippedHighlightFraction >
+        thresholds.clippedHighlightFractionMax) {
       findings.add(
         QualityFinding(
           check: QualityCheckId.exposure,
@@ -378,11 +382,8 @@ class FrameQualityAnalyzer {
     List<QualityFinding> findings,
   ) {
     final q = input.cameraOrientation;
-    final norm = math.sqrt(
-      q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w,
-    );
-    final finite =
-        q.x.isFinite && q.y.isFinite && q.z.isFinite && q.w.isFinite;
+    final norm = math.sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w);
+    final finite = q.x.isFinite && q.y.isFinite && q.z.isFinite && q.w.isFinite;
     final evidence = <String, double>{
       'quaternion_norm': norm,
       'alignment_error_deg': input.alignmentErrorDeg,
@@ -481,7 +482,8 @@ class FrameQualityAnalyzer {
           check: QualityCheckId.neighborOverlap,
           severity: QualitySeverity.info,
           code: 'overlap_unmeasured',
-          message: 'Overlap with the neighbouring photograph could not be '
+          message:
+              'Overlap with the neighbouring photograph could not be '
               'measured on this device.',
         ),
       );

@@ -50,8 +50,10 @@ def test_complete_listing_can_request_agent_with_optional_fields_absent(monkeypa
     monkeypatch.setattr(agent_only_flow, "_agent_profile", lambda *args: {
         "agent_id": 12, "display_name": "Agent",
     })
+    monkeypatch.setattr(agent_only_flow, "require_submitted_ownership_proof", Mock())
     session = Mock()
     session.execute.return_value.scalar.return_value = None
+    session.execute.return_value.mappings.return_value.first.return_value = None
 
     result = agent_only_flow.request_agent(
         10, agent_only_flow.AgentRequest(agent_user_id=uuid4()), session,
@@ -108,6 +110,8 @@ def test_inspection_gate_requires_confirmations_and_allows_blank_notes(monkeypat
     submit = Mock(return_value={})
     monkeypatch.setattr(agent_only_flow.PropertyVerificationService, "submit", submit)
     session = Mock()
+    monkeypatch.setattr(agent_inspection_policy, "ownership_proof_state", lambda *a: (True, 1))
+    monkeypatch.setattr(agent_inspection_policy, "ownership_submission_status", lambda *a: "pending")
     session.execute.return_value.scalars.return_value.all.return_value = []
     session.execute.return_value.all.return_value = []
     agent = SimpleNamespace(user_id=uuid4(), role="agent")

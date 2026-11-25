@@ -297,6 +297,14 @@ class TourPreviewViewModel extends ChangeNotifier {
 
   String get propertyId => tour?.propertyId ?? '';
 
+  /// The one sentence a failed panorama generation shows.
+  ///
+  /// The stitcher's own message (frame indices, inlier counts, OpenCV
+  /// failures) is a diagnostic: it goes to the internal log, never to the
+  /// screen, because the agent can only retry.
+  static const String _panoramaFailure =
+      'Unable to generate the panorama. Please try again.';
+
   Future<bool> regenerate() async {
     if (generating) return false;
     generating = true;
@@ -331,10 +339,12 @@ class TourPreviewViewModel extends ChangeNotifier {
       }
       // The photographs stay exactly as they are: a failed stitch is a
       // stitching problem, never a reason to recapture.
-      error = result.message;
+      CaptureLog.log('Panorama generation failed: ${result.message}');
+      error = _panoramaFailure;
       return false;
     } catch (e) {
-      error = 'Generation error: $e';
+      CaptureLog.log('Panorama generation threw: $e');
+      error = _panoramaFailure;
       return false;
     } finally {
       generating = false;
@@ -364,7 +374,8 @@ class TourPreviewViewModel extends ChangeNotifier {
       if (!result.success || result.panoramaPath == null) {
         // The photographs stay exactly as they are: a failed stitch is a
         // stitching problem, never a reason to recapture.
-        error = result.message;
+        CaptureLog.log('Sphere panorama generation failed: ${result.message}');
+        error = _panoramaFailure;
         return false;
       }
       final saved = await ServiceLocator.tourRepo.tourById(tourId);
@@ -385,7 +396,8 @@ class TourPreviewViewModel extends ChangeNotifier {
       await load();
       return true;
     } catch (e) {
-      error = 'Generation error: $e';
+      CaptureLog.log('Sphere panorama generation threw: $e');
+      error = _panoramaFailure;
       return false;
     }
   }
@@ -548,6 +560,12 @@ class TourPreviewViewModel extends ChangeNotifier {
   /// unavailable — never treated as a failure.
   Map<String, dynamic>? backendQuality;
 
+  /// Diagnostic counters over [deviceQuality].
+  ///
+  /// These are read from the persisted per-frame verdicts and are kept for
+  /// logging and for anyone debugging a capture. They are deliberately NOT
+  /// rendered: a count of photographs carrying warnings is an alarm the
+  /// agent cannot act on, so the preview shows no quality line at all.
   int get deviceQualityWarnings => deviceQuality.values
       .where((report) => report.verdict == QualityVerdict.warning)
       .length;
@@ -555,39 +573,6 @@ class TourPreviewViewModel extends ChangeNotifier {
   int get deviceQualityInvalid => deviceQuality.values
       .where((report) => report.verdict == QualityVerdict.invalid)
       .length;
-
-  /// The one-line photo-check summary for the preview, or `null` when every
-  /// analyzed frame passed (and at least one frame was analyzed).
-  String? get deviceQualityLine {
-    if (deviceQuality.isEmpty) return null;
-    final warnings = deviceQualityWarnings;
-    final invalid = deviceQualityInvalid;
-    if (warnings == 0 && invalid == 0) return null;
-    if (invalid > 0) {
-      return '$warnings photo(s) with quality warnings, $invalid unreadable — '
-          'retake any you want to improve.';
-    }
-    return '$warnings photo(s) with quality warnings — retaking any of them '
-        'is optional.';
-  }
-
-  /// The backend panorama-check line for the preview. Only spoken when the
-  /// server actually produced a report; silence means "not available yet".
-  String? get backendQualityLine {
-    final quality = backendQuality;
-    if (quality == null) return null;
-    final panorama = quality['panorama'];
-    if (panorama is! Map) return null;
-    final verdict = '${panorama['verdict'] ?? ''}';
-    final warnings = (panorama['warning_count'] as num?)?.toInt() ?? 0;
-    return switch (verdict) {
-      'pass' => 'Panorama checks passed (registration, coverage, seams).',
-      'warning' =>
-        'Panorama checks flagged $warnings issue(s) — the tour is still '
-            'saved and reviewable.',
-      _ => null,
-    };
-  }
 
   /// Public re-read of the server-side state (canonical panorama, inspection
   /// status, handoff record, queue state) without touching any local file.
@@ -697,8 +682,9 @@ class TourPreviewViewModel extends ChangeNotifier {
     final backendSessionId = backendSession?.backendSessionId;
     if (backendSessionId != null && backendSessionId.isNotEmpty) {
       try {
-        backendQuality = await ServiceLocator.apiClient
-            .get('/api/v1/360/sessions/$backendSessionId/quality');
+        backendQuality = await ServiceLocator.apiClient.get(
+          '/api/v1/360/sessions/$backendSessionId/quality',
+        );
       } on Object {
         backendQuality = null;
       }

@@ -8,6 +8,7 @@ import 'package:shared_logic/shared_logic.dart';
 
 import 'package:fyp/core/di/service_locator.dart';
 import 'package:fyp/core/routing/auth_route_guard.dart' show MfaEntryRequest;
+import 'package:fyp/core/routing/mobile_role.dart' show providerOnboardingRoute;
 import 'package:fyp/core/theme/sitewise_m3.dart';
 import 'package:fyp/core/theme/sitewise_theme.dart';
 import 'package:fyp/shared/presentation/components/provider_ui.dart';
@@ -215,12 +216,20 @@ class _ProviderMfaMobilePageState extends ConsumerState<ProviderMfaMobilePage> {
       _finishing = false;
       setState(() {
         _phase = _Phase.unreachable;
-        _error = 'Your authenticator verification could not be confirmed. '
+        _error =
+            'Your authenticator verification could not be confirmed. '
             'Check your connection and try again.';
       });
       return;
     }
     _finished = true;
+    final authState = ref.read(authNotifierProvider);
+    if (authState.status == AuthStatus.staffOnboarding) {
+      Navigator.of(
+        context,
+      ).pushNamedAndRemoveUntil(providerOnboardingRoute, (_) => false);
+      return;
+    }
     final entry = widget.entry;
     if (entry != null) {
       Navigator.of(context).pushNamedAndRemoveUntil(
@@ -253,11 +262,9 @@ class _ProviderMfaMobilePageState extends ConsumerState<ProviderMfaMobilePage> {
     }
     await ref.read(authNotifierProvider.notifier).signOut();
     if (!mounted) return;
-    Navigator.of(context).pushNamedAndRemoveUntil(
-      '/auth',
-      (_) => false,
-      arguments: 'login',
-    );
+    Navigator.of(
+      context,
+    ).pushNamedAndRemoveUntil('/auth', (_) => false, arguments: 'login');
   }
 
   Future<void> _copySetupKey() async {
@@ -327,7 +334,8 @@ class _ProviderMfaMobilePageState extends ConsumerState<ProviderMfaMobilePage> {
               ],
               _Phase.challenge => _verifyChildren(
                 headline: 'Verify your authenticator code',
-                description: 'Enter the six-digit code from your '
+                description:
+                    'Enter the six-digit code from your '
                     'authenticator app.',
                 stepper: const _MfaStepper(current: 2),
                 factorName: _target?.displayName,
@@ -335,7 +343,8 @@ class _ProviderMfaMobilePageState extends ConsumerState<ProviderMfaMobilePage> {
               _Phase.enrollSetup => _enrollSetupChildren(),
               _Phase.enrollVerify => _verifyChildren(
                 headline: 'Verify your authenticator code',
-                description: 'Enter the six-digit code from your '
+                description:
+                    'Enter the six-digit code from your '
                     'authenticator app.',
                 stepper: const _MfaStepper(current: 2),
                 factorName: null,
@@ -386,7 +395,8 @@ class _ProviderMfaMobilePageState extends ConsumerState<ProviderMfaMobilePage> {
             _panelHeading(
               icon: Icons.qr_code_2_rounded,
               title: '1. Scan the QR code',
-              body: 'Open an authenticator app (e.g. Google Authenticator or '
+              body:
+                  'Open an authenticator app (e.g. Google Authenticator or '
                   'Microsoft Authenticator) and scan the code below.',
             ),
             const SizedBox(height: 16),
@@ -470,9 +480,9 @@ class _ProviderMfaMobilePageState extends ConsumerState<ProviderMfaMobilePage> {
               title: 'Enter 6-digit code',
               body: factorName == null
                   ? 'Open your authenticator app and enter the current '
-                      '6-digit code.'
+                        '6-digit code.'
                   : 'Open your authenticator app and enter the current '
-                      '6-digit code for $factorName.',
+                        '6-digit code for $factorName.',
             ),
             const SizedBox(height: 16),
             _SixDigitField(
@@ -498,9 +508,9 @@ class _ProviderMfaMobilePageState extends ConsumerState<ProviderMfaMobilePage> {
           onPressed: _busy
               ? null
               : () => setState(() {
-                    _phase = _Phase.enrollSetup;
-                    _error = null;
-                  }),
+                  _phase = _Phase.enrollSetup;
+                  _error = null;
+                }),
           child: const Text('Back to previous step'),
         ),
     ];
@@ -508,58 +518,69 @@ class _ProviderMfaMobilePageState extends ConsumerState<ProviderMfaMobilePage> {
 
   // ----------------------------------------------------------- completion UI
 
-  List<Widget> _completeChildren() => [
-    const _MfaStepper(current: 3),
-    const SizedBox(height: 34),
-    Center(
-      child: Container(
-        width: 76,
-        height: 76,
-        alignment: Alignment.center,
-        decoration: const BoxDecoration(
-          color: SitewiseM3.greenWash,
-          shape: BoxShape.circle,
-        ),
-        child: const Icon(Icons.check_rounded, size: 40, color: SitewiseM3.green),
-      ),
-    ),
-    const SizedBox(height: 20),
-    Center(
-      child: Text(
-        'Verification complete',
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          fontFamily: kFontFamily,
-          fontSize: 20,
-          fontWeight: FontWeight.w800,
-          color: providerInk,
+  List<Widget> _completeChildren() {
+    final onboarding =
+        ref.watch(authNotifierProvider).status == AuthStatus.staffOnboarding;
+    return [
+      const _MfaStepper(current: 3),
+      const SizedBox(height: 34),
+      Center(
+        child: Container(
+          width: 76,
+          height: 76,
+          alignment: Alignment.center,
+          decoration: const BoxDecoration(
+            color: SitewiseM3.greenWash,
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            Icons.check_rounded,
+            size: 40,
+            color: SitewiseM3.green,
+          ),
         ),
       ),
-    ),
-    const SizedBox(height: 10),
-    Center(
-      child: Text(
-        widget.entry == null
-            ? 'This session now carries your second factor. You can return '
-                'to the workspace.'
-            : 'Your authenticator is confirmed and this session is verified. '
-                'Continuing opens your workspace.',
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          fontFamily: kFontFamily,
-          fontSize: 12.5,
-          height: 1.55,
-          color: providerMuted,
+      const SizedBox(height: 20),
+      Center(
+        child: Text(
+          'Verification complete',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontFamily: kFontFamily,
+            fontSize: 20,
+            fontWeight: FontWeight.w800,
+            color: providerInk,
+          ),
         ),
       ),
-    ),
-    const SizedBox(height: 28),
-    _primaryButton(
-      label: 'Continue to SiteWise',
-      icon: Icons.arrow_forward_rounded,
-      onPressed: _finish,
-    ),
-  ];
+      const SizedBox(height: 10),
+      Center(
+        child: Text(
+          onboarding
+              ? 'Your authenticator is confirmed. Finish your invitation '
+                    'onboarding to activate the account and open the workspace.'
+              : widget.entry == null
+              ? 'This session now carries your second factor. You can return '
+                    'to the workspace.'
+              : 'Your authenticator is confirmed and this session is verified. '
+                    'Continuing opens your workspace.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontFamily: kFontFamily,
+            fontSize: 12.5,
+            height: 1.55,
+            color: providerMuted,
+          ),
+        ),
+      ),
+      const SizedBox(height: 28),
+      _primaryButton(
+        label: onboarding ? 'Continue to onboarding' : 'Continue to SiteWise',
+        icon: Icons.arrow_forward_rounded,
+        onPressed: _finish,
+      ),
+    ];
+  }
 
   // ----------------------------------------------------------------- pieces
 
@@ -847,9 +868,7 @@ class _ManualKeyCard extends StatelessWidget {
           onTap: onToggle,
           child: Semantics(
             button: true,
-            label: open
-                ? 'Hide manual setup key'
-                : 'Enter setup key manually',
+            label: open ? 'Hide manual setup key' : 'Enter setup key manually',
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
               child: Row(
@@ -929,11 +948,7 @@ class _CodeTipsCard extends StatelessWidget {
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(
-          Icons.info_outline_rounded,
-          size: 18,
-          color: SitewiseM3.amber,
-        ),
+        Icon(Icons.info_outline_rounded, size: 18, color: SitewiseM3.amber),
         const SizedBox(width: 10),
         Expanded(
           child: Column(
@@ -1086,7 +1101,10 @@ class _SixDigitFieldState extends State<_SixDigitField> {
     final active = fieldFocused && index == code.length && !filled;
     return Container(
       height: 58,
-      margin: EdgeInsets.only(left: index == 0 ? 0 : 5, right: index == 5 ? 0 : 5),
+      margin: EdgeInsets.only(
+        left: index == 0 ? 0 : 5,
+        right: index == 5 ? 0 : 5,
+      ),
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: Colors.white,

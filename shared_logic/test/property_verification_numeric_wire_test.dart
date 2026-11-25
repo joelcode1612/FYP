@@ -73,6 +73,37 @@ void main() {
       expect(model.availableFeatures, 47);
     });
 
+    test('location intelligence values and states survive the wire unchanged', () {
+      final model = LocationResearchAssociation.fromJson({
+        'available': false,
+        'feature_count': 64,
+        'available_features': 2,
+        'calculated_features': 4,
+        'feature_values': {
+          'road_length_density_500m_km_km2': 3.25,
+          'osm_walkway_length_density_500m_km_km2': 'invalid',
+          'pop_2000m': 0.0,
+          'walk_isochrone_area_10min_km2': double.nan,
+        },
+        'feature_states': {
+          'road_length_density_500m_km_km2': 'validated',
+          'osm_walkway_length_density_500m_km_km2': 'calculated_unvalidated',
+          'pop_2000m': 'validated',
+          'walk_isochrone_area_10min_km2': 'unavailable',
+        },
+        'missing_features': ['walk_isochrone_area_10min_km2'],
+        'unvalidated_features': ['osm_walkway_length_density_500m_km_km2'],
+      });
+      expect(model.featureValues['road_length_density_500m_km_km2'], 3.25);
+      expect(model.featureValues['pop_2000m'], 0.0);
+      expect(model.featureValues.containsKey('osm_walkway_length_density_500m_km_km2'), isFalse);
+      expect(model.featureValues.containsKey('walk_isochrone_area_10min_km2'), isFalse);
+      expect(model.featureStates['osm_walkway_length_density_500m_km_km2'],
+          'calculated_unvalidated');
+      expect(model.featureStates['walk_isochrone_area_10min_km2'], 'unavailable');
+      expect(model.unvalidatedFeatures, contains('osm_walkway_length_density_500m_km_km2'));
+    });
+
     test('population only accepts the exact cumulative catchments', () {
       final incomplete = VerificationPopulation.fromJson({
         'pop_total_200m': 20,

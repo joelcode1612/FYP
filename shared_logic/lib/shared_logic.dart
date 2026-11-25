@@ -35,6 +35,7 @@ export 'src/domain/entities/explore.dart';
 export 'src/domain/entities/full_analysis.dart';
 export 'src/domain/entities/geo.dart';
 export 'src/domain/entities/location_intelligence.dart';
+export 'src/domain/entities/address_preview.dart';
 export 'src/domain/entities/owner_listing.dart';
 export 'src/domain/entities/property_enrichment.dart';
 // The staff verification detail carries its own `LocationAnalysis` (the
@@ -42,8 +43,7 @@ export 'src/domain/entities/property_enrichment.dart';
 // entrepreneur `LocationAnalysis` from location_intelligence.dart remains the
 // one name exported here. The verification type is still reachable through
 // PropertyVerificationDetail.locationAnalysis and by direct library import.
-export 'src/domain/entities/property_verification.dart'
-    hide LocationAnalysis;
+export 'src/domain/entities/property_verification.dart' hide LocationAnalysis;
 export 'src/domain/entities/pu_feature_coverage.dart';
 export 'src/domain/entities/pu_prediction.dart';
 export 'src/domain/entities/recommendation.dart';
@@ -76,6 +76,7 @@ export 'src/domain/repositories/recommendation_repository.dart';
 export 'src/domain/repositories/recommendation_search_repository.dart';
 export 'src/domain/repositories/saved_properties_repository.dart';
 export 'src/domain/repositories/staff_mfa_repository.dart';
+export 'src/domain/repositories/staff_onboarding_repository.dart';
 export 'src/domain/services/location_analysis_rules.dart';
 export 'src/domain/services/panorama_stitcher.dart';
 
@@ -187,6 +188,7 @@ export 'src/application/services/auth_service.dart';
 export 'src/application/services/property_service.dart';
 export 'src/application/services/property_verification_service.dart';
 export 'src/application/services/recommendation_service.dart';
+export 'src/application/services/staff_onboarding_service.dart';
 export 'src/application/services/tour_service.dart';
 export 'src/application/services/upload_service.dart';
 export 'src/application/services/verification_service.dart';
