@@ -88,7 +88,22 @@ def _report_progress(job_id: uuid.UUID, message: str) -> None:
 
 def _plan_target(target_id: int, plan_version: str) -> tuple[float, float] | None:
     """Return the documented yaw/pitch prior for a known 38-target plan."""
-    if not 1 <= target_id <= 38 or str(plan_version or "1") not in {"1", "2"}:
+    version = str(plan_version or "1")
+    if version == "3":
+        if not 1 <= target_id <= 56:
+            return None
+        middle = tuple(float(((i * 20 + 180) % 360) - 180) for i in range(18))
+        upper = tuple(float(((340 - i * 20 + 180) % 360) - 180) for i in range(18))
+        if target_id <= 18:
+            return middle[target_id - 1], 0.0
+        if target_id == 19:
+            return 0.0, 90.0
+        if target_id <= 37:
+            return upper[target_id - 20], 40.0
+        if target_id <= 55:
+            return middle[target_id - 38], -40.0
+        return 0.0, -90.0
+    if not 1 <= target_id <= 38 or version not in {"1", "2"}:
         return None
     middle = (0, 30, 60, 90, 120, 150, 180, -150, -120, -90, -60, -30)
     upper = (-30, -60, -90, -120, -150, 180, 150, 120, 90, 60, 30, 0)

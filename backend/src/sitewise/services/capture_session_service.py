@@ -63,6 +63,8 @@ CAPTURE_MODES: dict[str, int] = {
     BACKEND_38_MODE: 38,
     "device_38": 38,
     "device_38_panorama": 38,
+    "device_56": 56,
+    "device_56_backend": 56,
     "arcore_26": 26,
     "arcore_tour_30": 30,
 }

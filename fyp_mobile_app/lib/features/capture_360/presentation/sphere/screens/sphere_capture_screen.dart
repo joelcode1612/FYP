@@ -977,7 +977,12 @@ class _BottomPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final aligned = controller.activeErrorDeg <= controller.toleranceDeg;
+    // SITEWISE_CAPTURE_PLAN_UI_V1
+    final total = controller.targets.length;
+    final active = controller.activeTarget;
+    final aligned = active != null &&
+        !controller.moving &&
+        controller.activeErrorDeg <= controller.toleranceDeg;
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
       decoration: BoxDecoration(
@@ -1002,7 +1007,9 @@ class _BottomPanel extends StatelessWidget {
           ),
           const SizedBox(height: 9),
           Text(
-            controller.progressLabel,
+            active == null
+                ? '${controller.capturedCount} of $total photos saved'
+                : 'Target ${active.spec.targetId} of $total · ${active.spec.ringName}',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
@@ -1011,11 +1018,16 @@ class _BottomPanel extends StatelessWidget {
               fontWeight: FontWeight.w700,
             ),
           ),
+          const SizedBox(height: 6),
+          Text(
+            '${controller.capturedCount} of $total photos saved',
+            style: const TextStyle(color: Colors.white70, fontSize: 13),
+          ),
           const SizedBox(height: 10),
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
-              value: controller.capturedCount / kSphereTargetCount,
+              value: total == 0 ? 0.0 : (controller.capturedCount / total).clamp(0.0, 1.0).toDouble(),
               minHeight: 4,
               backgroundColor: Colors.white.withValues(alpha: 0.14),
               valueColor: const AlwaysStoppedAnimation<Color>(CaptureColors.ok),
@@ -1062,6 +1074,39 @@ class _MotionChip extends StatelessWidget {
   );
 }
 
+class _CaptureSavedRing extends StatelessWidget {
+  const _CaptureSavedRing({required this.controller});
+  final SphereCaptureController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final total = controller.targets.length;
+    final saved = controller.capturedCount;
+    final fraction = total == 0 ? 0.0 : (saved / total).clamp(0.0, 1.0).toDouble();
+    return Semantics(
+      label: '$saved of $total photos saved',
+      child: SizedBox.square(
+        dimension: 116,
+        child: Stack(alignment: Alignment.center, children: [
+          SizedBox.expand(child: CircularProgressIndicator(
+            value: fraction,
+            strokeWidth: 8,
+            color: CaptureColors.ok,
+            backgroundColor: Colors.white24,
+          )),
+          Column(mainAxisSize: MainAxisSize.min, children: [
+            Text('$saved / $total', style: const TextStyle(
+              color: Colors.white, fontSize: 19, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 4),
+            Icon(saved == total && total > 0 ? Icons.check : Icons.camera_alt_outlined,
+              color: CaptureColors.ok, size: 23),
+          ]),
+        ]),
+      ),
+    );
+  }
+}
+
 class _BackendCompletionOverlay extends StatelessWidget {
   const _BackendCompletionOverlay({required this.controller});
 
@@ -1083,11 +1128,7 @@ class _BackendCompletionOverlay extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
-                Icons.cloud_upload_outlined,
-                color: CaptureColors.ok,
-                size: 48,
-              ),
+              _CaptureSavedRing(controller: controller),
               const SizedBox(height: 12),
               const Text(
                 'Capture complete',
@@ -1099,7 +1140,7 @@ class _BackendCompletionOverlay extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                '${controller.capturedCount} / $kSphereTargetCount photos saved',
+                '${controller.capturedCount} / ${controller.targets.length} photos saved',
                 style: const TextStyle(
                   color: CaptureColors.mutedOnDark,
                   fontSize: 14,
@@ -1145,7 +1186,7 @@ class _CompletionOverlay extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.check_circle, color: CaptureColors.ok, size: 54),
+              _CaptureSavedRing(controller: controller),
               const SizedBox(height: 12),
               const Text(
                 'Capture Complete!',
@@ -1157,7 +1198,7 @@ class _CompletionOverlay extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                '${controller.capturedCount} / $kSphereTargetCount Targets',
+                '${controller.capturedCount} / ${controller.targets.length} Targets',
                 style: const TextStyle(
                   color: CaptureColors.mutedOnDark,
                   fontSize: 13,

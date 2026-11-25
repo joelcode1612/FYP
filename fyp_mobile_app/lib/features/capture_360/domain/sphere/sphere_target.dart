@@ -62,6 +62,11 @@ import 'package:fyp/features/capture_360/domain/virtual_tour/math/vectors.dart';
 
 /// How many directions a complete sphere has.
 const int kSphereTargetCount = 38;
+const int kSphereEnhancedTargetCount = 56;
+const int kSphereEnhancedPlanVersion = 3;
+
+int sphereTargetCountForPlan(int version) =>
+    version == kSphereEnhancedPlanVersion ? kSphereEnhancedTargetCount : kSphereTargetCount;
 
 /// The vertical field of view **assumed** for the rear camera, in degrees.
 ///
@@ -219,7 +224,27 @@ Vec3 sphereDirection(double yawDeg, double pitchDeg) {
 /// facing when the sphere was calibrated. The controller refuses to capture
 /// anything else until it is saved, which is what makes the first photograph a
 /// known, horizon-level frame rather than whatever happened to be nearest.
-List<SphereTargetSpec> buildSphereTargets() {
+List<SphereTargetSpec> buildSphereTargets({int planVersion = kSphereCapturePlanVersion}) {
+  if (planVersion == kSphereEnhancedPlanVersion) {
+    final targets = <SphereTargetSpec>[];
+    double wrap(double yaw) => ((yaw + 180) % 360 + 360) % 360 - 180;
+    void ring(List<double> yaws, double pitch, String name) {
+      for (var i = 0; i < yaws.length; i++) {
+        final yaw = wrap(yaws[i]);
+        final id = targets.length + 1;
+        targets.add(SphereTargetSpec(targetId: id, yawDeg: yaw, pitchDeg: pitch,
+          ringName: name, indexInRing: i + 1, direction: sphereDirection(yaw, pitch)));
+      }
+    }
+    ring(List<double>.generate(18, (i) => i * 20.0), 0, 'Middle Ring');
+    targets.add(SphereTargetSpec(targetId: targets.length + 1, yawDeg: 0, pitchDeg: 90,
+      ringName: 'Zenith', direction: sphereDirection(0, 90)));
+    ring(List<double>.generate(18, (i) => -20.0 - i * 20.0), kSphereRingPitchDeg, 'Upper Ring');
+    ring(List<double>.generate(18, (i) => i * 20.0), -kSphereRingPitchDeg, 'Lower Ring');
+    targets.add(SphereTargetSpec(targetId: targets.length + 1, yawDeg: 0, pitchDeg: -90,
+      ringName: 'Nadir', direction: sphereDirection(0, -90)));
+    return List<SphereTargetSpec>.unmodifiable(targets);
+  }
   const List<double> middleYaws = <double>[
     0,
     30,
