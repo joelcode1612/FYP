@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:math';
 
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
@@ -8,7 +6,6 @@ import 'package:shared_logic/shared_logic.dart' show M2Draft, AppFailure, Networ
 
 import 'package:sitewise_jaspr_web/core/di/app_locator.dart';
 import 'bdj_objective_proposal_panel.dart' show BdjObjectiveProposalPanel;
-import 'research_workflow_panel.dart' show ResearchCandidatePanel;
 import 'stage_four_question_review.dart' show StageFourQuestionReview;
 import 'stage_five_questionnaire_preview.dart' show StageFiveQuestionnairePreview;
 import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart' show ActionButton;
@@ -21,15 +18,10 @@ import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart' show 
 ///
 /// * questions and saved answers come from `GET /m2/assessments/{id}`
 /// * answers are written by `PUT /m2/assessments/{id}/answers/{item_key}`
-/// * business description / BDJ is `POST /m2/assessments/{id}/bdj/evaluate`
-///   (the DETERMINISTIC candidate ruleset — not a model call)
 /// * confirmation is `POST /m2/assessments/{id}/review` then `.../confirm`
-/// * the research objective is `POST /m2/confirmations/{id}/research-objectives`
-/// * the QJ context is a READ (`GET /m2/research-objectives/{id}/qj-context`);
-///   it is not a QJ run.
-/// * the research-question candidate is prepared, read, reviewed and revised
-///   through `ResearchCandidatePanel` below (`.../qg-candidate`,
-///   `/research-questions/{version}`, `.../owner-review`, `.../revision`).
+/// * subsequent research stages use the governed panels for objective proposals,
+///   question review and questionnaire preview. Declaration confirmation does
+///   not run BDJ or authorize question generation.
 ///
 /// Activity History is a separate read-only surface and is linked, not
 /// duplicated here.
@@ -123,9 +115,6 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
   bool _autoSaveQueued = false;
   bool _pauseReady = false;
 
-  /// Kept for standalone M2 workflow's manual discard-edits action.
-  bool _discardArmed = false;
-
   /// Whether the read-only review summary is expanded.
   bool _showReview = false;
   int? _reviewedRevision;
@@ -144,10 +133,6 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
   /// many there are; this index is only the position on screen.
   int _itemIndex = 0;
 
-  Map<String, dynamic>? _worksheet;
-  /// UI-01: finding decisions persisted for the current revision, by finding id.
-  /// Only codes the backend accepts are ever stored here.
-  Map<String, String> _decisions = {};
   Map<String, dynamic>? _confirmation;
   Map<String, dynamic>? _contextStatus;
 
@@ -176,9 +161,6 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
   String? _conceptPreviewError;
   bool _conceptPreviewLoading = false;
   int _conceptPreviewTicket = 0;
-  Map<String, dynamic>? _objective;
-  Map<String, dynamic>? _qjContext;
-  String _objectiveText = '';
 
   int _request = 0;
 
@@ -262,8 +244,6 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     setState(() {
       _selected = id;
       _draft = draft;
-      _worksheet = null;
-      _decisions = {};
       _confirmation = null;
       _contextStatus = null;
       // A preview belongs to one assessment at one revision. Opening another
@@ -271,9 +251,6 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
       // moment before its own preview arrives.
       _conceptPreview = null;
       _conceptPreviewError = null;
-      _objective = null;
-      _qjContext = null;
-      _objectiveText = '';
       _itemIndex = 0;
       _seedEditors(draft);
     });
@@ -281,21 +258,6 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     // different revision is loaded. It is not awaited: a slow preview must not
     // delay the questionnaire, and the card states plainly while it is loading.
     unawaited(_loadConceptPreview());
-    // CP-10 DEF-06 state restoration: worksheet and confirmation are server
-    // state and must survive a reload. Without this, 'Save research
-    // objective' was permanently dead after any reload while the server
-    // honestly refuses a duplicate confirm — the objective was unreachable.
-    if (!component.embedded) {
-      try {
-        final sheet = await AppLocator.m2.worksheet(draft);
-        if (!mounted || request != _request) return;
-        if (sheet['revision'] == draft.revision) {
-          _worksheet = sheet;
-        }
-      } catch (_) {
-        // No worksheet is available; do not fabricate one.
-      }
-    }
     try {
       final conf = await AppLocator.m2.currentConfirmation(draft.id);
       if (!mounted || request != _request) return;
@@ -965,9 +927,6 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
         _reviewedRevision = null;
         _showReview = false;
         _seedEditors(updated, preserve: preserved);
-        // A new revision invalidates decisions recorded against the old one.
-        _decisions = {};
-        _worksheet = null;
         notice = preserved.isEmpty
             ? 'Saved $key. Server revision is now ${updated.revision}.'
             : 'Saved $key. ${preserved.length} other unsaved edit(s) were kept. '
@@ -1280,57 +1239,6 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     }
   }
 
-  /// UI-01: persist one permitted finding decision through the existing route.
-  ///
-  /// The backend accepts exactly two codes. `KEEP_ORIGINAL` means the
-  /// declaration stands as written — it is NOT scientific approval, NOT proof
-  /// the declaration is correct, and NOT resolution of the uncertainty.
-  /// `REVIEW_LATER` is recorded but never satisfies confirmation.
-  Future<void> _decide(String findingId, String decision) async {
-    final draft = _draft;
-    if (draft == null || busy) return;
-    setState(() {
-      busy = true;
-      error = null;
-      notice = '';
-    });
-    try {
-      final result =
-          await AppLocator.m2.decide(draft, findingId, decision, _uuid4());
-      if (!mounted) return;
-      final event = result['event'];
-      final saved = event is Map && event['decision'] is String
-          ? event['decision'] as String
-          : decision;
-      setState(() {
-        _decisions = {..._decisions, findingId: saved};
-        notice = saved == 'KEEP_ORIGINAL'
-            ? 'Decision recorded: the declaration stands as written. This is not '
-                  'scientific approval and does not resolve the uncertainty.'
-            : 'Decision recorded: review deferred. REVIEW_LATER does not satisfy '
-                  'confirmation.';
-      });
-    } catch (_) {
-      if (mounted) {
-        setState(() => error =
-            'The finding decision was refused. Reload the current revision and '
-            'choose one of the two permitted decisions.');
-      }
-    } finally {
-      if (mounted) setState(() => busy = false);
-    }
-  }
-
-  String _uuid4() {
-    final rnd = Random.secure();
-    final bytes = List<int>.generate(16, (_) => rnd.nextInt(256));
-    bytes[6] = (bytes[6] & 0x0f) | 0x40;
-    bytes[8] = (bytes[8] & 0x3f) | 0x80;
-    final hex = bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
-    return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-'
-        '${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
-  }
-
   /// Restore the persisted BCB status when a confirmed assessment is reopened.
   ///
   /// Read-only by construction: this calls the status endpoint and never the
@@ -1339,10 +1247,8 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
   /// confirm again — a confirmation already exists and is the precondition for
   /// reading, not something the read should produce.
   ///
-  /// Failure is silent on purpose. The worksheet has already loaded; turning a
-  /// readable page into an error because an optional context status was
-  /// unavailable would be a regression. The explicit action button and its
-  /// message remain the way to surface a real failure.
+  /// Failure is silent on purpose: an unavailable optional context status must
+  /// not prevent the saved declaration from being displayed.
   Future<void> _restoreContextStatus(int request) async {
     final draft = _draft;
     final confirmation = _confirmation;
@@ -1490,110 +1396,6 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     for (final entry in raw is List ? raw : const [])
       if (entry is String) entry,
   ];
-
-  Future<void> _readContextStatus() async {
-    final draft = _draft;
-    final confirmation = _confirmation;
-    if (draft == null || confirmation == null || busy) return;
-    setState(() {
-      busy = true;
-      error = null;
-      notice = '';
-    });
-    try {
-      final status = await AppLocator.m2.contextStatus(
-        draft.id,
-        confirmation['id'] as String,
-        draft.revision,
-      );
-      if (!mounted) return;
-      setState(() => _contextStatus = status);
-    } catch (_) {
-      if (mounted) {
-        setState(
-          () => error =
-              'The business-context status could not be read. Persisted BCB is '
-              'default-off and requires verified tenant/concept/geography/'
-              'purpose bindings.',
-        );
-      }
-    } finally {
-      if (mounted) setState(() => busy = false);
-    }
-  }
-
-  Future<void> _createObjective() async {
-    final draft = _draft;
-    final confirmation = _confirmation;
-    if (draft == null || confirmation == null || busy) return;
-    if (_objectiveText.trim().isEmpty) {
-      setState(() => error = 'Enter the research objective before submitting.');
-      return;
-    }
-    setState(() {
-      busy = true;
-      error = null;
-      notice = '';
-    });
-    try {
-      final result = await AppLocator.m2.createObjective(
-        confirmation['id'] as String,
-        draft.revision,
-        _objectiveText,
-      );
-      if (!mounted) return;
-      setState(() {
-        _objective = result;
-        _qjContext = null;
-        notice =
-            'Research objective ${result['id']} persisted against the '
-            'confirmation revision.';
-      });
-    } catch (_) {
-      if (mounted) {
-        setState(
-          () => error =
-              'The research objective was not saved. It is bound to the '
-              'confirmation revision and must be current.',
-        );
-      }
-    } finally {
-      if (mounted) setState(() => busy = false);
-    }
-  }
-
-  Future<void> _readQjContext() async {
-    final draft = _draft;
-    final objective = _objective;
-    if (draft == null || objective == null || busy) return;
-    setState(() {
-      busy = true;
-      error = null;
-      notice = '';
-    });
-    try {
-      final context = await AppLocator.m2.qjContext(
-        objective['id'] as String,
-        draft.revision,
-      );
-      if (!mounted) return;
-      setState(() {
-        _qjContext = context;
-        notice =
-            'QJ context read. This is the objective\'s judgement input, not a '
-            'QJ run: no QJ execution endpoint is registered.';
-      });
-    } catch (_) {
-      if (mounted) {
-        setState(
-          () => error =
-              'The QJ context could not be read for this objective revision.',
-        );
-      }
-    } finally {
-      if (mounted) setState(() => busy = false);
-    }
-  }
 
   // --- rendering -----------------------------------------------------------
 
@@ -3062,8 +2864,6 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
         _confirmation = null;
         _reviewedRevision = null;
         _showReview = false;
-        _worksheet = null;
-        _decisions = {};
         saved++;
       } catch (failure) {
         failed.add(key);
@@ -3110,18 +2910,6 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     // leaves the revision untouched, and refetching would replace a readable
     // preview with a spinner for no new information.
     if (saved > 0) unawaited(_loadConceptPreview());
-  }
-
-  /// Abandon unsaved editor state. Stored answers are untouched.
-  void _discardEdits() {
-    final draft = _draft;
-    if (draft == null) return;
-    setState(() {
-      _seedEditors(draft);
-      _discardArmed = false;
-      error = null;
-      notice = 'Unsaved edits discarded. Stored answers are unchanged.';
-    });
   }
 
   /// DEF-11 unbound state.

@@ -69,6 +69,17 @@ async def lifespan(app: FastAPI):
             raise
     else:
         logger.info("Startup schema creation disabled (db_auto_create=false).")
+    try:
+        from sqlmodel import Session
+        from sitewise.db.session import engine
+        from sitewise.services.enrichment_schema import schema_gaps
+
+        with Session(engine) as session:
+            missing_schema = schema_gaps(session)
+        if missing_schema:
+            logger.warning("Enrichment schema requires migration: %s", ", ".join(missing_schema))
+    except Exception as exc:
+        logger.warning("Enrichment schema could not be checked: %s", type(exc).__name__)
     _warm_explainers()
     # Background explanation worker: computes SHAP off the request path and
     # resumes any pending durable jobs left by a previous process. Startup
@@ -254,7 +265,16 @@ def health_v1() -> dict:
             session.execute(text("SELECT 1"))
     except Exception:
         db_ok = False
-    return {"status": "ok" if db_ok else "degraded", "database": "ok" if db_ok else "error"}
+    from sitewise.services import explanation_worker, panorama_worker
+
+    panorama_ok = panorama_worker.is_running()
+    explanation_ok = explanation_worker.is_running()
+    return {
+        "status": "ok" if db_ok and panorama_ok and explanation_ok else "degraded",
+        "database": "ok" if db_ok else "error",
+        "panorama_worker": "running" if panorama_ok else "unavailable",
+        "explanation_worker": "running" if explanation_ok else "unavailable",
+    }
 
 
 # Serve the compiled Jaspr frontend (static assets + SPA fallback) on this

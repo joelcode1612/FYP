@@ -57,7 +57,10 @@ logger = logging.getLogger("sitewise.capture_session")
 #: follow. ``device_38_panorama`` is the Flutter-stitched workflow: the same
 #: 38-target plan, but the panorama is produced on the device and confirmed
 #: through the panorama endpoints instead of a Python stitching job.
+BACKEND_38_MODE = "device_38_backend"
+
 CAPTURE_MODES: dict[str, int] = {
+    BACKEND_38_MODE: 38,
     "device_38": 38,
     "device_38_panorama": 38,
     "arcore_26": 26,
@@ -214,6 +217,19 @@ def require_capture_session(
     return record
 
 
+def require_mutable_capture_session(
+    session: Session, *, session_id: uuid.UUID, user_id: Any, role: str
+) -> CaptureSession:
+    """Read a session for a write, re-checking the property's current status."""
+    record = require_capture_session(
+        session, session_id=session_id, user_id=user_id, role=role
+    )
+    provider_scope.require_mutable_listing(
+        session, listing_id=int(record.property_id), role=role
+    )
+    return record
+
+
 def confirmed_frame_count(session: Session, session_id: uuid.UUID) -> int:
     return int(
         session.execute(
@@ -320,9 +336,20 @@ def request_processing(
     partial stitch. A live job is returned as-is so client retries cannot
     double-process one session.
     """
-    record_session = session.get(CaptureSession, session_id)
+    record_session = session.get(CaptureSession, session_id, with_for_update=True)
     if record_session is None:
         raise NotFoundError("Capture session not found.")
+    if record_session.status == "cancelled":
+        raise ValidationError("A cancelled capture session cannot be processed.")
+    if record_session.capture_mode == BACKEND_38_MODE:
+        frames = list_capture_frames(session, session_id)
+        ready_targets = {
+            frame.target_index for frame in frames
+            if frame.upload_status == "confirmed" and frame.checksum_sha256
+        }
+        expected_targets = set(range(1, record_session.expected_frames + 1))
+        if ready_targets != expected_targets:
+            raise ValidationError("Confirm every original 38-target frame and checksum before processing.")
     confirmed = confirmed_frame_count(session, session_id)
     if confirmed < record_session.expected_frames:
         raise ValidationError(
@@ -332,9 +359,10 @@ def request_processing(
     live = session.execute(
         text(
             "SELECT id FROM fyp.panorama_jobs WHERE session_id = :sid "
-            "AND status IN ('queued', 'processing')"
+            "AND (status IN ('queued', 'processing') OR (:retain_result AND status = 'done')) "
+            "ORDER BY created_at DESC LIMIT 1"
         ),
-        {"sid": str(session_id)},
+        {"sid": str(session_id), "retain_result": record_session.capture_mode == BACKEND_38_MODE},
     ).first()
     if live is not None:
         job = session.get(PanoramaJob, live[0])

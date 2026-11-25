@@ -30,7 +30,9 @@ EVIDENCE_FILE = EVIDENCE_DIR / "bd01_qgb_evidence.json"
 
 CLONE = "project1_workflow_tests"
 PROTECTED = {"Dss", "Final_Location_Analysis"}
-DSN = f"postgresql://postgres:123456@localhost:5432/{CLONE}"
+from sitewise.core.config import local_database_url
+
+DSN = local_database_url(CLONE).set(drivername="postgresql")
 
 RECEIPT = "BD01 P2: corrected question-bank schema verified on the disposable clone"
 
@@ -93,7 +95,7 @@ def expect_error(cur, sql: str) -> tuple[str, str]:
 
 def main() -> int:
     EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
-    conn = psycopg2.connect(DSN)
+    conn = psycopg2.connect(DSN.render_as_string(hide_password=False))
     conn.autocommit = True
     cur = conn.cursor()
 

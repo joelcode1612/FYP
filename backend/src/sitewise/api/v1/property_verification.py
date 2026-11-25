@@ -28,7 +28,11 @@ from sitewise.dependencies import (
 )
 from sitewise.domain import rbac
 from sitewise.services import verification_storage as storage
-from sitewise.services.agent_inspection_policy import require_ready_for_admin
+from sitewise.services.agent_inspection_policy import (
+    guard_enrichment_before_submit as _guard_enrichment_before_submit,
+    require_ready_for_admin,
+)
+from sitewise.services import provider_scope
 from sitewise.services.property_enrichment_service import PropertyEnrichmentService
 from sitewise.services.property_verification_service import (
     AdminPropertyReviewService,
@@ -60,7 +64,7 @@ class SubmitRequest(BaseModel):
     verifies ownership and never publishes the property.
     """
 
-    scope: Literal["full", "listing"] = "full"
+    scope: Literal["full", "listing", "ownership"] = "full"
     acknowledge_unavailable_population: bool = Field(
         default=False,
         description=(
@@ -133,11 +137,18 @@ def submit_for_verification(
       unavailable rather than estimated, so the reviewer needs to know it is
       missing instead of assuming a low number.
     """
-    if rbac.canonical_role(current.role) != rbac.ROLE_AGENT:
-        raise HTTPException(status_code=403, detail="Only the assigned Agent submits for Admin review.")
-    if payload is not None and payload.scope != "full":
-        raise HTTPException(status_code=422, detail="Agent submission must include ownership verification.")
-    require_ready_for_admin(session, property_id, current)
+    provider_scope.require_mutable_listing(
+        session, listing_id=property_id, role=current.role
+    )
+    role = rbac.canonical_role(current.role)
+    scope = payload.scope if payload is not None else "full"
+    if role == rbac.ROLE_OWNER and scope == "ownership":
+        return PropertyVerificationService(session).submit(
+            property_id, current.user_id, scope="ownership", role=current.role
+        )
+    if role != rbac.ROLE_AGENT or scope == "ownership":
+        raise HTTPException(status_code=403, detail="This verification must be submitted by its Owner or assigned Agent.")
+    evidence = require_ready_for_admin(session, property_id, current)
     acknowledgement = bool(
         payload.acknowledge_unavailable_population if payload is not None else False
     )
@@ -156,55 +167,10 @@ def submit_for_verification(
     return service.submit(
         property_id,
         current.user_id,
-        scope=payload.scope if payload is not None else "full",
+        scope=scope,
         role=current.role,
+        panorama_id=evidence["completed_panorama_id"],
     )
-
-
-def _guard_enrichment_before_submit(
-    session: Session, property_id: int, acknowledged: bool
-) -> None:
-    """Refuse a premature or unacknowledged submission.
-
-    Listings that were never enriched keep their previous behaviour: the guard
-    only engages once at least one enrichment category row exists, so the
-    existing submission flows (and their tests) are untouched.
-    """
-    rows = session.execute(
-        text(
-            """
-            SELECT category, status
-            FROM fyp.property_enrichment_category
-            WHERE property_id = :pid
-            """
-        ),
-        {"pid": property_id},
-    ).all()
-    if not rows:
-        return
-
-    states = {row[0]: row[1] for row in rows}
-    running = sorted(c for c, s in states.items() if s == "running")
-    if running:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                "Enrichment is still running for: "
-                + ", ".join(running)
-                + ". Wait for it to finish before submitting."
-            ),
-        )
-
-    population = states.get("population")
-    if population in ("unavailable", "failed", "stale") and not acknowledged:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                "Population could not be measured for these coordinates "
-                f"(state: {population}). Confirm that you want to submit "
-                "without a population figure."
-            ),
-        )
 
 
 @submitter_router.post("/{property_id}/verification/documents", status_code=201)
@@ -218,6 +184,9 @@ async def upload_document(
 ) -> dict:
     """Upload listing or ownership evidence. The storage key is generated
     server-side; the file never touches a public URL."""
+    provider_scope.require_mutable_listing(
+        session, listing_id=property_id, role=current.role
+    )
     if verification_type not in ("listing", "ownership"):
         raise HTTPException(
             status_code=422, detail="verification_type must be listing or ownership."
@@ -226,7 +195,10 @@ async def upload_document(
         raise HTTPException(status_code=403, detail="Only the Property Owner uploads ownership proof.")
     if verification_type == "listing" and rbac.canonical_role(current.role) != rbac.ROLE_AGENT:
         raise HTTPException(status_code=403, detail="Only the Agent uploads inspection evidence.")
-    data = await file.read()
+    limit = storage.max_bytes()
+    data = await file.read(limit + 1)
+    if len(data) > limit:
+        raise HTTPException(status_code=413, detail="Ownership evidence exceeds the upload size limit.")
     try:
         document = PropertyVerificationService(session).add_document(
             property_id,
@@ -252,7 +224,8 @@ def download_document(
     """Stream a private document. Access: the submitting owner, or an
     administrator with completed MFA. Everyone else gets 403/404."""
     document = PropertyVerificationService(session).document_for_download(
-        document_id, current.user_id, is_admin=_is_admin(current)
+        document_id, current.user_id, is_admin=_is_admin(current),
+        agent_role=current.role if current.assurance_level == "aal2" else None,
     )
     path, _size = storage.open_document(document.storage_key)
     return FileResponse(

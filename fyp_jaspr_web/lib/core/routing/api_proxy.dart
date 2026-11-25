@@ -115,7 +115,7 @@ Future<shelf.Response> _forward(
       502,
       body: jsonEncode({
         'detail': 'The Sitewise API at ${backend.origin} is unavailable. '
-            'Start FYP/backend (uvicorn on port 8000); see serve.ps1. '
+            'Start the unified SiteWise server on port 8090 with run-sitewise.ps1. '
             'Error: $error',
       }),
       headers: const {'content-type': 'application/json; charset=utf-8'},

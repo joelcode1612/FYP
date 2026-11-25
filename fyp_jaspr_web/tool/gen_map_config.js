@@ -9,7 +9,7 @@ const envPath = process.env.SITEWISE_MAP_ENV
   : path.resolve(__dirname, '..', '..', 'backend', '.env');
 const outputPath = path.resolve(__dirname, '..', 'web', 'map-config.js');
 
-if (!fs.existsSync(envPath)) {
+if (!process.env.CARTO_BASEMAPS_KEY && !fs.existsSync(envPath)) {
   console.error('Missing backend env file:', envPath);
   process.exit(1);
 }
@@ -24,7 +24,7 @@ function readEnv(key) {
   }
   return '';
 }
-const key = readEnv('CARTO_BASEMAPS_KEY');
+const key = (process.env.CARTO_BASEMAPS_KEY || readEnv('CARTO_BASEMAPS_KEY')).trim();
 if (!key) {
   console.error('CARTO_BASEMAPS_KEY is missing from:', envPath);
   process.exit(1);

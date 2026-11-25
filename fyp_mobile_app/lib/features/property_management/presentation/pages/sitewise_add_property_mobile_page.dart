@@ -1311,6 +1311,31 @@ class _SitewiseAddPropertyMobilePageState
     );
   }
 
+  Future<void> _verifySavedAddress() async {
+    final id = _draftId;
+    if (id == null || _saving) return;
+    setState(() {
+      _saving = true;
+      _serverError = null;
+    });
+    try {
+      final status = await ServiceLocator.ownerListings.validateSavedAddress(id);
+      if (mounted) {
+        setState(() => _serverMessage =
+            'Address verification: ${status.replaceAll('_', ' ')}.');
+      }
+    } on Object catch (error) {
+      if (mounted) {
+        setState(() => _serverError = _readableError(
+          error,
+          fallback: 'Could not verify the saved address.',
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   Widget _buildConfirmation() {
     final saved = _draftId != null;
     return Padding(
@@ -1372,6 +1397,12 @@ class _SitewiseAddPropertyMobilePageState
             ),
           ),
           const SizedBox(height: 16),
+          if (saved)
+            OutlinedButton.icon(
+              onPressed: _saving ? null : _verifySavedAddress,
+              icon: const Icon(Icons.location_on_outlined),
+              label: const Text('Verify saved address'),
+            ),
           FilledButton.icon(
             onPressed: saved && !_saving ? _goToListings : null,
             icon: const Icon(Icons.list_alt_outlined),

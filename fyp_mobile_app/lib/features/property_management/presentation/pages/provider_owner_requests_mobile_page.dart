@@ -25,6 +25,7 @@ class _OwnerRequestsState
   String? uploadError;
   String? requestError;
   final proofStatuses = <int, String>{};
+  final ownershipReviewStatuses = <int, String>{};
   final Map<int, String> statuses = {};
   final Map<int, String> agentNames = {};
   final Map<int, List<String>> missingDetails = {};
@@ -67,6 +68,10 @@ class _OwnerRequestsState
           } else {
             proofStatuses.remove(property.id);
           }
+        }
+        final ownershipStatus = r['ownership_review_status'];
+        if (ownershipStatus is String) {
+          ownershipReviewStatuses[property.id] = ownershipStatus;
         }
         final missing = r['missing_required_fields'];
         missingDetails[property.id] = missing is List
@@ -564,6 +569,35 @@ class _OwnerRequestsState
     ),
   );
 
+  Future<void> _submitOwnership(ProviderListing property) async {
+    if (busy) return;
+    setState(() {
+      busy = true;
+      uploadError = null;
+    });
+    try {
+      await ServiceLocator.propertyVerification.submit(
+        '${property.id}',
+        scope: 'ownership',
+      );
+      if (mounted) {
+        setState(() => ownershipReviewStatuses[property.id] = 'pending');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ownership proof submitted for review')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => uploadError = readableFailure(
+          error,
+          fallback: 'Ownership proof could not be submitted.',
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
   Widget _requestButtons(ProviderListing property) {
     final raw = statuses[property.id]?.trim().toLowerCase() ?? '';
     final outstanding = const <String>{
@@ -583,7 +617,22 @@ class _OwnerRequestsState
       ),
     );
     final missing = missingDetails[property.id];
-    if (outstanding) return uploadButton;
+    final ownershipStatus = ownershipReviewStatuses[property.id] ?? 'not_submitted';
+    final proofActions = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        uploadButton,
+        if (ownershipStatus != 'not_submitted')
+          Text('Ownership review: ${ownershipStatus.replaceAll('_', ' ')}'),
+        if (proofStatuses[property.id] == 'active' &&
+            const {'not_submitted', 'rejected', 'information_requested'}.contains(ownershipStatus))
+          OutlinedButton(
+            onPressed: busy ? null : () => _submitOwnership(property),
+            child: const Text('Submit ownership verification'),
+          ),
+      ],
+    );
+    if (outstanding) return proofActions;
     final requestButton = FilledButton.icon(
       onPressed: busy || missing == null ? null : () => requestAgent(property),
       icon: const Icon(Icons.assignment_ind_outlined, size: 18),
@@ -599,12 +648,12 @@ class _OwnerRequestsState
         if (constraints.maxWidth < 325) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [uploadButton, const SizedBox(height: 8), requestButton],
+            children: [proofActions, const SizedBox(height: 8), requestButton],
           );
         }
         return Row(
           children: [
-            Expanded(child: uploadButton),
+            Expanded(child: proofActions),
             const SizedBox(width: 8),
             Expanded(child: requestButton),
           ],

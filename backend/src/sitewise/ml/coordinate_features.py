@@ -30,6 +30,7 @@ failed raster or routing lookup blanks only its own features.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from math import isfinite
 from typing import Any
 
 from sqlalchemy import text
@@ -100,6 +101,7 @@ GROUPS = (
 #: WorldPop inclusion rule and raster version recorded on the research table.
 POP_RADII = (500, 1000, 2000, 3000)
 POP_NODATA = -99999
+POP_SPHERE_RADIUS_M = 6378137.0
 POP_WINDOW_DEG = 0.045
 POP_INCLUSION_RULE = (
     "PIXEL_CENTRE_INSIDE_HAVERSINE_RADIUS_WHOLE_PIXEL_R6378137M_NODATA_MINUS99999_EXCLUDED")
@@ -181,7 +183,7 @@ def _number(value: Any) -> float | None:
         number = float(value)
     except (TypeError, ValueError):
         return None
-    return number if number == number else None
+    return number if isfinite(number) else None
 
 
 def _round(value: Any, digits: int) -> float | None:
@@ -234,9 +236,9 @@ class CoordinateFeatureExtractor:
             FROM m, near, inter
             """)
         try:
-            row = self.session.execute(sql, {"lat": lat, "lon": lon}).mappings().one()
+            with self.session.begin_nested():
+                row = self.session.execute(sql, {"lat": lat, "lon": lon}).mappings().one()
         except Exception as exc:  # noqa: BLE001 - reported, never faked
-            self.session.rollback()
             result.reason = f"{type(exc).__name__}: {str(exc)[:240]}"
             return result
 
@@ -326,9 +328,9 @@ class CoordinateFeatureExtractor:
             FROM cnt, rt, dp
             """)
         try:
-            row = self.session.execute(sql, {"start_node": start_node}).mappings().one()
+            with self.session.begin_nested():
+                row = self.session.execute(sql, {"start_node": start_node}).mappings().one()
         except Exception as exc:  # noqa: BLE001
-            self.session.rollback()
             result.reason = f"{type(exc).__name__}: {str(exc)[:240]}"
             return result
 
@@ -472,7 +474,6 @@ class CoordinateFeatureExtractor:
                 FROM frac, h
                 """, {"hull": hull_hex})
         except Exception as exc:  # noqa: BLE001 - the area stays valid without the raster
-            self.session.rollback()
             self._raster_error = f"{type(exc).__name__}: {str(exc)[:200]}"
             return {"population": None, "coverage_pct": None}
         if row is None:
@@ -572,44 +573,38 @@ class CoordinateFeatureExtractor:
         result.values = {name: None for name in names}
         result.sources = {name: attempted for name in names}
         result.notes = {"residential_building_tag_set": list(RESIDENTIAL_BUILDING_TAGS)}
-        measured = 0
-        errors: list[str] = []
-        for radius, suffix in ((500, "500m"), (1000, "1000m")):
-            row = self._residential_radius(lat, lon, radius)
+        # Match classify_residential_quality.py: a zero at either radius is
+        # trusted only when the 500 m ring itself establishes confirmed zero.
+        inner = self._residential_radius(lat, lon, 500)
+        outer = self._residential_radius(lat, lon, 1000)
+        confirmed_zero = bool(
+            inner and inner["res_count"] == 0 and inner["any_building"] >= 10
+        )
+        for suffix, row in (("500m", inner), ("1000m", outer)):
             if row is None:
-                errors.append(f"ring_{suffix}: query failed or no polygons")
                 continue
-            measured += 1
-            buffer_area = _number(row["buffer_area_m2"]) or 0.0
             count = _number(row["res_count"])
-            any_building = _number(row["any_building"]) or 0
-            landuse_present = (_number(row["landuse_polygons"]) or 0) > 0
-            result.notes[f"any_building_count_{suffix}"] = any_building
-            result.notes[f"buffer_area_{suffix}_m2"] = _round(buffer_area, 1)
-            if count is None:
-                errors.append(f"ring_{suffix}: no building polygon at all "
-                              f"(residential features left unresolved, not zero-filled)")
+            area = _number(row["buffer_area_m2"])
+            result.notes[f"any_building_count_{suffix}"] = row["any_building"]
+            if count is None or not area or (count == 0 and not confirmed_zero):
                 continue
             result.values[f"residential_building_count_{suffix}"] = count
-            if buffer_area > 0:
-                result.values[f"residential_building_density_{suffix}_km2"] = round(
-                    count / (buffer_area / 1e6), 2)
-                footprint = _number(row["footprint_area_m2"])
-                if footprint is not None:
-                    result.values[f"residential_footprint_coverage_{suffix}_pct"] = round(
-                        min(100.0, 100.0 * footprint / buffer_area), 3)
-                landuse = _number(row["landuse_area_m2"])
-                if landuse is not None and landuse_present:
-                    result.values[f"residential_landuse_coverage_{suffix}_pct"] = round(
-                        min(100.0, 100.0 * landuse / buffer_area), 3)
-        if errors:
-            result.notes["quality"] = "; ".join(errors)
+            result.values[f"residential_building_density_{suffix}_km2"] = round(
+                count / (area / 1e6), 2
+            )
+            for field, metric in (
+                ("footprint_area_m2", "footprint"), ("landuse_area_m2", "landuse")
+            ):
+                # The original union-area aggregate reports measured absence
+                # as zero once the radius has passed the coverage gate.
+                surface = _number(row[field]) if row[field] is not None else 0.0
+                if surface is not None:
+                    result.values[f"residential_{metric}_coverage_{suffix}_pct"] = round(
+                        min(100.0, 100.0 * surface / area), 3
+                    )
         result.status = _status(result)
-        if not measured:
-            result.status = STATUS_FAILED
-            result.reason = "residential polygon query failed for both rings"
-        elif result.status != STATUS_READY:
-            result.reason = "no_residential_building_polygon_in_ring"
+        if result.status != STATUS_READY:
+            result.reason = "residential polygon data missing or sparse under training coverage rules"
         return result
 
     def _residential_radius(self, lat: float, lon: float, radius: int) -> dict[str, Any] | None:
@@ -638,10 +633,11 @@ class CoordinateFeatureExtractor:
             FROM ix
             """)
         try:
-            row = self.session.execute(
-                sql, {"lat": lat, "lon": lon, "radius": radius}).mappings().first()
+            with self.session.begin_nested():
+                row = self.session.execute(
+                    sql, {"lat": lat, "lon": lon, "radius": radius}
+                ).mappings().first()
         except Exception:  # noqa: BLE001 - this group is model-imputable, never fatal
-            self.session.rollback()
             return None
         if row is None:
             return None
@@ -661,7 +657,7 @@ class CoordinateFeatureExtractor:
         *PIXEL_CENTRE_INSIDE_HAVERSINE_RADIUS_WHOLE_PIXEL_R6378137M_NODATA_
         MINUS99999_EXCLUDED*. A 100 m pixel therefore contributes its whole
         population value when its centre lies within a haversine buffer of the
-        exact radius (``ST_DistanceSphere`` uses the same 6378137 m sphere), and
+        exact radius (the training scripts specify a 6378137 m sphere), and
         NoData never contributes. This is deliberately *not* the area-weighted
         partial-pixel sum the geodesic buffer used before, which lands 1-4 %
         away from the values the model was trained on.
@@ -682,7 +678,7 @@ class CoordinateFeatureExtractor:
                       FROM o, public.worldpop_2025_constrained w
                       WHERE w.rast && ST_Expand(o.geom, :window)),
             px AS (SELECT (pg.val = :nodata) AS nodata, pg.val AS val,
-                          ST_DistanceSphere(pg.geom, o.geom) AS d
+                          ST_DistanceSphere(pg.geom, o.geom, :sphere_radius) AS d
                    FROM o, tiles t
                    CROSS JOIN LATERAL ST_PixelAsCentroids(t.rast, 1) AS pg(geom, val, p, q))
             SELECT count(*) FILTER (WHERE nodata = FALSE)::int AS valid_pixels,
@@ -690,7 +686,7 @@ class CoordinateFeatureExtractor:
             FROM px
             """
         row = self._row(sql, {"lat": lat, "lon": lon, "window": POP_WINDOW_DEG,
-                              "nodata": POP_NODATA})
+                              "nodata": POP_NODATA, "sphere_radius": POP_SPHERE_RADIUS_M})
         if row is None:  # pragma: no cover - the aggregate always returns one row
             result.status = STATUS_FAILED
             result.reason = "population raster query returned no row"
@@ -948,10 +944,11 @@ class CoordinateFeatureExtractor:
         query.  ``extract()`` catches the raise per group so one broken source
         cannot erase the features another source produced.
         """
-        found = self.session.execute(text(sql), params).mappings().first()
+        with self.session.begin_nested():
+            found = self.session.execute(text(sql), params).mappings().first()
         return dict(found) if found is not None else None
 
-    def extract(self, lat: float, lon: float) -> dict[str, GroupResult]:
+    def extract(self, lat: float, lon: float, *, selected: set[str] | None = None) -> dict[str, GroupResult]:
         """Run every group, isolating each one's failure from the others."""
         groups = (
             (GROUP_ROAD, self.road_geometry),
@@ -966,10 +963,11 @@ class CoordinateFeatureExtractor:
         )
         results: dict[str, GroupResult] = {}
         for name, runner in groups:
+            if selected is not None and name not in selected:
+                continue
             try:
                 results[name] = runner(lat, lon)
             except Exception as exc:  # noqa: BLE001 - reported, never faked
-                self.session.rollback()
                 failed = GroupResult(name)
                 failed.status = STATUS_FAILED
                 failed.reason = f"{type(exc).__name__}: {str(exc)[:300]}"

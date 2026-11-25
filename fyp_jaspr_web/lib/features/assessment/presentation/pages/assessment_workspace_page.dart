@@ -1,6 +1,5 @@
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
-import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import 'package:sitewise_jaspr_web/features/assessment/presentation/components/assessment_journey_stepper.dart';
@@ -57,10 +56,7 @@ class AssessmentWorkspacePage extends StatefulComponent {
   final String stage;
 
   /// Optional `?businessType=` selection carried from Recommendations.
-  ///
-  /// Used ONLY to seed a draft when the assessment has no saved requirements
-  /// yet. An existing saved requirement is never overwritten: the entrepreneur's
-  /// recorded answer stays authoritative.
+  /// Retained for route compatibility; the active M2 workflow owns declarations.
   final String businessType;
 
   const AssessmentWorkspacePage({
@@ -77,10 +73,6 @@ class AssessmentWorkspacePage extends StatefulComponent {
 class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   static const _api = AssessmentApi();
 
-  /// The two stages whose body lives inside the workspace. The other three
-  /// hand over to pages that already exist.
-  static const _inlineStages = {'business_requirements', 'location_evidence'};
-
   /// All five checkpoint keys — every stage opens its own independent
   /// checkpoint view (the mockup's step1…step5 sections), navigated by the
   /// journey stepper.
@@ -94,10 +86,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
 
   late Future<_Load> _future = _open(component.propertyId);
 
-  /// Which in-page stage panel is expanded. Seeded from `?stage=` in
-  /// [initState] so a shared link lands on the panel it names.
-  String? _openStage;
-
   /// Which checkpoint view is on screen — one of [_stageKeys]. Null falls
   /// back to the record's own current stage. Each checkpoint is independent:
   /// the workspace renders exactly one at a time.
@@ -105,48 +93,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
 
   /// Step 1's saved-property search query.
   String _propSearch = '';
-
-  /// Step 3's findings filter: `all` | `selected` | `unselected`.
-  String _evidenceFilter = 'all';
-
-  /// Step 3's findings search query.
-  String _evidenceSearch = '';
-
-  /// Step 3's findings the user marked for research (metric keys). Component
-  /// state only — the backend has no endpoint for these, so nothing here is
-  /// presented as persisted.
-  final Set<String> _bdjSelected = <String>{};
-
-  /// Step 3's expanded finding cards (metric keys).
-  final Set<String> _bdjExpanded = <String>{};
-
-  /// Step 3's objective decision: `confirm` | `refine` | `add`.
-  String _bdjDecision = 'confirm';
-
-  /// Step 3's follow-up note for refine / add decisions.
-  String _bdjDetails = '';
-
-  /// Step 3's decision-save status line; error renders in the warning tone.
-  String? _bdjStatus;
-  bool _bdjStatusError = false;
-
-  /// Step 4's approve / reject decision per candidate id (`approve` | `reject`).
-  final Map<String, String> _reviewDecisions = <String, String>{};
-
-  /// Step 4's reasoning-panel state per candidate id. Absent means "the group
-  /// default": high-relevance candidates open, the rest collapsed.
-  final Map<String, bool> _reviewExpanded = <String, bool>{};
-
-  /// Step 4's tab filter: `all` | `decided`.
-  String _reviewFilter = 'all';
-
-  /// Step 4's inline "add a question" form.
-  bool _reviewAddOpen = false;
-  String _reviewDraftQuestion = '';
-  String _reviewDraftContext = '';
-  String? _reviewAddError;
-  final List<({String question, String context})> _reviewCustom =
-      <({String question, String context})>[];
 
   /// The property whose assessment is open as an in-place detail view. Set by
   /// the listing's row actions so the workspace content swaps in WITHOUT a
@@ -168,10 +114,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   bool _busy = false;
   String? _notice;
   AssessmentFailure? _writeError;
-
-  /// The record the last successful read or write returned. Kept so the
-  /// requirements form can seed itself from what is actually persisted.
-  AssessmentRecord? _record;
 
   String? _readinessAssessmentId;
   Map<String, dynamic>? _workflowReadiness;
@@ -255,10 +197,11 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
       }
       setState(() {
         _workflowReadiness = result.value;
-        if (!result.ok)
+        if (!result.ok) {
           _readinessError =
               result.failure?.message ??
               'Assessment progress could not be verified.';
+        }
       });
       if (!result.ok) return;
       if (!afterWrite) return;
@@ -273,8 +216,9 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     await _refreshWorkflowReadiness(assessmentId, afterWrite: true);
     if (!mounted ||
         _readinessAssessmentId != assessmentId ||
-        _declarationEditing)
+        _declarationEditing) {
       return;
+    }
     final readinessM2 =
         (_workflowReadiness?['stage_2'] as Map?)?['m2_assessment_id'];
     if ((_workflowReadiness?['stage_3'] as Map?)?['enterable'] != true ||
@@ -341,17 +285,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   String? _m2LinkError;
   String _m2LinkFor = '';
   int _m2LinkRequest = 0;
-
-  /// Whether the collapsed location-scoring inputs are expanded.
-  bool _showScoringForm = false;
-
-  /// Stage 2 form values. Numbers stay as text so an emptied field is visibly
-  /// empty and invalid — never silently coerced to zero.
-  _RequirementsDraft? _draft;
-  Map<String, String> _draftErrors = const {};
-
-  Future<List<String>>? _typesFuture;
-  Future<ApiResult<EvidencePayload>>? _evidenceFuture;
 
   /// Step 5's assembled report read, loaded the first time the report
   /// checkpoint is opened, so browsing another stage never calls the report
@@ -448,7 +381,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   @override
   void initState() {
     super.initState();
-    if (_inlineStages.contains(component.stage)) _openStage = component.stage;
     if (_stageKeys.contains(component.stage)) _checkpoint = component.stage;
   }
 
@@ -470,20 +402,9 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
       return;
     }
     _invalidateWorkflowReadiness();
-    _openStage = _inlineStages.contains(component.stage)
-        ? component.stage
-        : null;
     _checkpoint = _stageKeys.contains(component.stage) ? component.stage : null;
-    _record = null;
-    _draft = null;
-    _draftErrors = const {};
-    _typesFuture = null;
-    _evidenceFuture = null;
     _reportFuture = null;
-    _resetReview();
     _propSearch = '';
-    _evidenceFilter = 'all';
-    _evidenceSearch = '';
     _notice = null;
     _writeError = null;
     // Entering or leaving the listing view: its reads and dialog state are
@@ -531,7 +452,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     _invalidateWorkflowReadiness();
     _notice = null;
     _writeError = null;
-    _draft = null;
     _reportFuture = null;
     _future = _open(propertyId);
   });
@@ -545,17 +465,8 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     _openPropertyId = propertyId;
     _reportRecord = null;
     _checkpoint = _stageKeys.contains(stage) ? stage : null;
-    _openStage = _inlineStages.contains(stage) ? stage : null;
-    _record = null;
-    _draft = null;
-    _draftErrors = const {};
-    _typesFuture = null;
-    _evidenceFuture = null;
     _reportFuture = null;
-    _resetReview();
     _propSearch = '';
-    _evidenceFilter = 'all';
-    _evidenceSearch = '';
     _notice = null;
     _writeError = null;
     _busy = false;
@@ -569,18 +480,9 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     _invalidateWorkflowReadiness();
     _openPropertyId = null;
     _checkpoint = null;
-    _openStage = null;
-    _record = null;
     _reportRecord = null;
-    _draft = null;
-    _draftErrors = const {};
-    _typesFuture = null;
-    _evidenceFuture = null;
     _reportFuture = null;
-    _resetReview();
     _propSearch = '';
-    _evidenceFilter = 'all';
-    _evidenceSearch = '';
     _notice = null;
     _writeError = null;
     _busy = false;
@@ -614,37 +516,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     _notice = null;
     _writeError = null;
   });
-
-  /// Step 4's per-session review state (decisions, expanded reasoning, the
-  /// add-question draft) is dropped whenever the open record changes.
-  void _resetReview() {
-    _reviewDecisions.clear();
-    _reviewExpanded.clear();
-    _reviewFilter = 'all';
-    _reviewAddOpen = false;
-    _reviewDraftQuestion = '';
-    _reviewDraftContext = '';
-    _reviewAddError = null;
-    _reviewCustom.clear();
-  }
-
-  Future<List<String>> _types() {
-    final existing = _typesFuture;
-    if (existing != null) return existing;
-    // A failed lookup yields no options, and the form then says the list is
-    // unavailable rather than offering values that may match nothing.
-    final future = _api.propertyTypes().then(
-      (result) => result.ok ? result.value! : const <String>[],
-    );
-    _typesFuture = future;
-    return future;
-  }
-
-  Future<ApiResult<EvidencePayload>> _evidence(String propertyId) =>
-      _evidenceFuture ??= _api.evidence(propertyId);
-
-  void _retryEvidence(String propertyId) =>
-      setState(() => _evidenceFuture = _api.evidence(propertyId));
 
   /// Step 5's report read, memoised per assessment so switching checkpoints
   /// back and forth does not re-assemble the document on every tap.
@@ -773,7 +644,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     final started = result.value!;
     setState(() {
       _busy = false;
-      _record = started.assessment;
       _future = Future.value(_Started(started.assessment));
       _notice = started.created
           ? 'Assessment started. Stage 1 is recorded as complete because '
@@ -944,8 +814,7 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   });
 
   /// Opens one independent checkpoint view. The journey stepper navigates
-  /// between the five checkpoints; the workspace renders exactly one at a
-  /// time, and an inline stage's panel expands with its checkpoint.
+  /// between the five checkpoints; the workspace renders exactly one at a time.
   void _openCheckpoint(String key) => setState(() {
     // Written before the rebuild so a refresh during the transition still
     // restores this checkpoint. Only the `stage` parameter is replaced.
@@ -953,64 +822,7 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     _checkpoint = key;
     _notice = null;
     _writeError = null;
-    if (_inlineStages.contains(key)) {
-      _openStage = key;
-      if (key == 'business_requirements') _seedDraft();
-    } else {
-      _openStage = null;
-    }
   });
-
-  /// Builds the form from the persisted requirements, or from the shared
-  /// preferences when the assessment has none yet — so the first save starts
-  /// from the criteria the ranking already uses.
-  void _seedDraft() {
-    if (_draft != null) return;
-    final stored = _record?.requirements;
-    if (stored != null) {
-      _draft = _RequirementsDraft(
-        businessType: stored['business_type'] as String? ?? '',
-        propertyType: stored['property_type'] as String? ?? '',
-        targetMarket: _firstText(stored['requirements']),
-        seatingModel: stored['seating_model'] as String? ?? '',
-        minBudget: _text(stored['min_budget_rm']),
-        maxBudget: _text(stored['max_budget_rm']),
-        minSize: _text(stored['min_size_sqft']),
-        maxSize: _text(stored['max_size_sqft']),
-        preferredAreas: _textList(stored['preferred_areas']),
-      );
-      return;
-    }
-    final prefs = AppLocator.preferences;
-    // The recommendation the entrepreneur arrived from carries their own
-    // business type; prefer it over the shared preference, but never over an
-    // already-saved assessment requirement (handled above).
-    final carried = component.businessType.trim();
-    _draft = _RequirementsDraft(
-      businessType: carried.isNotEmpty ? carried : prefs.businessType,
-      propertyType: prefs.propertyType,
-      targetMarket: prefs.requirements.isEmpty ? '' : prefs.requirements.first,
-      seatingModel: prefs.seatingModel,
-      minBudget: _text(prefs.minBudgetRm),
-      maxBudget: _text(prefs.maxBudgetRm),
-      minSize: _text(prefs.minSizeSqft),
-      maxSize: prefs.maxSizeSqft.isFinite ? _text(prefs.maxSizeSqft) : '',
-      preferredAreas: prefs.preferredAreas,
-    );
-  }
-
-  static String _text(Object? value) =>
-      value is num ? value.toStringAsFixed(0) : '';
-
-  static List<String> _textList(Object? value) => [
-    if (value is List)
-      for (final item in value) '$item',
-  ];
-
-  static String _firstText(Object? value) {
-    final items = _textList(value);
-    return items.isEmpty ? '' : items.first;
-  }
 
   // ----------------------------------------------------------------- listing
 
@@ -2301,9 +2113,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   // ------------------------------------------------------------- workspace UI
 
   Component _workspace(AssessmentRecord record) {
-    // Cached for the requirements form's seed. Assigning during build is safe:
-    // it is a plain field write and never schedules a rebuild.
-    _record = record;
     if (_readinessAssessmentId != record.assessmentId) {
       if (_readinessAssessmentId != null) _checkpoint = null;
       _readinessAssessmentId = record.assessmentId;
@@ -2684,50 +2493,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     _m2QuestionnaireSection(record),
   ];
 
-  /// The five-question recommender, demoted from a second questionnaire to a
-  /// collapsed scoring section.
-  ///
-  /// It cannot simply be deleted: `requirements_saved_at` gates stage 2, and the
-  /// stored payload is what the stage reads back. Presenting it side by side with
-  /// the M2V1 instrument made it look like a second business declaration the
-  /// entrepreneur also had to complete. It is now closed by default, labelled for
-  /// what it is, and opened only on request.
-  Component _locationScoringSection(
-    AssessmentRecord record,
-  ) => section(classes: 'panel asw-inline', [
-    _panelHead(icon: 'tune', title: 'Location-scoring preferences'),
-    div(classes: 'panel__body stack stack--md', [
-      p(classes: 'small asw-muted', [
-        Component.text(
-          record.requirements == null
-              ? 'Not set yet. These answers feed the property recommendation '
-                    'score. They are separate from the business declaration '
-                    'above and are not M2 answers.'
-              : 'Saved. These answers feed the property recommendation score. '
-                    'They are separate from the business declaration above and '
-                    'are not M2 answers.',
-        ),
-      ]),
-      ActionButton(
-        _showScoringForm
-            ? 'Hide location preferences'
-            : 'Edit location preferences',
-        variant: 'secondary',
-        onClick: () => setState(() => _showScoringForm = !_showScoringForm),
-      ),
-      if (_showScoringForm) ...[
-        div(classes: 'asw-stepbar', [
-          h2(classes: 'asw-stepbar__title', [
-            Component.text('Property scoring inputs'),
-          ]),
-        ]),
-        record.requirementsVersion == 1
-            ? _legacyRequirementsPanel(record)
-            : _questionnairePanel(record),
-      ],
-    ]),
-  ]);
-
   /// CP-10 DEF-03 / DEF-11: the M2V1 research questionnaire (11 items) inside
   /// Step 2. This is the authoritative business-declaration instrument; every
   /// value still comes from `/api/v1/m2/...` through [M2WorkflowPanel], so no
@@ -2865,16 +2630,18 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     });
     try {
       final link = await AppLocator.m2.linkForMarketplace(assessmentId);
-      if (!mounted || _m2LinkFor != assessmentId || request != _m2LinkRequest)
+      if (!mounted || _m2LinkFor != assessmentId || request != _m2LinkRequest) {
         return;
+      }
       final id = link?['m2_assessment_id'] as String? ?? '';
       setState(() {
         _m2LinkId = id;
         _m2LinkStatus = id.isEmpty ? 'unlinked' : 'linked';
       });
     } catch (error) {
-      if (!mounted || _m2LinkFor != assessmentId || request != _m2LinkRequest)
+      if (!mounted || _m2LinkFor != assessmentId || request != _m2LinkRequest) {
         return;
+      }
       setState(() {
         _m2LinkStatus = 'error';
         _m2LinkError = _m2FailureText(error);
@@ -2891,8 +2658,9 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     });
     try {
       final link = await AppLocator.m2.initializeForMarketplace(assessmentId);
-      if (!mounted || _m2LinkFor != assessmentId || request != _m2LinkRequest)
+      if (!mounted || _m2LinkFor != assessmentId || request != _m2LinkRequest) {
         return;
+      }
       final id = link['m2_assessment_id'] as String? ?? '';
       if (id.isEmpty) {
         setState(() {
@@ -2906,8 +2674,9 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
         _m2LinkStatus = 'linked';
       });
     } catch (error) {
-      if (!mounted || _m2LinkFor != assessmentId || request != _m2LinkRequest)
+      if (!mounted || _m2LinkFor != assessmentId || request != _m2LinkRequest) {
         return;
+      }
       setState(() {
         _m2LinkStatus = 'error';
         _m2LinkError = _m2FailureText(error);
@@ -4090,57 +3859,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
         'at this location.';
   }
 
-  /// The measured evidence Step 3 established, as context bullets.
-  List<String> _reviewContext(EvidencePayload? evidence) {
-    if (evidence == null) {
-      return ['Step 3 has no measured evidence for this property yet.'];
-    }
-    final metrics = [
-      for (final group in evidence.groups)
-        for (final metric in group.metrics)
-          if (metric.isAvailable) metric,
-    ].take(4).toList();
-    if (metrics.isEmpty) {
-      return ['Step 3 has no measured evidence for this property yet.'];
-    }
-    return [
-      for (final (index, metric) in metrics.indexed)
-        'F${(index + 1).toString().padLeft(2, '0')} — ${metric.label}: '
-            '${_metricValue(metric)}',
-    ];
-  }
-
-  static String _reviewVersionStamp(AssessmentRecord record) {
-    final iso = record.updatedAt ?? '';
-    final date = iso.length >= 10 ? iso.substring(0, 10) : '';
-    final version = 'v${record.requirementsVersion}';
-    return date.isEmpty ? version : '$version ($date)';
-  }
-
-  static EvidenceMetric? _reviewMetric(EvidencePayload? payload, String key) {
-    if (payload == null) return null;
-    for (final group in payload.groups) {
-      for (final metric in group.metrics) {
-        if (metric.key == key && metric.isAvailable) return metric;
-      }
-    }
-    return null;
-  }
-
-  static EvidenceMetric? _reviewGroupMetric(
-    EvidencePayload? payload,
-    String groupKey,
-  ) {
-    if (payload == null) return null;
-    for (final group in payload.groups) {
-      if (group.key != groupKey) continue;
-      for (final metric in group.metrics) {
-        if (metric.isAvailable) return metric;
-      }
-    }
-    return null;
-  }
-
   /// A stored requirement rendered with the questionnaire's own option labels.
   String? _answerText(Map<String, dynamic> stored, String id) {
     final raw = stored[id];
@@ -4323,60 +4041,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     return rows;
   }
 
-  // --------------------------------------------------------------- step footer
-
-  /// The reference's step footer: back to the previous checkpoint, forward to
-  /// the next. Navigation only — completion is always an explicit decision.
-  Component _stepFooter(AssessmentRecord record, AssessmentStage selected) {
-    final index = record.stages.indexWhere(
-      (stage) => stage.key == selected.key,
-    );
-    final previous = index > 0 ? record.stages[index - 1] : null;
-    final next = index >= 0 && index < record.stages.length - 1
-        ? record.stages[index + 1]
-        : null;
-    return div(classes: 'asw-stepactions', [
-      if (previous != null)
-        ActionButton(
-          'Back to '
-          '${AssessmentJourneyStepper.displayLabel(previous.key, previous.title)}',
-          variant: 'secondary',
-          onClick: () => _openCheckpoint(previous.key),
-        ),
-      if (next != null)
-        ActionButton(
-          'Continue to '
-          '${AssessmentJourneyStepper.displayLabel(next.key, next.title)}',
-          icon: 'arrow_forward',
-          onClick: () => _openCheckpoint(next.key),
-        ),
-    ]);
-  }
-
-  /// A measured metric rendered with its unit, e.g. "31,366 people".
-  static String _metricValue(EvidenceMetric metric) {
-    final value = metric.value;
-    if (value == null) return 'Not measured';
-    final text = value == value.roundToDouble()
-        ? value.toStringAsFixed(0)
-        : value.toStringAsFixed(1);
-    final grouped = text.replaceAllMapped(
-      RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-      (match) => '${match[1]},',
-    );
-    final unit = metric.unit.trim();
-    if (unit.isEmpty) return grouped;
-    if (unit == 'count') return grouped;
-    if (unit == 'RM/month') return 'RM $grouped/month';
-    if (unit == 'm') {
-      final metres = value;
-      return metres >= 995
-          ? '${(metres / 1000).toStringAsFixed(1)} km'
-          : '$grouped m';
-    }
-    return '$grouped $unit';
-  }
-
   Component _crumbs({String? leaf}) {
     // The listing is the trail's end: Home › Assessments. The workspace adds
     // the checkpoint leaf, and its "Assessments" hop returns in place (no
@@ -4440,8 +4104,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
           ]),
         ]),
       ]);
-
-  // ------------------------------------------ stage 2: five-question flow (V3)
 
   /// One business-preference question (five-question Recommender V3,
   /// requirements schema v3, 2026-11-11).
@@ -4669,428 +4331,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     'space_size_preference': 'Space size',
   };
 
-  Component _questionnairePanel(AssessmentRecord record) {
-    _seedAnswers();
-    final index = _answerStep.clamp(0, _questions.length - 1);
-    final q = _questions[index];
-    final isLast = index == _questions.length - 1;
-    final answered = _questions
-        .where((question) => _stepValid(question.kind, _answers[question.id]))
-        .length;
-    final progress = (answered / _questions.length * 100).round();
-
-    // The reference puts the question navigator and the question card straight
-    // on the page (each with its own border), so the step bar above already
-    // names the step — no second panel head repeating "Business preferences".
-    return div(classes: 'asw-qlayout', [
-      // Left: question navigator.
-      aside(classes: 'asw-qnav', [
-        div(classes: 'asw-qnav__head', [
-          h3(classes: 'asw-qnav__title', [
-            Component.text('Questions (${_questions.length})'),
-          ]),
-          p(
-            classes: 'small asw-muted',
-            attributes: const {'aria-live': 'polite'},
-            [Component.text('$answered of ${_questions.length} answered')],
-          ),
-          div(
-            classes: 'asw-qnav__rail',
-            attributes: const {'aria-hidden': 'true'},
-            [
-              div(
-                classes: 'asw-qnav__fill',
-                styles: Styles(width: Unit.percent(progress.toDouble())),
-                const [],
-              ),
-            ],
-          ),
-        ]),
-        nav(
-          classes: 'asw-qnav__list',
-          attributes: const {'aria-label': 'Choose an assessment question'},
-          [
-            for (final (i, question) in _questions.indexed)
-              button(
-                classes: 'asw-qnav__item${i == index ? ' is-current' : ''}',
-                attributes: {'type': 'button'},
-                events: events(
-                  onClick: () => setState(() {
-                    _answerStep = i;
-                    _answerError = null;
-                  }),
-                ),
-                [
-                  span(classes: 'asw-qnav__label', [
-                    Component.text(
-                      _questionNavLabels[question.id] ?? question.id,
-                    ),
-                  ]),
-                  span(classes: 'asw-qnav__state', [
-                    Component.text(
-                      _stepValid(question.kind, _answers[question.id])
-                          ? '✓'
-                          : '',
-                    ),
-                  ]),
-                ],
-              ),
-          ],
-        ),
-        div(classes: 'asw-qnav__foot', [
-          Component.text(
-            'You can return to any question and change your answer.',
-          ),
-        ]),
-      ]),
-
-      // Right: the current question card.
-      div(classes: 'asw-qcard', [
-        div(classes: 'asw-qcard__header', [
-          span(classes: 'asw-qcard__code', [
-            Component.text('V3-Q${index + 1}'),
-          ]),
-          span(classes: 'asw-qcard__position', [
-            Component.text('Question ${index + 1} of ${_questions.length}'),
-          ]),
-        ]),
-        h2(classes: 'asw-qcard__prompt', [Component.text(q.prompt)]),
-        p(classes: 'asw-qcard__help', [Component.text(q.help)]),
-        div(classes: 'asw-qcard__meta', [
-          span(classes: 'asw-qcard__required', [
-            Component.text('Required to complete this step'),
-          ]),
-          span(classes: 'small asw-muted', [
-            Component.text(
-              q.kind == 'multi'
-                  ? 'Select every answer that applies'
-                  : 'One answer per question',
-            ),
-          ]),
-        ]),
-        div(classes: 'asw-qcard__answers', [
-          for (final (token, caption) in q.options)
-            label(classes: 'asw-answer${_isPicked(q, token) ? ' is-on' : ''}', [
-              input(
-                type: q.kind == 'multi' ? InputType.checkbox : InputType.radio,
-                name: 'aswQ${q.id}',
-                checked: _isPicked(q, token),
-                events: events(
-                  onChange: (_) => setState(() {
-                    _toggleAnswer(q, token);
-                    _answerError = null;
-                  }),
-                ),
-              ),
-              span(classes: 'asw-answer__label', [Component.text(caption)]),
-            ]),
-        ]),
-        if (_answerError != null)
-          div(classes: 'notice notice-warn', [Component.text(_answerError!)]),
-        // Footer split like the reference: Previous on the left, the forward
-        // action (next question, or save-and-complete on the last one) on
-        // the right.
-        div(classes: 'asw-qcard__footer', [
-          div(classes: 'asw-qcard__group', [
-            ActionButton(
-              'Previous',
-              variant: 'secondary',
-              onClick: index == 0
-                  ? null
-                  : () => setState(() {
-                      _answerStep = index - 1;
-                      _answerError = null;
-                    }),
-            ),
-          ]),
-          div(classes: 'asw-qcard__group', [
-            if (isLast)
-              ActionButton(
-                _busy ? 'Saving…' : 'Save and complete stage 2',
-                onClick: _busy ? null : () => _saveAnswers(record),
-              )
-            else
-              ActionButton(
-                'Next question',
-                icon: 'arrow_forward',
-                onClick: () {
-                  if (!_stepValid(q.kind, _answers[q.id])) {
-                    setState(
-                      () => _answerError = 'Answer this question to continue.',
-                    );
-                    return;
-                  }
-                  setState(() {
-                    _answerStep = index + 1;
-                    _answerError = null;
-                  });
-                },
-              ),
-          ]),
-        ]),
-      ]),
-    ]);
-  }
-
-  bool _isPicked(
-    ({
-      String id,
-      String prompt,
-      String help,
-      String kind,
-      List<(String, String)> options,
-    })
-    q,
-    String token,
-  ) {
-    final value = _answers[q.id];
-    if (q.kind == 'multi') {
-      return value is List && value.contains(token);
-    }
-    return value == token;
-  }
-
-  void _toggleAnswer(
-    ({
-      String id,
-      String prompt,
-      String help,
-      String kind,
-      List<(String, String)> options,
-    })
-    q,
-    String token,
-  ) {
-    if (q.kind == 'multi') {
-      final current = [
-        for (final item in (_answers[q.id] as List? ?? const [])) '$item',
-      ];
-      if (current.contains(token)) {
-        current.remove(token);
-      } else {
-        current.add(token);
-      }
-      _answers[q.id] = current;
-      return;
-    }
-    _answers[q.id] = token;
-  }
-
-  // ------------------------------------------------------------- stage 2 body
-
-  Component _legacyRequirementsPanel(AssessmentRecord record) {
-    _seedDraft();
-    final draft = _draft;
-    if (draft == null) return const span([]);
-
-    return section(classes: 'panel asw-inline', [
-      div(classes: 'panel__head', [
-        span(classes: 'panel__title', [
-          Component.text('Business requirements'),
-        ]),
-      ]),
-      div(classes: 'panel__body stack stack--md', [
-        p(classes: 'asw-note', [
-          Component.text(
-            'These are the same values your ranking preferences use. Saving '
-            'here writes them to this assessment and applies them to your '
-            'preferences, so the shortlist reflects what you just entered.',
-          ),
-        ]),
-        FutureBuilder<List<String>>(
-          future: _types(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
-              return const Skeleton(variant: 'row');
-            }
-            return _propertyTypeField(draft, snapshot.data ?? const []);
-          },
-        ),
-        div(classes: 'filters', [
-          div(classes: 'frow', [
-            _numberField(
-              'Minimum monthly rent (RM)',
-              value: draft.minBudget,
-              error: _draftErrors['min_budget_rm'],
-              hint: 'Optional. Below 0 is rejected; empty means no floor.',
-              onChanged: (v) => setState(() => draft.minBudget = v),
-            ),
-            _numberField(
-              'Maximum monthly rent (RM)',
-              value: draft.maxBudget,
-              error: _draftErrors['max_budget_rm'],
-              hint: 'Required, and must be above zero.',
-              onChanged: (v) => setState(() => draft.maxBudget = v),
-            ),
-            _numberField(
-              'Minimum floor area (sq ft)',
-              value: draft.minSize,
-              error: _draftErrors['min_size_sqft'],
-              hint: 'Optional. Empty means no floor.',
-              onChanged: (v) => setState(() => draft.minSize = v),
-            ),
-            _numberField(
-              'Maximum floor area (sq ft)',
-              value: draft.maxSize,
-              error: _draftErrors['max_size_sqft'],
-              hint: 'Required, and must be above zero.',
-              onChanged: (v) => setState(() => draft.maxSize = v),
-            ),
-          ]),
-          div(classes: 'frow', [
-            Field(
-              labelText: 'Business category',
-              error: _draftErrors['business_type'],
-              hint:
-                  'Your concept, e.g. "Specialty coffee". Describes the '
-                  'business, not the building.',
-              child: input(
-                attributes: {
-                  'type': 'text',
-                  'value': draft.businessType,
-                  'maxlength': '120',
-                  'placeholder': 'e.g. Specialty coffee',
-                },
-                events: events<String>(
-                  onInput: (v) => setState(() => draft.businessType = v),
-                ),
-              ),
-            ),
-            Field(
-              labelText: 'Target market',
-              error: _draftErrors['target_market'],
-              hint: 'Stored with the assessment as a requirement note.',
-              child: input(
-                attributes: {
-                  'type': 'text',
-                  'value': draft.targetMarket,
-                  'maxlength': '240',
-                  'placeholder': 'e.g. Office workers, students',
-                },
-                events: events<String>(
-                  onInput: (v) => setState(() => draft.targetMarket = v),
-                ),
-              ),
-            ),
-            Field(
-              labelText: 'Seating model',
-              error: _draftErrors['seating_model'],
-              hint: 'Optional. How the space will be used, e.g. "Dine-in".',
-              child: input(
-                attributes: {
-                  'type': 'text',
-                  'value': draft.seatingModel,
-                  'maxlength': '60',
-                  'placeholder': 'e.g. Dine-in with takeaway',
-                },
-                events: events<String>(
-                  onInput: (v) => setState(() => draft.seatingModel = v),
-                ),
-              ),
-            ),
-          ]),
-        ]),
-        if (_draftErrors.isNotEmpty)
-          div(classes: 'notice notice-warn', [
-            Component.text(
-              'Fix the highlighted fields. Nothing has been saved.',
-            ),
-          ]),
-        div(classes: 'actions-row', [
-          ActionButton(
-            _busy ? 'Saving…' : 'Save and complete stage 2',
-            onClick: _busy ? null : () => _saveRequirements(record),
-          ),
-          ActionButton(
-            'Close',
-            variant: 'ghost',
-            onClick: _busy ? null : () => _toggleStage('business_requirements'),
-          ),
-        ]),
-        p(classes: 'disclaimer', [
-          Component.text(
-            'The property type above is the building category the eligibility '
-            'filter matches against the catalogue. The business category is '
-            'your concept. They are separate fields: setting one never '
-            'overwrites the other.',
-          ),
-        ]),
-      ]),
-    ]);
-  }
-
-  Component _propertyTypeField(_RequirementsDraft draft, List<String> types) {
-    if (types.isEmpty) {
-      return Field(
-        labelText: 'Property type',
-        error: _draftErrors['property_type'],
-        hint:
-            'The catalogue\'s property-type list could not be loaded, so this '
-            'is free text. The eligibility filter matches it exactly against '
-            'the listing\'s property type.',
-        child: input(
-          attributes: {
-            'type': 'text',
-            'value': draft.propertyType,
-            'maxlength': '60',
-            'placeholder': 'e.g. Shop lot',
-          },
-          events: events<String>(
-            onInput: (v) => setState(() => draft.propertyType = v),
-          ),
-        ),
-      );
-    }
-
-    // `Any` is the value the recommendation filter treats as no constraint.
-    final options = ['Any', ...types];
-    return Field(
-      labelText: 'Property type',
-      error: _draftErrors['property_type'],
-      hint: 'Read from the catalogue, so every option matches real listings.',
-      child: div(classes: 'chips', [
-        for (final option in options)
-          label(
-            classes: option == draft.propertyType
-                ? 'checkpill is-on'
-                : 'checkpill',
-            [
-              input(
-                type: InputType.radio,
-                name: 'aswPropertyType',
-                checked: option == draft.propertyType,
-                events: events(
-                  onChange: (_) => setState(() => draft.propertyType = option),
-                ),
-              ),
-              span([Component.text(option)]),
-            ],
-          ),
-      ]),
-    );
-  }
-
-  Component _numberField(
-    String label, {
-    required String value,
-    required String? error,
-    required String hint,
-    required void Function(String) onChanged,
-  }) => Field(
-    labelText: label,
-    error: error,
-    hint: hint,
-    child: input(
-      attributes: {
-        'type': 'number',
-        'value': value,
-        'min': '0',
-        'step': '1',
-        'inputmode': 'numeric',
-      },
-      events: events<String>(onInput: onChanged),
-    ),
-  );
 }
 
 /// The outcome of the initial read, as a value so `build` can match on it.
@@ -5121,144 +4361,6 @@ final class _NotStarted extends _Load {
 final class _Failed extends _Load {
   final AssessmentFailure failure;
   const _Failed(this.failure);
-}
-
-// ================================================================= requirements
-
-/// Stage 2 form state.
-///
-/// Numeric fields are text on purpose: an emptied field has to stay visibly
-/// empty and fail validation, rather than being silently parsed to zero and
-/// saved as a real constraint the entrepreneur never chose.
-final class _RequirementsDraft {
-  String businessType;
-  String propertyType;
-  String targetMarket;
-  String seatingModel;
-  String minBudget;
-  String maxBudget;
-  String minSize;
-  String maxSize;
-  List<String> preferredAreas;
-
-  _RequirementsDraft({
-    required this.businessType,
-    required this.propertyType,
-    required this.targetMarket,
-    required this.seatingModel,
-    required this.minBudget,
-    required this.maxBudget,
-    required this.minSize,
-    required this.maxSize,
-    required this.preferredAreas,
-  });
-
-  /// The same limits the backend enforces, so the objection arrives before a
-  /// round trip. The server still validates independently.
-  Map<String, String> validate() {
-    final errors = <String, String>{};
-
-    final business = businessType.trim();
-    if (business.isEmpty) {
-      errors['business_type'] = 'Enter your business category.';
-    } else if (business.length > 120) {
-      errors['business_type'] = 'Use 120 characters or fewer.';
-    }
-
-    final type = propertyType.trim();
-    if (type.isEmpty) {
-      errors['property_type'] = 'Choose a property type, or "Any".';
-    } else if (type.length > 60) {
-      errors['property_type'] = 'Use 60 characters or fewer.';
-    }
-
-    if (targetMarket.trim().length > 240) {
-      errors['target_market'] = 'Use 240 characters or fewer.';
-    }
-    if (seatingModel.trim().length > 60) {
-      errors['seating_model'] = 'Use 60 characters or fewer.';
-    }
-
-    final minBudgetValue = _number(
-      minBudget,
-      'min_budget_rm',
-      errors,
-      required: false,
-    );
-    final maxBudgetValue = _number(
-      maxBudget,
-      'max_budget_rm',
-      errors,
-      required: true,
-    );
-    final minSizeValue = _number(
-      minSize,
-      'min_size_sqft',
-      errors,
-      required: false,
-    );
-    final maxSizeValue = _number(
-      maxSize,
-      'max_size_sqft',
-      errors,
-      required: true,
-    );
-
-    if (minBudgetValue != null &&
-        maxBudgetValue != null &&
-        minBudgetValue > maxBudgetValue) {
-      errors['min_budget_rm'] = 'Minimum rent cannot exceed the maximum.';
-    }
-    if (minSizeValue != null &&
-        maxSizeValue != null &&
-        minSizeValue > maxSizeValue) {
-      errors['min_size_sqft'] = 'Minimum floor area cannot exceed the maximum.';
-    }
-    return errors;
-  }
-
-  static double? _number(
-    String raw,
-    String field,
-    Map<String, String> errors, {
-    required bool required,
-  }) {
-    final text = raw.trim();
-    if (text.isEmpty) {
-      if (required) errors[field] = 'This value is required.';
-      return null;
-    }
-    final parsed = double.tryParse(text);
-    if (parsed == null || !parsed.isFinite) {
-      errors[field] = 'Enter a number.';
-      return null;
-    }
-    if (parsed < 0) {
-      errors[field] = 'Enter zero or a positive number.';
-      return null;
-    }
-    if (required && parsed <= 0) {
-      errors[field] = 'Enter a value greater than zero.';
-      return null;
-    }
-    return parsed;
-  }
-
-  /// The payload the backend's `validate_requirements` expects.
-  Map<String, dynamic> toPayload() => {
-    'business_type': businessType.trim(),
-    'property_type': propertyType.trim(),
-    'target_market': targetMarket.trim(),
-    'seating_model': seatingModel.trim(),
-    'min_budget_rm': double.tryParse(minBudget.trim()) ?? 0,
-    'max_budget_rm': double.tryParse(maxBudget.trim()) ?? 0,
-    'min_size_sqft': double.tryParse(minSize.trim()) ?? 0,
-    'max_size_sqft': double.tryParse(maxSize.trim()) ?? 0,
-    'requirements': targetMarket.trim().isEmpty
-        ? const []
-        : [targetMarket.trim()],
-    'preferred_areas': preferredAreas,
-  };
 }
 
 // =================================================================== sub-views
@@ -5400,31 +4502,6 @@ class _SelectedPropertyPanel extends StatelessComponent {
     dt([Component.text(label)]),
     dd([Component.text(value)]),
   ]);
-}
-
-/// One customer-research question candidate in step 4.
-///
-/// Derived — never fetched: [strengths] and [evidence] are written from the
-/// saved requirements and the measured Step 3 evidence, so the panel can always
-/// explain where a question came from. `group` is `high`, `low` or `custom`.
-final class _ReviewCandidate {
-  final String id;
-  final String group;
-  final String question;
-  final String source;
-  final String version;
-  final List<String> strengths;
-  final List<String> evidence;
-
-  const _ReviewCandidate({
-    required this.id,
-    required this.group,
-    required this.question,
-    required this.source,
-    required this.version,
-    required this.strengths,
-    required this.evidence,
-  });
 }
 
 /// The report document and the RP-13 business description read together.

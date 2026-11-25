@@ -139,7 +139,6 @@ flutter:
     - assets/models/ar_capture_target.glb
     - assets/models/white_frame_bezel.glb
     - assets/sitewise-mark-64.png
-    - assets/config/dev.json
     - assets/config/sitewise_dev.json
     - assets/images/capture_guide/
 

@@ -189,32 +189,12 @@ class LocationAnalysisService:
         return int(row or 0)
 
     def _research_association(self, property_id: int) -> dict[str, Any]:
-        """Strict 47-feature PU eligibility check (read-only, no imputation).
-
-        A listing without a verified subject link, or with missing model
-        features, is reported as unavailable with the exact reason — no score
-        is invented and no other property's figure is reused.
-        """
-        from sitewise.ml.property_features import FeatureResolutionError
-        from sitewise.ml.property_predictor import PropertyPUPredictor
+        """Report operational expanded64 coverage without substituting a score."""
+        from sitewise.ml.pu_expanded import expanded_rental_prediction
 
         try:
-            result = PropertyPUPredictor(self.session).predict(
-                property_id, source="rental"
-            )
-        except FeatureResolutionError as exc:
-            return {
-                "available": False,
-                "score": None,
-                "label": None,
-                "model_version": None,
-                "feature_count": None,
-                "available_features": None,
-                "missing_features": [],
-                "unavailable_reason": str(exc),
-                "research_only": True,
-            }
-        except Exception as exc:  # noqa: BLE001 — model load/inference must not break review
+            result = expanded_rental_prediction(self.session, property_id)
+        except Exception as exc:  # noqa: BLE001 — feature collection must not break review
             return {
                 "available": False,
                 "score": None,
@@ -236,6 +216,7 @@ class LocationAnalysisService:
             "feature_count": result.get("feature_count"),
             "available_features": result.get("available_features"),
             "missing_features": coverage if isinstance(coverage, list) else [],
+            "unvalidated_features": result.get("unvalidated_features", []),
             "unavailable_reason": result.get("reason"),
             "research_only": True,
         }

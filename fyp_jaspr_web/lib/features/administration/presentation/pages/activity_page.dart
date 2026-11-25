@@ -555,9 +555,9 @@ class _ActivityState extends State<AdminActivityPage> {
       data?.authentication,
       data?.mfa,
     ];
-    final checkedSources = sources.where((source) => source != null).length;
-    final availableSources = sources.where((source) => source?.available == true).length;
-    final unavailableSources = sources.where((source) => source?.available == false).length;
+    final checkedSources = sources.where((entry) => entry != null).length;
+    final availableSources = sources.where((entry) => entry?.available == true).length;
+    final unavailableSources = sources.where((entry) => entry?.available == false).length;
     return AppLayout(
       role: AppRole.admin,
       currentRoute: '/admin/activity',

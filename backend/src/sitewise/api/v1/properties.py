@@ -2,6 +2,7 @@
 
 import logging
 from typing import Literal
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field, field_validator
@@ -354,6 +355,7 @@ class OwnerDraftRequest(BaseModel):
     name (draft creation); updates may omit any field. Final submission
     re-validates completeness server-side."""
 
+    draft_request_id: UUID | None = None
     name: str | None = Field(default=None, min_length=1, max_length=160)
     property_type: str | None = Field(default=None, max_length=60)
     description: str | None = Field(default=None, max_length=4000)
@@ -463,7 +465,8 @@ def create_owner_draft(
     """Persist a NEW draft. The owner identity comes from the verified token;
     the database assigns the persistent id; the draft stays unpublished and
     outside the admin queue."""
-    _owner_write_only(current)
+    if not rbac.has_role(current.role, (rbac.ROLE_OWNER, rbac.ROLE_AGENT)):
+        raise ForbiddenError("Only a Property Owner or assigned Agent account may create a draft.")
     if not (payload.name or "").strip():
         raise HTTPException(
             status_code=422, detail="A draft property needs at least a name."
@@ -474,15 +477,42 @@ def create_owner_draft(
     # assignment row instead, which is what the workspace and the admin queue
     # both read. Owners keep the existing owner_user_id behaviour.
     agent_id = _provider_agent_id(session, current)
-    row = repo.create_owner_draft(
-        owner_user_id=None if agent_id is not None else current.user_id,
-        payload=payload.model_dump(),
-    )
-    if agent_id is not None:
-        AgentAssignmentRepository(session).assign(
-            int(row["id"]), agent_id, assigned_by=None
-        )
-        row = repo.owner_listing(int(row["id"])) or row
+    try:
+        request_key = None
+        existing_id = None
+        if payload.draft_request_id is not None:
+            request_key = str(uuid5(
+                NAMESPACE_URL, f"sitewise/draft/{current.user_id}/{payload.draft_request_id}"
+            ))
+            # Keep duplicate retries for this account and request in the same
+            # transaction order without locking unrelated draft submissions.
+            session.execute(text("""
+                SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))
+            """), {"key": request_key})
+            existing_id = session.execute(text("""
+                SELECT id FROM fyp.rental_properties WHERE draft_request_key = :key
+            """), {"key": request_key}).scalar_one_or_none()
+        if existing_id is not None:
+            row = _owned_listing_or_error(repo, int(existing_id), current)
+        else:
+            row = repo.create_owner_draft(
+                owner_user_id=None if agent_id is not None else current.user_id,
+                payload=payload.model_dump(exclude={"draft_request_id"}),
+                commit=False,
+            )
+            if request_key is not None:
+                session.execute(text("""
+                    UPDATE fyp.rental_properties SET draft_request_key = :key WHERE id = :id
+                """), {"key": request_key, "id": row["id"]})
+            if agent_id is not None:
+                AgentAssignmentRepository(session).assign(
+                    int(row["id"]), agent_id, assigned_by=None, commit=False
+                )
+                row = repo.owner_listing(int(row["id"])) or row
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
     return {
         "data": row,
         "meta": {
@@ -533,6 +563,9 @@ def update_own_listing(
     repo = FypPropertyRepository(session)
     _owned_listing_or_error(repo, property_id, current)
     listing = _owned_listing_or_error(repo, property_id, current, for_update=True)
+    provider_scope.require_mutable_listing(
+        session, listing_id=property_id, role=current.role
+    )
     if listing.get("is_published") or listing.get("verification_status") not in ("draft", "rejected"):
         raise HTTPException(status_code=409, detail="The property is locked for review or published.")
     verification = verification_row(session, property_id)
@@ -545,7 +578,7 @@ def update_own_listing(
             detail="This property is awaiting or has passed review; "
             "its details can no longer be edited.",
         )
-    fields = payload.model_dump(exclude_unset=True)
+    fields = payload.model_dump(exclude_unset=True, exclude={"draft_request_id"})
     if fields.get("name") is None:
         # A null name must not null out the NOT NULL column: keep the
         # existing draft name.
@@ -623,6 +656,9 @@ async def upload_listing_photo(
     _owner_write_only(current)
     repo = FypPropertyRepository(session)
     listing = _owned_listing_or_error(repo, property_id, current)
+    provider_scope.require_mutable_listing(
+        session, listing_id=property_id, role=current.role
+    )
     if listing.get("is_published") or listing.get("verification_status") not in ("draft", "rejected"):
         raise HTTPException(status_code=409, detail="Photos are locked for review or publication.")
     verification = verification_row(session, property_id)
@@ -678,6 +714,9 @@ def delete_listing_photo(
     _owned_listing_or_error(repo, property_id, current)
     _owner_write_only(current)
     listing = _owned_listing_or_error(repo, property_id, current)
+    provider_scope.require_mutable_listing(
+        session, listing_id=property_id, role=current.role
+    )
     if listing.get("is_published") or listing.get("verification_status") not in ("draft", "rejected"):
         raise HTTPException(status_code=409, detail="Photos are locked for review or publication.")
     deleted = repo.delete_listing_photo(property_id, photo_id)
@@ -698,6 +737,9 @@ def set_primary_listing_photo(
     _owned_listing_or_error(repo, property_id, current)
     _owner_write_only(current)
     listing = _owned_listing_or_error(repo, property_id, current)
+    provider_scope.require_mutable_listing(
+        session, listing_id=property_id, role=current.role
+    )
     if listing.get("is_published") or listing.get("verification_status") not in ("draft", "rejected"):
         raise HTTPException(status_code=409, detail="Photos are locked for review or publication.")
     if not repo.set_primary_listing_photo(property_id, photo_id):
@@ -899,3 +941,53 @@ def validate_property_address(
             "note": "Address validation does not verify ownership or approve the listing.",
         },
     }
+
+@router.post("/listings/{property_id}/validate-address")
+def validate_saved_property_address(
+    property_id: int,
+    session: Session = Depends(get_db),
+    current: AuthenticatedUser = Depends(require_property_owner),
+) -> dict:
+    """Validate the saved address and persist a server-obtained verdict."""
+    _owner_write_only(current)
+    repository = FypPropertyRepository(session)
+    listing = _owned_listing_or_error(repository, property_id, current)
+    provider_scope.require_mutable_listing(
+        session, listing_id=property_id, role=current.role
+    )
+    if listing["is_published"] or listing["verification_status"] not in ("draft", "rejected"):
+        raise HTTPException(status_code=409, detail="The property is locked for address edits.")
+    keys = ("address", "city", "state", "postcode", "latitude", "longitude")
+    if any(not listing.get(key) for key in keys[:4]):
+        raise HTTPException(status_code=422, detail="Save the street, city, state and postcode first.")
+    result = validate_property_address(
+        AddressValidationRequest(
+            address_lines=[listing["address"]],
+            city=listing["city"],
+            state=listing["state"],
+            postcode=listing["postcode"],
+        ),
+        current,
+    )["data"]
+    latest = _owned_listing_or_error(repository, property_id, current, for_update=True)
+    if (
+        latest["is_published"]
+        or latest["verification_status"] not in ("draft", "rejected")
+        or any(_owner_field_changed(listing.get(key), latest.get(key), key) for key in keys)
+    ):
+        raise HTTPException(status_code=409, detail="The saved property changed. Retry address verification.")
+    if session.execute(text("""
+        SELECT listing_id FROM fyp.agent_listing_assignment
+        WHERE listing_id = :id AND workflow_status IN ('accepted', 'needs_correction', 'submitted')
+        FOR UPDATE
+    """), {"id": property_id}).first() is not None:
+        raise HTTPException(status_code=409, detail="Use the inspection correction workflow while an inspection is active.")
+    repository.set_address_validation(
+        property_id,
+        status=result["status"],
+        formatted_address=result["formatted_address"],
+        latitude=result["latitude"],
+        longitude=result["longitude"],
+    )
+    session.commit()
+    return {"data": repository.owner_listing(property_id), "address_validation": result}

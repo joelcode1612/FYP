@@ -62,9 +62,10 @@ class ShapExplainer:
 
     def explain(
         self,
-        features: dict[str, float],
+        features: dict[str, float | None],
         *,
         background: list[dict[str, float]] | None = None,
+        allowed_missing: frozenset[str] = frozenset(),
     ) -> dict:
         loaded = self.loader.load_cached(self.model_name)
         if not background:
@@ -78,17 +79,20 @@ class ShapExplainer:
         except ImportError as exc:
             raise ModelUnavailableError("Install SHAP and numpy for explanations") from exc
 
-        def vector(row: dict[str, Any]) -> list[float]:
-            missing = [f for f in loaded.feature_names if row.get(f) is None]
+        def vector(row: dict[str, Any], allowed: frozenset[str] = frozenset()) -> list[float]:
+            missing = [f for f in loaded.feature_names if row.get(f) is None and f not in allowed]
             if missing:
                 raise ModelUnavailableError(f"SHAP background or subject is missing {missing}")
-            return [float(row[name]) for name in loaded.feature_names]
+            return [float("nan") if row.get(name) is None else float(row[name])
+                    for name in loaded.feature_names]
 
         if len(background) > 100:
             raise ModelUnavailableError("Provide up to 100 representative background observations")
-        X = np.asarray([vector(features)], dtype=float)
+        X = np.asarray([vector(features, allowed_missing)], dtype=float)
         B = np.asarray([vector(r) for r in background], dtype=float)
-        if not np.all(np.isfinite(X)) or not np.all(np.isfinite(B)):
+        missing_mask = np.asarray([features.get(name) is None and name in allowed_missing
+                                   for name in loaded.feature_names])
+        if not np.all(np.isfinite(X) | missing_mask) or not np.all(np.isfinite(B)):
             raise ModelUnavailableError("SHAP inputs contain nonfinite values")
 
         def positive_association(rows):

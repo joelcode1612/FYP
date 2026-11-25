@@ -854,11 +854,9 @@ def main() -> int:
 def _engine() -> Any:
     from sqlalchemy import create_engine
 
-    url = os.environ.get(
-        "ANALYTICS_DATABASE_URL",
-        "postgresql+psycopg2://postgres:123456@localhost:5432/Final_Location_Analysis",
-    )
-    return create_engine(url)
+    from sitewise.core.config import settings
+
+    return create_engine(settings.analytics_database_url)
 
 
 if __name__ == "__main__":

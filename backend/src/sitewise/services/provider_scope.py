@@ -26,6 +26,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from fastapi import HTTPException
 from sqlalchemy import text
 from sqlmodel import Session
 
@@ -117,6 +118,44 @@ def can_manage_listing(
         ):
             return True, True
     return True, False
+
+
+APPROVED_LOCK_MESSAGE = "This property has been approved and is locked for editing."
+MUTABLE_STATUSES = ("draft", "rejected", "changes_requested")
+
+
+def require_mutable_listing(
+    session: Session, *, listing_id: int, role: str
+) -> dict[str, Any]:
+    """Re-read the property inside the caller's transaction and lock it.
+
+    Approval, publication and pending review are authoritative in the database,
+    never in a cached client status or an ``editable`` response field. Only an
+    administrator may bypass this lock (for the explicit correction workflow).
+    """
+    if rbac.can_administer_users(role):
+        return {"listing_id": listing_id, "administrator": True}
+    row = session.execute(
+        text(
+            "SELECT verification_status, is_published "
+            "FROM fyp.rental_properties WHERE id = :pid FOR UPDATE"
+        ),
+        {"pid": listing_id},
+    ).mappings().first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Property not found.")
+    status = str(row.get("verification_status") or "").lower()
+    published = bool(row.get("is_published"))
+    if published or status in ("approved", "verified", "pending", "under_review"):
+        detail = (
+            APPROVED_LOCK_MESSAGE
+            if published or status in ("approved", "verified")
+            else "This property is locked while it awaits administrator review."
+        )
+        raise HTTPException(status_code=409, detail=detail)
+    if status not in MUTABLE_STATUSES:
+        raise HTTPException(status_code=409, detail=APPROVED_LOCK_MESSAGE)
+    return {"listing_id": listing_id, "administrator": False, "status": status}
 
 
 def managed_property_ids(

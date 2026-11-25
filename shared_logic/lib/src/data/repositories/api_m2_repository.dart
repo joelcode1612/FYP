@@ -110,8 +110,6 @@ String canonicalSourceJson(Object? value) {
   return jsonEncode(value);
 }
 
-String _sourceCanonical(Object? value) => canonicalSourceJson(value);
-
 /// M2 confirmation revisions are integral in the server contract. On dart2js
 /// JSON integers may also satisfy `is double`; preserve this known field as an
 /// integer without changing float formatting for BCB or other source packets.

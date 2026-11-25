@@ -292,6 +292,8 @@ class PropertyVerificationService:
         listing = self.get_property_owned(property_id, user_id, is_admin, role)
         verification = verification_row(self.session, property_id)
         documents = self._document_rows(property_id) if verification else []
+        if not is_admin and str(listing.get("owner_user_id")) != str(user_id):
+            documents = [doc for doc in documents if doc["verification_type"] == "listing"]
         corrections = self._requested_corrections(property_id, verification) if verification else {}
         return {
             "property": listing_payload(listing),
@@ -301,7 +303,8 @@ class PropertyVerificationService:
         }
 
     def document_for_download(
-        self, document_id: uuid.UUID, user_id: uuid.UUID, is_admin: bool
+        self, document_id: uuid.UUID, user_id: uuid.UUID, is_admin: bool,
+        *, agent_role: str | None = None,
     ) -> VerificationDocument:
         doc = self.session.get(VerificationDocument, document_id)
         if doc is None:
@@ -311,12 +314,14 @@ class PropertyVerificationService:
         listing = rental_listing(self.session, doc.property_id)
         owner = listing.get("owner_user_id") if listing else None
         owned = owner is not None and str(owner) == str(user_id)
-        if not owned:
-            verification = self.session.get(PropertyVerification, doc.verification_id)
-            submitted = verification is not None and verification.submitted_by == user_id
-            if not submitted:
-                raise ForbiddenError("This document belongs to another submission.")
-        return doc
+        if owned:
+            return doc
+        # Inspection files may be read by the current MFA-verified assignee.
+        # Ownership proof is restricted to the Owner and Admin reviewers.
+        if doc.verification_type == "listing" and provider_scope.is_agent_role(agent_role):
+            self.get_property_owned(doc.property_id, user_id, role=agent_role)
+            return doc
+        raise ForbiddenError("You do not have access to this verification document.")
 
     # -- mutations ----------------------------------------------------------
 
@@ -328,27 +333,11 @@ class PropertyVerificationService:
         role: str | None = None,
         panorama_id: str | None = None,
     ) -> dict[str, Any]:
-        """Submit (or resubmit) the property for review.
-
-        ``scope`` selects how much is being submitted:
-
-        * ``full`` (default) — the historical behaviour: at least one active
-          ownership document is REQUIRED and both dimensions move to
-          ``pending`` together.
-        * ``listing`` — the listing-information-only workflow: a complete
-          listing enters the review queue with
-          ``listing_status = pending`` while ``ownership_status`` stays
-          exactly where it is (``not_submitted`` for a first submission).
-          Ownership evidence is NOT required, ownership is never verified by
-          this path, and publication eligibility stays ``false`` — approving
-          the listing later never publishes the property.
-
-        Completeness applies to both scopes. Google address validation is
-        no longer a submission prerequisite; administrators review the entered
-        address and available location evidence.
-        """
-        if scope not in ("full", "listing"):
-            raise ConflictError("scope must be 'full' or 'listing'.")
+        """Submit one dimension or the legacy combined review."""
+        if scope not in ("full", "listing", "ownership"):
+            raise ConflictError("Unknown verification submission scope.")
+        listing_scope = scope in ("full", "listing")
+        ownership_scope = scope in ("full", "ownership")
         listing = self.get_property_owned(property_id, submitter_id, role=role)
 
         # An incomplete draft can be SAVED but never SUBMITTED: every field
@@ -358,7 +347,7 @@ class PropertyVerificationService:
         missing = listing_completeness_errors(
             listing, require_availability=not provider_scope.is_agent_role(role),
         )
-        if missing:
+        if listing_scope and missing:
             raise ConflictError(
                 "Complete these fields before submitting for verification: "
                 + ", ".join(missing)
@@ -369,6 +358,9 @@ class PropertyVerificationService:
         # enters the queue with the address as entered, and location truth is
         # established by geospatial enrichment plus admin review.
 
+        self.session.execute(text(
+            "SELECT pg_advisory_xact_lock(hashtextextended('property-verification:' || CAST(:pid AS text), 0))"
+        ), {"pid": property_id})
         verification = verification_row(self.session, property_id)
         if verification is None:
             verification = PropertyVerification(property_id=property_id, submitted_by=submitter_id)
@@ -388,6 +380,9 @@ class PropertyVerificationService:
                         "This listing is already awaiting or has passed "
                         "review; wait for the administrator's decision."
                     )
+            elif scope == "ownership":
+                if verification.ownership_status not in RESUBMITTABLE:
+                    raise ConflictError("Ownership verification is already awaiting or has passed review.")
             elif not can_resubmit(verification.listing_status, verification.ownership_status):
                 raise ConflictError(
                     "This property is already awaiting or has passed review; "
@@ -397,7 +392,7 @@ class PropertyVerificationService:
                 "listing_status": verification.listing_status,
                 "ownership_status": verification.ownership_status,
             }
-        if scope == "full":
+        if ownership_scope:
             ownership_docs = self.session.exec(
                 select(VerificationDocument).where(
                     VerificationDocument.property_id == property_id,
@@ -425,13 +420,13 @@ class PropertyVerificationService:
                     "Ownership proof is recorded but its private file cannot "
                     "be opened on this server. Ask the Owner to re-upload it."
                 )
-        if verification.listing_status in RESUBMITTABLE:
+        if listing_scope and verification.listing_status in RESUBMITTABLE:
             verification.listing_status = "pending"
         # The listing-only scope NEVER advances ownership: without evidence
         # the dimension must remain not_submitted (or whatever accurate state
         # it already holds) — an approval of listing facts is not proof of
         # ownership and never moves this status.
-        if scope == "full" and verification.ownership_status in RESUBMITTABLE:
+        if ownership_scope and verification.ownership_status in RESUBMITTABLE:
             verification.ownership_status = "pending"
         verification.submitted_by = submitter_id
         verification.latest_note = None
@@ -440,17 +435,18 @@ class PropertyVerificationService:
         verification.version += 1
         # The listing row and the verification record move in the SAME
         # transaction: a submission never half-lands.
-        FypPropertyRepository(self.session).set_listing_verification_status(
-            property_id, "pending"
-        )
+        if listing_scope:
+            FypPropertyRepository(self.session).set_listing_verification_status(
+                property_id, "pending"
+            )
         self.session.add(
             VerificationAudit(
                 property_id=property_id,
                 verification_id=verification.verification_id,
-                verification_type=None if scope == "full" else "listing",
-                previous_status=previous["listing_status"],
-                new_status=verification.listing_status,
-                action="submitted" if scope == "full" else "listing_submitted",
+                verification_type=None if scope == "full" else scope,
+                previous_status=previous["ownership_status" if scope == "ownership" else "listing_status"],
+                new_status=verification.ownership_status if scope == "ownership" else verification.listing_status,
+                action="submitted" if scope == "full" else f"{scope}_submitted",
             )
         )
         # Agent assignment state changes in this SAME transaction as
@@ -464,7 +460,7 @@ class PropertyVerificationService:
         # the canonical row), so the job is no longer the proof. Legacy
         # sessions keep the same semantics: their panorama row only exists
         # after the worker completed the stitch.
-        if provider_scope.is_agent_role(role):
+        if listing_scope and provider_scope.is_agent_role(role):
             # SQLAlchemy's text() parses ':true' inside a JSON string literal
             # as a bind parameter, which made this UPDATE fail with
             # "A value is required for bind parameter 'true'". Bind the whole
@@ -972,6 +968,8 @@ class AdminPropertyReviewService:
             mirrored = "rejected"
         elif verification.publication_eligible:
             mirrored = "approved"
+        elif verification.listing_status == "not_submitted":
+            mirrored = "draft"
         else:
             mirrored = "pending"
         FypPropertyRepository(self.session).set_listing_verification_status(
