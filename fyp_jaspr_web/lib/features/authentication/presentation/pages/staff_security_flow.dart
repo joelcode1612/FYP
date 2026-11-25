@@ -79,7 +79,7 @@ class _StaffSecurityFlowState extends State<StaffSecurityFlow> {
           _Screen.sessionExpired =>
             'Your sign-in session has expired. Please sign in again.',
           _Screen.roleDenied =>
-            'This account does not have Agent or Administrator access, so it cannot use staff verification.',
+            'This verification is available to Property Owners, Agents, and Administrators.',
           _Screen.accountBlocked =>
             'Your account is not active. Contact a Sitewise administrator before signing in.',
           _Screen.enroll =>

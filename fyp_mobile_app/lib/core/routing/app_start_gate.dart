@@ -164,6 +164,20 @@ class _AppStartGateState extends ConsumerState<AppStartGate> {
           return StaffWorkspaceRequiredView(role: role);
         }
         return _afterSignIn(state);
+      case AuthStatus.staffOnboarding:
+        final user = state.user;
+        if (user == null || !user.isPendingProvider) {
+          return const AccountStatusView(
+            message: 'This invitation session is not valid.',
+          );
+        }
+        final navigation = postAuthNavigation(user);
+        _go(
+          navigation?.route ?? providerOnboardingRoute,
+          enterRole: user.role,
+          arguments: navigation?.arguments,
+        );
+        return _splash();
       case AuthStatus.accountInactive:
         return AccountStatusView(message: state.message);
       case AuthStatus.error:

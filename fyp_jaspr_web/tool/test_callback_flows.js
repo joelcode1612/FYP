@@ -13,9 +13,8 @@
 //     url." / "No authenticated session was returned." errors
 //   * session wait: a late callback session is awaited, not misreported
 //   * one completion per document
-//   * updatePassword: invite flow ends the LOCAL session, leaves the account
-//     pending, leaves a one-time notice and redirects to /staff/signin;
-//     recovery flow keeps the normal sign-in completion; failed updates
+//   * updatePassword: invite flow keeps the session for trusted MFA and
+//     activation; recovery flow keeps the normal sign-in completion; failed updates
 //     neither redirect nor lose the flow context
 //
 // Run: npm run test-callbacks --prefix tool   (or: node tool/test_callback_flows.js)
@@ -307,30 +306,22 @@ test('one completion: concurrent complete() calls navigate exactly once', async 
 
 // --- updatePassword: invitation flow (Issue C) --------------------------------
 
-test('invite update: sets password, signs out LOCALLY, leaves notice, routes to /staff/signin', async () => {
-  const { bridge, navigations, updateUserCalls, signOutCalls, sessionStorage } = await boot({
-    url: 'https://x.test/reset-password',
-    role: 'agent',
-    status: 'pending',
+for (const role of ['agent', 'owner']) {
+  test(`invite update: ${role} keeps its session and starts MFA before activation`, async () => {
+    const { bridge, navigations, updateUserCalls, signOutCalls, sessionStorage } = await boot({
+      url: 'https://x.test/reset-password',
+      role,
+      status: 'pending',
+    });
+    sessionStorage.setItem('sitewise.passwordFlow', 'invite');
+    await bridge.updatePassword('Sup3rSecret!x');
+    assert.strictEqual(updateUserCalls.length, 1, 'exactly one credential update');
+    assert.strictEqual(signOutCalls.length, 0, 'the session is needed to verify TOTP');
+    assert.deepStrictEqual(navigations, ['/staff/mfa']);
+    assert.strictEqual(sessionStorage.getItem('sitewise.passwordFlow'), null);
+    assert.strictEqual(sessionStorage.getItem('sitewise.passwordNotice'), null);
   });
-  sessionStorage.setItem('sitewise.passwordFlow', 'invite');
-  await bridge.updatePassword('Sup3rSecret!x');
-  assert.strictEqual(updateUserCalls.length, 1, 'exactly one credential update');
-  assert.strictEqual(updateUserCalls[0].password, 'Sup3rSecret!x');
-  assert.strictEqual(signOutCalls.length, 1, 'exactly one sign-out');
-  assert.strictEqual(signOutCalls[0].scope, 'local', 'LOCAL sign-out only');
-  assert.deepStrictEqual(navigations, ['/staff/signin']);
-  assert.strictEqual(
-    sessionStorage.getItem('sitewise.passwordFlow'),
-    null,
-    'flow context cleared after success',
-  );
-  const raw = sessionStorage.getItem('sitewise.passwordNotice');
-  assert.ok(raw, 'one-time success notice left for the sign-in page');
-  const notice = JSON.parse(raw);
-  assert.strictEqual(notice.title, 'Password successfully created!');
-  assert.match(notice.body, /awaiting administrator activation/);
-});
+}
 
 test('invite update: the notice never carries credentials or tokens', async () => {
   const { bridge, sessionStorage } = await boot({ url: 'https://x.test/reset-password' });
@@ -359,10 +350,12 @@ test('invite update: a failed update stays on the page and keeps the flow contex
   assert.strictEqual(sessionStorage.getItem('sitewise.passwordNotice'), null);
 });
 
-test('invite update: consumePasswordNotice is one-shot', async () => {
-  const { bridge, sessionStorage } = await boot({ url: 'https://x.test/reset-password' });
-  sessionStorage.setItem('sitewise.passwordFlow', 'invite');
-  await bridge.updatePassword('Sup3rSecret!x');
+test('a legacy password notice is consumed once', async () => {
+  const { bridge, sessionStorage } = await boot({ url: 'https://x.test/login' });
+  sessionStorage.setItem('sitewise.passwordNotice', JSON.stringify({
+    title: 'Password successfully created!',
+    body: 'The password was set.',
+  }));
   const first = JSON.parse(bridge.consumePasswordNotice());
   assert.strictEqual(first.title, 'Password successfully created!');
   assert.strictEqual(bridge.consumePasswordNotice(), null, 'second read consumes nothing');

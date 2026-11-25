@@ -53,6 +53,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // log, auth listeners and the mutable assurance object.
 async function boot({
   pathname,
+  search = '',
   role,
   aal,
   factors = VERIFIED_FACTOR,
@@ -77,6 +78,7 @@ async function boot({
   const enrollCalls = [];
   const unenrollCalls = [];
   const logs = [];
+  let activations = 0;
   const record = (...args) => logs.push(args.map((a) => String(a)).join(' '));
   // Mutable session state: the verify step mutates it the way GoTrue's verify
   // response does (aal2 token + verified factor), and tests may downgrade it
@@ -148,10 +150,10 @@ async function boot({
   };
   const location = {
     pathname,
-    href: 'https://x.test' + pathname,
+    href: 'https://x.test' + pathname + search,
     // Real browsers always expose these as strings; the callback detection
     // reads them once at document load.
-    search: '',
+    search,
     hash: '',
     protocol: 'https:',
     origin: 'https://x.test',
@@ -174,6 +176,12 @@ async function boot({
       return json({ configured: true, supabaseUrl: 'https://x.supabase.co', supabasePublishableKey: 'pub' });
     if (u.endsWith('/health')) return json({ status: 'ok' });
     if (u.endsWith('/api/v1/auth/me')) return json(profile);
+    if (u.endsWith('/api/v1/staff/onboarding/complete')) {
+      if (sessionState.aal !== 'aal2') return json({ detail: 'MFA required' }, false, 403);
+      activations++;
+      profile.account_status = 'active';
+      return json({ ok: true });
+    }
     return json({ detail: 'not found' }, false, 404);
   };
   const sandbox = {
@@ -215,6 +223,7 @@ async function boot({
     enrollCalls,
     unenrollCalls,
     logs,
+    get activations() { return activations; },
   };
 }
 
@@ -576,6 +585,56 @@ test('post-verify: an already-aal2 session is never sent back to /staff/verify',
   await bridge.complete();
   // complete() routes to the account's own home — never back to verification.
   assert.deepStrictEqual(navigations, ['/admin']);
+});
+
+test('Owner at aal1 must verify when opening Add Property', async () => {
+  const { navigations } = await boot({
+    pathname: '/owner/add-property',
+    search: '?id=42',
+    role: 'owner',
+    aal: 'aal1',
+  });
+  assert.deepStrictEqual(navigations, ['/staff/verify']);
+});
+
+test('verified Owner returns to the intended draft', async () => {
+  const { bridge, navigations } = await boot({
+    pathname: '/staff/verify',
+    search: '?next=%2Fowner%2Fadd-property%3Fid%3D42',
+    role: 'owner',
+    aal: 'aal1',
+  });
+  await bridge.mfaChallengeStart();
+  assert.strictEqual(await bridge.mfaChallengeVerify('123456'), true);
+  await bridge.complete();
+  assert.deepStrictEqual(navigations, ['/owner/add-property?id=42']);
+});
+
+test('Owner MFA cannot use an Admin return route', async () => {
+  const { bridge, navigations } = await boot({
+    pathname: '/staff/verify',
+    search: '?next=%2Fadmin%2Flistings',
+    role: 'owner',
+    aal: 'aal2',
+  });
+  await bridge.mfaChallengeStart();
+  await bridge.complete();
+  assert.deepStrictEqual(navigations, ['/owner']);
+});
+
+test('pending invited Owner activates only after MFA', async () => {
+  const fixture = await boot({
+    pathname: '/staff/verify',
+    role: 'owner',
+    aal: 'aal1',
+    status: 'pending',
+  });
+  await fixture.bridge.mfaChallengeStart();
+  assert.strictEqual(fixture.activations, 0);
+  await fixture.bridge.mfaChallengeVerify('123456');
+  await fixture.bridge.complete();
+  assert.strictEqual(fixture.activations, 1);
+  assert.deepStrictEqual(fixture.navigations, ['/owner']);
 });
 
 (async () => {

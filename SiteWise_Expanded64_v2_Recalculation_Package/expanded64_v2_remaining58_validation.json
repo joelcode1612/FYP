@@ -1,0 +1,16 @@
+{
+  "generated_at_from_inventory_utc": "2026-11-25T12:22:40.258177+00:00",
+  "definition_version": "expanded64-feature-definitions-v1",
+  "features_assessed": 58,
+  "retained_unchanged": 58,
+  "flagged_inconsistent_or_unresolved": 18,
+  "method": "Read-only cross-check of the committed 64-feature parity evidence, the runtime category mapping and the original 1,796-row training CSV. No database write, no value substitution, no definition change.",
+  "excluded_from_assessment": [
+    "osm_walkway_length_density_500m_km_km2",
+    "pop_2000m",
+    "pop_3000m",
+    "road_length_density_500m_km_km2",
+    "walk_isochrone_area_10min_km2",
+    "worldpop_walk_reachable_10min"
+  ]
+}

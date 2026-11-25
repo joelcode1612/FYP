@@ -9,9 +9,29 @@ import 'package:fyp/core/di/service_locator.dart';
 import 'package:fyp/core/config/mobile_config.dart';
 import 'package:fyp/core/theme/sitewise_m3.dart';
 import 'package:fyp/core/theme/sitewise_theme.dart';
+import 'package:fyp/features/property_management/presentation/widgets/address_preview_panel.dart';
 import 'package:fyp/shared/presentation/layouts/mobile_app_shell.dart';
 import 'package:fyp/core/routing/mobile_navigation.dart';
 import 'package:fyp/shared/presentation/layouts/provider_tab_scope.dart';
+
+/// Holds the live form's exit guard for the Provider shell's system-back
+/// handler. Only one Add wizard is interactive at a time; the form clears its
+/// own registration on dispose.
+class AddPropertyLeaveGuard extends Notifier<Future<bool> Function()?> {
+  @override
+  Future<bool> Function()? build() => null;
+
+  void register(Future<bool> Function() guard) => state = guard;
+
+  void unregister(Future<bool> Function() guard) {
+    if (identical(state, guard)) state = null;
+  }
+}
+
+final addPropertyLeaveGuardProvider =
+    NotifierProvider<AddPropertyLeaveGuard, Future<bool> Function()?>(
+      AddPropertyLeaveGuard.new,
+    );
 
 /// SiteWise Add Property — the ONE create/edit form for the whole Provider
 /// workspace, reused unchanged by Property Owners and Agents.
@@ -22,13 +42,20 @@ import 'package:fyp/shared/presentation/layouts/provider_tab_scope.dart';
 /// an agent's records the existing management assignment — never by a second
 /// form.
 ///
-/// Drafts persist in PostgreSQL (`fyp.rental_properties` with
-/// ``verification_status='draft'``) through the authenticated FastAPI
-/// endpoints; submitting hands the record to the existing property
-/// verification workflow (documents -> submit -> admin review). There is no
-/// local-only state here: every save is a server round trip, and the
-/// confirmation step shows the real database-assigned property ID.
-class SitewiseAddPropertyMobilePage extends StatefulWidget {
+/// The registration wizard is memory-only until the Review step: Back and
+/// Continue keep every controller and choice in this State, and no database
+/// row is created while the form is being filled in. The single "Save
+/// property" action on Review is the only write; it persists through the
+/// authenticated FastAPI endpoint into PostgreSQL (`fyp.rental_properties`
+/// with ``verification_status='draft'``), carries the signed address
+/// confirmation so verified coordinates are stored, and the backend queues
+/// the existing geospatial enrichment on that write. The saved row then moves
+/// through the existing verification workflow (documents -> Agent inspection
+/// -> Admin review) and remains Draft · Not published until that completes.
+///
+/// Leaving an unsaved new form — by back navigation or by the Provider dock —
+/// asks for confirmation before the in-memory form is discarded.
+class SitewiseAddPropertyMobilePage extends ConsumerStatefulWidget {
   /// Resume an existing draft (`fyp.rental_properties.id`) from
   /// My listings. Null starts a blank form.
   final String? initialDraftId;
@@ -36,12 +63,12 @@ class SitewiseAddPropertyMobilePage extends StatefulWidget {
   const SitewiseAddPropertyMobilePage({super.key, this.initialDraftId});
 
   @override
-  State<SitewiseAddPropertyMobilePage> createState() =>
+  ConsumerState<SitewiseAddPropertyMobilePage> createState() =>
       _SitewiseAddPropertyMobilePageState();
 }
 
 class _SitewiseAddPropertyMobilePageState
-    extends State<SitewiseAddPropertyMobilePage> {
+    extends ConsumerState<SitewiseAddPropertyMobilePage> {
   // The Add Property form is the Provider workspace's Add destination. Its
   // palette now points at the shared SiteWise design system instead of
   // carrying a private copy that drifted from the entrepreneur screens.
@@ -65,9 +92,9 @@ class _SitewiseAddPropertyMobilePageState
   static const List<String> _stepDescriptions = <String>[
     'Enter the basic details of your commercial unit.',
     'Add the address and any optional property details.',
-    'An authorized Agent will independently inspect and capture the 360° tour.',
-    'Check the details before saving your draft.',
-    'Save the property as a draft. Assign an Agent later in Requests.',
+    'An authorized Agent will inspect the property and capture its 360° tour.',
+    'Check the details and confirm the location before saving.',
+    'Your property stays a draft until the existing verification workflow completes.',
   ];
 
   // The one Agent/Owner Add Property form offers only two property types.
@@ -125,10 +152,33 @@ class _SitewiseAddPropertyMobilePageState
   String? _leaseChoice;
   String? _tenure;
   String? _titleType;
-  String? _landlordPermission;
   String? _legacyAvailability;
   DateTime? _availableFrom;
-  final String _draftRequestId = _newDraftRequestId();
+  String? _draftRequestId;
+  Map<String, dynamic>? _createAttempt;
+  final Set<String> _pendingReplayFields = {};
+  Map<String, dynamic> _draftBaseline = {};
+  bool _draftLoadFailed = false;
+  bool _loadingDraft = false;
+
+  // --- Automatic address preview (server-side provider chain) ---------------
+  // Debounced auto-search once the required address fields are valid. The
+  // confirmed location rides the single Review-step save as signed evidence
+  // that the backend re-verifies before storing coordinates.
+  Timer? _previewTimer;
+  int _previewSeq = 0;
+  AddressPreview? _addressPreview;
+  bool _previewPending = false;
+  String? _previewError;
+  (String, String, String, String)? _lastRequestedKey;
+  String? _confirmedToken;
+  (String, String, String, String)? _confirmedKey;
+  String? _confirmedLabel;
+  (String, String, String, String)? _previewAddressKey;
+  String? _savedAddressStatus;
+  String? _savedFormattedAddress;
+  DateTime? _previewExpiresAt;
+
   String? _validationMessage;
 
   /// Field-specific errors, rendered under the relevant control. The shared
@@ -140,8 +190,17 @@ class _SitewiseAddPropertyMobilePageState
   String _serverStatus = 'draft';
   String? _rejectionReason;
   bool _saving = false;
-  String? _serverMessage;
   String? _serverError;
+
+  /// Claimed for the whole final save, including its client validation, so a
+  /// repeated tap can never issue a second create request.
+  bool _saveInFlight = false;
+
+  /// True only after the backend acknowledged the final save. An unsaved new
+  /// form is guarded on every exit; a saved form is not.
+  bool _savedInSession = false;
+
+  late final Future<bool> Function() _leaveGuard = _confirmDiscardIfUnsaved;
 
   String get _propertyName => _nameController.text.trim();
   String get _monthlyRent => _rentController.text.trim();
@@ -189,18 +248,31 @@ class _SitewiseAddPropertyMobilePageState
 
   bool get _live => MobileConfig.usesLiveApi;
 
+  /// An existing saved property (including a draft being edited) is never
+  /// treated as unsaved; only a new form that has not reached a confirmed
+  /// backend save is guarded when the user leaves.
+  bool get _hasUnsavedNewProperty => _draftId == null && !_savedInSession;
+
   @override
   void initState() {
     super.initState();
-    if (widget.initialDraftId != null &&
-        widget.initialDraftId!.isNotEmpty &&
-        MobileConfig.usesLiveApi) {
-      _resumeDraft(widget.initialDraftId!);
+    // The persistent Provider shell asks this guard before its system-back
+    // handler switches away from the Add tab.
+    ref.read(addPropertyLeaveGuardProvider.notifier).register(_leaveGuard);
+    if (!_live) return;
+    final id = widget.initialDraftId;
+    if (id != null && id.isNotEmpty) {
+      _draftId = id;
+      unawaited(_resumeDraft(id));
+    } else {
+      _draftBaseline = _draftFields();
+      unawaited(_recoverCreation());
     }
   }
 
   @override
   void dispose() {
+    _previewTimer?.cancel();
     _nameController.dispose();
     _rentController.dispose();
     _areaController.dispose();
@@ -214,6 +286,7 @@ class _SitewiseAddPropertyMobilePageState
     _frontageController.dispose();
     _leaseMonthsController.dispose();
     _depositController.dispose();
+    ref.read(addPropertyLeaveGuardProvider.notifier).unregister(_leaveGuard);
     super.dispose();
   }
 
@@ -221,25 +294,65 @@ class _SitewiseAddPropertyMobilePageState
   // Server lifecycle
   // ---------------------------------------------------------------------------
 
-  Future<void> _resumeDraft(String id) async {
+  Future<void> _loadDraft(
+    Future<OwnerListing?> Function() load, {
+    String? storageKey,
+  }) async {
+    if (_saving) return;
     setState(() {
       _saving = true;
+      _loadingDraft = true;
+      _draftLoadFailed = false;
       _serverError = null;
     });
     try {
-      final listing = await ServiceLocator.ownerListings.getListing(id);
-      if (!mounted) return;
+      final listing = await load();
+      if (!mounted || listing == null) return;
       _applyListing(listing);
-    } on Object catch (error) {
+      if (storageKey != null) await _forgetCreation(storageKey);
+    } catch (error) {
       if (!mounted) return;
       setState(() {
+        _draftLoadFailed = true;
         _serverError = _readableError(
           error,
           fallback: 'Could not load the saved draft.',
         );
       });
     } finally {
-      if (mounted) setState(() => _saving = false);
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _loadingDraft = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _resumeDraft(String id) =>
+      _loadDraft(() => ServiceLocator.ownerListings.getListing(id));
+
+  Future<void> _recoverCreation() async {
+    final key = ServiceLocator.draftRequests.accountKey;
+    if (key == null) return;
+    await _loadDraft(() async {
+      final requestId = _draftRequestId ??= await ServiceLocator.draftRequests
+          .read(key);
+      if (requestId == null) return null;
+      return ServiceLocator.ownerListings.recoverDraft(requestId);
+    }, storageKey: key);
+  }
+
+  Future<void> _forgetCreation(String? key) async {
+    final requestId = _draftRequestId;
+    _draftRequestId = null;
+    _createAttempt = null;
+    _pendingReplayFields.clear();
+    if (key == null || requestId == null) return;
+    try {
+      await ServiceLocator.draftRequests.forget(key, requestId);
+    } on Object {
+      // The saved row can still be recovered from the retained key.
     }
   }
 
@@ -314,7 +427,6 @@ class _SitewiseAddPropertyMobilePageState
           };
     _tenure = listing.tenure;
     _titleType = listing.titleType;
-    _landlordPermission = listing.landlordFnbPermission;
     _availableFrom = DateTime.tryParse(listing.availableFrom ?? '');
     final normalizedType = normalizeCommercialPropertyType(
       listing.propertyType,
@@ -326,10 +438,40 @@ class _SitewiseAddPropertyMobilePageState
             _supportedPropertyTypes.contains(normalizedType)
         ? normalizedType
         : '';
+    _recordSavedAddress(listing);
+    _draftBaseline = _draftFields();
     setState(() {});
   }
 
+  void _recordSavedAddress(OwnerListing listing) {
+    final valid =
+        listing.addressValidationStatus == 'validated' &&
+        listing.latitude != null &&
+        listing.longitude != null;
+    _savedAddressStatus = valid ? 'Address verified' : 'Address not verified';
+    _savedFormattedAddress = valid ? listing.addressFormatted : null;
+    _confirmedKey = valid ? _currentAddressKey : null;
+    _confirmedLabel = _savedFormattedAddress;
+    _confirmedToken = null;
+    if (valid) {
+      // Server-derived coordinates from the saved row: enough to show the
+      // compact preview on Review without inventing new signed evidence.
+      _addressPreview ??= AddressPreview(
+        matchClass: AddressMatchClass.precise,
+        components: const <String, bool>{},
+        notes: const <String>[],
+        addressHash: '',
+        formattedAddress: _savedFormattedAddress ?? _address,
+        latitude: listing.latitude,
+        longitude: listing.longitude,
+      );
+      _previewAddressKey = _currentAddressKey;
+      _lastRequestedKey = _currentAddressKey;
+    }
+  }
+
   void _onStateChanged(String? value) {
+    if (value == _stateName) return;
     setState(() {
       _stateController.text = value ?? '';
       _districtController.clear();
@@ -339,9 +481,11 @@ class _SitewiseAddPropertyMobilePageState
       _fieldErrors.remove('postcode');
       _validationMessage = null;
     });
+    _onAddressFieldsChanged();
   }
 
   void _onCityChanged(String? value) {
+    if (value == _district) return;
     setState(() {
       _districtController.text = value ?? '';
       _postcodeController.clear();
@@ -349,6 +493,7 @@ class _SitewiseAddPropertyMobilePageState
       _fieldErrors.remove('postcode');
       _validationMessage = null;
     });
+    _onAddressFieldsChanged();
   }
 
   void _onPostcodeChanged(String? value) {
@@ -357,103 +502,170 @@ class _SitewiseAddPropertyMobilePageState
       _fieldErrors.remove('postcode');
       _validationMessage = null;
     });
+    _onAddressFieldsChanged();
   }
 
-  Map<String, dynamic> _draftFields() =>
-      OwnerListing(
-          id: _draftId ?? '',
-          name: '',
-          verificationStatus: _serverStatus,
-        ).toDraftJson(
-          name: _propertyName.isEmpty ? null : _propertyName,
-          propertyType: _propertyType,
-          description: _descriptionController.text.trim().isEmpty
-              ? null
-              : _descriptionController.text.trim(),
-          address: _address.isEmpty ? null : _address,
-          city: _district.isEmpty ? null : _district,
-          state: _stateName.isEmpty ? null : _stateName,
-          postcode: _postcode.isEmpty ? null : _postcode,
-          rentalPrice: double.tryParse(_monthlyRent),
-          sizeSqft: double.tryParse(_builtUpArea),
-          availability: _availability.isEmpty ? null : _availability,
-          floorLevel: _numericFloor,
-          floorDescription: _floorDescription,
-          frontageFt: _frontage.isEmpty ? null : double.tryParse(_frontage),
-          furnishing: _furnishing,
-          tenure: _tenure,
-          unitPosition: _unitPosition,
-          hasParking: _parkingValue,
-          leaseDurationMonths: _leaseMonthsForRequest,
-          leaseDurationNegotiable: _leaseNegotiable,
-          availableFrom: _availableFrom == null
-              ? null
-              : '${_availableFrom!.year.toString().padLeft(4, '0')}-'
-                    '${_availableFrom!.month.toString().padLeft(2, '0')}-'
-                    '${_availableFrom!.day.toString().padLeft(2, '0')}',
-          rentalDepositMyr: _deposit.isEmpty ? null : double.tryParse(_deposit),
-          titleType: _titleType,
-          landlordFnbPermission: _landlordPermission,
-          draftRequestId: _draftRequestId,
-        )
-        ..removeWhere(
-          (key, _) =>
-              key == 'availability' &&
-              _availability.isEmpty &&
-              _legacyAvailability != null,
-        );
+  Map<String, dynamic> _draftFields() {
+    final fields =
+        OwnerListing(
+            id: _draftId ?? '',
+            name: '',
+            verificationStatus: _serverStatus,
+          ).toDraftJson(
+            name: _propertyName.isEmpty ? null : _propertyName,
+            propertyType: _propertyType,
+            description: _descriptionController.text.trim().isEmpty
+                ? null
+                : _descriptionController.text.trim(),
+            address: _address.isEmpty ? null : _address,
+            city: _district.isEmpty ? null : _district,
+            state: _stateName.isEmpty ? null : _stateName,
+            postcode: _postcode.isEmpty ? null : _postcode,
+            rentalPrice: double.tryParse(_monthlyRent),
+            sizeSqft: double.tryParse(_builtUpArea),
+            availability: _availability.isEmpty ? null : _availability,
+            floorLevel: _numericFloor,
+            floorDescription: _floorDescription,
+            frontageFt: _frontage.isEmpty ? null : double.tryParse(_frontage),
+            furnishing: _furnishing,
+            tenure: _tenure,
+            unitPosition: _unitPosition,
+            hasParking: _parkingValue,
+            leaseDurationMonths: _leaseMonthsForRequest,
+            leaseDurationNegotiable: _leaseNegotiable,
+            availableFrom: _availableFrom == null
+                ? null
+                : '${_availableFrom!.year.toString().padLeft(4, '0')}-'
+                      '${_availableFrom!.month.toString().padLeft(2, '0')}-'
+                      '${_availableFrom!.day.toString().padLeft(2, '0')}',
+            rentalDepositMyr: _deposit.isEmpty
+                ? null
+                : double.tryParse(_deposit),
+            titleType: _titleType,
+            // F&B use is the SiteWise listing assumption: landlord permission is
+            // no longer a form input. 'Yes' is auto-assigned for new drafts; the
+            // backend preserves the stored value of existing records on update.
+            landlordFnbPermission: 'Yes',
+          )
+          ..removeWhere(
+            (key, _) =>
+                key == 'availability' &&
+                _availability.isEmpty &&
+                _legacyAvailability != null,
+          );
+    // Confirmed location evidence rides every save (create AND update); the
+    // backend re-verifies the signature and the address hash server-side.
+    if (_confirmationCurrent && _confirmedToken != null) {
+      fields['address_confirmation_token'] = _confirmedToken;
+    }
+    return fields;
+  }
 
-  /// Save Draft: create the row once, then update the SAME row. The backend
-  /// stamps the owner from the verified token and assigns the persistent id.
-  // SITEWISE_ADD_PROPERTY_EXPLICIT_DRAFT_V1
-  // Persist the row first; only an acknowledged server save is a success.
-  Future<bool> _saveDraft() async {
-    if (_saving) return false;
+  /// The only save action in the wizard, bound to Review's "Save property".
+  ///
+  /// Validates every mandatory field and the confirmed location before any
+  /// write, claims [_saveInFlight] for the whole operation so repeated taps
+  /// cannot create two properties, and advances to Confirmation only after the
+  /// backend has acknowledged the save.
+  Future<void> _saveProperty() async {
+    if (_saveInFlight || _saving || _draftLoadFailed || !_editable) return;
+    setState(() => _saveInFlight = true);
+    try {
+      FocusManager.instance.primaryFocus?.unfocus();
+      if (!_validateCurrentStep()) {
+        if (mounted) setState(() {});
+        return;
+      }
+      if (!_confirmationCurrent) {
+        if (!mounted) return;
+        setState(() {
+          _step = 2;
+          _fieldErrors['address'] =
+              'Confirm the verified property location before saving.';
+          _validationMessage =
+              'Confirm the verified property location before saving.';
+        });
+        return;
+      }
+      final saved = await _persistProperty();
+      if (!mounted || !saved) return;
+      setState(() {
+        _savedInSession = true;
+        _step = 5;
+      });
+    } finally {
+      if (mounted) setState(() => _saveInFlight = false);
+    }
+  }
+
+  /// The single backend write. Called only by [_saveProperty] after full
+  /// validation. Creates the row once with an idempotency request id, then
+  /// updates that same row; the backend applies the signed address evidence
+  /// and queues the existing geospatial enrichment on either write.
+  Future<bool> _persistProperty() async {
+    if (_saving || _draftLoadFailed || !_editable) return false;
     if (!_live) {
       setState(() {
         _serverError =
-            'Draft saving requires the live Sitewise service '
+            'Saving a property requires the live Sitewise service '
             '(a demo build keeps no property records).';
       });
       return false;
     }
-    // Partial drafts are allowed, but invalid optional values are not.
-    _fieldErrors.remove('availability');
-    _fieldErrors.remove('floor_level');
-    _fieldErrors.remove('frontage_ft');
-    _collectOptionalDetailsErrors();
-    if (_fieldErrors.containsKey('availability') ||
-        _fieldErrors.containsKey('floor_level') ||
-        _fieldErrors.containsKey('frontage_ft') ||
-        _fieldErrors.containsKey('rental_deposit_myr') ||
-        _fieldErrors.containsKey('lease_duration')) {
-      setState(() {
-        _step = 2;
-        _validationMessage = 'Correct the optional details before saving.';
-      });
-      return false;
-    }
+    final fields = _draftFields();
+    final savedAddressKey = _currentAddressKey;
+    final changed = Map<String, dynamic>.of(fields)
+      ..removeWhere((key, value) => _draftBaseline[key] == value);
     setState(() {
       _saving = true;
       _serverError = null;
-      _serverMessage = null;
       _validationMessage = null;
     });
     try {
       final repository = ServiceLocator.ownerListings;
       final OwnerListing saved;
       if (_draftId == null) {
-        saved = await repository.createDraft(_draftFields());
+        final key = ServiceLocator.draftRequests.accountKey;
+        final requestId = _draftRequestId ??=
+            (key == null
+                ? null
+                : await ServiceLocator.draftRequests.read(key)) ??
+            _newDraftRequestId();
+        if (key != null) {
+          await ServiceLocator.draftRequests.remember(key, requestId);
+        }
+        final previous = _createAttempt;
+        _createAttempt ??= Map.of(fields);
+        // A retried create replays only changed fields, but confirmation
+        // evidence must ride EVERY attempt: the first attempt may have failed
+        // before the server applied it.
+        if (previous != null &&
+            _confirmationCurrent &&
+            _confirmedToken != null) {
+          _pendingReplayFields.add('address_confirmation_token');
+        }
+        final replayPatch = previous == null
+            ? changed
+            : (Map<String, dynamic>.of(fields)..removeWhere(
+                (key, value) =>
+                    previous[key] == value &&
+                    !_pendingReplayFields.contains(key),
+              ));
+        if (previous != null) _pendingReplayFields.addAll(replayPatch.keys);
+        saved = await repository.createDraft({
+          ...fields,
+          'draft_request_id': requestId,
+        }, replayPatch: replayPatch);
+        if (mounted) await _forgetCreation(key);
       } else {
-        saved = await repository.updateDraft(_draftId!, _draftFields());
+        saved = await repository.updateDraft(_draftId!, changed);
       }
       if (!mounted) return false;
       setState(() {
         _draftId = saved.id;
+        _draftBaseline = fields;
         _serverStatus = saved.verificationStatus;
-        _serverMessage =
-            'Draft saved to Sitewise (ID ${saved.id}). '
-            'You can leave this page and resume it later from My listings.';
+        if (savedAddressKey == _currentAddressKey) _recordSavedAddress(saved);
       });
       return true;
     } on Object catch (error) {
@@ -461,7 +673,7 @@ class _SitewiseAddPropertyMobilePageState
       setState(() {
         _serverError = _readableError(
           error,
-          fallback: 'Could not save the draft.',
+          fallback: 'Could not save the property.',
         );
       });
       return false;
@@ -471,6 +683,9 @@ class _SitewiseAddPropertyMobilePageState
   }
 
   String _readableError(Object error, {required String fallback}) {
+    if (error is ServiceFailure || error is ResponseFormatFailure) {
+      return (error as AppFailure).userMessage;
+    }
     if (error is AppFailure) return error.message;
     return fallback;
   }
@@ -568,14 +783,6 @@ class _SitewiseAddPropertyMobilePageState
       'lease_duration',
       PropertyFormRules.leaseDurationError(_leaseChoice, _leaseMonths),
     );
-    _putField(
-      'landlord_fnb_permission',
-      PropertyFormRules.optionError(
-        _landlordPermission,
-        landlordFnbPermissionOptions,
-        'landlord permission for F&B use',
-      ),
-    );
     _collectOptionalDetailsErrors();
   }
 
@@ -643,20 +850,15 @@ class _SitewiseAddPropertyMobilePageState
     if (message != null) _fieldErrors[key] = message;
   }
 
-  Future<void> _goNext() async {
-    if (_step >= 5 || _saving) return;
+  void _goNext() {
+    // Review has no Continue action: its only action is _saveProperty, which
+    // opens Confirmation after the backend confirms the write.
+    if (_step >= 4 || _saving || _saveInFlight || _draftLoadFailed) return;
     FocusManager.instance.primaryFocus?.unfocus();
-    // On review, the existing form rules must still pass. The record is
-    // committed before opening the confirmation page.
     if (!_validateCurrentStep()) {
       if (mounted) setState(() {});
       return;
     }
-    if (_step == 4) {
-      final persisted = await _saveDraft();
-      if (!mounted || !persisted) return;
-    }
-    if (!mounted) return;
     setState(() {
       _step += 1;
       _validationMessage = null;
@@ -689,6 +891,100 @@ class _SitewiseAddPropertyMobilePageState
     setState(() => _validationMessage = null);
   }
 
+  /// Ask before abandoning a brand-new, unsaved registration. A saved
+  /// property or an existing draft being edited is never treated as unsaved.
+  Future<bool> _confirmDiscardIfUnsaved() async {
+    if (!_hasUnsavedNewProperty) return true;
+    if (_saving || _saveInFlight) return false;
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Discard unsaved property?'),
+        content: const Text(
+          'Your property has not been saved. Leaving this page will discard '
+          'the information you have entered.',
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Continue editing'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Discard and leave'),
+          ),
+        ],
+      ),
+    );
+    if (discard == true && _hasUnsavedNewProperty) _discardForm();
+    return discard ?? false;
+  }
+
+  /// Clear only the in-memory wizard. Called after the user explicitly
+  /// confirms discarding, so returning to Add starts a blank form even when
+  /// the persistent Provider tab kept this page alive.
+  void _discardForm() {
+    _previewTimer?.cancel();
+    for (final controller in <TextEditingController>[
+      _nameController,
+      _rentController,
+      _areaController,
+      _addressController,
+      _stateController,
+      _districtController,
+      _postcodeController,
+      _descriptionController,
+      _availabilityController,
+      _floorLevelController,
+      _frontageController,
+      _leaseMonthsController,
+      _depositController,
+    ]) {
+      controller.clear();
+    }
+    _draftRequestId = null;
+    _createAttempt = null;
+    _pendingReplayFields.clear();
+    ++_previewSeq;
+    _step = 1;
+    _propertyType = 'Shoplot';
+    _floorDescription = null;
+    _unitPosition = null;
+    _furnishing = null;
+    _parkingChoice = null;
+    _leaseChoice = null;
+    _tenure = null;
+    _titleType = null;
+    _legacyAvailability = null;
+    _availableFrom = null;
+    _previewTimer = null;
+    _previewAddressKey = null;
+    _lastRequestedKey = null;
+    _addressPreview = null;
+    _previewPending = false;
+    _previewError = null;
+    _previewExpiresAt = null;
+    _confirmedToken = null;
+    _confirmedKey = null;
+    _confirmedLabel = null;
+    _savedAddressStatus = null;
+    _savedFormattedAddress = null;
+    _draftBaseline = _draftFields();
+    setState(() {
+      _fieldErrors.clear();
+      _validationMessage = null;
+      _serverError = null;
+    });
+  }
+
+  /// Back navigation on a pushed Add route (drill-in / cold deep link). The
+  /// persistent Provider tab delegates system back to the registered guard.
+  Future<void> _handleSystemBack() async {
+    if (!await _confirmDiscardIfUnsaved() || !mounted) return;
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) navigator.pop();
+  }
+
   /// Leave the form for the signed-in role's property listing.
   ///
   /// Inside the Provider shell the listing tab already exists, so the dock
@@ -696,7 +992,8 @@ class _SitewiseAddPropertyMobilePageState
   /// as a drill-in cannot see that scope; it pops with [addPropertyDoneResult]
   /// and the shell re-selects `/provider/listings`. A cold deep link has no
   /// shell underneath it, and only that case rebuilds the stack.
-  void _goToListings() {
+  Future<void> _goToListings() async {
+    if (!await _confirmDiscardIfUnsaved() || !mounted) return;
     const listings = '/provider/listings';
     final scope = ProviderTabScope.maybeOf(context);
     if (scope != null && scope.handlesRoute(listings)) {
@@ -718,7 +1015,9 @@ class _SitewiseAddPropertyMobilePageState
   /// resumed draft has no scope: popping with a tab result returns to the shell
   /// that opened it, and a cold deep link falls back to the original route
   /// replacement so the workspace is never stacked twice.
-  void _onDockNavigate(String route) {
+  Future<void> _onDockNavigate(String route) async {
+    if (route == '/provider/add-property') return;
+    if (!await _confirmDiscardIfUnsaved() || !mounted) return;
     final scope = ProviderTabScope.maybeOf(context);
     if (scope != null && scope.handlesRoute(route)) {
       scope.go(route);
@@ -743,7 +1042,7 @@ class _SitewiseAddPropertyMobilePageState
 
   @override
   Widget build(BuildContext context) {
-    return Theme(
+    final form = Theme(
       data: _formTheme,
       child: Consumer(
         builder: (context, ref, _) {
@@ -755,6 +1054,8 @@ class _SitewiseAddPropertyMobilePageState
           final destinations = providerDestinationsFor(role);
           return MobileAppShell(
             title: 'Add property',
+            // Task-focused Add Property chrome (SiteWise V2).
+            hideTopBar: true,
             currentRoute: _dockRouteFor(destinations),
             // This form is the Provider dock's Add destination: keep the exact
             // Material 3 chrome and the role's provider tabs while it is open.
@@ -781,14 +1082,25 @@ class _SitewiseAddPropertyMobilePageState
                       children: <Widget>[
                         const SizedBox(height: 8),
                         _buildPageHeading(),
-                        const SizedBox(height: 18),
+                        const SizedBox(height: 12),
                         _buildStepper(),
-                        const SizedBox(height: 18),
-                        _buildMainCard(),
-                        if (_serverMessage != null) ...<Widget>[
-                          const SizedBox(height: 14),
-                          _buildServerBanner(_serverMessage!, success: true),
-                        ],
+                        const SizedBox(height: 16),
+                        if (_loadingDraft)
+                          const Center(child: CircularProgressIndicator())
+                        else if (_draftLoadFailed)
+                          OutlinedButton(
+                            onPressed: () {
+                              final id = widget.initialDraftId;
+                              if (id == null) {
+                                unawaited(_recoverCreation());
+                              } else {
+                                unawaited(_resumeDraft(id));
+                              }
+                            },
+                            child: const Text('Retry loading draft'),
+                          )
+                        else
+                          _buildMainCard(),
                         if (_serverError != null) ...<Widget>[
                           const SizedBox(height: 14),
                           _buildServerBanner(_serverError!, success: false),
@@ -811,107 +1123,102 @@ class _SitewiseAddPropertyMobilePageState
         },
       ),
     );
+
+    // The persistent Add tab lives inside the shell's PopScope, whose handler
+    // asks the registered guard before changing tabs. A pushed Add route is
+    // the top route, so it must own system back itself.
+    final scope = ProviderTabScope.maybeOf(context);
+    final persistentTab =
+        scope != null && scope.handlesRoute('/provider/add-property');
+    if (persistentTab) return form;
+    return PopScope<Object?>(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) unawaited(_handleSystemBack());
+      },
+      child: form,
+    );
   }
 
   Widget _buildPageHeading() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    final isEditing = _draftId != null;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: <Widget>[
-        const Text(
-          'PROVIDER WORKSPACE',
-          style: TextStyle(
-            color: _brandStrong,
-            fontSize: 10,
-            fontWeight: FontWeight.w900,
-            letterSpacing: 1.6,
+        IconButton(
+          tooltip: _step > 1 && _step < 5 ? 'Previous step' : 'My properties',
+          onPressed: _saving
+              ? null
+              : _step > 1 && _step < 5
+              ? _goBack
+              : _goToListings,
+          icon: const Icon(Icons.arrow_back_rounded, color: _ink),
+          style: IconButton.styleFrom(
+            minimumSize: const Size(48, 48),
+            side: const BorderSide(color: _border),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
         ),
-        const SizedBox(height: 7),
-        const Text(
-          'Add commercial property',
-          style: TextStyle(
-            color: _ink,
-            fontSize: 25,
-            height: 1.15,
-            fontWeight: FontWeight.w900,
-            letterSpacing: -0.8,
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            isEditing ? 'Edit property' : 'Add property',
+            style: const TextStyle(
+              color: _ink,
+              fontSize: 23,
+              height: 1.2,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.5,
+            ),
           ),
-        ),
-        const SizedBox(height: 7),
-        Text(
-          _draftId == null
-              ? 'Fill in the property details. On Review, tap Save draft '
-                    'to create the listing in My listings.'
-              : 'Editing saved property #$_draftId (status: $_serverStatus).',
-          style: const TextStyle(color: _muted, fontSize: 13, height: 1.5),
         ),
       ],
     );
   }
 
   Widget _buildStepper() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: _border),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        children: List<Widget>.generate(5, (index) {
-          final stepNumber = index + 1;
-          final isCurrent = stepNumber == _step;
-          final isDone = stepNumber < _step;
-          return Expanded(
-            child: Row(
-              children: <Widget>[
-                Expanded(
-                  child: Center(
-                    child: Container(
-                      width: 34,
-                      height: 34,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: isCurrent
-                            ? _brand
-                            : isDone
-                            ? const Color(0xFFEDF4FF)
-                            : const Color(0xFFF6F8FC),
-                        border: Border.all(
-                          color: isCurrent
-                              ? _brand
-                              : isDone
-                              ? const Color(0xFFCFE0FD)
-                              : const Color(0xFFD6DEEA),
-                        ),
-                      ),
-                      child: Center(
-                        child: Text(
-                          isDone ? '✓' : '$stepNumber',
-                          style: TextStyle(
-                            color: isCurrent
-                                ? Colors.white
-                                : isDone
-                                ? _brandStrong
-                                : const Color(0xFF59677C),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                      ),
+    final step = _step.clamp(1, _stepNames.length).toInt();
+    return Semantics(
+      label: 'Step $step of ${_stepNames.length}: ${_stepNames[step - 1]}',
+      excludeSemantics: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Text(
+            'STEP $step OF ${_stepNames.length}',
+            style: const TextStyle(
+              color: _brandStrong,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.7,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: List<Widget>.generate(_stepNames.length, (index) {
+              return Expanded(
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    right: index == _stepNames.length - 1 ? 0 : 5,
+                  ),
+                  child: Container(
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: index < step - 1
+                          ? const Color(0xFF9DB8EC)
+                          : index == step - 1
+                          ? _brand
+                          : _border,
+                      borderRadius: BorderRadius.circular(4),
                     ),
                   ),
                 ),
-                if (index < 4)
-                  Container(
-                    width: 10,
-                    height: 1,
-                    color: const Color(0xFFDCE4F1),
-                  ),
-              ],
-            ),
-          );
-        }),
+              );
+            }),
+          ),
+        ],
       ),
     );
   }
@@ -937,8 +1244,8 @@ class _SitewiseAddPropertyMobilePageState
                     _stepNames[_step - 1],
                     style: const TextStyle(
                       color: _ink,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                   const SizedBox(height: 5),
@@ -946,7 +1253,7 @@ class _SitewiseAddPropertyMobilePageState
                     _stepDescriptions[_step - 1],
                     style: const TextStyle(
                       color: _muted,
-                      fontSize: 12,
+                      fontSize: 14,
                       height: 1.45,
                     ),
                   ),
@@ -998,7 +1305,11 @@ class _SitewiseAddPropertyMobilePageState
                   // row past the 390dp viewport.
                   Flexible(
                     child: FilledButton(
-                      onPressed: _saving ? null : _goNext,
+                      onPressed: _saving || _saveInFlight
+                          ? null
+                          : _step == 4
+                          ? _saveProperty
+                          : _goNext,
                       style: FilledButton.styleFrom(
                         backgroundColor: _brand,
                         foregroundColor: Colors.white,
@@ -1009,7 +1320,7 @@ class _SitewiseAddPropertyMobilePageState
                         ),
                       ),
                       child: Text(
-                        _step == 4 ? 'Save draft' : 'Continue →',
+                        _step == 4 ? 'Save property' : 'Continue →',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontWeight: FontWeight.w800),
@@ -1144,8 +1455,9 @@ class _SitewiseAddPropertyMobilePageState
         _buildChoiceGrid(),
         const SizedBox(height: 16),
         _buildInfoNotice(
-          'Saving creates a real draft record. Only an authorized Agent may '
-          'capture its 360° tour and submit it for Admin verification.',
+          'Nothing is saved while you fill in the form. The only save action '
+          'is on Review, where the property is stored as a draft for the '
+          'existing Agent inspection and Admin verification workflow.',
         ),
       ],
     );
@@ -1303,22 +1615,6 @@ class _SitewiseAddPropertyMobilePageState
           error: _fieldErrors['rental_deposit_myr'],
         ),
         const SizedBox(height: 15),
-        _buildSelectField(
-          label: 'Landlord permission for F&B use',
-          value: _landlordPermission ?? '',
-          hint: 'Select the owner-declared status',
-          options: landlordFnbPermissionOptions,
-          requiredField: true,
-          searchable: false,
-          helper:
-              'This is an owner declaration, not licensing approval or a suitability result.',
-          error: _fieldErrors['landlord_fnb_permission'],
-          onSelected: (value) => setState(() {
-            _landlordPermission = value;
-            _fieldErrors.remove('landlord_fnb_permission');
-          }),
-        ),
-        const SizedBox(height: 14),
         _rentalRateSummary(),
         const SizedBox(height: 22),
         _sectionTitle('Ownership information'),
@@ -1398,8 +1694,11 @@ class _SitewiseAddPropertyMobilePageState
           error: _fieldErrors['postcode'],
           onSelected: _onPostcodeChanged,
         ),
+        _addressPreviewPanel(),
         _buildInfoNotice(
-          'Your address is checked through the existing server workflow. Saving rental terms never overwrites verified coordinates.',
+          'Your address is checked through the existing server workflow. '
+          'Confirm the verified location here; its signed evidence is sent '
+          'with the final save so the stored coordinates cannot drift.',
         ),
       ],
     );
@@ -1493,8 +1792,183 @@ class _SitewiseAddPropertyMobilePageState
 
   void _onAddressChanged(String value) {
     final removedError = _fieldErrors.remove('address') != null;
-    if (!removedError && _validationMessage == null) return;
-    setState(() => _validationMessage = null);
+    if (removedError || _validationMessage != null) {
+      setState(() => _validationMessage = null);
+    }
+    _onAddressFieldsChanged();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Automatic address preview + location confirmation
+  // ---------------------------------------------------------------------------
+
+  (String, String, String, String) get _currentAddressKey =>
+      (_address, _district, _stateName, _postcode);
+
+  bool get _addressComplete =>
+      PropertyFormRules.addressError(_address) == null &&
+      _address.length <= 300 &&
+      MalaysiaLocations.stateNames.contains(_stateName) &&
+      MalaysiaLocations.citiesFor(_stateName).contains(_district) &&
+      MalaysiaLocations.postcodesFor(_stateName, _district).contains(_postcode);
+
+  bool get _previewFresh => _previewExpiresAt?.isAfter(DateTime.now()) == true;
+
+  bool get _confirmationCurrent =>
+      _confirmedKey == _currentAddressKey &&
+      (_confirmedToken == null || _previewFresh);
+
+  void _onAddressFieldsChanged() {
+    final key = _currentAddressKey;
+    if (_previewAddressKey == key || _confirmedKey == key) return;
+    _previewTimer?.cancel();
+    ++_previewSeq;
+    setState(() {
+      _previewAddressKey = key;
+      _lastRequestedKey = null;
+      _previewExpiresAt = null;
+      _addressPreview = null;
+      _previewPending = false;
+      _previewError = null;
+      _confirmedToken = null;
+      _confirmedKey = null;
+      _confirmedLabel = null;
+    });
+    if (_live && _editable && _addressComplete) {
+      _previewTimer = Timer(const Duration(milliseconds: 800), () {
+        unawaited(_runPreview(key));
+      });
+    }
+  }
+
+  Future<void> _runPreview((String, String, String, String) key) async {
+    if (!mounted ||
+        !_live ||
+        !_editable ||
+        !_addressComplete ||
+        key != _currentAddressKey ||
+        _previewPending) {
+      return;
+    }
+    _previewTimer?.cancel();
+    final seq = ++_previewSeq;
+    final startedAt = DateTime.now();
+    setState(() {
+      _lastRequestedKey = key;
+      _previewAddressKey = key;
+      _previewPending = true;
+      _previewError = null;
+      _addressPreview = null;
+      _previewExpiresAt = null;
+      _confirmedToken = null;
+      _confirmedKey = null;
+      _confirmedLabel = null;
+    });
+    try {
+      final preview = await ServiceLocator.ownerListings.previewAddress(
+        address: key.$1,
+        city: key.$2,
+        state: key.$3,
+        postcode: key.$4,
+      );
+      if (!mounted || seq != _previewSeq || key != _currentAddressKey) return;
+      setState(() {
+        _previewPending = false;
+        _addressPreview = preview;
+        _previewExpiresAt = startedAt.add(
+          Duration(seconds: preview.confirmation?.expiresInSeconds ?? 0),
+        );
+      });
+    } on Object catch (error) {
+      if (!mounted || seq != _previewSeq || key != _currentAddressKey) return;
+      setState(() {
+        _previewPending = false;
+        _previewError = _readableError(
+          error,
+          fallback:
+              'Could not verify this address. Retry or save an unverified draft.',
+        );
+      });
+    }
+  }
+
+  void _confirmLocation() {
+    final preview = _addressPreview;
+    if (_lastRequestedKey != _currentAddressKey ||
+        preview == null ||
+        !preview.isPrecise ||
+        !preview.confirmable) {
+      return;
+    }
+    if (!_previewFresh) {
+      unawaited(_runPreview(_currentAddressKey));
+      return;
+    }
+    setState(() {
+      _confirmedToken = preview.confirmation!.token;
+      _confirmedKey = _currentAddressKey;
+      _confirmedLabel = preview.formattedAddress;
+    });
+  }
+
+  Widget _addressPreviewPanel({bool compact = false}) {
+    final preview = _addressPreview;
+    final confirmed = _confirmationCurrent;
+    final verified =
+        preview?.isPrecise == true &&
+        preview?.confirmable == true &&
+        _previewFresh;
+    final failed =
+        _previewError != null ||
+        preview?.matchClass == AddressMatchClass.notFound ||
+        preview?.matchClass == AddressMatchClass.serviceUnavailable ||
+        (preview?.isPrecise == true && preview?.confirmable != true);
+    final status = switch ((
+      _addressComplete,
+      _previewPending,
+      confirmed || verified,
+      failed,
+      preview,
+    )) {
+      (false, _, _, _, _) => 'Complete all address fields.',
+      (_, true, _, _, _) => 'Verifying your address…',
+      (_, _, true, _, _) => 'Address verified',
+      (_, _, _, true, _) => 'Unable to verify address.',
+      (_, _, _, _, final result?) when !result.isPrecise =>
+        'Please provide a more specific address.',
+      (_, _, _, _, final result?) when result.isPrecise =>
+        'Address verification expired. Verify again.',
+      _ =>
+        _live
+            ? 'Ready to verify address.'
+            : 'Address verification requires a connection to SiteWise.',
+    };
+    return AddressPreviewPanel(
+      status: status,
+      preview: verified || confirmed ? preview : null,
+      pending: _previewPending,
+      verified: verified || confirmed,
+      confirmed: confirmed,
+      formattedAddress: confirmed
+          ? _confirmedLabel
+          : verified
+          ? preview?.formattedAddress
+          : null,
+      errorText: _previewError ?? (failed ? preview?.notes.firstOrNull : null),
+      onVerify:
+          _live &&
+              _editable &&
+              _addressComplete &&
+              !_saving &&
+              !_previewPending &&
+              !confirmed &&
+              !verified
+          ? () => unawaited(_runPreview(_currentAddressKey))
+          : null,
+      retry: _lastRequestedKey != null,
+      onConfirm: verified && !confirmed && !_saving ? _confirmLocation : null,
+      mapHeight: compact ? 104 : 160,
+    );
   }
 
   /// A tappable field that opens a searchable option sheet.
@@ -1605,65 +2079,111 @@ class _SitewiseAddPropertyMobilePageState
     onSelected(picked);
   }
 
+  // SITEWISE_COMPACT_AGENT_VERIFICATION_V1
   Widget _buildAgentHandoff() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      const Icon(
-        Icons.verified_user_outlined,
-        color: SitewiseColors.action,
-        size: 36,
-      ),
-      const SizedBox(height: 12),
-      const Text(
-        'How verification works',
-        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-      ),
-      const SizedBox(height: 14),
-      _handoffRole(
-        'Property owner',
-        'Provides property information, submits ownership or authorization proof, and requests an authorized Agent inspection.',
-      ),
-      const SizedBox(height: 12),
-      _handoffRole(
-        'Assigned Agent',
-        'Reviews your details, checks observable physical characteristics, records discrepancies, completes the existing 38-target 360° capture, previews its generated panorama, and submits the inspection to Admin.',
+      const Row(
+        children: [
+          Icon(Icons.verified_user_outlined, color: _brand, size: 24),
+          SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              'How it works',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: _ink,
+              ),
+            ),
+          ),
+        ],
       ),
       const SizedBox(height: 12),
       _handoffRole(
-        'Administrator',
-        'Reviews the listing, ownership evidence, Agent findings and panorama, then makes the final verification decision.',
+        1,
+        Icons.description_outlined,
+        'Owner request',
+        'Submit ownership proof and request an inspection.',
+      ),
+      const SizedBox(height: 8),
+      _handoffRole(
+        2,
+        Icons.camera_alt_outlined,
+        'Agent inspection',
+        'Check the property and capture its 360° tour.',
+      ),
+      const SizedBox(height: 8),
+      _handoffRole(
+        3,
+        Icons.assignment_turned_in_outlined,
+        'Admin review',
+        'Review the evidence and make the final decision.',
       ),
       const SizedBox(height: 12),
       _buildInfoNotice(
-        'Owners do not perform 360° capture. Uploading ownership evidence does not itself complete verification.',
+        'Only Agents capture tours. Ownership proof alone does not complete verification.',
       ),
     ],
   );
 
-  Widget _handoffRole(String heading, String details) => Container(
-    padding: const EdgeInsets.all(13),
-    decoration: BoxDecoration(
-      color: const Color(0xFFF8FAFD),
-      border: Border.all(color: _border),
-      borderRadius: BorderRadius.circular(11),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          heading,
-          style: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w800,
-            color: _ink,
+  Widget _handoffRole(
+    int step,
+    IconData icon,
+    String heading,
+    String details,
+  ) => Semantics(
+    container: true,
+    label: 'Step $step of 3',
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFD),
+        border: Border.all(color: _border),
+        borderRadius: BorderRadius.circular(11),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ExcludeSemantics(
+            child: Container(
+              width: 40,
+              height: 40,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: const Color(0xFFE8F0FD),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, size: 23, color: _brand),
+            ),
           ),
-        ),
-        const SizedBox(height: 5),
-        Text(
-          details,
-          style: const TextStyle(fontSize: 14, height: 1.45, color: _muted),
-        ),
-      ],
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$step. $heading',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: _ink,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  details,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    height: 1.4,
+                    color: _muted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     ),
   );
 
@@ -1739,10 +2259,6 @@ class _SitewiseAddPropertyMobilePageState
               'Rental deposit',
               _deposit.isEmpty ? 'Not provided' : 'RM $_deposit',
             ),
-            _ReviewRow(
-              'Landlord permission for F&B use',
-              _display(_landlordPermission ?? ''),
-            ),
           ],
         ),
         const SizedBox(height: 18),
@@ -1759,12 +2275,20 @@ class _SitewiseAddPropertyMobilePageState
           title: 'Address',
           step: 2,
           rows: <_ReviewRow>[
+            _ReviewRow(
+              'Location verification',
+              _confirmationCurrent
+                  ? 'Address verified and location confirmed'
+                  : 'Location confirmation required',
+            ),
             _ReviewRow('Street address', _display(_address)),
             _ReviewRow('State / federal territory', _display(_stateName)),
             _ReviewRow('City / township', _display(_district)),
             _ReviewRow('Postcode', _display(_postcode)),
           ],
         ),
+        const SizedBox(height: 12),
+        _addressPreviewPanel(compact: true),
         const SizedBox(height: 18),
         _buildReviewSection(
           title: 'Agent verification requirements',
@@ -1783,7 +2307,9 @@ class _SitewiseAddPropertyMobilePageState
         ),
         const SizedBox(height: 16),
         _buildInfoNotice(
-          'Review all required details before saving. The property remains an unpublished draft until the existing verification workflow is completed.',
+          'Review all required details and confirm the location before '
+          'saving. The property remains Draft · Not published until the '
+          'existing verification workflow is completed.',
         ),
       ],
     );
@@ -1811,19 +2337,20 @@ class _SitewiseAddPropertyMobilePageState
                 title,
                 style: const TextStyle(
                   color: _ink,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w900,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ),
             TextButton(
-              onPressed: () => _editStep(step),
+              onPressed: _saving ? null : () => _editStep(step),
+              style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
               child: const Text(
                 'Edit',
                 style: TextStyle(
                   color: _brandStrong,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
@@ -1834,37 +2361,6 @@ class _SitewiseAddPropertyMobilePageState
         ...rows.map(_buildReviewRow),
       ],
     );
-  }
-
-  Future<void> _verifySavedAddress() async {
-    final id = _draftId;
-    if (id == null || _saving) return;
-    setState(() {
-      _saving = true;
-      _serverError = null;
-    });
-    try {
-      final status = await ServiceLocator.ownerListings.validateSavedAddress(
-        id,
-      );
-      if (mounted) {
-        setState(
-          () => _serverMessage =
-              'Address verification: ${status.replaceAll('_', ' ')}.',
-        );
-      }
-    } on Object catch (error) {
-      if (mounted) {
-        setState(
-          () => _serverError = _readableError(
-            error,
-            fallback: 'Could not verify the saved address.',
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
   }
 
   Widget _buildConfirmation() {
@@ -1922,32 +2418,17 @@ class _SitewiseAddPropertyMobilePageState
                 const Divider(height: 1),
                 const SizedBox(height: 12),
                 const Text(
-                  'Database property ID',
-                  style: TextStyle(color: _muted),
+                  'Draft · Not published',
+                  style: TextStyle(color: _muted, fontSize: 14),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  _draftId ?? 'Not assigned',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  'Status: ${_serverStatus.replaceAll('_', ' ')} · Not published',
-                  style: const TextStyle(color: _muted, fontSize: 14),
-                ),
+                const SizedBox(height: 8),
+                Text(_savedAddressStatus ?? 'Address not verified'),
+                if (_savedFormattedAddress case final String address)
+                  Text(address),
               ],
             ),
           ),
           const SizedBox(height: 16),
-          if (saved)
-            OutlinedButton.icon(
-              onPressed: _saving ? null : _verifySavedAddress,
-              icon: const Icon(Icons.location_on_outlined),
-              label: const Text('Verify saved address'),
-            ),
           FilledButton.icon(
             onPressed: saved && !_saving ? _viewSavedProperty : null,
             icon: const Icon(Icons.open_in_new_rounded),
@@ -1962,9 +2443,7 @@ class _SitewiseAddPropertyMobilePageState
           OutlinedButton.icon(
             onPressed: saved && !_saving ? _goToListings : null,
             icon: const Icon(Icons.list_alt_outlined),
-            label: const Text(
-              'Go to My Listings to add proof or request an Agent',
-            ),
+            label: const Text('Back to My Listings'),
             style: OutlinedButton.styleFrom(
               minimumSize: const Size.fromHeight(52),
             ),
@@ -2189,29 +2668,53 @@ class _SitewiseAddPropertyMobilePageState
   }
 
   Widget _buildReviewRow(_ReviewRow row) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: _border)),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final label = Text(
             row.label,
             style: const TextStyle(
-              color: Color(0xFF627088),
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
+              color: _muted,
+              fontSize: 14,
+              height: 1.4,
+              fontWeight: FontWeight.w500,
             ),
-          ),
-          const SizedBox(height: 3),
-          Text(
+          );
+          final value = Text(
             row.value,
             style: const TextStyle(
-              color: Color(0xFF1A273A),
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
+              color: _ink,
+              fontSize: 15,
+              height: 1.4,
+              fontWeight: FontWeight.w600,
             ),
-          ),
-        ],
+          );
+          final stack =
+              constraints.maxWidth < 250 ||
+              MediaQuery.textScalerOf(context).scale(14) > 18 ||
+              row.value.length > 42;
+          if (stack) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[label, const SizedBox(height: 4), value],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(flex: 5, child: label),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 6,
+                child: Align(alignment: Alignment.centerRight, child: value),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

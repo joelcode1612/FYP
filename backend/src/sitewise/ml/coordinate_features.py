@@ -36,25 +36,30 @@ from typing import Any
 from sqlalchemy import text
 from sqlmodel import Session
 
-#: Class lists exactly as the research pipeline defines them.
-ROAD_CLASSES = (
-    "motorway", "trunk", "primary", "secondary", "tertiary", "unclassified",
-    "residential", "living_street", "service", "motorway_link", "trunk_link",
-    "primary_link", "secondary_link", "tertiary_link", "road",
+from sitewise.ml.expanded64_feature_definitions import (
+    ALL_CLASSES,
+    CIRCLE_500_KM2,
+    CIRCLE_1000_KM2,
+    DEFINITIONS_VERSION,
+    JUNCTION_SEARCH_DEG,
+    MAJOR_CLASSES,
+    MAJOR_ROAD_SEARCH_DEG,
+    POP_INCLUSION_RULE,
+    POP_NODATA,
+    POP_RADII,
+    POP_RASTER_VERSION,
+    POP_SPHERE_RADIUS_M,
+    POP_WINDOW_DEG,
+    ROAD_CLASSES,
+    WALK_CLASSES,
 )
-MAJOR_CLASSES = (
-    "motorway", "trunk", "primary", "secondary", "motorway_link", "trunk_link",
-    "primary_link", "secondary_link",
-)
-WALK_CLASSES = ("footway", "path", "steps", "pedestrian", "corridor", "living_street", "track")
-ALL_CLASSES = tuple(dict.fromkeys(ROAD_CLASSES + WALK_CLASSES))
+
+#: Class lists and flat-circle denominators are owned by the versioned
+#: definition registry; importing them here keeps the runtime calculator and
+#: the Expanded64_v2 ML handoff on one definition.
 RESIDENTIAL_BUILDING_TAGS = (
     "apartments", "detached", "house", "semidetached_house", "residential", "terrace",
 )
-
-#: Flat circle areas used by the research workbook (not the geodesic area).
-CIRCLE_500_KM2 = 0.785398163
-CIRCLE_1000_KM2 = 3.141592654
 
 #: Walk tree: 900 s over ``cost_s``; metres derived with the 1.35 stride factor.
 WALK_TREE_SECONDS = 900.0
@@ -98,14 +103,8 @@ GROUPS = (
     GROUP_PARKING,
 )
 
-#: WorldPop inclusion rule and raster version recorded on the research table.
-POP_RADII = (500, 1000, 2000, 3000)
-POP_NODATA = -99999
-POP_SPHERE_RADIUS_M = 6378137.0
-POP_WINDOW_DEG = 0.045
-POP_INCLUSION_RULE = (
-    "PIXEL_CENTRE_INSIDE_HAVERSINE_RADIUS_WHOLE_PIXEL_R6378137M_NODATA_MINUS99999_EXCLUDED")
-POP_RASTER_VERSION = "R2025A v1 / mys_pop_2025_CN_100m_R2025A_v1.tif / public.worldpop_2025_constrained"
+#: WorldPop inclusion rule and raster version are imported from the versioned
+#: definition registry above (see expanded64_feature_definitions.py).
 #: ``demand_gen.pois_master`` categories the model counts, at the model's radii.
 POI_CATEGORIES = {
     "office_pois": "OFFICE",
@@ -226,11 +225,11 @@ class CoordinateFeatureExtractor:
                           (SELECT sum(len) FILTER (WHERE highway IN {_classes(ROAD_CLASSES)}) FROM c1) AS road_m_1000,
                           (SELECT sum(len) FILTER (WHERE highway IN {_classes(WALK_CLASSES)}) FROM c5) AS walk_m_500),
             near AS (SELECT min(ST_Distance(b.geom::geography, r.way::geography)) AS nearest_major_m
-                     FROM b JOIN fyp_features.roads_v2 r ON r.way && ST_Expand(b.geom, 0.05)
+                     FROM b JOIN fyp_features.roads_v2 r ON r.way && ST_Expand(b.geom, {MAJOR_ROAD_SEARCH_DEG})
                      WHERE r.highway IN {_classes(MAJOR_CLASSES)}),
             inter AS (SELECT count(j.node)::int AS junctions_500
                       FROM b LEFT JOIN fyp_features.road_junctions_v2 j
-                        ON ST_DWithin(j.geom, b.geom, 0.0045))
+                        ON ST_DWithin(j.geom, b.geom, {JUNCTION_SEARCH_DEG}))
             SELECT m.road_m_500, m.road_m_1000, m.walk_m_500,
                    near.nearest_major_m, inter.junctions_500
             FROM m, near, inter
@@ -265,6 +264,10 @@ class CoordinateFeatureExtractor:
             "junction_count_500m": junctions,
             "denominator": "flat circle area 0.785398163 / 3.141592654 km2 as in the "
                            "research workbook (not geodesic buffer area)",
+            "definition_version": DEFINITIONS_VERSION,
+            "standardised_features": (
+                "road_length_density_500m_km_km2, osm_walkway_length_density_500m_km_km2"
+            ),
         }
         result.status = _status(result)
         if result.status == STATUS_UNAVAILABLE:
@@ -427,6 +430,7 @@ class CoordinateFeatureExtractor:
         vertices = _number(row["n"]) or 0
         far_m = _number(row["far_m"])
         result.notes = {
+            "definition_version": DEFINITIONS_VERSION,
             "start_node": start_node,
             "snap_m": snap_m,
             "walk_tree_nodes": vertices,
@@ -692,6 +696,7 @@ class CoordinateFeatureExtractor:
             result.reason = "population raster query returned no row"
             return result
         result.notes = {
+            "definition_version": DEFINITIONS_VERSION,
             "worldpop_pixel_inclusion_rule": POP_INCLUSION_RULE,
             "worldpop_raster_version": POP_RASTER_VERSION,
             "worldpop_window_deg": POP_WINDOW_DEG,

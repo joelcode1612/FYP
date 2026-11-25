@@ -93,7 +93,7 @@ _METRICS: dict[str, tuple[str, str, int | None, str, str]] = {
         "m walk",
         None,
         "location",
-        "sitewise_analytics.subject_features.nearest_transit_walk_m",
+        "fyp.property_inference_features.nearest_transit_walk_m",
     ),
     "bus_stops_500m_walk": (
         "Transit stops within walk",
@@ -142,21 +142,21 @@ _METRICS: dict[str, tuple[str, str, int | None, str, str]] = {
         "outlets",
         500,
         "competition",
-        "sitewise_analytics competitor count, 500 m radius",
+        "saved property inference snapshot competitor count, 500 m radius",
     ),
     "fnb_competitors_1000m": (
         "Recorded F&B competitors",
         "outlets",
         1000,
         "competition",
-        "sitewise_analytics competitor count, 1 km radius",
+        "saved property inference snapshot competitor count, 1 km radius",
     ),
     "nearest_competitor_distance_m": (
         "Nearest recorded competitor",
         "m",
         None,
         "competition",
-        "sitewise_analytics competitor distance",
+        "saved property inference snapshot competitor distance",
     ),
     "cafe_count_500m": (
         "Cafés",

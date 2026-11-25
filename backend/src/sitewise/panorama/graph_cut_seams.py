@@ -31,19 +31,36 @@ def seam_cut_graph_bytes(width: int, height: int, scale: int = SEAM_CUT_SCALE) -
     return edges * 16 + (cells + 2) * 16
 
 
-def _delta(best_colour: np.ndarray, second_colour: np.ndarray, i: int) -> float:
+def _gains_for(channel_gains: np.ndarray | None, frame_id: int) -> np.ndarray:
+    if channel_gains is None or frame_id < 0 or frame_id >= len(channel_gains):
+        return np.ones(3, dtype=np.float32)
+    return channel_gains[frame_id]
+
+
+def _delta(
+    best_colour: np.ndarray,
+    second_colour: np.ndarray,
+    best_frame: np.ndarray,
+    second_frame: np.ndarray,
+    i: int,
+    channel_gains: np.ndarray | None,
+) -> float:
     o = i * 3
+    best_gain = _gains_for(channel_gains, int(best_frame[i]))
+    second_gain = _gains_for(channel_gains, int(second_frame[i]))
     return (
-        abs(int(best_colour[o]) - int(second_colour[o]))
-        + abs(int(best_colour[o + 1]) - int(second_colour[o + 1]))
-        + abs(int(best_colour[o + 2]) - int(second_colour[o + 2]))
+        abs(float(best_colour[o]) * float(best_gain[0]) - float(second_colour[o]) * float(second_gain[0]))
+        + abs(float(best_colour[o + 1]) * float(best_gain[1]) - float(second_colour[o + 1]) * float(second_gain[1]))
+        + abs(float(best_colour[o + 2]) * float(best_gain[2]) - float(second_colour[o + 2]) * float(second_gain[2]))
     ) / 3.0
 
 
-def _luma(rgb: np.ndarray, i: int) -> float:
+def _luma(rgb: np.ndarray, i: int, gain: np.ndarray) -> float:
     off = i * 3
     return (
-        rgb[off] * 0.299 + rgb[off + 1] * 0.587 + rgb[off + 2] * 0.114
+        rgb[off] * gain[0] * 0.299
+        + rgb[off + 1] * gain[1] * 0.587
+        + rgb[off + 2] * gain[2] * 0.114
     )
 
 
@@ -55,9 +72,10 @@ def seam_sobel_edge_energy_at(
     width: int,
     height: int,
     index: int,
+    channel_gains: np.ndarray | None = None,
 ) -> float:
-    return _sobel_at(best_colour, best_frame, width, height, index) + _sobel_at(
-        second_colour, second_frame, width, height, index
+    return _sobel_at(best_colour, best_frame, width, height, index, channel_gains) + _sobel_at(
+        second_colour, second_frame, width, height, index, channel_gains
     )
 
 
@@ -69,8 +87,11 @@ def seam_pixel_cost_at(
     width: int,
     height: int,
     index: int,
+    channel_gains: np.ndarray | None = None,
 ) -> float:
-    return _delta(best_colour, second_colour, index) + 6.0 * seam_sobel_edge_energy_at(
+    return _delta(
+        best_colour, second_colour, best_frame, second_frame, index, channel_gains
+    ) + 6.0 * seam_sobel_edge_energy_at(
         best_colour=best_colour,
         second_colour=second_colour,
         best_frame=best_frame,
@@ -78,6 +99,7 @@ def seam_pixel_cost_at(
         width=width,
         height=height,
         index=index,
+        channel_gains=channel_gains,
     )
 
 
@@ -87,13 +109,15 @@ def _sobel_at(
     width: int,
     height: int,
     index: int,
+    channel_gains: np.ndarray | None,
 ) -> float:
     x = index % width
     y = index // width
     frame_id = frame_ids[index]
     if frame_id < 0:
         return 0.0
-    centre = _luma(rgb, index)
+    gain = _gains_for(channel_gains, int(frame_id))
+    centre = _luma(rgb, index, gain)
 
     def sample(dx: int, dy: int) -> float:
         xx = x + dx
@@ -103,7 +127,7 @@ def _sobel_at(
         j = yy * width + xx
         if frame_ids[j] != frame_id:
             return centre
-        return _luma(rgb, j)
+        return _luma(rgb, j, gain)
 
     tl = sample(-1, -1)
     t = sample(0, -1)
@@ -213,6 +237,7 @@ def find_seam_labels(
     min_weight: float,
     seam_cost_weight: float,
     scale: int = SEAM_CUT_SCALE,
+    channel_gains: np.ndarray | None = None,
 ) -> np.ndarray | None:
     """Runs the min-cut and returns a full-resolution ownership label map.
 
@@ -262,7 +287,14 @@ def find_seam_labels(
                     active_count += 1
                     best_cost += -math.log(best_weight_list[i] + 1e-6)
                     second_cost += -math.log(second_weight_list[i] + 1e-6)
-                    delta += _delta(best_colour, second_colour, i)
+                    delta += _delta(
+                        best_colour,
+                        second_colour,
+                        best_frame_list,
+                        second_frame_list,
+                        i,
+                        channel_gains,
+                    )
             if count == 0:
                 continue
             if active_count == 0:
@@ -303,6 +335,7 @@ def find_seam_labels(
                     width=width,
                     height=height,
                     index=sample_index,
+                    channel_gains=channel_gains,
                 )
             )
             color_diff = delta / active_count
@@ -342,6 +375,19 @@ def find_seam_labels(
 
             if gx + 1 < gw:
                 other = cell + 1
+                if active[other] == 1:
+                    cap = (
+                        seam_cost_weight
+                        * (float(delta_sum[cell]) + float(delta_sum[other]))
+                        / 2
+                        / 255.0
+                    )
+                    add_edge(cell, other, cap)
+                    add_edge(other, cell, cap)
+            # Longitude is periodic. Without this edge the cut is optimized
+            # on a rectangle and may place an unconstrained seam at 0°/360°.
+            if gx == gw - 1 and gw > 1:
+                other = gy * gw
                 if active[other] == 1:
                     cap = (
                         seam_cost_weight

@@ -157,12 +157,18 @@ def submit_for_verification(
     # account's enrichment progress (running categories, population gaps).
     # The record-level check decides access; only a caller entitled to manage
     # this listing ever reaches the guard below.
-    service.get_property_owned(
+    listing = service.get_property_owned(
         property_id,
         current.user_id,
         is_admin=_is_admin(current),
         role=current.role,
     )
+    from sitewise.services.property_enrichment_service import _valid_coordinates
+
+    if listing.get("address_validation_status") != "validated" or not _valid_coordinates(
+        listing.get("latitude"), listing.get("longitude")
+    ):
+        raise HTTPException(409, "Verify and confirm the property address before submitting the listing for review.")
     _guard_enrichment_before_submit(session, property_id, acknowledgement)
     return service.submit(
         property_id,
@@ -285,11 +291,101 @@ def review_detail(property_id: int, session: DbSession, admin: AdminUser) -> dic
     — without recalculating anything. A category that could not be measured is
     reported as unavailable, never as a zero.
     """
-    payload = AdminPropertyReviewService(session).detail(property_id)
+    service = AdminPropertyReviewService(session)
+    before = service.final_review_state(property_id)
+    payload = service.detail(property_id)
+    final = service.final_review_state(property_id, check_storage=True)
+    if before["token"] != final["token"]:
+        final["blockers"].append("Evidence changed during loading. Refresh the review.")
+        final["token"] = None
+    payload["final_review"] = final
     enrichment = PropertyEnrichmentService(session)
     enrichment.ensure_schema()
     payload["enrichment"] = enrichment.summary(property_id)
     return payload
+
+
+@staff_router.get("/{property_id}/location-intelligence")
+def location_intelligence_status(property_id: int, session: DbSession, admin: AdminUser) -> dict:
+    from sitewise.services.expanded64_enrichment import persisted_association
+    from sqlalchemy import text
+
+    coordinates = session.execute(text(
+        "SELECT latitude, longitude, address_validation_status "
+        "FROM fyp.rental_properties WHERE id=:id"
+    ), {"id": property_id}).first()
+    if coordinates is None:
+        raise HTTPException(status_code=404, detail="Property not found.")
+    payload = persisted_association(session, property_id, *coordinates[:2])
+    # Reported so the reviewer can tell "never queued" from "queued but the
+    # address verdict was not server-derived".
+    payload["address_validation_status"] = coordinates[2]
+    return payload
+
+
+@staff_router.post("/{property_id}/location-intelligence/analyze", status_code=202)
+def analyze_location_intelligence(
+    property_id: int, session: DbSession, admin: AdminUser, full: bool = False,
+) -> dict:
+    """Queue only the missing, failed or stale measurement categories.
+
+    ``full=true`` is the explicit full recalculation. Nothing is ever
+    recalculated merely because the review page was opened.
+    """
+    from sitewise.services.expanded64_enrichment import enqueue_outstanding
+
+    try:
+        result = enqueue_outstanding(session, property_id, full=full)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="Property not found.") from exc
+    session.commit()
+    return result
+
+
+@staff_router.post("/{property_id}/location-intelligence/recalculate", status_code=202)
+@staff_router.post("/{property_id}/location-intelligence/retry/{category}", status_code=202)
+def queue_location_intelligence(
+    property_id: int, session: DbSession, admin: AdminUser, category: str | None = None,
+) -> dict:
+    from sitewise.services.expanded64_enrichment import CATEGORIES, enqueue
+
+    if category is not None and category not in CATEGORIES:
+        raise HTTPException(status_code=404, detail="Unknown measurement category.")
+    try:
+        queued = enqueue(session, property_id, category=category, force=True)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="Property not found.") from exc
+    session.commit()
+    return {"queued": queued}
+
+
+class FinalDecisionRequest(BaseModel):
+    action: Literal["approve", "reject", "information", "publish", "unpublish"]
+    token: str = Field(min_length=1, max_length=100)
+    reviewed: set[Literal["property", "ownership", "panorama"]] = Field(default_factory=set)
+    component: Literal["property", "ownership", "inspection", "panorama"] | None = None
+    reason: str | None = Field(default=None, max_length=2000)
+
+
+@staff_router.get("/{property_id}/final-review")
+def final_review(property_id: int, session: DbSession, admin: AdminUser) -> dict:
+    return AdminPropertyReviewService(session).final_review_state(property_id)
+
+
+@staff_router.post("/{property_id}/final-review")
+def final_review_decision(
+    property_id: int, payload: FinalDecisionRequest, session: DbSession, admin: AdminUser,
+) -> dict:
+    if payload.action == "approve" and payload.reviewed != {"property", "ownership", "panorama"}:
+        raise HTTPException(422, "Confirm all three evidence reviews.")
+    if payload.action in ("reject", "information") and (
+        payload.component is None or not (payload.reason or "").strip()
+    ):
+        raise HTTPException(422, "Choose the affected component and enter a reason.")
+    return AdminPropertyReviewService(session).final_decision(
+        property_id, admin.user_id, action=payload.action, token=payload.token,
+        component=payload.component, reason=payload.reason,
+    )
 
 
 @staff_router.post("/{property_id}/verification/start-review")
@@ -311,18 +407,7 @@ def approve_dimension(
     session: DbSession,
     admin: AdminUser,
 ) -> dict:
-    """Approve ONE dimension. Never touches the other dimension's status;
-    publication eligibility is recomputed server-side after the commit."""
-    if payload.dimension == "listing":
-        assignment = session.execute(text("""
-            SELECT workflow_status FROM fyp.agent_listing_assignment
-            WHERE listing_id=:pid
-        """), {"pid":property_id}).scalar()
-        if assignment != "submitted":
-            raise HTTPException(status_code=409, detail="Agent inspection and panorama are not submitted.")
-    return AdminPropertyReviewService(session).approve(
-        property_id, payload.dimension, admin.user_id
-    )
+    raise HTTPException(409, "Use Approve Property to approve the full submission.")
 
 
 @staff_router.post("/{property_id}/verification/reject")
@@ -332,17 +417,7 @@ def reject_dimension(
     session: DbSession,
     admin: AdminUser,
 ) -> dict:
-    result = AdminPropertyReviewService(session).reject(
-        property_id, payload.dimension, admin.user_id, payload.reason
-    )
-    if payload.dimension == "listing":
-        session.execute(text("""
-            UPDATE fyp.agent_listing_assignment SET workflow_status='needs_correction', updated_at=now()
-             WHERE listing_id=:pid AND workflow_status='submitted'
-        """), {"pid":property_id})
-        session.commit()
-    return result
-
+    raise HTTPException(409, "Use the consolidated property correction action.")
 
 @staff_router.post("/{property_id}/verification/request-information")
 def request_information(
@@ -351,6 +426,4 @@ def request_information(
     session: DbSession,
     admin: AdminUser,
 ) -> dict:
-    return AdminPropertyReviewService(session).request_information(
-        property_id, payload.dimension, admin.user_id, payload.note
-    )
+    raise HTTPException(409, "Use the consolidated property correction action.")

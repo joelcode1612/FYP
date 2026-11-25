@@ -5,6 +5,8 @@ import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'package:sitewise_jaspr_web/core/di/app_locator.dart';
+import 'package:sitewise_jaspr_web/features/authentication/data/auth_service.dart';
+import 'package:sitewise_jaspr_web/shared/presentation/components/address_preview_map.dart';
 import 'package:sitewise_jaspr_web/shared/presentation/layouts/app_layout.dart';
 
 /// Live owner listing wizard. All values use the shared form vocabulary and
@@ -20,7 +22,11 @@ class AddPropertyPage extends StatefulComponent {
 class _AddPropertyPageState extends State<AddPropertyPage> {
   final Map<String, String> _v = <String, String>{'property_type': 'Shoplot'};
   final Map<String, String> _fieldErrors = <String, String>{};
-  late final String _requestId = _uuid();
+  final Map<String, String> _baseline = {'property_type': 'Shoplot'};
+  String? _requestId;
+  Map<String, dynamic>? _createAttempt;
+  final Set<String> _pendingReplayFields = {};
+  bool _recoveryFailed = false;
   int _step = 0;
   bool _loading = false;
   bool _loadedExisting = false;
@@ -33,6 +39,22 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
   String? _savedId;
   String? _status;
   String? _addressStatus;
+
+  // --- Automatic address preview (Google/fallback geocoder, server-side) ---
+  // Debounced auto-search once the required address fields are valid; the
+  // confirmed location rides Save Draft as signed evidence that the backend
+  // verifies against the stored address.
+  Timer? _previewTimer;
+  int _previewSeq = 0;
+  AddressPreview? _preview;
+  bool _previewPending = false;
+  String? _previewError;
+  String? _lastRequestedKey;
+  String? _confirmedToken;
+  String? _confirmedKey;
+  String? _confirmedLabel;
+  bool _mapExpanded = false;
+  bool _panelCollapsed = false;
 
   static String _uuid() {
     final r = Random.secure();
@@ -47,7 +69,11 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
   void initState() {
     super.initState();
     final id = component.editingId;
-    if (id != null) unawaited(_load(id));
+    if (id != null) {
+      unawaited(_load(id));
+    } else {
+      unawaited(_recoverCreation());
+    }
   }
 
   Future<void> _load(String id) async {
@@ -55,42 +81,7 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
     try {
       final p = await AppLocator.ownerListings.getListing(id);
       if (!mounted) return;
-      setState(() {
-        _v.addAll({
-          'name': p.name,
-          'property_type': p.propertyType ?? '',
-          'description': p.description ?? '',
-          'address': p.address ?? '',
-          'city': p.city ?? '',
-          'state': p.state ?? '',
-          'postcode': p.postcode ?? '',
-          'rental_price': _num(p.rentalPrice),
-          'size_sqft': _num(p.sizeSqft),
-          'floor_level': p.floorLevel?.toString() ?? '',
-          'floor_description': p.floorDescription ?? '',
-          'unit_position': p.unitPosition ?? '',
-          'frontage_ft': _num(p.frontageFt),
-          'furnishing': p.furnishing ?? '',
-          'has_parking': p.hasParking == null
-              ? ''
-              : (p.hasParking! ? 'Available' : 'Not available'),
-          'availability': _availabilityLabel(p.availability),
-          'lease_duration_months': p.leaseDurationMonths?.toString() ?? '',
-          'rental_deposit_myr': _num(p.rentalDepositMyr),
-          'available_from': p.availableFrom ?? '',
-          'lease_duration_negotiable': p.leaseDurationNegotiable == true
-              ? 'yes'
-              : 'no',
-          'landlord_fnb_permission': p.landlordFnbPermission ?? '',
-          'tenure': p.tenure ?? '',
-          'title_type': p.titleType ?? '',
-        });
-        _savedId = id;
-        _loadedExisting = true;
-        _locked = !p.locallyEditable;
-        _status = p.verificationStatus;
-        _loading = false;
-      });
+      _applyListing(p);
     } on Object {
       if (mounted) {
         setState(() {
@@ -101,6 +92,109 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
     }
   }
 
+  void _applyListing(OwnerListing p) {
+    setState(() {
+      _v.addAll({
+        'name': p.name,
+        'property_type': p.propertyType ?? '',
+        'description': p.description ?? '',
+        'address': p.address ?? '',
+        'city': p.city ?? '',
+        'state': p.state ?? '',
+        'postcode': p.postcode ?? '',
+        'rental_price': _num(p.rentalPrice),
+        'size_sqft': _num(p.sizeSqft),
+        'floor_level': p.floorLevel?.toString() ?? '',
+        'floor_description': p.floorDescription ?? '',
+        'unit_position': p.unitPosition ?? '',
+        'frontage_ft': _num(p.frontageFt),
+        'furnishing': p.furnishing ?? '',
+        'has_parking': p.hasParking == null
+            ? ''
+            : (p.hasParking! ? 'Available' : 'Not available'),
+        'availability': _availabilityLabel(p.availability),
+        'lease_duration_months': p.leaseDurationMonths?.toString() ?? '',
+        'rental_deposit_myr': _num(p.rentalDepositMyr),
+        'available_from': p.availableFrom ?? '',
+        'lease_duration_negotiable': switch (p.leaseDurationNegotiable) {
+          true => 'yes',
+          false => 'no',
+          null => '',
+        },
+        'tenure': p.tenure ?? '',
+        'title_type': p.titleType ?? '',
+      });
+      _baseline
+        ..clear()
+        ..addAll(_v);
+      _savedId = p.id;
+      _loadedExisting = true;
+      _locked = !p.locallyEditable;
+      _status = p.verificationStatus;
+      // A saved verdict with live coordinates IS a confirmed location for the
+      // stored address: the backend clears it on any address change, so its
+      // presence here means the user already confirmed THIS address.
+      final validation = p.addressValidationStatus;
+      if ((validation == 'validated' || validation == 'partially_validated') &&
+          p.latitude != null &&
+          p.longitude != null) {
+        _confirmedToken = null;
+        _confirmedKey = _currentAddressKey;
+        _confirmedLabel = null;
+        _preview = null;
+      }
+      _loading = false;
+    });
+  }
+
+  Future<void> _recoverCreation() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+      _recoveryFailed = false;
+    });
+    try {
+      _requestId ??= WebAuth.draftRequestId;
+      final requestId = _requestId;
+      if (requestId == null) return;
+      final listing = await AppLocator.ownerListings.recoverDraft(requestId);
+      if (!mounted || listing == null) return;
+      _applyListing(listing);
+      _forgetCreation();
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _recoveryFailed = true;
+          _error = _saveError(error, 'Could not check for an earlier draft.');
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _forgetCreation() {
+    // A failed local cleanup is safe. Reopening will recover the same row.
+    try {
+      WebAuth.rememberDraftRequestId(null);
+    } on Object {
+      return;
+    }
+    _requestId = null;
+    _createAttempt = null;
+    _pendingReplayFields.clear();
+  }
+
+  String _saveError(Object error, String fallback) {
+    if (error is AppFailure) {
+      if (error is ServiceFailure || error is ResponseFormatFailure) {
+        return '${error.userMessage} Your entries are still here.';
+      }
+      return '${error.message} Your entries are still here.';
+    }
+    return '$fallback Your entries are still here.';
+  }
+
   static String _num(num? n) => n == null ? '' : n.toString();
   static String _availabilityLabel(String? v) => switch (v) {
     'Available now' || 'Ready to move in' => 'Ready to move in',
@@ -109,12 +203,19 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
     _ => v ?? '',
   };
 
-  void _set(String key, String value) => setState(() {
-    _v[key] = value;
-    _fieldErrors.remove(key);
-    _error = null;
-    _draftSaved = false;
-  });
+  void _set(String key, String value) {
+    setState(() {
+      _v[key] = value;
+      _fieldErrors.remove(key);
+      _error = null;
+      _draftSaved = false;
+    });
+    // Any address-field edit invalidates a previous confirmation and schedules
+    // the debounced automatic re-search.
+    if (const {'address', 'state', 'city', 'postcode'}.contains(key)) {
+      _onAddressFieldsChanged();
+    }
+  }
   String? _validateStep(int step) {
     _fieldErrors.clear();
     if (step == 0) {
@@ -173,14 +274,6 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
         PropertyFormRules.leaseDurationError(
           _leaseChoice,
           _v['lease_duration_months'],
-        ),
-      );
-      _putError(
-        'landlord_fnb_permission',
-        PropertyFormRules.optionError(
-          _v['landlord_fnb_permission'],
-          landlordFnbPermissionOptions,
-          'landlord permission',
         ),
       );
       _putError(
@@ -267,16 +360,21 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
   }
 
   Future<void> _save({bool partial = false}) async {
-    if (partial) {
-      final titleError = PropertyFormRules.titleError(_v['name']);
-      if (titleError != null) {
-        setState(() {
-          _fieldErrors['name'] = titleError;
-          _error = 'Enter a property title before saving this draft.';
-        });
-        return;
-      }
-    } else {
+    if (_saving || _loading || _locked || _recoveryFailed) return;
+    final editingId = component.editingId ?? _savedId;
+    if (editingId != null && !_loadedExisting) return;
+    final snapshot = Map<String, String>.of(_v);
+    bool changed(String field) => snapshot[field] != _baseline[field];
+    final titleError = PropertyFormRules.titleError(snapshot['name']);
+    if (titleError != null &&
+        (editingId == null || changed('name') || !partial)) {
+      setState(() {
+        _fieldErrors['name'] = titleError;
+        _error = titleError;
+      });
+      return;
+    }
+    if (!partial) {
       for (var i = 0; i < 3; i++) {
         final error = _validateStep(i);
         if (error != null) {
@@ -288,72 +386,153 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
         }
       }
     }
+
+    final invalid = <String, String>{};
+    final payload = <String, dynamic>{};
+    void add(String key, Object? value, {bool dependentChange = false}) {
+      if (editingId == null || changed(key) || dependentChange) {
+        payload[key] = value;
+      }
+    }
+
+    String? value(String key) {
+      final text = snapshot[key]?.trim();
+      return text == null || text.isEmpty ? null : text;
+    }
+
+    void number(String key, String label, double min, double max) {
+      if (editingId != null && !changed(key)) return;
+      final raw = value(key);
+      final parsed = raw == null ? null : double.tryParse(raw);
+      if (raw != null &&
+          (parsed == null ||
+              !parsed.isFinite ||
+              parsed < min ||
+              parsed > max)) {
+        invalid[key] = 'Enter a valid $label.';
+      }
+      add(key, parsed);
+    }
+
+    for (final key in const [
+      'name',
+      'property_type',
+      'description',
+      'address',
+      'city',
+      'state',
+      'postcode',
+      'floor_description',
+      'unit_position',
+      'furnishing',
+      'tenure',
+      'title_type',
+    ]) {
+      add(key, value(key));
+    }
+    number('rental_price', 'monthly rent', 0.01, 10000000);
+    number('size_sqft', 'built-up area', 0.01, 10000000);
+    number('floor_level', 'floor number', -1, 9999.9);
+    number('frontage_ft', 'frontage', 0, 10000);
+    number('rental_deposit_myr', 'rental deposit', 0, 10000000);
+    add('has_parking', switch (snapshot['has_parking']) {
+      'Available' => true,
+      'Not available' => false,
+      _ => null,
+    });
+    add('availability', _availabilityWire(snapshot['availability']));
+    add(
+      'available_from',
+      snapshot['availability'] == 'Available from a specific date'
+          ? value('available_from')
+          : null,
+      dependentChange: changed('availability'),
+    );
+    final leaseChanged =
+        changed('lease_duration_negotiable') ||
+        changed('lease_duration_months');
+    if (editingId == null || leaseChanged) {
+      final negotiable = switch (snapshot['lease_duration_negotiable']) {
+        'yes' => true,
+        'no' => false,
+        _ => null,
+      };
+      final raw = value('lease_duration_months');
+      final lease = negotiable == true || raw == null
+          ? null
+          : int.tryParse(raw);
+      if (negotiable != true &&
+          raw != null &&
+          (lease == null || lease < 1 || lease > 360)) {
+        invalid['lease_duration_months'] =
+            'Enter a rental period from 1 to 360 months.';
+      }
+      payload['lease_duration_months'] = lease;
+      payload['lease_duration_negotiable'] = negotiable;
+    }
+    if (invalid.isNotEmpty) {
+      setState(() {
+        _fieldErrors.addAll(invalid);
+        _error = invalid.values.join(' ');
+      });
+      return;
+    }
+    // The confirmed location rides the save as signed evidence bound to the
+    // exact address; without it the draft simply saves unverified.
+    if (_confirmationCurrent && _confirmedToken != null) {
+      payload['address_confirmation_token'] = _confirmedToken;
+    }
+
     setState(() {
       _saving = true;
       _error = null;
       _draftSaved = false;
     });
-    final lease = _v['lease_duration_negotiable'] == 'yes'
-        ? null
-        : int.tryParse(_v['lease_duration_months'] ?? '');
-    final payload = <String, dynamic>{
-      'draft_request_id': _requestId,
-      'name': (_v['name'] ?? '').trim(), 'property_type': _v['property_type'],
-      'description': _v['description'], 'address': (_v['address'] ?? '').trim(),
-      'city': _v['city'], 'state': _v['state'], 'postcode': _v['postcode'],
-      'rental_price': double.tryParse(_v['rental_price'] ?? ''),
-      'size_sqft': double.tryParse(_v['size_sqft'] ?? ''),
-      // Coordinates remain server-owned and are deliberately omitted.
-      'floor_level':
-          double.tryParse(_v['floor_level'] ?? '') ??
-          switch (_v['floor_description']) {
-            'Basement' => -1.0,
-            'Ground floor' => 0.0,
-            'First floor' => 1.0,
-            'Second floor' => 2.0,
-            _ => null,
-          },
-      'floor_description': _v['floor_description'],
-      'unit_position': _v['unit_position'],
-      'frontage_ft': double.tryParse(_v['frontage_ft'] ?? ''),
-      'furnishing': _v['furnishing'],
-      'has_parking': switch (_v['has_parking']) {
-        'Available' => true,
-        'Not available' => false,
-        _ => null,
-      },
-      'availability': _availabilityWire(_v['availability']),
-      'available_from': _v['availability'] == 'Available from a specific date'
-          ? _v['available_from']
-          : null,
-      'lease_duration_months': lease,
-      'lease_duration_negotiable': _v['lease_duration_negotiable'] == 'yes',
-      'rental_deposit_myr': double.tryParse(_v['rental_deposit_myr'] ?? ''),
-      'landlord_fnb_permission': _v['landlord_fnb_permission'],
-      'tenure': _v['tenure'], 'title_type': _v['title_type'],
-    };
     try {
-      final editingId = component.editingId ?? _savedId;
-      final result = editingId == null
-          ? await AppLocator.ownerListings.createDraft(payload)
-          : await AppLocator.ownerListings.updateDraft(editingId, payload);
+      final OwnerListing result;
+      if (editingId == null) {
+        final requestId = _requestId ??= WebAuth.draftRequestId ?? _uuid();
+        WebAuth.rememberDraftRequestId(requestId);
+        final previous = _createAttempt;
+        _createAttempt ??= Map.of(payload);
+        // A retried create replays only changed fields, but confirmation
+        // evidence must ride EVERY attempt: the first attempt may have failed
+        // before the server applied it.
+        if (_confirmationCurrent && _confirmedToken != null) {
+          _pendingReplayFields.add('address_confirmation_token');
+        }
+        final replayPatch = Map<String, dynamic>.of(payload)
+          ..removeWhere(
+            (key, value) => previous == null
+                ? !changed(key)
+                : previous[key] == value && !_pendingReplayFields.contains(key),
+          );
+        if (previous != null) _pendingReplayFields.addAll(replayPatch.keys);
+        result = await AppLocator.ownerListings.createDraft({
+          ...payload,
+          'draft_request_id': requestId,
+        }, replayPatch: replayPatch);
+        if (mounted) _forgetCreation();
+      } else {
+        result = await AppLocator.ownerListings.updateDraft(editingId, payload);
+      }
       if (!mounted) return;
       setState(() {
         _savedId = result.id;
         _loadedExisting = true;
+        _baseline
+          ..clear()
+          ..addAll(snapshot);
         _draftSaved = partial;
         _saved = !partial;
-        _saving = false;
         _status = result.verificationStatus;
       });
-    } on Object {
+    } catch (error) {
       if (mounted) {
-        setState(() {
-          _saving = false;
-          _error =
-              'The draft could not be saved. Your entries are still here; try again.';
-        });
+        setState(() => _error = _saveError(error, 'Could not save the draft.'));
       }
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -390,6 +569,136 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
     _ => null,
   };
 
+  // ---------------------------------------------------------------------------
+  // Automatic address preview + location confirmation
+  // ---------------------------------------------------------------------------
+
+  /// Canonical identity of the typed address, matching the backend's evidence
+  /// binding (whitespace-collapsed, case-folded parts joined with '|').
+  String get _currentAddressKey => [
+    (_v['address'] ?? '').trim(),
+    (_v['city'] ?? '').trim(),
+    (_v['state'] ?? '').trim(),
+    (_v['postcode'] ?? '').trim(),
+  ].map((part) => part.toLowerCase().replaceAll(RegExp(r'\s+'), ' ')).join('|');
+
+  /// The preview fires only when the required address fields carry valid
+  /// Malaysian dropdown values (state/city/postcode stay dropdown-driven).
+  bool get _addressComplete {
+    final state = _v['state'] ?? '';
+    final city = _v['city'] ?? '';
+    final postcode = _v['postcode'] ?? '';
+    return (_v['address'] ?? '').trim().isNotEmpty &&
+        MalaysiaLocations.stateNames.contains(state) &&
+        MalaysiaLocations.citiesFor(state).contains(city) &&
+        MalaysiaLocations.postcodesFor(state, city).contains(postcode);
+  }
+
+  /// Confirmation is valid only while the typed address is unchanged.
+  bool get _confirmationCurrent =>
+      _confirmedToken != null && _confirmedKey == _currentAddressKey;
+
+  void _onAddressFieldsChanged() {
+    // An edited address immediately invalidates the previous confirmation —
+    // Save Draft must never carry evidence for an address the user changed.
+    if (_confirmedKey != null && _confirmedKey != _currentAddressKey) {
+      setState(() {
+        _confirmedToken = null;
+        _confirmedKey = null;
+        _confirmedLabel = null;
+      });
+    }
+    _schedulePreview();
+  }
+
+  void _schedulePreview() {
+    _previewTimer?.cancel();
+    if (!_addressComplete) {
+      if (_preview != null || _previewPending || _previewError != null) {
+        setState(() {
+          _preview = null;
+          _previewPending = false;
+          _previewError = null;
+          _lastRequestedKey = null;
+          _mapExpanded = false;
+          _panelCollapsed = false;
+        });
+      }
+      return;
+    }
+    final key = _currentAddressKey;
+    // Duplicate guard: an identical address is already previewed or in
+    // flight, so typing non-address noise never re-requests.
+    if (key == _lastRequestedKey && (_preview != null || _previewPending)) {
+      return;
+    }
+    // ~800 ms after the latest change, request the match automatically.
+    _previewTimer = Timer(const Duration(milliseconds: 800), () {
+      unawaited(_runPreview(key));
+    });
+  }
+
+  Future<void> _runPreview(String key) async {
+    final seq = ++_previewSeq;
+    setState(() {
+      _previewPending = true;
+      _previewError = null;
+      _panelCollapsed = false;
+    });
+    try {
+      final preview = await AppLocator.ownerListings.previewAddress(
+        address: (_v['address'] ?? '').trim(),
+        city: (_v['city'] ?? '').trim(),
+        state: (_v['state'] ?? '').trim(),
+        postcode: (_v['postcode'] ?? '').trim(),
+      );
+      // Ignore outdated responses: the user changed the address meanwhile.
+      if (!mounted || seq != _previewSeq) return;
+      setState(() {
+        _previewPending = false;
+        _lastRequestedKey = key;
+        _preview = preview;
+        if (_confirmedKey != null && _confirmedKey != key) {
+          _confirmedToken = null;
+          _confirmedKey = null;
+          _confirmedLabel = null;
+        }
+      });
+    } on Object {
+      if (!mounted || seq != _previewSeq) return;
+      setState(() {
+        _previewPending = false;
+        _lastRequestedKey = key;
+        _preview = null;
+        _previewError =
+            'Address lookup is temporarily unavailable. You can still save '
+            'the draft with the address you typed; its location can be '
+            'verified later.';
+      });
+    }
+  }
+
+  void _confirmLocation() {
+    final token = _preview?.confirmation?.token;
+    if (token == null || _preview == null) return;
+    setState(() {
+      _confirmedToken = token;
+      _confirmedKey = _currentAddressKey;
+      _confirmedLabel = _preview!.formattedAddress ?? '';
+    });
+  }
+
+  void _editAddress() {
+    // Collapse the preview and drop the confirmation so the owner can retype;
+    // the next change re-runs the automatic search automatically.
+    setState(() {
+      _panelCollapsed = true;
+      _confirmedToken = null;
+      _confirmedKey = null;
+      _confirmedLabel = null;
+    });
+  }
+
   @override
   Component build(BuildContext context) => AppLayout(
     role: AppRole.owner,
@@ -403,7 +712,8 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
             span(classes: 'spinner', []),
             Component.text('Loading property…'),
           ])
-        : (component.editingId != null && !_loadedExisting && !_locked)
+        : (_recoveryFailed ||
+              (component.editingId != null && !_loadedExisting && !_locked))
         ? div(classes: 'card stack', [
             p([
               Component.text(_error ?? 'Property details could not be loaded.'),
@@ -411,7 +721,10 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
             button(
               classes: 'btn btn--secondary',
               events: events(
-                onClick: () => unawaited(_load(component.editingId!)),
+                onClick: () {
+                  final id = component.editingId;
+                  unawaited(id == null ? _recoverCreation() : _load(id));
+                },
               ),
               [Component.text('Retry')],
             ),
@@ -597,12 +910,6 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
         required: true,
       ),
     _field('rental_deposit_myr', 'Rental deposit (RM)', type: 'number'),
-    _select(
-      'landlord_fnb_permission',
-      'Landlord permission for F&B use',
-      landlordFnbPermissionOptions,
-      required: true,
-    ),
     _pair('Rental per square foot', _psfLabel),
     _select(
       'tenure',
@@ -630,6 +937,7 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
         _fieldErrors.remove('state');
         _fieldErrors.remove('city');
         _fieldErrors.remove('postcode');
+        _onAddressFieldsChanged();
       }),
     ),
     _select(
@@ -643,6 +951,7 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
         _v['postcode'] = '';
         _fieldErrors.remove('city');
         _fieldErrors.remove('postcode');
+        _onAddressFieldsChanged();
       }),
     ),
     _select(
@@ -651,6 +960,7 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
       MalaysiaLocations.postcodesFor(_v['state'], _v['city']),
       required: true,
     ),
+    ?_addressPreviewPanel(),
   ]);
 
   Component _agentStep() => _section('Agent verification', [
@@ -675,7 +985,7 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
     ),
     _pair(
       'Rental terms',
-      'RM ${_v['rental_price'] ?? '—'} / month · ${_v['size_sqft'] ?? '—'} sq ft · $_psfLabel · ${_leaseChoice ?? 'Not provided'} · ${_v['availability'] ?? 'Not provided'} · available from ${_v['available_from']?.isNotEmpty == true ? _v['available_from'] : 'Not applicable'} · deposit RM ${_v['rental_deposit_myr']?.isNotEmpty == true ? _v['rental_deposit_myr'] : 'Not provided'} · F&B permission ${_v['landlord_fnb_permission'] ?? 'Not provided'}',
+      'RM ${_v['rental_price'] ?? '—'} / month · ${_v['size_sqft'] ?? '—'} sq ft · $_psfLabel · ${_leaseChoice ?? 'Not provided'} · ${_v['availability'] ?? 'Not provided'} · available from ${_v['available_from']?.isNotEmpty == true ? _v['available_from'] : 'Not applicable'} · deposit RM ${_v['rental_deposit_myr']?.isNotEmpty == true ? _v['rental_deposit_myr'] : 'Not provided'}',
     ),
     _pair(
       'Ownership information',
@@ -683,7 +993,8 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
     ),
     _pair(
       'Address',
-      '${_v['address'] ?? 'Not provided'}, ${_v['city'] ?? 'Not provided'}, ${_v['state'] ?? 'Not provided'} ${_v['postcode'] ?? ''}',
+      '${_v['address'] ?? 'Not provided'}, ${_v['city'] ?? 'Not provided'}, ${_v['state'] ?? 'Not provided'} ${_v['postcode'] ?? ''}'
+      '${_confirmationCurrent ? ' · location confirmed on the map' : ' · location not yet confirmed'}',
     ),
     _pair(
       'Agent verification',
@@ -794,6 +1105,143 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
     span(classes: 'text-muted', [Component.text(k)]),
     span([Component.text(v)]),
   ]);
+
+  /// Compact interactive map + match status below the address fields:
+  /// automatic search result, confirmation evidence, edit and expand.
+  Component? _addressPreviewPanel() {
+    final preview = _preview;
+    final confirmed = _confirmationCurrent;
+    final showPanel =
+        (preview != null || _previewPending || _previewError != null || confirmed) &&
+        !_panelCollapsed;
+    if (!showPanel) return null;
+
+    final children = <Component>[];
+    if (confirmed) {
+      children.add(
+        div(classes: 'sw-addr-confirmed', [
+          Component.text(
+            'Location confirmed for this address'
+            '${_confirmedLabel != null && _confirmedLabel!.isNotEmpty ? ' — $_confirmedLabel' : ''}.',
+          ),
+        ]),
+      );
+    }
+    if (_previewPending) {
+      children.add(
+        div(classes: 'sw-addr-status is-searching', [
+          span(classes: 'spinner spinner--sm', []),
+          Component.text(' Searching for the address…'),
+        ]),
+      );
+    } else if (_previewError != null && preview == null) {
+      children.add(div(classes: 'sw-addr-status is-error', [
+        Component.text(_previewError!),
+      ]));
+    } else if (preview != null && !confirmed) {
+      children.add(
+        div(classes: 'sw-addr-status is-${preview.matchClass.name}', [
+          Component.text(
+            '${preview.matchClass.label}'
+            '${preview.provider == null ? '' : ' (${preview.provider})'}',
+          ),
+        ]),
+      );
+      if (preview.formattedAddress != null) {
+        children.add(
+          p(classes: 'small', [Component.text(preview.formattedAddress!)]),
+        );
+      }
+      children.add(_componentChips(preview));
+      for (final note in preview.notes) {
+        children.add(p(classes: 'small text-muted', [Component.text(note)]));
+      }
+    }
+    if (preview != null && preview.hasLocation) {
+      children.add(
+        AddressPreviewMap(
+          latitude: preview.latitude!,
+          longitude: preview.longitude!,
+          label: preview.formattedAddress ?? '',
+          title: 'Preview of the matched property location',
+          height: _mapExpanded ? 560 : 300,
+        ),
+      );
+      children.add(
+        p(classes: 'small text-muted', [
+          Component.text('Map data © OpenStreetMap contributors.'),
+        ]),
+      );
+    }
+    if (preview != null && !confirmed && preview.confirmable) {
+      children.add(
+        div(classes: 'row', [
+          button(
+            classes: 'btn btn--primary',
+            events: events(onClick: _confirmLocation),
+            [Component.text('Confirm location')],
+          ),
+          button(
+            classes: 'btn btn--secondary',
+            events: events(onClick: _editAddress),
+            [Component.text('Edit address')],
+          ),
+        ]),
+      );
+      children.add(
+        p(classes: 'small text-muted', [
+          Component.text(
+            'Confirming records that the shown location is the actual '
+            'property location for this address. It is not ownership proof '
+            'or administrator verification.',
+          ),
+        ]),
+      );
+    } else if (confirmed) {
+      children.add(
+        div(classes: 'row', [
+          button(
+            classes: 'btn btn--secondary',
+            events: events(onClick: _editAddress),
+            [Component.text('Edit address')],
+          ),
+        ]),
+      );
+    }
+    return div(classes: 'card stack stack--sm sw-addr-preview', [
+      div(classes: 'row row--between', [
+        h3([Component.text('Location preview')]),
+        if (preview != null && preview.hasLocation)
+          button(
+            classes: 'btn btn--secondary btn--sm',
+            events: events(
+              onClick: () => setState(() => _mapExpanded = !_mapExpanded),
+            ),
+            [Component.text(_mapExpanded ? 'Collapse map' : 'Expand map')],
+          ),
+      ]),
+      div(classes: 'stack stack--xs', children),
+    ]);
+  }
+
+  Component _componentChips(AddressPreview preview) {
+    String label(bool ok, String what) => ok ? '$what matched' : '$what differs';
+    final chips = <Component>[
+      span(classes: preview.components['postcode_matches'] == false ? 'chip chip--bad' : 'chip chip--ok', [
+        Component.text(label(preview.components['postcode_matches'] != false, 'Postcode')),
+      ]),
+      span(classes: preview.components['city_matches'] == false ? 'chip chip--bad' : 'chip chip--ok', [
+        Component.text(label(preview.components['city_matches'] != false, 'City')),
+      ]),
+      span(classes: preview.components['state_matches'] == false ? 'chip chip--bad' : 'chip chip--ok', [
+        Component.text(label(preview.components['state_matches'] != false, 'State')),
+      ]),
+      span(classes: preview.components['country_matches'] == false ? 'chip chip--bad' : 'chip chip--ok', [
+        Component.text(label(preview.components['country_matches'] != false, 'Country: Malaysia')),
+      ]),
+    ];
+    return div(classes: 'sw-addr-chips', chips);
+  }
 
   Component _typeCards() => div(classes: 'stack stack--xs', [
     label([Component.text('Commercial property type *')]),

@@ -40,9 +40,9 @@ SELECT p.source_data,
 FROM fyp.catalogue_properties AS p
 LEFT JOIN LATERAL (
     SELECT s.other_features
-    FROM sitewise_analytics.subject_features AS s
+    FROM fyp.property_inference_features AS s
     WHERE s.canonical_property_id = p.id
-      AND btrim(s.sample_class) = 'U'
+
     ORDER BY s.imported_at DESC NULLS LAST
     LIMIT 1
 ) AS f ON TRUE

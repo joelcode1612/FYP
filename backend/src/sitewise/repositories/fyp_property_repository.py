@@ -532,7 +532,7 @@ class FypPropertyRepository:
         """Verified research linkage for one property.
 
         Returns the verified subject link plus the linked
-        ``sitewise_analytics.subject_features`` row. These are *research
+        ``fyp.property_inference_features`` row. These are *research
         features and status flags* — there is no verified success-probability
         column, and none is invented here. ``null`` when the property has no
         verified link (all 227 published rows: the 955-link set is the
@@ -544,7 +544,7 @@ class FypPropertyRepository:
                     """
                     SELECT l.subject_id, l.sitewise_property_id, l.match_method,
                            l.match_evidence, l.verified_at,
-                           sf.sample_class, sf.competitor_count_500m,
+                           sf.competitor_count_500m,
                            sf.competitor_count_1000m,
                            sf.cafe_count_500m, sf.restaurant_count_500m,
                            sf.fast_food_count_500m,
@@ -559,7 +559,7 @@ class FypPropertyRepository:
                            sf.analysis_status, sf.parking_status,
                            sf.reference_coverage, sf.feature_snapshot_at
                     FROM fyp.property_subject_links l
-                    JOIN sitewise_analytics.subject_features sf
+                    JOIN fyp.property_inference_features sf
                         ON sf.subject_id = l.subject_id
                     WHERE l.property_id = :pid AND l.match_verified
                     """
@@ -1099,7 +1099,13 @@ class FypPropertyRepository:
                 "available_from": payload.get("available_from"),
                 "rental_deposit_myr": payload.get("rental_deposit_myr"),
                 "title_type": payload.get("title_type"),
-                "landlord_fnb_permission": payload.get("landlord_fnb_permission"),
+                # F&B use is the SiteWise listing assumption: every NEW
+                # listing defaults to landlord permission 'Yes' server-side.
+                # The API request models no longer carry this field, so an
+                # existing client cannot bypass the default by sending one.
+                "landlord_fnb_permission": (
+                    payload.get("landlord_fnb_permission") or "Yes"
+                ),
                 "address_validation_status": payload.get(
                     "address_validation_status"
                 ),
@@ -1155,7 +1161,9 @@ class FypPropertyRepository:
         "available_from",
         "rental_deposit_myr",
         "title_type",
-        "landlord_fnb_permission",
+        # landlord_fnb_permission is deliberately NOT owner-writable: it is
+        # set to 'Yes' server-side on create and preserved on every edit, so
+        # an unrelated save can never overwrite a stored permission value.
     )
 
     _LISTING_SELECT = (
@@ -1238,9 +1246,12 @@ class FypPropertyRepository:
                     NULLIF(:postcode, ''), :latitude, :longitude, :rental_price,
                     :size_sqft,
                     CASE WHEN :rental_price IS NOT NULL AND :rental_price > 0
-                           AND :size_sqft IS NOT NULL AND :size_sqft > 0
-                         THEN ROUND(:rental_price::numeric / :size_sqft::numeric, 2)
-                         ELSE NULL END,
+                       AND :size_sqft IS NOT NULL AND :size_sqft > 0
+                     THEN ROUND(
+                         CAST(:rental_price AS NUMERIC) /
+                         CAST(:size_sqft AS NUMERIC), 2
+                     )
+                     ELSE NULL END,
                     NULLIF(:availability, ''), :floor_level,
                     NULLIF(:floor_description, ''), :frontage_ft,
                     NULLIF(:furnishing, ''), NULLIF(:tenure, ''),
@@ -1282,7 +1293,13 @@ class FypPropertyRepository:
                 "available_from": payload.get("available_from"),
                 "rental_deposit_myr": payload.get("rental_deposit_myr"),
                 "title_type": payload.get("title_type"),
-                "landlord_fnb_permission": payload.get("landlord_fnb_permission"),
+                # F&B use is the SiteWise listing assumption: every NEW draft
+                # defaults to landlord permission 'Yes' server-side. The draft
+                # request model no longer carries this field, so a client
+                # cannot override the default through the wizard.
+                "landlord_fnb_permission": (
+                    payload.get("landlord_fnb_permission") or "Yes"
+                ),
                 "has_parking": (
                     None if payload.get("has_parking") is None
                     else 1 if payload.get("has_parking") else 0
@@ -1299,7 +1316,7 @@ class FypPropertyRepository:
             self.session.commit()
         return listing  # type: ignore[return-value]
 
-    def update_owner_listing(self, property_id: int, fields: dict) -> dict | None:
+    def update_owner_listing(self, property_id: int, fields: dict, *, commit: bool = True) -> dict | None:
         """Whitelisted partial update of one owned listing.
 
         ``psf`` is recomputed whenever price and size are both known, matching
@@ -1340,7 +1357,13 @@ class FypPropertyRepository:
             sets.append(
                 "psf = CASE WHEN :psf_price IS NOT NULL AND :psf_price > 0 "
                 "AND :psf_size IS NOT NULL AND :psf_size > 0 "
-                "THEN ROUND(:psf_price::numeric / :psf_size::numeric, 2) "
+                # SQLAlchemy text() does NOT substitute a bind parameter whose
+                # ':name' token is immediately followed by '::' (PostgreSQL
+                # cast) — ':psf_price::numeric' stayed raw in the compiled SQL
+                # and psycopg2 sent a literal ':' to the server
+                # (ProgrammingError: syntax error at or near ":"). CAST(x AS y)
+                # avoids the ambiguity entirely.
+                "THEN ROUND(CAST(:psf_price AS numeric) / CAST(:psf_size AS numeric), 2) "
                 "ELSE NULL END"
             )
             params["psf_price"] = price
@@ -1358,6 +1381,20 @@ class FypPropertyRepository:
         ]
         if changed_address:
             changed = " OR ".join(changed_address)
+            # The stored coordinates were derived from the PREVIOUS address.
+            # An edited address invalidates them immediately: the confirmation
+            # trio is cleared, the coordinate association is removed (every
+            # enrichment consumer keys staleness off the coordinate hash), and
+            # the persisted snapshots are marked invalidated below. New
+            # coordinates can only arrive from a fresh server-side verdict.
+            previous = self.session.execute(
+                text(
+                    "SELECT latitude, longitude FROM fyp.rental_properties "
+                    "WHERE id = :pid"
+                ),
+                params,
+            ).mappings().first()
+            sets.extend(["latitude = NULL", "longitude = NULL"])
             sets.extend(
                 f"{column} = CASE WHEN {changed} THEN NULL ELSE {column} END"
                 for column in ("address_validation_status", "address_formatted", "address_validated_at")
@@ -1373,8 +1410,51 @@ class FypPropertyRepository:
         if row.scalar_one_or_none() is None:
             self.session.rollback()
             return None
-        self.session.commit()
+        if changed_address:
+            self._invalidate_location_evidence(property_id, previous)
+        if commit:
+            self.session.commit()
         return self.owner_listing(property_id)
+
+    def _invalidate_location_evidence(
+        self, property_id: int, previous: dict | None
+    ) -> None:
+        """Mark persisted geospatial snapshots invalidated by an address edit.
+
+        The property's coordinates are already cleared, which makes every
+        stored measurement unavailable-by-hash for consumers and fences any
+        in-flight enrichment job (both workers re-check the live coordinates
+        before settling). This merge-only marker additionally records WHY the
+        evidence went stale, with the previous coordinate hash for provenance.
+        Historical measurement payloads are preserved untouched.
+        """
+        from sitewise.services.property_enrichment_service import (
+            _valid_coordinates,
+            coordinate_hash,
+        )
+
+        previous_hash = None
+        if previous is not None and _valid_coordinates(
+            previous["latitude"], previous["longitude"]
+        ):
+            previous_hash = coordinate_hash(
+                float(previous["latitude"]), float(previous["longitude"])
+            )
+        self.session.execute(
+            text(
+                "UPDATE fyp.property_geospatial_features "
+                "SET expanded64_measurements = COALESCE(expanded64_measurements, '{}'::jsonb) "
+                "|| jsonb_build_object('_invalidated', jsonb_build_object("
+                "'at', now(), 'reason', 'address_changed', "
+                "'previous_coordinate_hash', :prev_hash)), "
+                "pu_inference_snapshot = COALESCE(pu_inference_snapshot, '{}'::jsonb) "
+                "|| jsonb_build_object('_invalidated', jsonb_build_object("
+                "'at', now(), 'reason', 'address_changed', "
+                "'previous_coordinate_hash', :prev_hash)) "
+                "WHERE property_id = :pid"
+            ),
+            {"pid": property_id, "prev_hash": previous_hash},
+        )
 
     def set_address_validation(
         self,
@@ -1385,12 +1465,17 @@ class FypPropertyRepository:
         latitude: float | None = None,
         longitude: float | None = None,
     ) -> None:
-        """Persist a SERVER-obtained Google Address Validation verdict.
+        """Persist a SERVER-obtained provider verdict for the address.
 
         Called INSIDE the caller's transaction (no commit here) so the verdict
         and the lifecycle transition land atomically. Coordinates are replaced
-        only when the provider returned a validated premise and real numbers —
-        a partial verdict never overwrites the owner's pin.
+        only when the verdict located the address (``validated`` premise-level,
+        or ``partially_validated`` from a user-confirmed preview/approximate
+        match) with real numbers — an unconfirmed verdict never overwrites the
+        stored location. Landing new coordinates also clears the
+        ``_invalidated`` marker that an address edit left on the geospatial
+        snapshots: the coordinate-hash staleness checks keep guarding the
+        stored measurements themselves.
         """
         sets = [
             "address_validation_status = :status",
@@ -1404,7 +1489,7 @@ class FypPropertyRepository:
             "formatted": formatted_address,
         }
         if (
-            status == "validated"
+            status in ("validated", "partially_validated")
             and latitude is not None
             and longitude is not None
             and -90 <= float(latitude) <= 90
@@ -1421,6 +1506,20 @@ class FypPropertyRepository:
             ),
             params,
         )
+        if "lat" in params:
+            # The property API queues Location Intelligence after applying
+            # the address verdict, keeping one dispatch point for both models.
+            self.session.execute(
+                text(
+                    "UPDATE fyp.property_geospatial_features "
+                    "SET expanded64_measurements = COALESCE(expanded64_measurements, '{}'::jsonb) "
+                    "- '_invalidated', "
+                    "pu_inference_snapshot = COALESCE(pu_inference_snapshot, '{}'::jsonb) "
+                    "- '_invalidated' "
+                    "WHERE property_id = :pid"
+                ),
+                {"pid": property_id},
+            )
 
     def set_listing_verification_status(
         self,
@@ -1490,7 +1589,7 @@ class FypPropertyRepository:
         return grouped
 
     def add_listing_photo(
-        self, property_id: int, url: str, caption: str, is_primary: bool
+        self, property_id: int, url: str, caption: str, is_primary: bool, *, commit: bool = True
     ) -> dict:
         """Attach one uploaded photo. The FIRST photo of a listing always
         becomes primary; an explicit primary request demotes the others."""
@@ -1523,7 +1622,8 @@ class FypPropertyRepository:
                 "primary": make_primary,
             },
         ).mappings().one()
-        self.session.commit()
+        if commit:
+            self.session.commit()
         return dict(row)
 
     def delete_listing_photo(

@@ -108,7 +108,7 @@ class LocationAnalysisService:
         freshness = refresh.freshness_payload(property_id)
         provenance = refresh.provenance_summary()
 
-        research_association = self._research_association(property_id)
+        research_association = self._research_association(property_id, listing)
 
         part_a = self._part_a(
             listing, verification, photos_count, ownership_docs, enrichment, geo
@@ -163,7 +163,7 @@ class LocationAnalysisService:
         rows = self.session.execute(
             text(
                 "SELECT category, status FROM fyp.property_enrichment_category "
-                "WHERE property_id = :pid"
+                "WHERE property_id = :pid AND left(category, 11) <> 'expanded64_'"
             ),
             {"pid": property_id},
         ).all()
@@ -188,38 +188,12 @@ class LocationAnalysisService:
         ).scalar()
         return int(row or 0)
 
-    def _research_association(self, property_id: int) -> dict[str, Any]:
-        """Report operational expanded64 coverage without substituting a score."""
-        from sitewise.ml.pu_expanded import expanded_rental_prediction
+    def _research_association(self, property_id: int, listing: dict[str, Any]) -> dict[str, Any]:
+        from sitewise.services.expanded64_enrichment import persisted_association
 
-        try:
-            result = expanded_rental_prediction(self.session, property_id)
-        except Exception as exc:  # noqa: BLE001 — feature collection must not break review
-            return {
-                "available": False,
-                "score": None,
-                "label": None,
-                "model_version": None,
-                "feature_count": None,
-                "available_features": None,
-                "missing_features": [],
-                "unavailable_reason": f"Research model could not run: {exc}",
-                "research_only": True,
-            }
-        coverage = result.get("missing_features")
-        return {
-            "available": bool(result.get("available")),
-            "score": result.get("score"),
-            "label": result.get("label"),
-            "model_version": result.get("model_version"),
-            "score_meaning": result.get("score_meaning"),
-            "feature_count": result.get("feature_count"),
-            "available_features": result.get("available_features"),
-            "missing_features": coverage if isinstance(coverage, list) else [],
-            "unvalidated_features": result.get("unvalidated_features", []),
-            "unavailable_reason": result.get("reason"),
-            "research_only": True,
-        }
+        return persisted_association(
+            self.session, property_id, listing.get("latitude"), listing.get("longitude"),
+        )
 
     # ------------------------------------------------------------------
     # Part A — listing verification readiness

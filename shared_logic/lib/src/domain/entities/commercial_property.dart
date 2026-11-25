@@ -21,11 +21,18 @@ class CommercialProperty {
 
   /// Asking rental. [rentalMaxRm] is set when the owner gives a range
   /// (e.g. RM 7,000–RM 8,000); otherwise it equals [rentalRm].
-  final double rentalRm;
+  final double? recordedRentalRm;
   final double rentalMaxRm;
-  final double sizeSqft;
-  final double latitude;
-  final double longitude;
+  final double? recordedSizeSqft;
+  final double? recordedLatitude;
+  final double? recordedLongitude;
+
+  // Existing catalogue consumers use numeric values for filtering and sorting.
+  // Owner draft views use the recorded values to preserve missing measurements.
+  double get rentalRm => recordedRentalRm ?? 0;
+  double get sizeSqft => recordedSizeSqft ?? 0;
+  double get latitude => recordedLatitude ?? 0;
+  double get longitude => recordedLongitude ?? 0;
   final String propertyType; // Shop lot, Corner unit, Food court stall…
   final VerificationStatus verification;
   final double suitabilityScore; // 0–100
@@ -182,11 +189,11 @@ class CommercialProperty {
     required this.city,
     required this.state,
     required this.postcode,
-    required this.rentalRm,
+    required double? rentalRm,
     double? rentalMaxRm,
-    required this.sizeSqft,
-    required this.latitude,
-    required this.longitude,
+    required double? sizeSqft,
+    required double? latitude,
+    required double? longitude,
     required this.propertyType,
     required this.verification,
     required this.suitabilityScore,
@@ -235,11 +242,16 @@ class CommercialProperty {
     this.population1km,
     this.accessibilityScore,
     this.nearbyPropertyCount,
-  }) : rentalMaxRm = rentalMaxRm ?? rentalRm;
+  }) : recordedRentalRm = rentalRm,
+       recordedSizeSqft = sizeSqft,
+       recordedLatitude = latitude,
+       recordedLongitude = longitude,
+       rentalMaxRm = rentalMaxRm ?? rentalRm ?? 0;
 
   bool get hasRentalRange => rentalMaxRm > rentalRm;
 
   String get rentalDisplay {
+    if (recordedRentalRm == null) return 'Rent not provided';
     String fmt(double v) => 'RM ${v.toStringAsFixed(0)}';
     if (hasRentalRange) return '${fmt(rentalRm)}–${fmt(rentalMaxRm)}';
     return fmt(rentalRm);
@@ -250,7 +262,10 @@ class CommercialProperty {
   /// Coordinates usable for mapping: false when the row has none. The (0, 0)
   /// pair is the codebase's "no coordinates" sentinel and must never be
   /// plotted or routed through distance math.
-  bool get hasCoordinates => latitude != 0 || longitude != 0;
+  bool get hasCoordinates =>
+      recordedLatitude != null &&
+      recordedLongitude != null &&
+      (latitude != 0 || longitude != 0);
 
   CommercialProperty copyWith({
     VerificationStatus? verification,
@@ -273,11 +288,11 @@ class CommercialProperty {
     city: city,
     state: state,
     postcode: postcode,
-    rentalRm: rentalRm ?? this.rentalRm,
+    rentalRm: rentalRm ?? recordedRentalRm,
     rentalMaxRm: rentalMaxRm ?? this.rentalMaxRm,
-    sizeSqft: sizeSqft ?? this.sizeSqft,
-    latitude: latitude,
-    longitude: longitude,
+    sizeSqft: sizeSqft ?? recordedSizeSqft,
+    latitude: recordedLatitude,
+    longitude: recordedLongitude,
     propertyType: propertyType,
     verification: verification ?? this.verification,
     suitabilityScore: suitabilityScore,
@@ -291,7 +306,9 @@ class CommercialProperty {
     requirements: requirements ?? this.requirements,
     tags: tags ?? this.tags,
     description: clearDescription ? null : (description ?? this.description),
-    availability: clearAvailability ? null : (availability ?? this.availability),
+    availability: clearAvailability
+        ? null
+        : (availability ?? this.availability),
     tenure: tenure,
     furnishing: furnishing,
     floorLevel: floorLevel,

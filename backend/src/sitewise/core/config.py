@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -161,6 +161,14 @@ class Settings(BaseSettings):
     # (Redirect URLs), otherwise GoTrue rejects the flow. Empty falls back to
     # the first CORS origin + /auth/callback.
     supabase_staff_invite_redirect_url: str = ""
+    # New Owner invitations use a server-tracked validity window. Keep this at
+    # or below the Supabase Auth email-link expiry; the conservative default
+    # matches Supabase's usual one-hour email OTP lifetime.
+    staff_invitation_expiry_minutes: int = Field(default=60, gt=0)
+    # A pending invitation is claimed before its external email call. A stale
+    # claim can be recovered after a crashed request without allowing two live
+    # administrators to dispatch the same invitation concurrently.
+    staff_invitation_claim_seconds: int = Field(default=120, gt=0)
     # Timeout (seconds) for GoTrue admin REST calls not wrapped by supabase-py
     # (MFA factor administration in supabase-py 2.34.0).
     supabase_admin_timeout_seconds: int = 15
@@ -211,7 +219,19 @@ class Settings(BaseSettings):
     # catalogue: 896/955 properties resolve a complete 64-feature vector and
     # 351 pass the unchanged strictly-greater-than-50 gate. "legacy" and
     # "experimental47" remain selectable for comparison and audit.
+    # "operational25" is the SEPARATE 25-feature candidate selected explicitly.
+    # It is shadow-persisted by default; choosing it activates ONLY the Layer-1
+    # score source. Expanded64 artifacts stay on disk for rollback/research.
     sitewise_pu_model_variant: str = "expanded64"
+
+    # --- Expanded64_v2 artifact opt-in (default OFF) -----------------------
+    # Empty keeps the validated original sitewise_pu_64_expanded artifact
+    # active. The retrained Expanded64_v2 artifact is integrated by the
+    # separate ML workstream; this setting only points the EXISTING engine at
+    # it once its validated file is present under backend/src/sitewise/ml/.
+    # Any other name is rejected at use time, so a typo cannot silently
+    # activate an unrelated artifact.
+    sitewise_expanded64_v2_model_name: str = ""
 
     # --- Optional device-panorama enhancement (default OFF) ----------------
     # When explicitly enabled, an administrator may run a CONSERVATIVE tonal
@@ -225,10 +245,10 @@ class Settings(BaseSettings):
     @property
     def pu_model_variant(self) -> str:
         variant = (self.sitewise_pu_model_variant or "legacy").strip().lower()
-        if variant not in {"legacy", "experimental47", "expanded64"}:
+        if variant not in {"legacy", "experimental47", "expanded64", "operational25"}:
             raise ValueError(
-                "SITEWISE_PU_MODEL_VARIANT must be 'legacy', 'experimental47' or "
-                f"'expanded64', got {self.sitewise_pu_model_variant!r}"
+                "SITEWISE_PU_MODEL_VARIANT must be 'legacy', 'experimental47', "
+                f"'expanded64' or 'operational25', got {self.sitewise_pu_model_variant!r}"
             )
         return variant
 

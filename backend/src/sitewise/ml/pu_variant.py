@@ -105,14 +105,23 @@ def resolve_variant(
             ),
         )
     if variant == "expanded64":
-        from sitewise.ml.pu_expanded import EXPANDED_MODEL_NAME
+        from sitewise.ml.pu_expanded import (
+            active_expanded_model_name, uses_v2_feature_definitions,
+        )
+        from sitewise.ml.expanded64_feature_definitions import DEFINITIONS_VERSION
+        from sitewise.services.explanation_cache import cached_file_sha256
 
-        loaded = ModelLoader().load_cached(EXPANDED_MODEL_NAME)
+        # One engine, one artifact slot. The original artifact stays active
+        # until the separately validated Expanded64_v2 file is configured.
+        model_name = active_expanded_model_name()
+        loaded = ModelLoader().load_cached(model_name)
         meta = loaded.meta
+        v2 = uses_v2_feature_definitions(model_name)
+        digest = cached_file_sha256(ModelLoader()._find_artifact(model_name)) or "unavailable"
         return VariantInfo(
             key="expanded64",
-            layer1_model=EXPANDED_MODEL_NAME,
-            artifact=meta.get("artifact_filename", "sitewise_pu_64_expanded.joblib"),
+            layer1_model=model_name,
+            artifact=meta.get("artifact_filename", f"{model_name}.joblib"),
             version=meta.get("model_variant"),
             feature_count=len(loaded.feature_names),
             research_only=True,
@@ -120,8 +129,8 @@ def resolve_variant(
             score_source=(
                 "live inference: exact 64-feature vector resolved from the analytics "
                 "database + committed training-data bridge, scored by "
-                "sitewise_pu_64_expanded.joblib (sha256 "
-                "0371f4e4ef20a0e264cc4fa7b47f770e7fae23016787fc0d8f7bd42d3541676f)"
+                f"{meta.get('artifact_filename', model_name + '.joblib')} "
+                f"(sha256 {digest})"
             ),
             score_meaning=(
                 "Uncalibrated bagged-LogisticRegression P-vs-U association index "
@@ -130,6 +139,14 @@ def resolve_variant(
             ),
             notes=(
                 "Expanded research model: production_ready=false per its model card.",
+                f"Calculation definitions: {DEFINITIONS_VERSION}. "
+                + (
+                    "The six recovered inputs are admitted only after their "
+                    "Expanded64_v2 training features were recalculated with the same definitions."
+                    if v2 else
+                    "The original 2026-11-15 definitions remain active; the six "
+                    "standardised inputs are measured but withheld from this artifact."
+                ),
                 "The 16 population-age/residential measurements exist only in the "
                 "committed training data; properties without a complete "
                 "expanded-bridge record (including every newly submitted listing) "
@@ -142,6 +159,34 @@ def resolve_variant(
                 "greater-than-50 gate on the 0-100 scale retains 47.7% of the "
                 "model's own training rows (median 47.8), comparable to the legacy "
                 "stored-score scale, so the threshold is unchanged.",
+            ),
+        )
+    if variant == "operational25":
+        from sitewise.ml import operational25 as op25
+
+        spec = op25.contract()
+        digest = op25.artifact_sha256()
+        return VariantInfo(
+            key="operational25",
+            layer1_model=op25.MODEL_NAME,
+            artifact=f"{op25.MODEL_NAME}.joblib",
+            version=str(spec["version"]),
+            feature_count=len(spec["feature_names"]),
+            research_only=True,
+            production_ready=False,
+            score_source=(
+                "live 25-feature inference: population rings, demand-generator POIs, "
+                "OSM road geometry and residential density measured at verified "
+                "coordinates; artifact sha256 " + digest
+            ),
+            score_meaning=spec["score_meaning"],
+            notes=(
+                "Separate research candidate: Expanded64 and legacy artifacts remain "
+                "available for rollback; score families are never mixed.",
+                "Only the eight residential inputs may use the artifact's trained "
+                "missing-value policy; all other measurements must be observed.",
+                "Source-use permission for Google-derived POIs and training/live "
+                "parity remain unverified; production_ready=false.",
             ),
         )
     loaded = ModelLoader().load_cached(EXPERIMENTAL_MODEL_NAME)

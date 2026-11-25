@@ -74,7 +74,8 @@ class AdminNotifier extends Notifier<AdminState> {
 
   Future<void> approve(String id) => _controller.approve(id);
 
-  Future<void> reject(String id, String reason) => _controller.reject(id, reason);
+  Future<void> reject(String id, String reason) =>
+      _controller.reject(id, reason);
 
   Future<void> approveTour(String id) => _controller.approveTour(id);
 
@@ -116,6 +117,11 @@ class AdminNotifier extends Notifier<AdminState> {
 
   Future<void> loadReviewDetail(String propertyId) =>
       _controller.loadReviewDetail(propertyId);
+
+  Future<void> finalDecision(
+    String propertyId,
+    Map<String, dynamic> decision,
+  ) => _controller.finalDecision(propertyId, decision);
 
   void closeReviewDetail() => _controller.closeReviewDetail();
 

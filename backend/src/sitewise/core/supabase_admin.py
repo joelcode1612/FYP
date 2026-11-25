@@ -148,19 +148,19 @@ class SupabaseAdminService:
                 return None
             page += 1
 
-    def invite_agent(
+    def invite_staff_user(
         self,
         *,
         email: str,
         full_name: str,
         phone_number: str | None = None,
     ) -> dict[str, Any]:
-        """Create the auth identity (if new) and email the native invite link.
+        """Create an invited identity and email Supabase's native invite link.
 
-        The invite email is Supabase's own password-setup flow: the agent
-        opens the link, lands on the authorized redirect URL with a valid
-        one-time code, and sets a password. No custom token is generated and
-        no password is ever created or viewed by an administrator.
+        The invite email is Supabase's own password-setup flow: the invited
+        Owner or Agent opens the link, lands on the authorized redirect URL
+        with a valid one-time code, and sets a password. No custom token is
+        generated and no password is ever created or viewed by an administrator.
         """
         options = {
             "data": {
@@ -175,11 +175,29 @@ class SupabaseAdminService:
             message = str(exc)
             if "422" in message or "already" in message.lower():
                 raise ConflictError(
-                    "This email is already registered in Supabase Auth. Use the "
-                    "explicit existing-account workflow to grant staff access."
+                    "This email is already registered in Supabase Auth. Sign in "
+                    "instead or ask an administrator to reconcile the account."
                 ) from exc
-            raise SupabaseAdminError(f"Supabase invite failed: {message}") from exc
+            raise SupabaseAdminError("Supabase invite failed.") from exc
         return _normalize_auth_user(invited)
+
+    def resend_signup_confirmation(self, *, email: str) -> None:
+        """Re-send Supabase's confirmation email for an unconfirmed identity.
+
+        Used only for a still-pending invited Owner whose original invite was
+        revoked or expired. Supabase sends the email and owns the one-time link;
+        no action link or token is returned to the application or administrator.
+        """
+        try:
+            self.client.auth.resend(
+                {
+                    "type": "signup",
+                    "email": email,
+                    "options": {"email_redirect_to": settings.staff_invite_redirect},
+                }
+            )
+        except Exception as exc:
+            raise SupabaseAdminError("Supabase confirmation email resend failed.") from exc
 
     def create_confirmed_entrepreneur(
         self,
@@ -395,6 +413,68 @@ class SupabaseAdminService:
         rows = list(result.data or [])
         return rows[0] if rows else None
 
+    def reconcile_invited_owner_profile(
+        self,
+        *,
+        user_id: uuid.UUID | str,
+        email: str,
+        full_name: str | None,
+        phone_number: str | None,
+    ) -> dict[str, Any]:
+        """Provision a pending Owner without overwriting concurrent activation.
+
+        Supabase may create a provisional Entrepreneur/pending row through its
+        new-user trigger. Only that row or an already-pending Owner may become
+        the invited Owner; an active, suspended or established account is never
+        demoted by an administrator retry.
+        """
+        payload: dict[str, Any] = {
+            "user_id": str(user_id),
+            "email": email,
+            "role": "owner",
+            "account_status": "pending",
+        }
+        if full_name is not None:
+            payload["full_name"] = full_name
+        if phone_number is not None:
+            payload["phone_number"] = phone_number
+        current = self.get_identity_profile(user_id)
+        try:
+            if current is None:
+                result = self.client.table("users").insert(payload).execute()
+            else:
+                if (
+                    str(current.get("user_id")) != str(user_id)
+                    or str(current.get("email") or "").strip().lower() != email
+                    or (current.get("role"), current.get("account_status"))
+                    not in {
+                        ("entrepreneur", "pending"),
+                        ("owner", "pending"),
+                    }
+                ):
+                    raise ConflictError(
+                        "The Owner account changed during invitation reconciliation."
+                    )
+                result = (
+                    self.client.table("users")
+                    .update(payload)
+                    .eq("user_id", str(user_id))
+                    .eq("email", str(current["email"]))
+                    .eq("role", str(current["role"]))
+                    .eq("account_status", str(current["account_status"]))
+                    .select("*")
+                    .execute()
+                )
+                if not result.data:
+                    raise ConflictError(
+                        "The Owner account changed during invitation reconciliation."
+                    )
+        except ConflictError:
+            raise
+        except Exception as exc:
+            raise SupabaseAdminError("Owner identity reconciliation failed.") from exc
+        return (result.data or [{}])[0]
+
     def update_identity_profile(
         self, user_id: uuid.UUID | str, data: dict[str, Any]
     ) -> None:
@@ -409,6 +489,30 @@ class SupabaseAdminService:
         except Exception as exc:
             raise SupabaseAdminError(f"Identity profile update failed: {exc}") from exc
 
+    def update_identity_profile_if(
+        self,
+        user_id: uuid.UUID | str,
+        data: dict[str, Any],
+        *,
+        expected_status: str,
+        expected_role: str,
+    ) -> dict[str, Any] | None:
+        """Compare-and-set an authoritative profile transition."""
+        try:
+            result = (
+                self.client.table("users")
+                .update(data)
+                .eq("user_id", str(user_id))
+                .eq("account_status", expected_status)
+                .eq("role", expected_role)
+                .select("*")
+                .execute()
+            )
+        except Exception as exc:
+            raise SupabaseAdminError("Identity profile transition failed.") from exc
+        rows = list(result.data or [])
+        return rows[0] if rows else None
+
     # ------------------------------------------------------------------
     # Staff invitations
     # ------------------------------------------------------------------
@@ -421,11 +525,15 @@ class SupabaseAdminService:
         invited_by_user_id: uuid.UUID | str,
         status: str = "sent",
         expires_at: str | None = None,
+        invited_role: str = "agent",
     ) -> dict[str, Any]:
+        if invited_role not in {"agent", "owner"}:
+            raise ValueError("Invalid invitation role")
         payload: dict[str, Any] = {
             "invited_email": invited_email,
             "invited_by_user_id": str(invited_by_user_id),
             "invitation_status": status,
+            "invited_role": invited_role,
         }
         if invited_user_id is not None:
             payload["invited_user_id"] = str(invited_user_id)
@@ -434,19 +542,45 @@ class SupabaseAdminService:
         try:
             result = self.client.table("staff_invitations").insert(payload).execute()
         except Exception as exc:
+            message = str(exc)
+            if "23505" in message or "duplicate key" in message.lower():
+                raise ConflictError(
+                    "An open invitation already exists for this email. Revoke it "
+                    "before issuing another invitation."
+                ) from exc
             raise SupabaseAdminError(f"Invitation write failed: {exc}") from exc
         return (result.data or [{}])[0]
 
-    def update_invitation(self, invitation_id: str, data: dict[str, Any]) -> None:
+    def update_invitation(
+        self,
+        invitation_id: str,
+        data: dict[str, Any],
+        *,
+        expected_statuses: tuple[str, ...] | None = None,
+        expected_fields: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        """Update one invitation with compare-and-set preconditions.
+
+        ``expected_fields`` binds a transition to the exact provisioning claim
+        that won the race, so a late provider response cannot overwrite a newer
+        administrator's replacement invitation.
+        """
         try:
-            (
+            query = (
                 self.client.table("staff_invitations")
                 .update(data)
                 .eq("invitation_id", invitation_id)
-                .execute()
+                .select("*")
             )
+            if expected_statuses:
+                query = query.in_("invitation_status", list(expected_statuses))
+            for key, value in (expected_fields or {}).items():
+                query = query.eq(key, value)
+            result = query.execute()
         except Exception as exc:
             raise SupabaseAdminError(f"Invitation update failed: {exc}") from exc
+        rows = list(result.data or [])
+        return rows[0] if rows else None
 
     def list_invitations(self, email: str | None = None) -> list[dict[str, Any]]:
         query = self.client.table("staff_invitations").select("*")

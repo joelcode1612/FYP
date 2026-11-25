@@ -447,7 +447,10 @@ class SitewiseApp extends StatelessComponent {
           Route(
             path: '/owner/add-property',
             builder: (context, state) => _page(
-              e_owner_add.AddPropertyPage(editingId: state.queryParams['id']),
+              e_owner_add.AddPropertyPage(
+                key: ValueKey(state.queryParams['id']),
+                editingId: state.queryParams['id'],
+              ),
               title: 'Add commercial property — Sitewise',
               description: 'Create or update an owner property draft.',
             ),

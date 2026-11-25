@@ -42,6 +42,7 @@ from sitewise.dependencies import (
     require_entrepreneur,
     require_property_owner,
 )
+from sitewise.domain import rbac
 from sitewise.services.enquiry_service import EnquiryService
 from sitewise.services.provider_performance_service import ProviderPerformanceService
 from sitewise.services.provider_scope import (
@@ -160,9 +161,23 @@ def provider_performance(session: DbSession, current: ProviderUser) -> dict:
 # ---------------------------------------------------------------------------
 
 
+def _require_account_verification_access(current: ProviderUser) -> AuthenticatedUser:
+    if rbac.canonical_role(current.role) == rbac.ROLE_OWNER:
+        raise HTTPException(
+            status_code=403,
+            detail="Property Owner account access is granted through invitation activation.",
+        )
+    return current
+
+
+AccountVerificationUser = Annotated[
+    AuthenticatedUser, Depends(_require_account_verification_access)
+]
+
+
 @router.get("/verification")
 def provider_verification_status(
-    session: DbSession, current: ProviderUser
+    session: DbSession, current: AccountVerificationUser
 ) -> dict:
     """The caller's own account verification. Never a fabricated decision.
 
@@ -210,7 +225,7 @@ class ProviderVerificationRequest(BaseModel):
 def submit_provider_verification(
     payload: ProviderVerificationRequest,
     session: DbSession,
-    current: ProviderUser,
+    current: AccountVerificationUser,
 ) -> dict:
     """Submit (or re-submit after a rejection) for administrator review.
 

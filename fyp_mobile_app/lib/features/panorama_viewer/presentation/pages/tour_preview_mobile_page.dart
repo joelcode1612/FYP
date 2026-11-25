@@ -104,7 +104,6 @@ class _TourPreviewMobilePageState extends ConsumerState<TourPreviewMobilePage> {
                           _panorama(vm.tour!),
                           const SizedBox(height: 8),
                           _draftSavedLine(),
-                          ..._qualityLines(),
                           if (vm.generating)
                             Padding(
                               padding: const EdgeInsets.only(top: 8),
@@ -726,69 +725,6 @@ class _TourPreviewMobilePageState extends ConsumerState<TourPreviewMobilePage> {
       ],
     ),
   );
-
-  /// Quality review lines: what the device measured per photograph, and what
-  /// the backend's panorama checks concluded. Purely informational — a
-  /// quality warning never blocks submission, never deletes a photograph,
-  /// and never triggers a retake on its own.
-  List<Widget> _qualityLines() {
-    final lines = <Widget>[];
-    final deviceLine = vm.deviceQualityLine;
-    if (deviceLine != null) {
-      lines.add(
-        Padding(
-          padding: const EdgeInsets.only(top: 6, left: 4, right: 4),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(
-                vm.deviceQualityInvalid > 0
-                    ? Icons.error_outline
-                    : Icons.info_outline,
-                size: 16,
-                color: vm.deviceQualityInvalid > 0
-                    ? SitewiseColors.danger
-                    : SitewiseColors.muted,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  deviceLine,
-                  style: const TextStyle(fontSize: 13),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-    final backendLine = vm.backendQualityLine;
-    if (backendLine != null) {
-      lines.add(
-        Padding(
-          padding: const EdgeInsets.only(top: 6, left: 4, right: 4),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Icon(
-                Icons.verified_outlined,
-                size: 16,
-                color: SitewiseColors.muted,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  backendLine,
-                  style: const TextStyle(fontSize: 13),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-    return lines;
-  }
 
   /// The Recapture choice (§8): retake the targets that need improving, or
   /// start a whole new 38-photo attempt. The previous draft survives both —

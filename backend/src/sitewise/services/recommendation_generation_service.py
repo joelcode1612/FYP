@@ -229,7 +229,10 @@ class RecommendationGenerationService:
         batch is returned without recomputing (``reused_existing_batch``).
         """
         limit = max(1, min(int(limit), 100))
-        variant = resolve_variant(variant_key="expanded64")
+        # One ranking batch uses ONE selected Layer-1 variant. "operational25"
+        # is a separate candidate; every other setting keeps the deployed
+        # Expanded64 behaviour and its rollback path unchanged.
+        variant = resolve_variant()
         artifact_digest = _artifact_sha256(variant.artifact)
         payload = self.preferences.payload(user_id)
         stored = payload.get("preferences")
@@ -276,16 +279,21 @@ class RecommendationGenerationService:
         rejections: Counter[str] = Counter()
         scored: list[Any] = []
         unavailable: list[dict[str, Any]] = []
-        scores = expanded_scores_many(
-            self.analytics_session, [str(row["property_id"]) for row in rows],
-            **({"refresh": True} if refresh else {}),
-        )
+        if variant.key == "operational25":
+            from sitewise.services.operational25_enrichment import scores_many
+
+            scores = scores_many(self.app_session, rows)
+        else:
+            scores = expanded_scores_many(
+                self.analytics_session, [str(row["property_id"]) for row in rows],
+                **({"refresh": True} if refresh else {}),
+            )
         inferred_count = 0
         for row in rows:
             candidate = PropertyCandidate.from_row(row)
             prediction = scores.get(str(candidate.property_id), {})
             if not prediction.get("available"):
-                rejections["expanded64_inference_unavailable"] += 1
+                rejections[f"{variant.key}_inference_unavailable"] += 1
                 if len(unavailable) < 10:
                     coverage = prediction.get("feature_coverage") or {}
                     unavailable.append({
@@ -298,7 +306,7 @@ class RecommendationGenerationService:
                 candidate,
                 pu_association_score=float(prediction["score"]),
                 pu_score_source=variant.score_source,
-                pu_feature_set="expanded64",
+                pu_feature_set=variant.key,
                 pu_model_method="live_inference",
             )
             inferred_count += 1
@@ -348,10 +356,16 @@ class RecommendationGenerationService:
             "layer1_variant": variant.key,
             "layer1_model": variant.layer1_model,
             "layer2_engine_version": engine_version,
-            "expanded64_coverage": {
+            # Variant-agnostic key for new clients; the legacy key stays only
+            # for the deployed Expanded64 response shape.
+            "layer1_coverage": {
                 "scored_live_inference": inferred_count,
                 "unavailable_examples": unavailable,
             },
+            **({"expanded64_coverage": {
+                "scored_live_inference": inferred_count,
+                "unavailable_examples": unavailable,
+            }} if variant.key == "expanded64" else {}),
             "ranking": "final_score desc, preference_match_score desc, "
                        "pu_association_score desc, property_id asc",
         }
@@ -534,10 +548,18 @@ class RecommendationGenerationService:
 
     @staticmethod
     def _has_expanded_score(row: dict[str, Any]) -> bool:
+        """True when a stored row was scored by live Layer-1 inference.
+
+        Feature counts come from the pinned model metadata rather than a
+        hardcoded 64, so Operational25 batches remain reusable.
+        """
+        from sitewise.ml.operational25 import MODEL_NAME as OPERATIONAL25_MODEL_NAME
+
         model = row.get("model") or {}
+        count = model.get("feature_count")
         return (
-            model.get("name") == EXPANDED_MODEL_NAME
-            and model.get("feature_count") == 64
+            model.get("name") in {EXPANDED_MODEL_NAME, OPERATIONAL25_MODEL_NAME}
+            and isinstance(count, int) and count > 0
             and model.get("score_source_mode") == "live_inference"
         )
 

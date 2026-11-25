@@ -26,9 +26,7 @@ class ApiPropertyVerificationRepository
   @override
   Future<VerificationStatusView> statusForProperty(String propertyId) async =>
       PropertyVerificationMapper.statusView(
-        await _client.get(
-          '/api/v1/properties/$propertyId/verification',
-        ),
+        await _client.get('/api/v1/properties/$propertyId/verification'),
       );
 
   @override
@@ -68,10 +66,8 @@ class ApiPropertyVerificationRepository
   );
 
   @override
-  Future<List<int>> downloadDocument(String documentId) =>
-      _client.downloadBinary(
-        '/api/v1/properties/verification-documents/$documentId',
-      );
+  Future<List<int>> downloadDocument(String documentId) => _client
+      .downloadBinary('/api/v1/properties/verification-documents/$documentId');
 
   @override
   Future<VerificationQueuePage> adminQueue(
@@ -90,6 +86,60 @@ class ApiPropertyVerificationRepository
         await _client.get('/api/v1/staff/properties/$propertyId'),
       );
 
+  @override
+  Future<void> finalDecision(
+    String propertyId,
+    Map<String, dynamic> decision,
+  ) async {
+    await _client.post(
+      '/api/v1/staff/properties/$propertyId/final-review',
+      decision,
+    );
+  }
+
+  Future<LocationResearchAssociation> locationIntelligence(
+    String propertyId,
+  ) async => LocationResearchAssociation.fromJson(
+    await _client.get(
+      '/api/v1/staff/properties/$propertyId/location-intelligence',
+    ),
+  );
+
+  Future<void> queueLocationIntelligence(
+    String propertyId, {
+    String? category,
+  }) async {
+    final action = category == null ? 'recalculate' : 'retry/$category';
+    await _client.post(
+      '/api/v1/staff/properties/$propertyId/location-intelligence/$action',
+      {},
+    );
+  }
+
+  /// Queues only the measurement categories that are missing, failed or stale
+  /// for the property's current coordinates. Pass [full] only when an
+  /// administrator explicitly asks for a full recalculation.
+  ///
+  /// Returns the backend's own reason when nothing needed queueing.
+  Future<String?> analyzeLocationIntelligence(
+    String propertyId, {
+    bool full = false,
+  }) async {
+    final response = await _client.post(
+      '/api/v1/staff/properties/$propertyId/location-intelligence/analyze'
+      '${full ? '?full=true' : ''}',
+      const {},
+    );
+    final queued = response['queued'];
+    final reason = response['reason'];
+    if (reason is String && reason.isNotEmpty) return reason;
+    if (queued is List && queued.isNotEmpty) {
+      return 'Queued ${queued.length} categor${queued.length == 1 ? 'y' : 'ies'} '
+          'for calculation.';
+    }
+    return null;
+  }
+
   Future<PropertyVerification> _decide(
     String propertyId,
     VerificationDimension dimension,
@@ -98,10 +148,7 @@ class ApiPropertyVerificationRepository
   ]) async => _verification(
     await _client.post(
       '/api/v1/staff/properties/$propertyId/verification/$action',
-      {
-        'dimension': dimension.wire,
-        ...?extra,
-      },
+      {'dimension': dimension.wire, ...?extra},
     ),
   );
 

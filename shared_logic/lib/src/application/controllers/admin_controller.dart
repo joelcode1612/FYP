@@ -92,7 +92,8 @@ class AdminController extends StateController<AdminState> {
       state.listings.where((p) => p.verification == status).length;
 
   /// Users marked pending — the real onboarding queue size.
-  int get pendingUsers => state.users.where((u) => u.status == 'Pending').length;
+  int get pendingUsers =>
+      state.users.where((u) => u.status == 'Pending').length;
 
   Future<void> loadDashboard() async {
     setState(state.copyWith(loading: true, clearError: true));
@@ -218,16 +219,11 @@ class AdminController extends StateController<AdminState> {
       _setReviewError(const DemoModeFailure());
       return;
     }
-    final effective =
-        (filters ?? state.reviewFilters).copyWith(
-          offset: filters != null ? 0 : state.reviewFilters.offset,
-        );
+    final effective = (filters ?? state.reviewFilters).copyWith(
+      offset: filters != null ? 0 : state.reviewFilters.offset,
+    );
     setState(
-      state.copyWith(
-        loading: true,
-        clearError: true,
-        reviewFilters: effective,
-      ),
+      state.copyWith(loading: true, clearError: true, reviewFilters: effective),
     );
     try {
       final page = await _reviews!.queue(effective);
@@ -275,11 +271,9 @@ class AdminController extends StateController<AdminState> {
     }
   }
 
-  void closeReviewDetail() =>
-      setState(state.copyWith(clearReviewDetail: true));
+  void closeReviewDetail() => setState(state.copyWith(clearReviewDetail: true));
 
-  void clearReviewNotice() =>
-      setState(state.copyWith(clearReviewNotice: true));
+  void clearReviewNotice() => setState(state.copyWith(clearReviewNotice: true));
 
   /// Runs one review operation with busy/notice handling, then refreshes
   /// the queue page (and the open detail, if any).
@@ -296,10 +290,7 @@ class AdminController extends StateController<AdminState> {
     try {
       final result = await operation(_reviews!);
       setState(
-        state.copyWith(
-          clearBusyAction: true,
-          reviewNotice: noticeFor(result),
-        ),
+        state.copyWith(clearBusyAction: true, reviewNotice: noticeFor(result)),
       );
       await loadReviewPage();
       if (state.reviewDetail != null) {
@@ -309,6 +300,24 @@ class AdminController extends StateController<AdminState> {
       setState(state.copyWith(error: e.toString(), clearBusyAction: true));
     }
   }
+
+  Future<void> finalDecision(
+    String propertyId,
+    Map<String, dynamic> decision,
+  ) => _runReview(
+    'property-decision',
+    (reviews) async {
+      await reviews.finalDecision(propertyId, decision);
+      return null;
+    },
+    (_) => switch (decision['action']) {
+      'approve' => 'Property approved.',
+      'publish' => 'Property and panorama published.',
+      'unpublish' => 'Property and panorama unpublished.',
+      'reject' => 'Property correction recorded.',
+      _ => 'Additional information requested.',
+    },
+  );
 
   Future<void> startDimensionReview(
     String propertyId,

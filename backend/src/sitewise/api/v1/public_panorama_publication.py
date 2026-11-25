@@ -85,6 +85,10 @@ def publish_job(job_id: str, db: Db, admin: AdminMfaUser):
         link = bridge.link_by_public_property(public_property_id)
         if not link or not _listing_exists(db, int(link["listing_id"])):
             raise HTTPException(409, "Link this capture property to an FYP listing first.")
+        if db.execute(text("""
+            SELECT 1 FROM fyp.property_verification WHERE property_id=:id
+        """), {"id": int(link["listing_id"])}).first():
+            raise HTTPException(409, "Use Publish Property for a submitted inspection.")
         if job.get("status") != "done" or job.get("verification_status") != "approved":
             raise HTTPException(409, "The panorama must be completed and approved.")
         if bridge.uploaded_target_count(str(job["session_id"])) != 38:
@@ -148,6 +152,11 @@ def published_property_panorama(property_ref: str, response: Response,
                 f"/entrepreneur/property-detail?id={listing_id}"
             ),
         }
+    if db.execute(text("""
+        SELECT 1 FROM fyp.verification_audit
+        WHERE property_id=:id AND action='property_approved' LIMIT 1
+    """), {"id": listing_id}).first():
+        raise HTTPException(404, "No published submitted panorama for this listing.")
     with PublicPanoramaBridge() as bridge:
         link = bridge.link_by_listing(listing_id)
         if link is None:

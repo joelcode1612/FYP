@@ -52,12 +52,16 @@ class AdminPropertyReviewService {
   final PropertyVerificationRepository repo;
   const AdminPropertyReviewService(this.repo);
 
-  Future<VerificationQueuePage> queue(
-    VerificationQueueFilters filters,
-  ) => repo.adminQueue(filters);
+  Future<VerificationQueuePage> queue(VerificationQueueFilters filters) =>
+      repo.adminQueue(filters);
 
   Future<VerificationDetail> detail(String propertyId) =>
       repo.adminDetail(propertyId);
+
+  Future<void> finalDecision(
+    String propertyId,
+    Map<String, dynamic> decision,
+  ) => repo.finalDecision(propertyId, decision);
 
   Future<PropertyVerification> startReview(
     String propertyId,

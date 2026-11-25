@@ -94,7 +94,11 @@ class _EntrepreneurTourMobilePageState
         );
       }
     }
-    return _TourData(tour: tour, property: property, propertyError: propertyError);
+    return _TourData(
+      tour: tour,
+      property: property,
+      propertyError: propertyError,
+    );
   }
 
   @override

@@ -80,16 +80,20 @@ def _distance_to_edge(edge: np.ndarray, width: int, height: int) -> np.ndarray:
 
     def horizontal_chain(row: np.ndarray, reverse: bool) -> np.ndarray:
         # d[i] = min(d[i], d[i±1] + 1) unrolls to a running min of
-        # (a[k] − k) forward / (a[k] + k) backward, which numpy's accumulate
-        # evaluates exactly.
+        # (a[k] − k) forward / (a[k] + k) backward. Tile longitude so a seam
+        # on either side of the 0°/360° boundary is one pixel away.
+        if width <= 1:
+            return row
+        row = np.concatenate((row, row, row))
+        columns = np.arange(row.size, dtype=np.float32)
         if not reverse:
             shifted = row - columns
             np.minimum.accumulate(shifted, out=shifted)
-            return shifted + columns
+            return (shifted + columns)[width : 2 * width]
         backward = row + columns
         backward = backward[::-1]
         np.minimum.accumulate(backward, out=backward)
-        return backward[::-1] - columns
+        return (backward[::-1] - columns)[width : 2 * width]
 
     # Forward: left, up, and the two upper diagonals.
     for y in range(height):
@@ -98,14 +102,8 @@ def _distance_to_edge(edge: np.ndarray, width: int, height: int) -> np.ndarray:
         if y > 0:
             prev = distance[(y - 1) * width : y * width]
             row = np.minimum(row, prev + 1)
-            left = np.empty(width, dtype=np.float32)
-            left[1:] = prev[:-1] + diagonal
-            left[0] = np.inf
-            row = np.minimum(row, left)
-            right = np.empty(width, dtype=np.float32)
-            right[:-1] = prev[1:] + diagonal
-            right[-1] = np.inf
-            row = np.minimum(row, right)
+            row = np.minimum(row, np.roll(prev, 1) + diagonal)
+            row = np.minimum(row, np.roll(prev, -1) + diagonal)
         distance[row_slice] = horizontal_chain(row, reverse=False)
 
     # Backward: right, down, and the two lower diagonals.
@@ -115,14 +113,8 @@ def _distance_to_edge(edge: np.ndarray, width: int, height: int) -> np.ndarray:
         if y + 1 < height:
             nxt = distance[(y + 1) * width : (y + 2) * width]
             row = np.minimum(row, nxt + 1)
-            left = np.empty(width, dtype=np.float32)
-            left[1:] = nxt[:-1] + diagonal
-            left[0] = np.inf
-            row = np.minimum(row, left)
-            right = np.empty(width, dtype=np.float32)
-            right[:-1] = nxt[1:] + diagonal
-            right[-1] = np.inf
-            row = np.minimum(row, right)
+            row = np.minimum(row, np.roll(nxt, 1) + diagonal)
+            row = np.minimum(row, np.roll(nxt, -1) + diagonal)
         distance[row_slice] = horizontal_chain(row, reverse=True)
 
     return distance
@@ -230,6 +222,7 @@ def composite_seams(
         second_frame=second_frame,
         min_weight=min_weight,
         seam_cost_weight=SEAM_COST_WEIGHT,
+        channel_gains=gains,
     )
     cut_used = cut is not None
     if cut is not None:
@@ -246,6 +239,7 @@ def composite_seams(
         best_frame=best_frame,
         second_frame=second_frame,
         min_weight=min_weight,
+        channel_gains=gains,
     )
 
     smoothed_spikes = smooth_isolated_seam_spikes(
@@ -259,6 +253,7 @@ def composite_seams(
         best_colour=best_colour,
         second_colour=second_colour,
         min_weight=min_weight,
+        channel_gains=gains,
     )
 
     # Ghost measurement on the colour-corrected contributors. Computed on the
@@ -332,12 +327,17 @@ def composite_seams(
 
     # Seam and wraparound quality, measured on the composited output.
     owner_here = np.where(label == 0, bf, sf).reshape(height, width)
-    seam_change = np.zeros((height, width), dtype=bool)
-    if width > 1:
-        seam_change[:, 1:] = owner_here[:, 1:] != owner_here[:, :-1]
+    previous_owner = np.roll(owner_here, 1, axis=1)
+    seam_change = (
+        (owner_here >= 0)
+        & (previous_owner >= 0)
+        & (owner_here != previous_owner)
+    )
     if seam_change.any():
         idx_a = np.flatnonzero(seam_change.reshape(-1))
-        idx_b = idx_a - 1
+        rows = idx_a // width
+        cols = idx_a % width
+        idx_b = rows * width + ((cols - 1) % width)
         seam_discontinuity = float(_output_delta(output, idx_a, idx_b).sum() / len(idx_a))
     else:
         seam_discontinuity = 0.0
@@ -413,6 +413,7 @@ def refine_seams(
     best_frame: np.ndarray,
     second_frame: np.ndarray,
     min_weight: float,
+    channel_gains: np.ndarray | None = None,
 ) -> int:
     """Moves ownership boundaries to where the two frames agree better."""
     moved = 0
@@ -422,9 +423,9 @@ def refine_seams(
     sw = second_weight
     for y in range(height):
         row = y * width
-        for x in range(1, width):
+        for x in range(width):
             i = row + x
-            prev = i - 1
+            prev = row + ((x - 1) % width)
             owner_prev = bf[prev] if label[prev] == 0 else sf[prev]
             owner_here = bf[i] if label[i] == 0 else sf[i]
             if owner_prev < 0 or owner_here < 0 or owner_prev == owner_here:
@@ -446,6 +447,7 @@ def refine_seams(
                 second_weight=sw,
                 best_colour=best_colour,
                 second_colour=second_colour,
+                channel_gains=channel_gains,
             )
     return moved
 
@@ -466,6 +468,7 @@ def _try_shift_boundary(
     second_weight: np.ndarray,
     best_colour: np.ndarray,
     second_colour: np.ndarray,
+    channel_gains: np.ndarray | None,
 ) -> int:
     def owner_at(i: int) -> int:
         return int(best_frame[i] if label[i] == 0 else second_frame[i])
@@ -478,7 +481,7 @@ def _try_shift_boundary(
         return False
 
     def seam_cost_at(position: int) -> float:
-        i = row_start + position
+        i = row_start + (position % width)
         cost = seam_pixel_cost_at(
             best_colour=best_colour,
             second_colour=second_colour,
@@ -487,6 +490,7 @@ def _try_shift_boundary(
             width=width,
             height=height,
             index=i,
+            channel_gains=channel_gains,
         )
         return SEAM_COST_WEIGHT * cost / 255.0
 
@@ -495,22 +499,24 @@ def _try_shift_boundary(
     best_shift = 0
 
     for shift in range(-SEAM_SEARCH_RADIUS, SEAM_SEARCH_RADIUS + 1):
-        if shift == 0:
+        if shift == 0 or abs(shift) >= width:
             continue
         target = boundary + shift
-        if target < 1 or target >= width:
-            continue
+        target_x = target % width
         wanted_owner = left_owner if shift > 0 else right_owner
         displaced_owner = right_owner if shift > 0 else left_owner
-        span_from = boundary if shift > 0 else target
-        span_to = target if shift > 0 else boundary
-
-        blocked = not supports(row_start + target - 1, left_owner) or not supports(
-            row_start + target, right_owner
-        )
+        blocked = not supports(
+            row_start + ((target_x - 1) % width), left_owner
+        ) or not supports(row_start + target_x, right_owner)
         sampling = 0.0
-        p = span_from
-        while p < span_to and not blocked:
+        crossed = (
+            [(boundary + offset) % width for offset in range(shift)]
+            if shift > 0
+            else [(boundary + shift + offset) % width for offset in range(-shift)]
+        )
+        for p in crossed:
+            if blocked:
+                break
             i = row_start + p
             if owner_at(i) != displaced_owner or not supports(i, wanted_owner):
                 blocked = True
@@ -518,7 +524,6 @@ def _try_shift_boundary(
             sampling += abs(
                 math.log(best_weight[i] + 1e-6) - math.log(second_weight[i] + 1e-6)
             )
-            p += 1
         if blocked:
             continue
 
@@ -531,17 +536,19 @@ def _try_shift_boundary(
     if best_shift == 0:
         return 0
 
-    target = boundary + best_shift
-    span_from = boundary if best_shift > 0 else target
-    span_to = target if best_shift > 0 else boundary
+    crossed = (
+        [(boundary + offset) % width for offset in range(best_shift)]
+        if best_shift > 0
+        else [(boundary + best_shift + offset) % width for offset in range(-best_shift)]
+    )
     assigned_owner = left_owner if best_shift > 0 else right_owner
-    for p in range(span_from, span_to):
+    for p in crossed:
         i = row_start + p
         if best_frame[i] == assigned_owner and best_weight[i] > min_weight:
             label[i] = 0
         elif second_frame[i] == assigned_owner and second_weight[i] > min_weight:
             label[i] = 1
-    return span_to - span_from
+    return len(crossed)
 
 
 def smooth_isolated_seam_spikes(
@@ -556,6 +563,7 @@ def smooth_isolated_seam_spikes(
     best_colour: np.ndarray,
     second_colour: np.ndarray,
     min_weight: float,
+    channel_gains: np.ndarray | None = None,
 ) -> int:
     """Removes only isolated, low-difference ownership spikes."""
     if width < 3 or height < 3:
@@ -589,10 +597,7 @@ def smooth_isolated_seam_spikes(
     for shift, axis in ((-1, 1), (1, 1), (-1, 0), (1, 0)):
         shifted = np.full((height, width), -1, dtype=np.int64)
         if axis == 1:
-            if shift < 0:
-                shifted[:, :-1] = owner[:, 1:]
-            else:
-                shifted[:, 1:] = owner[:, :-1]
+            shifted = np.roll(owner, -shift, axis=1)
         else:
             if shift < 0:
                 shifted[:-1, :] = owner[1:, :]
@@ -600,21 +605,36 @@ def smooth_isolated_seam_spikes(
                 shifted[1:, :] = owner[:-1, :]
         alt_count += (shifted == alternative).astype(np.int32)
 
-    difference = np.abs(
-        best_colour.reshape(n, 3).astype(np.int32)
-        - second_colour.reshape(n, 3).astype(np.int32)
-    ).sum(axis=1).reshape(height, width)
+    low_difference = np.zeros(n, dtype=bool)
+    candidate_indices = np.flatnonzero(candidate.reshape(-1))
+    best_pixels = best_colour.reshape(n, 3)
+    second_pixels = second_colour.reshape(n, 3)
+    gains = (
+        np.asarray(channel_gains, dtype=np.float32).reshape(-1, 3)
+        if channel_gains is not None
+        else None
+    )
+    chunk_size = 262144
+    for start in range(0, len(candidate_indices), chunk_size):
+        indices = candidate_indices[start : start + chunk_size]
+        best_values = best_pixels[indices].astype(np.float32)
+        second_values = second_pixels[indices].astype(np.float32)
+        if gains is not None:
+            best_values *= gains[bf_grid.reshape(-1)[indices]]
+            second_values *= gains[sf_grid.reshape(-1)[indices]]
+        low_difference[indices] = (
+            np.abs(best_values - second_values).mean(axis=1)
+            <= GHOST_VISIBLE_DELTA
+        )
 
     flip = (
         candidate
         & differs
         & (alt_count >= 3)
-        & (difference / 3.0 <= GHOST_VISIBLE_DELTA)
+        & low_difference.reshape(height, width)
     )
     flip[0, :] = False
     flip[-1, :] = False
-    flip[:, 0] = False
-    flip[:, -1] = False
 
     changed = int(flip.sum())
     if changed:

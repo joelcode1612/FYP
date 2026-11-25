@@ -585,16 +585,20 @@ class SphereCaptureController extends ChangeNotifier {
       _message = error.message;
     } catch (error) {
       _phase = SphereCapturePhase.failed;
-      _message = 'The capture could not start: ${_describe(error)}';
+      debugPrint('SPHERE_START: ${_describe(error)}');
+      _message =
+          'The camera could not start. Check the camera permission for '
+          'SiteWise, then try again.';
     }
     _notify();
   }
 
   void _onRotationError(Object error) {
     _phase = SphereCapturePhase.failed;
+    debugPrint('SPHERE_ROTATION: sensor stream failed: $error');
     _message =
-        'The device rotation sensor is unavailable, so the sphere cannot '
-        'follow the phone ($error).';
+        'The rotation sensor is unavailable, so the sphere cannot follow the '
+        'phone. Restart SiteWise and try again.';
     _notify();
   }
 
@@ -911,9 +915,10 @@ class SphereCaptureController extends ChangeNotifier {
       _message = error.message;
     } catch (error) {
       _phase = SphereCapturePhase.ready;
+      debugPrint('SPHERE_CAPTURE: photograph not saved: ${_describe(error)}');
       _message =
-          'The photograph could not be saved, so the target stays open: '
-          '${_describe(error)}';
+          'The photograph could not be saved, so the target stays open. '
+          'Hold still and try again.';
     } finally {
       _capturing = false;
       _notify();
@@ -944,9 +949,10 @@ class SphereCaptureController extends ChangeNotifier {
         await _camera.open();
         _notify();
       } catch (error) {
+        debugPrint('SPHERE_CAMERA: reopen failed: ${_describe(error)}');
         _message =
-            'The camera could not be reopened after returning to the app: '
-            '${_describe(error)}';
+            'The camera could not be reopened. Close and reopen SiteWise, '
+            'then try again.';
         _notify();
       }
     }
@@ -983,8 +989,11 @@ class SphereCaptureController extends ChangeNotifier {
         records: records,
         total: kSphereTargetCount,
         onStage: (String stage) {
+          // Diagnostic only: the stitcher's stage wording is image-processing
+          // jargon, so it is logged rather than shown. The UI keeps a plain
+          // "Creating the 360° panorama…" line and its own progress bar.
           _stitchStage = stage;
-          _notify();
+          debugPrint('SPHERE_STITCH_STAGE: $stage');
         },
       );
       if (result.success && result.panoramaPath != null) {
@@ -1319,8 +1328,10 @@ class SphereCaptureController extends ChangeNotifier {
       }
       _notify();
     } catch (error) {
-      debugPrint('SPHERE_QUALITY: analysis for target ${record.targetId} '
-          'failed: $error');
+      debugPrint(
+        'SPHERE_QUALITY: analysis for target ${record.targetId} '
+        'failed: $error',
+      );
     }
   }
 
@@ -1346,10 +1357,7 @@ class SphereCaptureController extends ChangeNotifier {
     _retakeTargetId = targetId;
     _targets = <SphereTargetState>[
       for (final t in _targets)
-        if (t.spec.targetId == targetId)
-          SphereTargetState(spec: t.spec)
-        else
-          t,
+        if (t.spec.targetId == targetId) SphereTargetState(spec: t.spec) else t,
     ];
     _qualityReports.remove(targetId);
     _lastQualityReport = null;
@@ -1365,11 +1373,13 @@ class SphereCaptureController extends ChangeNotifier {
     // continuity; the separation it reports is zero, which is honest — the
     // user is already standing where the photograph was taken.
     _lastCapturedDirection = spec?.direction;
-    if (_phase == SphereCapturePhase.complete && capturedCount < kSphereTargetCount) {
+    if (_phase == SphereCapturePhase.complete &&
+        capturedCount < kSphereTargetCount) {
       _phase = SphereCapturePhase.ready;
     }
     _stitchError = null;
-    _message = 'Retake armed for ${spec?.shortName ?? 'target $targetId'} — '
+    _message =
+        'Retake armed for ${spec?.shortName ?? 'target $targetId'} — '
         'aim and hold to replace the photograph.';
     _recomputeGuide();
     _notify();

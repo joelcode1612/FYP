@@ -39,7 +39,9 @@ class _PropertiesPageState extends State<PropertiesPage> {
     super.initState();
     Future.microtask(() {
       if (!mounted) return;
-      unawaited(context.read(ownerNotifierProvider(_ownerId()).notifier).load());
+      unawaited(
+        context.read(ownerNotifierProvider(_ownerId()).notifier).load(),
+      );
     });
   }
 
@@ -89,9 +91,7 @@ class _Content extends StatelessComponent {
                 ),
               )
             else
-              div(classes: 'rows', [
-                for (final p in properties) _row(p),
-              ]),
+              div(classes: 'rows', [for (final p in properties) _row(p)]),
           ]);
   }
 
@@ -157,7 +157,7 @@ class _Content extends StatelessComponent {
       div(classes: 'meta', [Component.text('${prop.address}, ${prop.city}')]),
       div(classes: 'meta', [
         Component.text(
-          '${prop.rentalDisplay} · ${prop.sizeSqft.toStringAsFixed(0)} sq ft · '
+          '${prop.rentalDisplay} · ${prop.recordedSizeSqft == null ? 'Area not provided' : '${prop.recordedSizeSqft!.toStringAsFixed(0)} sq ft'} · '
           '${prop.propertyType}',
         ),
       ]),
@@ -179,8 +179,8 @@ class _Content extends StatelessComponent {
           tone: prop.managementLabel.contains('Agent')
               ? 'action'
               : prop.managementLabel.contains('SiteWise')
-                  ? 'neutral'
-                  : 'warning',
+              ? 'neutral'
+              : 'warning',
         ),
       ]),
     ]),
@@ -193,9 +193,9 @@ class _Content extends StatelessComponent {
       if (prop.verification == VerificationStatus.draft ||
           prop.verification == VerificationStatus.rejected)
         ActionLink(
-        'Edit',
-        href: '/owner/add-property?id=${prop.id}',
-        variant: 'secondary',
+          'Edit',
+          href: '/owner/add-property?id=${prop.id}',
+          variant: 'secondary',
         ),
       if (prop.hasTour)
         ActionLink(

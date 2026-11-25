@@ -125,7 +125,9 @@ class HttpRegistrationClient implements RegistrationClient {
     try {
       final decoded = jsonDecode(body);
       final detail = decoded is Map ? decoded['detail'] : null;
-      if (detail is String && detail.trim().isNotEmpty && detail.length <= 220) {
+      if (detail is String &&
+          detail.trim().isNotEmpty &&
+          detail.length <= 220) {
         return detail.trim();
       }
     } on Object {
@@ -220,7 +222,8 @@ class HttpIdentityProbe implements IdentityProbe {
 ///     the session subject);
 ///   * no role is ever sent on registration — the backend provisions the
 ///     profile and this class re-reads whatever role it assigned;
-///   * a suspended or still-pending profile throws instead of routing;
+///   * a suspended profile throws; a pending Owner/Agent is returned only as
+///     a restricted onboarding session;
 ///   * if Supabase or the backend cannot be reached, nothing is granted.
 ///
 /// The Supabase session itself is persisted through
@@ -243,9 +246,13 @@ class SupabaseAuthRepository implements AuthRepository {
   // OAuth client IDs are public identifiers; the CLIENT SECRET must never
   // appear in the app or its dart-defines.
   static String get _googleWebClientId => MobileRuntimeConfig.value(
-    'GOOGLE_WEB_CLIENT_ID', fallback: const String.fromEnvironment('GOOGLE_WEB_CLIENT_ID'));
+    'GOOGLE_WEB_CLIENT_ID',
+    fallback: const String.fromEnvironment('GOOGLE_WEB_CLIENT_ID'),
+  );
   static String get _googleIosClientId => MobileRuntimeConfig.value(
-    'GOOGLE_IOS_CLIENT_ID', fallback: const String.fromEnvironment('GOOGLE_IOS_CLIENT_ID'));
+    'GOOGLE_IOS_CLIENT_ID',
+    fallback: const String.fromEnvironment('GOOGLE_IOS_CLIENT_ID'),
+  );
 
   // google_sign_in v7 initialization must complete before authenticate().
   Future<void>? _googleInitialization;
@@ -314,7 +321,10 @@ class SupabaseAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<bool> isAuthenticated() async => await currentUser() != null;
+  Future<bool> isAuthenticated() async {
+    final user = await currentUser();
+    return user?.isActiveProfile ?? false;
+  }
 
   @override
   Future<SitewiseUser> signInWithEmail({
@@ -349,9 +359,7 @@ class SupabaseAuthRepository implements AuthRepository {
     // Registration uses the stricter SiteWise policy; sign-in keeps the
     // historical 6-character floor so existing accounts still work.
     if (!SignupPasswordPolicy.isValid(password)) {
-      throw const ValidationFailure(
-        SignupPasswordPolicy.requirementMessage,
-      );
+      throw const ValidationFailure(SignupPasswordPolicy.requirementMessage);
     }
 
     final name = fullName?.trim();
@@ -405,8 +413,7 @@ class SupabaseAuthRepository implements AuthRepository {
         _client.resend(
           type: OtpType.signup,
           email: normalized,
-          emailRedirectTo:
-              MobileEndpoints.emailConfirmationRedirect.toString(),
+          emailRedirectTo: MobileEndpoints.emailConfirmationRedirect.toString(),
         ),
         'Sending another verification email took too long. Please try again.',
       );
@@ -626,7 +633,11 @@ class SupabaseAuthRepository implements AuthRepository {
 
     final status =
         (profile['account_status'] as String?)?.trim().toLowerCase() ?? '';
-    if (status != 'active') {
+    final canonicalRole = _requireRole(profile['role']);
+    final pendingProvider =
+        status == 'pending' &&
+        (canonicalRole == 'owner' || canonicalRole == 'agent');
+    if (status != 'active' && !pendingProvider) {
       throw AccountInactiveFailure(
         status: status.isEmpty ? 'unknown' : status,
         email: fallbackEmail ?? session.user.email ?? '',
@@ -635,7 +646,8 @@ class SupabaseAuthRepository implements AuthRepository {
 
     return _buildUser(
       profile,
-      canonicalRole: _requireRole(profile['role']),
+      canonicalRole: canonicalRole,
+      accountStatus: status,
       fallbackEmail: fallbackEmail ?? session.user.email ?? '',
     );
   }
@@ -670,18 +682,20 @@ class SupabaseAuthRepository implements AuthRepository {
   SitewiseUser _buildUser(
     Map<String, dynamic> profile, {
     required String canonicalRole,
+    required String accountStatus,
     required String fallbackEmail,
   }) {
     final email = (profile['email'] as String?)?.trim() ?? '';
     final name = (profile['full_name'] as String?)?.trim() ?? '';
-    final rawAal = (profile['assurance_level'] as String?)?.trim().toLowerCase();
+    final rawAal = (profile['assurance_level'] as String?)
+        ?.trim()
+        .toLowerCase();
     return SitewiseUser(
       id: profile['user_id'] as String,
       name: name.isNotEmpty ? name : _nameFromEmail(email),
       email: email.isNotEmpty ? email : fallbackEmail,
       role: AppRole.values.firstWhere((r) => r.name == canonicalRole),
-      // The value the server reported, already proven active by the caller.
-      status: 'Active',
+      status: accountStatus == 'pending' ? 'Pending' : 'Active',
       location: '',
       joinedAt:
           DateTime.tryParse(profile['created_at'] as String? ?? '') ??

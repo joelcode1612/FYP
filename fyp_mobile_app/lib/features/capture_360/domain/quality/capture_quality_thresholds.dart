@@ -172,15 +172,11 @@ class CaptureQualityThresholds {
 
   static CaptureQualityThresholds fromMap(Map<String, Object?> map) {
     return CaptureQualityThresholds(
-      analysisMaxWidth:
-          ((map['analysis_max_width'] as num?)?.toInt()) ?? 512,
+      analysisMaxWidth: ((map['analysis_max_width'] as num?)?.toInt()) ?? 512,
       laplacianVarianceMin: _asDouble(map['laplacian_variance_min'], 40.0),
       tenengradMeanMin: _asDouble(map['tenengrad_mean_min'], 12.0),
       edgeDensityFloor: _asDouble(map['edge_density_floor'], 0.02),
-      edgeMagnitudeThreshold: _asDouble(
-        map['edge_magnitude_threshold'],
-        24.0,
-      ),
+      edgeMagnitudeThreshold: _asDouble(map['edge_magnitude_threshold'], 24.0),
       clippedShadowFractionMax: _asDouble(
         map['clipped_shadow_fraction_max'],
         0.35,
@@ -198,10 +194,7 @@ class CaptureQualityThresholds {
       aspectRatioTarget: _asDouble(map['aspect_ratio_target'], 3 / 4),
       aspectRatioTolerance: _asDouble(map['aspect_ratio_tolerance'], 0.15),
       quaternionEpsilon: _asDouble(map['quaternion_epsilon'], 1e-3),
-      maxMetadataMismatchDeg: _asDouble(
-        map['max_metadata_mismatch_deg'],
-        5.0,
-      ),
+      maxMetadataMismatchDeg: _asDouble(map['max_metadata_mismatch_deg'], 5.0),
       overlapMinConfidence: _asDouble(map['overlap_min_confidence'], 0.35),
       overlapMaxSeparationDeg: _asDouble(
         map['overlap_max_separation_deg'],

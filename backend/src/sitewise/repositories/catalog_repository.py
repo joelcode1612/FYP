@@ -2,7 +2,7 @@
 
 The catalogue (the ``fyp.catalogue_properties`` view over the canonical
 ``fyp.rental_properties`` rows, 955 research rows) and the geospatial
-feature table (``sitewise_analytics.subject_features``, 1,849 rows) are
+feature table (``fyp.property_inference_features``, 1,849 rows) are
 populated by the import/analysis pipeline, not by this API. Everything here is
 a SELECT against those tables through the analytics session; nothing writes to
 them.
@@ -404,7 +404,7 @@ class CatalogRepository:
             self.session.execute(
                 text(
                     f"SELECT {_EVIDENCE_SELECT} "
-                    "FROM sitewise_analytics.subject_features f "
+                    "FROM fyp.property_inference_features f "
                     "WHERE f.canonical_property_id = :pid "
                     "ORDER BY f.imported_at DESC NULLS LAST LIMIT 1"
                 ),

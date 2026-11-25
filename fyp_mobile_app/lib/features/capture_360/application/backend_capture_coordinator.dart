@@ -144,6 +144,7 @@ class BackendCaptureCoordinator {
         onProgress: onProgress,
       );
     } on Object catch (error) {
+      final failure = _friendlyFailure(error);
       await _record(
         stationId,
         FrameSyncStatus.failed,
@@ -151,12 +152,33 @@ class BackendCaptureCoordinator {
             ? null
             : FrameSyncStatus.failed,
         backupSyncStatus: FrameSyncStatus.failed,
-        error: error is BackendHandoffFailure
-            ? error.message
-            : error.toString(),
+        error: failure.message,
       );
-      rethrow;
+      throw failure;
     }
+  }
+
+  /// One sentence a person can act on. HTTP statuses, storage codes and SDK
+  /// text are logged by [_friendlyFailure] and never reach the capture screen.
+  static const _syncFallback =
+      'The photographs could not be synchronized with Sitewise. They are '
+      'kept on this device — retry the synchronization.';
+
+  BackendHandoffFailure _friendlyFailure(Object error) {
+    if (error is BackendHandoffFailure) return error;
+    CaptureLog.log('Capture synchronization error: $error');
+    if (error is UnauthorizedFailure) {
+      return BackendHandoffFailure(error.userMessage);
+    }
+    if (error is NetworkFailure) {
+      return BackendHandoffFailure(error.userMessage);
+    }
+    if (error is ConflictFailure) {
+      // Backend conflicts are written for a person: a review rule, a
+      // published tour, a cancelled session.
+      return BackendHandoffFailure(error.message);
+    }
+    return const BackendHandoffFailure(_syncFallback);
   }
 
   Future<BackendHandoffResult> _handOff({
@@ -361,14 +383,19 @@ class BackendCaptureCoordinator {
   }) async {
     // The attempt key resolves the same session on retry. A replacement
     // panorama has a different key even when it shares the local station.
-    final created = await _client.post('$_api/sessions', <String, dynamic>{
-      'property_id': propertyId,
-      // Identifies the new Flutter-stitched workflow without changing the
-      // expected frame count or breaking legacy `device_38` sessions.
-      'capture_mode': 'device_38_panorama',
-      'capture_plan_version': '$kSphereCapturePlanVersion',
-      'idempotency_key': _idempotencyKey(propertyId, stationId, attemptKey),
-    });
+    final Map<String, dynamic> created;
+    try {
+      created = await _client.post('$_api/sessions', <String, dynamic>{
+        'property_id': propertyId,
+        // Identifies the new Flutter-stitched workflow without changing the
+        // expected frame count or breaking legacy `device_38` sessions.
+        'capture_mode': 'device_38_panorama',
+        'capture_plan_version': '$kSphereCapturePlanVersion',
+        'idempotency_key': _idempotencyKey(propertyId, stationId, attemptKey),
+      });
+    } on Object catch (error) {
+      throw _friendlyFailure(error);
+    }
     final id = created['sessionId'] as String?;
     if (id == null || id.isEmpty) {
       throw const BackendHandoffFailure(
@@ -404,16 +431,22 @@ class BackendCaptureCoordinator {
     required String checksum,
     Map<String, Object?>? qualityReport,
   }) async {
-    final permission = await _issueUploadUrls(sessionId, <int>[frame.targetId]);
-    await _uploadOne(
-      sessionId: sessionId,
-      frame: frame,
-      checksum: checksum,
-      permission: permission[frame.targetId],
-      qualityReport: qualityReport,
-      onProgress: () {},
-    );
-    return permission[frame.targetId]!['storagePath'] as String;
+    try {
+      final permission = await _issueUploadUrls(sessionId, <int>[
+        frame.targetId,
+      ]);
+      await _uploadOne(
+        sessionId: sessionId,
+        frame: frame,
+        checksum: checksum,
+        permission: permission[frame.targetId],
+        qualityReport: qualityReport,
+        onProgress: () {},
+      );
+      return permission[frame.targetId]!['storagePath'] as String;
+    } on Object catch (error) {
+      throw _friendlyFailure(error);
+    }
   }
 
   /// Uploads and confirms the device-stitched panorama — the cloud draft
@@ -433,13 +466,17 @@ class BackendCaptureCoordinator {
     required String checksum,
     Map<String, Object?>? deviceQuality,
   }) async {
-    return _uploadAndConfirmPanorama(
-      sessionId: sessionId,
-      propertyId: propertyId,
-      panoramaPath: panoramaPath,
-      checksum: checksum,
-      deviceQuality: deviceQuality,
-    );
+    try {
+      return await _uploadAndConfirmPanorama(
+        sessionId: sessionId,
+        propertyId: propertyId,
+        panoramaPath: panoramaPath,
+        checksum: checksum,
+        deviceQuality: deviceQuality,
+      );
+    } on Object catch (error) {
+      throw _friendlyFailure(error);
+    }
   }
 
   /// The canonical panorama metadata for a property, when the backend has
@@ -568,7 +605,7 @@ class BackendCaptureCoordinator {
       }
     }
 
-    var processed = checksums.length - toUpload.length;
+    var processed = checksums.length - toUpload.length - toRepair.length;
     final byTarget = <int, CapturedFrame>{
       for (final frame in frames) frame.targetId: frame,
     };
@@ -581,6 +618,7 @@ class BackendCaptureCoordinator {
       ),
     );
 
+    final failed = <int>[];
     if (toUpload.isNotEmpty) {
       onStage?.call('Backing up original photographs...');
       for (
@@ -592,28 +630,51 @@ class BackendCaptureCoordinator {
           for (final target in toUpload.skip(offset).take(_uploadConcurrency))
             target,
         ];
-        final permissions = await _issueUploadUrls(sessionId, batch);
-        await Future.wait(
-          batch.map(
-            (target) => _uploadOne(
-              sessionId: sessionId,
-              frame: byTarget[target]!,
-              checksum: checksums[target]!,
-              permission: permissions[target],
-              onProgress: () {
-                processed++;
-                onFrameProcessed?.call(processed, checksums.length);
-                onProgress?.call(
-                  BackendHandoffProgress(
-                    stage: BackendHandoffStage.framesBackingUp,
-                    processed: processed,
-                    total: checksums.length,
-                  ),
-                );
-              },
-            ),
-          ),
+        // One batch's permissions can be refused on its own (the service is
+        // briefly unavailable, or a session rule changed). That must not
+        // abandon the photographs that have not been attempted yet.
+        Map<int, Map<String, dynamic>> permissions;
+        try {
+          permissions = await _issueUploadUrls(sessionId, batch);
+        } on Object catch (error) {
+          CaptureLog.log(
+            'Upload permissions for ${batch.join(",")} were refused: $error',
+          );
+          failed.addAll(batch);
+          continue;
+        }
+        final outcomes = await Future.wait(
+          batch.map((target) async {
+            try {
+              await _uploadOne(
+                sessionId: sessionId,
+                frame: byTarget[target]!,
+                checksum: checksums[target]!,
+                permission: permissions[target],
+                onProgress: () {
+                  processed++;
+                  onFrameProcessed?.call(processed, checksums.length);
+                  onProgress?.call(
+                    BackendHandoffProgress(
+                      stage: BackendHandoffStage.framesBackingUp,
+                      processed: processed,
+                      total: checksums.length,
+                    ),
+                  );
+                },
+              );
+              return true;
+            } on Object catch (error) {
+              // A duplicate object, a stale checksum or a transient refusal
+              // is this photograph's problem, not the queue's.
+              CaptureLog.log('Backup of target $target failed: $error');
+              return false;
+            }
+          }),
         );
+        for (var index = 0; index < batch.length; index++) {
+          if (!outcomes[index]) failed.add(batch[index]);
+        }
         await _record(
           stationId,
           FrameSyncStatus.uploading,
@@ -629,45 +690,75 @@ class BackendCaptureCoordinator {
     }
 
     if (toRepair.isNotEmpty) {
-      await _repairConfirmed(
+      processed += await _repairConfirmed(
         sessionId: sessionId,
         propertyId: (await _store.getSession(stationId))?.propertyId,
         frames: frames,
         checksums: checksums,
         targets: toRepair,
+        failed: failed,
+      );
+    }
+    if (failed.isNotEmpty) {
+      throw BackendHandoffFailure(
+        '${failed.length} of ${checksums.length} photographs could not be '
+        'backed up yet. They are kept on this device — retry the '
+        'synchronization.',
       );
     }
     return _BackupOutcome(processed: processed, total: checksums.length);
   }
 
-  Future<void> _repairConfirmed({
+  /// Re-confirms frames whose stored object predates the current digest.
+  /// Returns how many were repaired; a single failure is logged and recorded
+  /// in [failed] so the remaining photographs still get their chance.
+  Future<int> _repairConfirmed({
     required String sessionId,
     required int? propertyId,
     required List<CapturedFrame> frames,
     required Map<int, String> checksums,
     required List<int> targets,
+    required List<int> failed,
   }) async {
-    if (propertyId == null) return;
+    if (propertyId == null) {
+      failed.addAll(targets);
+      return 0;
+    }
     final byTarget = <int, CapturedFrame>{
       for (final frame in frames) frame.targetId: frame,
     };
+    var repaired = 0;
     for (final target in targets) {
-      await _confirm(
-        sessionId,
-        byTarget[target]!,
-        checksums[target]!,
-        'properties/$propertyId/sessions/$sessionId/frames/$target.jpg',
-      );
+      try {
+        await _confirm(
+          sessionId,
+          byTarget[target]!,
+          checksums[target]!,
+          'properties/$propertyId/sessions/$sessionId/frames/$target.jpg',
+          // Nothing was uploaded in this run, so the stored bytes must be
+          // proven to be this photograph before the metadata is rewritten.
+          uploaded: false,
+        );
+        repaired++;
+      } on Object catch (error) {
+        CaptureLog.log('Re-confirmation of target $target failed: $error');
+        failed.add(target);
+      }
     }
+    return repaired;
   }
 
   Future<Map<int, Map<String, dynamic>>> _issueUploadUrls(
     String sessionId,
-    List<int> targets,
-  ) async {
+    List<int> targets, {
+    List<int> overwrite = const <int>[],
+  }) async {
     final issued = await _client.post(
       '$_api/sessions/$sessionId/upload-urls',
-      <String, dynamic>{'targets': targets},
+      <String, dynamic>{
+        'targets': targets,
+        if (overwrite.isNotEmpty) 'overwrite': overwrite,
+      },
     );
     final uploads = issued['uploads'];
     if (uploads is! List) {
@@ -693,14 +784,44 @@ class BackendCaptureCoordinator {
     return byTarget;
   }
 
-  Future<Map<String, dynamic>> _issuePanoramaUploadUrl(String sessionId) async {
+  /// True when Storage already holds this target's object, so the device must
+  /// confirm the stored bytes instead of uploading them again. This is the
+  /// normal resumed-backup case: Supabase refuses to mint an upload token for
+  /// an occupied path, so the backend reports the object rather than failing.
+  bool _alreadyStored(Map<String, dynamic>? permission) =>
+      permission != null && permission['alreadyStored'] == true;
+
+  /// A conflict the device can resolve by replacing the stored object: the
+  /// bytes are not there yet, or they are not this photograph (a stale object
+  /// from an interrupted attempt). Authorization, cancellation and review
+  /// conflicts must NOT be retried with an overwrite.
+  bool _isReplaceableConflict(Object error) {
+    if (error is! ConflictFailure) return false;
+    final message = error.message.toLowerCase();
+    return message.contains('checksum') ||
+        message.contains('not reached storage') ||
+        message.contains('upload this frame again') ||
+        message.contains('upload it again');
+  }
+
+  Future<Map<String, dynamic>> _issuePanoramaUploadUrl(
+    String sessionId, {
+    bool overwrite = false,
+  }) async {
     final issued = await _client.post(
-      '$_api/sessions/$sessionId/panorama/upload-url',
+      '$_api/sessions/$sessionId/panorama/upload-url'
+      '${overwrite ? '?overwrite=true' : ''}',
       const <String, dynamic>{},
     );
-    final uploadUrl = issued['uploadUrl'] as String?;
     final storagePath = issued['storagePath'] as String?;
-    if (uploadUrl == null || uploadUrl.isEmpty || storagePath == null) {
+    if (storagePath == null || storagePath.isEmpty) {
+      throw const BackendHandoffFailure(
+        'The Sitewise service returned no panorama upload permission.',
+      );
+    }
+    final uploadUrl = issued['uploadUrl'] as String?;
+    final alreadyStored = issued['alreadyStored'] == true;
+    if (!alreadyStored && (uploadUrl == null || uploadUrl.isEmpty)) {
       throw const BackendHandoffFailure(
         'The Sitewise service returned no panorama upload permission.',
       );
@@ -709,7 +830,70 @@ class BackendCaptureCoordinator {
       'uploadUrl': uploadUrl,
       'storagePath': storagePath,
       'headers': issued['headers'],
+      'alreadyStored': alreadyStored,
     };
+  }
+
+  /// Streams one file to Storage, refreshing an expired permission and
+  /// retrying transient failures. Returns the permission that finally
+  /// succeeded (it may be a refreshed one). Never called for an object the
+  /// backend already reported as stored.
+  Future<Map<String, dynamic>> _putWithRetries({
+    required String filePath,
+    required int target,
+    required Map<String, dynamic> permission,
+    required bool overwrite,
+    required Future<Map<String, dynamic>> Function({required bool overwrite})
+    refresh,
+  }) async {
+    var upload = permission;
+    var expiredRefreshes = 0;
+    var networkAttempts = 0;
+    while (true) {
+      final url = upload['uploadUrl'] as String?;
+      if (url == null || url.isEmpty) {
+        throw BackendHandoffFailure(
+          'The upload permission for target $target is incomplete.',
+        );
+      }
+      final outcome = await _putFile(
+        filePath: filePath,
+        target: target,
+        uri: Uri.parse(url),
+        headers: upload['headers'],
+      );
+      if (outcome == _PutOutcome.stored) return upload;
+      if (outcome == _PutOutcome.expired && expiredRefreshes < 2) {
+        expiredRefreshes++;
+        upload = await refresh(overwrite: overwrite);
+        continue;
+      }
+      if (outcome == _PutOutcome.retryable &&
+          networkAttempts < _maxUploadAttempts - 1) {
+        networkAttempts++;
+        await Future<void>.delayed(Duration(seconds: networkAttempts));
+        continue;
+      }
+      switch (outcome) {
+        case _PutOutcome.expired:
+          throw BackendHandoffFailure(
+            'Uploading target $target needs a fresh permission. Your '
+            'photographs are kept — retry the synchronization.',
+          );
+        case _PutOutcome.retryable:
+          throw BackendHandoffFailure(
+            'Uploading target $target did not complete. Your photographs '
+            'are kept — retry the synchronization.',
+          );
+        case _PutOutcome.fatal:
+          throw BackendHandoffFailure(
+            'Target $target could not be uploaded to Sitewise. Your '
+            'photographs are kept — retry the synchronization.',
+          );
+        case _PutOutcome.stored:
+          return upload;
+      }
+    }
   }
 
   Future<Map<String, dynamic>> _uploadAndConfirmPanorama({
@@ -721,59 +905,48 @@ class BackendCaptureCoordinator {
   }) async {
     final coverage = await _coverageFor(panoramaPath, checksum);
     var permission = await _issuePanoramaUploadUrl(sessionId);
-    var expiredRefreshes = 0;
-    var networkAttempts = 0;
+    var replaced = false;
     while (true) {
-      final url = permission['uploadUrl'] as String?;
-      if (url == null || url.isEmpty) {
-        throw const BackendHandoffFailure(
-          'The panorama upload permission is incomplete.',
+      final stored = _alreadyStored(permission);
+      if (!stored) {
+        permission = await _putWithRetries(
+          filePath: panoramaPath,
+          target: 0,
+          permission: permission,
+          overwrite: replaced,
+          refresh: ({required bool overwrite}) =>
+              _issuePanoramaUploadUrl(sessionId, overwrite: overwrite),
         );
       }
-      final outcome = await _putFile(
-        filePath: panoramaPath,
-        target: 0,
-        uri: Uri.parse(url),
-        headers: permission['headers'],
-      );
-      if (outcome == _PutOutcome.stored) break;
-      if (outcome == _PutOutcome.expired && expiredRefreshes < 2) {
-        expiredRefreshes++;
-        permission = await _issuePanoramaUploadUrl(sessionId);
-        continue;
+      final storagePath = permission['storagePath'] as String?;
+      if (storagePath == null || storagePath.isEmpty) {
+        throw const BackendHandoffFailure(
+          'The panorama upload permission has no storage path.',
+        );
       }
-      if (outcome == _PutOutcome.retryable &&
-          networkAttempts < _maxUploadAttempts - 1) {
-        networkAttempts++;
-        await Future<void>.delayed(Duration(seconds: networkAttempts));
-        continue;
+      try {
+        return await _client.post(
+          '$_api/sessions/$sessionId/panorama',
+          <String, dynamic>{
+            'storage_path': storagePath,
+            'checksum_sha256': checksum,
+            'coverage_report': <String, Object?>{
+              'source': 'device_capture_v2',
+              'stitched_on': 'flutter',
+              'photo_coverage': ?coverage,
+              'frame_quality': ?deviceQuality,
+            },
+          },
+        );
+      } on ConflictFailure catch (error) {
+        // The stored object is not this panorama (a stale upload from an
+        // earlier attempt). Replace it once, then confirm again. A published
+        // or approved tour refuses the replacement — that refusal is final.
+        if (replaced || !_isReplaceableConflict(error)) rethrow;
+        replaced = true;
+        permission = await _issuePanoramaUploadUrl(sessionId, overwrite: true);
       }
-      throw const BackendHandoffFailure(
-        'The 360° panorama could not be uploaded. It is kept on this device — '
-        'you can retry the synchronization.',
-      );
     }
-
-    final storagePath = permission['storagePath'] as String?;
-    if (storagePath == null || storagePath.isEmpty) {
-      throw const BackendHandoffFailure(
-        'The panorama upload permission has no storage path.',
-      );
-    }
-    final confirmed = await _client.post(
-      '$_api/sessions/$sessionId/panorama',
-      <String, dynamic>{
-        'storage_path': storagePath,
-        'checksum_sha256': checksum,
-        'coverage_report': <String, Object?>{
-          'source': 'device_capture_v2',
-          'stitched_on': 'flutter',
-          'photo_coverage': ?coverage,
-          'frame_quality': ?deviceQuality,
-        },
-      },
-    );
-    return confirmed;
   }
 
   Future<Map<String, Object?>?> _coverageFor(
@@ -816,72 +989,67 @@ class BackendCaptureCoordinator {
       );
     }
     var upload = permission;
-    var expiredRefreshes = 0;
-    var networkAttempts = 0;
+    var replaced = false;
     while (true) {
-      final url = upload['uploadUrl'] as String?;
-      if (url == null || url.isEmpty) {
-        throw BackendHandoffFailure(
-          'The upload permission for target ${frame.targetId} is incomplete.',
+      final stored = _alreadyStored(upload);
+      if (!stored) {
+        upload = await _putWithRetries(
+          filePath: frame.imagePath,
+          target: frame.targetId,
+          permission: upload,
+          overwrite: replaced,
+          refresh: ({required bool overwrite}) => _refreshUploadUrl(
+            sessionId,
+            frame.targetId,
+            overwrite: overwrite,
+          ),
         );
       }
-      final outcome = await _putFile(
-        filePath: frame.imagePath,
-        target: frame.targetId,
-        uri: Uri.parse(url),
-        headers: upload['headers'],
-      );
-      if (outcome == _PutOutcome.stored) break;
-      if (outcome == _PutOutcome.expired && expiredRefreshes < 2) {
-        expiredRefreshes++;
-        upload = await _refreshUploadUrl(sessionId, frame.targetId);
-        continue;
+      final storagePath = upload['storagePath'] as String?;
+      if (storagePath == null || storagePath.isEmpty) {
+        throw BackendHandoffFailure(
+          'The upload permission for target ${frame.targetId} has no storage '
+          'path.',
+        );
       }
-      if (outcome == _PutOutcome.retryable &&
-          networkAttempts < _maxUploadAttempts - 1) {
-        networkAttempts++;
-        await Future<void>.delayed(Duration(seconds: networkAttempts));
-        continue;
+      try {
+        // `uploaded: false` tells the backend the object predates this
+        // confirmation, so it reads the stored bytes back and compares them
+        // with this photograph's digest before registering the frame.
+        await _confirm(
+          sessionId,
+          frame,
+          checksum,
+          storagePath,
+          qualityReport: qualityReport,
+          uploaded: !stored,
+        );
+        onProgress();
+        return;
+      } on ConflictFailure catch (error) {
+        // Storage holds bytes that are not this photograph, or the object is
+        // not there yet. Ask for an authorized replacement and upload once;
+        // any other conflict (authorization, cancelled session, review rules)
+        // is final and must not be overwritten.
+        if (replaced || !_isReplaceableConflict(error)) rethrow;
+        replaced = true;
+        upload = await _refreshUploadUrl(
+          sessionId,
+          frame.targetId,
+          overwrite: true,
+        );
       }
-      switch (outcome) {
-        case _PutOutcome.expired:
-          throw BackendHandoffFailure(
-            'Uploading target ${frame.targetId} needs a fresh permission. '
-            'Your photographs are kept — retry the synchronization.',
-          );
-        case _PutOutcome.retryable:
-          throw BackendHandoffFailure(
-            'Uploading target ${frame.targetId} did not complete. Your '
-            'photographs are kept — retry the synchronization.',
-          );
-        case _PutOutcome.fatal:
-          throw BackendHandoffFailure(
-            'Target ${frame.targetId} could not be uploaded to Sitewise. '
-            'Your photographs are kept — retry the synchronization.',
-          );
-        case _PutOutcome.stored:
-          break;
-      }
-      break;
     }
-
-    final storagePath = upload['storagePath'] as String?;
-    if (storagePath == null || storagePath.isEmpty) {
-      throw BackendHandoffFailure(
-        'The upload permission for target ${frame.targetId} has no storage '
-        'path.',
-      );
-    }
-    await _confirm(sessionId, frame, checksum, storagePath,
-        qualityReport: qualityReport);
-    onProgress();
   }
 
   Future<Map<String, dynamic>> _refreshUploadUrl(
     String sessionId,
-    int target,
-  ) async {
-    final issued = await _issueUploadUrls(sessionId, <int>[target]);
+    int target, {
+    bool overwrite = false,
+  }) async {
+    final issued = await _issueUploadUrls(sessionId, <int>[
+      target,
+    ], overwrite: overwrite ? <int>[target] : const <int>[]);
     return issued[target]!;
   }
 
@@ -946,11 +1114,15 @@ class BackendCaptureCoordinator {
     String checksum,
     String storagePath, {
     Map<String, Object?>? qualityReport,
+    bool uploaded = true,
   }) async {
     await _client.post('$_api/sessions/$sessionId/frames', <String, dynamic>{
       'target_index': frame.targetId,
       'storage_path': storagePath,
       'checksum_sha256': checksum,
+      // False = the object was already in storage and this confirmation must
+      // verify the stored bytes against the digest above.
+      'uploaded': uploaded,
       if (frame.imageWidth > 0) 'image_width': frame.imageWidth,
       if (frame.imageHeight > 0) 'image_height': frame.imageHeight,
       'capture_pose': <String, Object?>{
@@ -962,6 +1134,12 @@ class BackendCaptureCoordinator {
         'sourceImageHeight': frame.sourceImageHeight,
         'cropOffsetX': frame.cropOffsetX,
         'cropOffsetY': frame.cropOffsetY,
+        // These are the guided target and capture gate observations, not
+        // claimed camera calibration. The quaternion above is the device pose.
+        'targetYawDegrees': frame.targetYawDegrees,
+        'targetPitchDegrees': frame.targetPitchDegrees,
+        'alignmentErrorDeg': frame.alignmentErrorDeg,
+        'toleranceDeg': frame.toleranceDeg,
         // Device quality evidence rides inside the open pose metadata — the
         // worker reads only the keys it knows, so this stays additive.
         'quality': ?qualityReport,

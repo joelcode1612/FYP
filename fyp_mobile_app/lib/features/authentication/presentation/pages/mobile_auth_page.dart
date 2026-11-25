@@ -13,6 +13,9 @@ import 'package:fyp/features/authentication/presentation/widgets/auth_field.dart
 import 'package:fyp/features/authentication/presentation/widgets/auth_provider_button.dart';
 import 'package:fyp/features/authentication/presentation/widgets/auth_tabs.dart';
 import 'package:fyp/features/authentication/presentation/widgets/auth_terms_row.dart';
+import 'package:fyp/features/authentication/presentation/widgets/signup_role_card.dart';
+
+// SITEWISE_OWNER_INVITE_UI_V1
 
 /// Mobile authentication feature: Log In / Sign Up in one screen.
 ///
@@ -197,7 +200,10 @@ class _MobileAuthPageState extends ConsumerState<MobileAuthPage> {
     // sign-in does — the manual _submit/_provider paths already navigate, so
     // those transitions are skipped here.
     ref.listen<AuthState>(authNotifierProvider, (previous, next) {
-      if (next.status != AuthStatus.authenticated) return;
+      if (next.status != AuthStatus.authenticated &&
+          next.status != AuthStatus.staffOnboarding) {
+        return;
+      }
       if (previous?.status == AuthStatus.authenticating) return;
       if (!mounted) return;
       final user = next.user;
@@ -229,7 +235,7 @@ class _MobileAuthPageState extends ConsumerState<MobileAuthPage> {
                     const SizedBox(height: 8),
                     Text(
                       isLogin
-                          ? 'Log in to Sitewise and continue exploring better F&B locations.'
+                          ? 'Sign in to your SiteWise account.'
                           : 'Join Sitewise to explore, compare and evaluate commercial F&B locations.',
                       style: const TextStyle(
                         fontSize: 13,
@@ -365,7 +371,7 @@ class _MobileAuthPageState extends ConsumerState<MobileAuthPage> {
                         children: [
                           Text(
                             isLogin
-                                ? "Don't have an account? "
+                                ? 'New entrepreneur? '
                                 : 'Already have an account? ',
                             style: const TextStyle(
                               fontSize: 12,
@@ -377,7 +383,7 @@ class _MobileAuthPageState extends ConsumerState<MobileAuthPage> {
                                 ? null
                                 : () {
                                     if (isLogin) {
-                                      // The three-step registration funnel is
+                                      // Public Entrepreneur registration is
                                       // a route, not a tab: keeping it out of
                                       // this screen preserves the brand-only
                                       // Login header and avoids a second
@@ -403,6 +409,12 @@ class _MobileAuthPageState extends ConsumerState<MobileAuthPage> {
                           ),
                         ],
                       ),
+                    ),
+                    const SizedBox(height: 18),
+                    const SignupInfoNote(
+                      message:
+                          'Property Owners and Agents must complete their '
+                          'administrator invitation before signing in.',
                     ),
                   ],
                 ),

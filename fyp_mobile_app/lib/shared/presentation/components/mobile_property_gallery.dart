@@ -1,3 +1,4 @@
+// SITEWISE_PROPERTY_DETAIL_REFERENCE_UI_V1
 import 'package:flutter/material.dart';
 import 'package:shared_logic/shared_logic.dart';
 
@@ -50,6 +51,9 @@ class MobilePropertyGallery extends StatefulWidget {
   final Widget? tourAction;
 
   final double aspectRatio;
+
+  /// Opt-in detail-only photo controls; recommendation cards are unchanged.
+  final bool detailControls;
   final BorderRadius borderRadius;
 
   const MobilePropertyGallery({
@@ -63,6 +67,7 @@ class MobilePropertyGallery extends StatefulWidget {
     this.bookmarkButton,
     this.tourAction,
     this.aspectRatio = 16 / 9,
+    this.detailControls = false,
     this.borderRadius = const BorderRadius.vertical(
       top: Radius.circular(14),
     ),
@@ -150,7 +155,30 @@ class _MobilePropertyGalleryState extends State<MobilePropertyGallery> {
           if (widget.bookmarkButton != null)
             Positioned(top: 4, right: 4, child: widget.bookmarkButton!),
           ?bottomLeft,
-          if (photos.length > 1)
+          if (widget.detailControls && photos.isNotEmpty) ...[
+            Positioned(top: 10, right: 10, child: _CounterChip(
+              current: _page.clamp(0, photos.length - 1).toInt() + 1,
+              total: photos.length, onTap: _openViewer)),
+            Positioned(bottom: 8, right: 8, child: Material(
+              color: SitewiseColors.surface, borderRadius: BorderRadius.circular(12),
+              child: IconButton(tooltip: 'Open full screen photos',
+                onPressed: _openViewer, icon: const Icon(Icons.fullscreen_rounded,
+                  color: SitewiseColors.ink),
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48)),
+            )),
+            if (photos.length > 1 && photos.length <= 10 && widget.tourAction == null)
+              Positioned(bottom: 18, left: 64, right: 64, child: IgnorePointer(
+                child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  for (var i = 0; i < photos.length; i++)
+                    Container(width: 8, height: 8,
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
+                      decoration: BoxDecoration(shape: BoxShape.circle,
+                        color: i == _page ? SitewiseColors.action : Colors.white70,
+                        border: Border.all(color: Colors.white, width: 1))),
+                ]),
+              )),
+          ],
+          if (!widget.detailControls && photos.length > 1)
             Positioned(
               bottom: 10,
               right: 10,

@@ -76,12 +76,9 @@ const propertyTitleTypeOptions = <String>[
   'Not sure',
 ];
 
-const landlordFnbPermissionOptions = <String>[
-  'Yes',
-  'No',
-  'Subject to approval',
-  'Not sure',
-];
+// Landlord F&B permission is no longer a selectable form answer: SiteWise
+// assumes F&B use eligibility for every new listing, and the backend
+// defaults `fyp.rental_properties.landlord_fnb_permission` to 'Yes'.
 
 /// Display labels only (for choice grids / dropdowns).
 List<String> get commercialPropertyTypeLabels =>

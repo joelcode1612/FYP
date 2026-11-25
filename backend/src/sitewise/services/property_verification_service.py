@@ -25,8 +25,11 @@ from sqlmodel import Session, select
 
 from sitewise.core.exceptions import (
     ConflictError,
+    AuthUnavailableError,
     ForbiddenError,
     NotFoundError,
+    ModelUnavailableError,
+    ValidationError,
 )
 from sitewise.db.models.property_verification import (
     LISTING_STATUSES,
@@ -68,7 +71,9 @@ REQUIRED_FOR_SUBMISSION = (
 REQUIRED_COMMERCIAL_TERMS = (
     "floor_description",
     "furnishing",
-    "landlord_fnb_permission",
+    # landlord_fnb_permission is no longer a user input: the server defaults
+    # it to 'Yes' on create, so requiring it here would block legacy drafts
+    # whose stored value is legitimately NULL.
 )
 
 
@@ -264,7 +269,7 @@ def audit_payload(a: VerificationAudit) -> dict[str, Any]:
         "new_status": a.new_status,
         "action": a.action,
         "admin_user_id": None if a.admin_user_id is None else str(a.admin_user_id),
-        "reason": a.reason,
+        "reason": None if a.action == "property_approved" else a.reason,
         "created_at": _iso(a.created_at),
     }
 
@@ -538,6 +543,7 @@ class PropertyVerificationService:
                                AND c.property_id = CAST(:pid AS text)
                                AND c.owner_id = :uid
                                AND c.status = 'completed'
+                               AND p.verification_status IS DISTINCT FROM 'rejected'
                                AND p.storage_path IS NOT NULL AND btrim(p.storage_path) <> ''
                                AND (CAST(:panorama_id AS text) IS NULL OR CAST(p.panorama_id AS text) = :panorama_id)
                              ORDER BY p.created_at DESC LIMIT 1)
@@ -904,6 +910,272 @@ class AdminPropertyReviewService:
         }
 
     # -- decisions ----------------------------------------------------------
+
+    def _final_evidence(self, property_id: int, *, lock: bool = False):
+        # Property -> assignment -> verification -> panorama/session -> documents.
+        suffix = " FOR UPDATE" if lock else ""
+        present = self.session.execute(text(
+            "SELECT id FROM fyp.rental_properties WHERE id=:id" + suffix
+        ), {"id": property_id}).scalar()
+        if present is None:
+            raise NotFoundError("Property not found.")
+        listing = rental_listing(self.session, property_id)
+        assignment = self.session.execute(text("""
+            SELECT agent_id, workflow_status, inspection_data, inspection_updated_at,
+                   submitted_at, panorama_id
+            FROM fyp.agent_listing_assignment WHERE listing_id=:id
+        """ + suffix), {"id": property_id}).mappings().first()
+        query = select(PropertyVerification).where(PropertyVerification.property_id == property_id)
+        verification = self.session.exec(query.with_for_update() if lock else query).first()
+        if verification is None:
+            raise NotFoundError("No submitted verification for this property.")
+        panorama = None
+        if assignment and assignment["workflow_status"] == "submitted" and assignment["panorama_id"]:
+            panorama = self.session.execute(text("""
+                SELECT p.panorama_id, p.session_id, p.storage_path, p.width, p.height,
+                       p.verification_status, p.coverage_report, cs.owner_id, cs.capture_plan_version
+                FROM fyp.panoramas p JOIN fyp.capture_sessions cs ON cs.id=p.session_id
+                WHERE p.panorama_id=:panorama AND p.property_id=CAST(:id AS text)
+                  AND cs.property_id=p.property_id AND cs.status='completed'
+                  AND p.created_at<=:submitted_at
+                  AND (cs.capture_plan_version='2' OR EXISTS (
+                    SELECT 1 FROM fyp.panorama_jobs j WHERE j.session_id=cs.id AND j.status='done'
+                  ))
+                  AND p.storage_path IS NOT NULL AND btrim(p.storage_path)<>''
+            """ + (" FOR UPDATE OF p, cs" if lock else "")), {
+                "id": property_id, "panorama": assignment["panorama_id"],
+                "submitted_at": assignment["submitted_at"],
+            }).mappings().first()
+        query = select(VerificationDocument).where(
+            VerificationDocument.property_id == property_id,
+            VerificationDocument.verification_id == verification.verification_id,
+            VerificationDocument.verification_type == "ownership",
+            VerificationDocument.status == "active",
+        ).order_by(VerificationDocument.document_id)
+        docs = self.session.exec(query.with_for_update() if lock else query).all()
+        return listing, assignment, verification, panorama, docs
+
+    @staticmethod
+    def _evidence_digest(evidence) -> str:
+        import hashlib
+
+        listing, assignment, _, panorama, docs = evidence
+        facts = {key: value for key, value in listing.items() if key not in {
+            "verification_status", "is_published", "rejection_reason", "updated_at",
+        }}
+        capture = dict(panorama) if panorama else {}
+        capture.pop("verification_status", None)
+        payload = [facts, dict(assignment) if assignment else None, capture,
+                   [(d.document_id, d.storage_key, d.uploaded_at) for d in docs]]
+        return hashlib.sha256(json.dumps(payload, default=str, sort_keys=True).encode()).hexdigest()
+
+    def _final_blockers(self, evidence) -> list[str]:
+        listing, assignment, verification, panorama, docs = evidence
+        blockers = listing_completeness_errors(
+            listing, require_availability=False, require_commercial_terms=True,
+        )
+        if any(status not in (*DECISIONABLE, "verified") for status in (
+            verification.listing_status, verification.ownership_status,
+        )):
+            blockers.append("Both listing and ownership must be submitted.")
+        if not docs:
+            blockers.append("Submit ownership evidence.")
+        if (not assignment or assignment["workflow_status"] != "submitted"
+                or not assignment["submitted_at"] or not assignment["inspection_updated_at"]
+                or any((assignment["inspection_data"] or {}).get(key) is not True
+                       for key in REQUIRED_INSPECTION)):
+            blockers.append("Submit a completed Agent inspection checklist.")
+        if (not panorama or panorama["verification_status"] == "rejected"
+                or not panorama["height"] or panorama["width"] != 2 * panorama["height"]
+                or not 512 <= panorama["width"] <= 8192):
+            blockers.append("Submit a completed 360-degree panorama.")
+        return blockers
+
+    def final_review_state(self, property_id: int, *, check_storage: bool = False) -> dict:
+        evidence = self._final_evidence(property_id)
+        listing, assignment, verification, panorama, _ = evidence
+        digest = self._evidence_digest(evidence)
+        blockers = self._final_blockers(evidence)
+        if check_storage and not blockers:
+            try:
+                self._verify_final_files(evidence, decode_image=False)
+            except ConflictError as exc:
+                blockers.append(str(exc))
+        approval = self._has_final_approval(verification.verification_id, digest)
+        checklist = (assignment["inspection_data"] or {}) if assignment else {}
+        return {
+            "token": f"{verification.version}:{digest}",
+            "panorama_id": str(panorama["panorama_id"]) if panorama else None,
+            "inspection": {key: checklist.get(key) is True for key in REQUIRED_INSPECTION}
+                          if assignment else {},
+            "inspection_notes": {key: checklist[key] for key in
+                                 ("condition_notes", "parking_notes", "accessibility_notes")
+                                 if isinstance(checklist.get(key), str) and checklist[key].strip()},
+            "blockers": blockers,
+            "approved": approval and verification.publication_eligible
+                        and verification.listing_status == verification.ownership_status == "verified"
+                        and listing["verification_status"] == "approved"
+                        and bool(panorama and panorama["verification_status"] == "approved"),
+            "published": listing["is_published"],
+        }
+
+    def _has_final_approval(self, verification_id, digest: str) -> bool:
+        latest = self.session.exec(select(VerificationAudit).where(
+            VerificationAudit.verification_id == verification_id,
+            VerificationAudit.action.in_(("property_approved", "property_rejected", "property_information_requested")),
+        ).order_by(VerificationAudit.created_at.desc()).limit(1)).first()
+        return bool(latest and latest.action == "property_approved" and latest.reason == digest)
+
+    @staticmethod
+    def verify_panorama_agent(agent_id: int, capture_owner_id) -> None:
+        from sitewise.core.supabase_admin import SupabaseAdminService, SupabaseAdminError
+
+        try:
+            identity = SupabaseAdminService().get_agent_profile_by_id(int(agent_id))
+        except (SupabaseAdminError, AuthUnavailableError) as exc:
+            raise ConflictError("The assigned Agent identity could not be verified.") from exc
+        if not identity or str(identity.get("user_id")) != str(capture_owner_id):
+            raise ConflictError("The submitted panorama belongs to another Agent.")
+
+    def _verify_final_files(self, evidence, *, decode_image: bool = True) -> None:
+        from sitewise.services import capture_storage
+        _, assignment, _, panorama, docs = evidence
+        self.verify_panorama_agent(assignment["agent_id"], panorama["owner_id"])
+        try:
+            for document in docs:
+                path, _ = storage.open_document(document.storage_key)
+                with path.open("rb") as stream:
+                    if not stream.read(1):
+                        raise OSError("Empty evidence file")
+        except (ModelUnavailableError, NotFoundError, OSError) as exc:
+            raise ConflictError("An active ownership document cannot be opened.") from exc
+        try:
+            if not decode_image:
+                if not capture_storage.object_exists(panorama["storage_path"]):
+                    raise ConflictError("The submitted panorama image is missing.")
+                return
+            data = capture_storage.download(panorama["storage_path"])
+        except (capture_storage.ObjectMissing, capture_storage.CaptureStorageUnavailable) as exc:
+            raise ConflictError("The submitted panorama image cannot be opened.") from exc
+        try:
+            if capture_storage.decode_panorama(data) != (panorama["width"], panorama["height"]):
+                raise ValidationError("Image dimensions changed.")
+            report = panorama["coverage_report"] or {}
+            coverage = report.get("photo_coverage") or {}
+            checksum = report.get("submitted_image_sha256") or coverage.get("panorama_sha256")
+            if checksum and not capture_storage.verify_checksum(data, checksum):
+                raise ValidationError("The stored panorama differs from the submitted image.")
+        except ValidationError as exc:
+            raise ConflictError("The submitted panorama image is invalid.") from exc
+
+    def final_decision(self, property_id: int, admin_id, *, action: str, token: str,
+                       component: str | None = None, reason: str | None = None) -> dict:
+        evidence = self._final_evidence(property_id, lock=True)
+        listing, assignment, verification, panorama, _ = evidence
+        digest = self._evidence_digest(evidence)
+        if token != f"{verification.version}:{digest}":
+            raise ConflictError("The evidence changed. Reload and review the current submission.")
+        if action in ("approve", "publish"):
+            blockers = self._final_blockers(evidence)
+            if blockers:
+                raise ConflictError(" ".join(blockers))
+            self._verify_final_files(evidence)
+        now = _now()
+        audit = []
+
+        def record(name, dimension=None, previous=None, status=None, note=None):
+            audit.append(VerificationAudit(
+                property_id=property_id, verification_id=verification.verification_id,
+                action=name, verification_type=dimension, previous_status=previous,
+                new_status=status, admin_user_id=admin_id, reason=note,
+            ))
+
+        if action == "approve":
+            if self._has_final_approval(verification.verification_id, digest):
+                raise ConflictError("This evidence has already been approved.")
+            for dimension in ("listing", "ownership"):
+                attr = f"{dimension}_status"
+                record(f"{dimension}_approved", dimension, getattr(verification, attr), "verified")
+                setattr(verification, attr, "verified")
+            self.session.execute(text("""
+                UPDATE fyp.panoramas SET verification_status='approved', reviewed_by=:admin,
+                    reviewed_at=:now, updated_at=:now, review_reason=NULL
+                WHERE panorama_id=:id
+            """), {"admin": admin_id, "now": now, "id": panorama["panorama_id"]})
+            record("panorama_approved", note=str(panorama["panorama_id"]))
+            verification.publication_eligible = True
+            FypPropertyRepository(self.session).set_listing_verification_status(property_id, "approved", None)
+            # One decision publishes the verified property and its pinned panorama
+            # in this same locked transaction. Publication is not a second approval.
+            self._set_final_publication(property_id, panorama, now)
+            # Hash the post-decision evidence, excluding workflow-only fields.
+            record("property_approved", note=self._evidence_digest(self._final_evidence(property_id)))
+            record("property_published")
+        elif action in ("publish", "unpublish"):
+            if action == "publish" and (
+                not verification.publication_eligible or listing["verification_status"] != "approved"
+                or verification.listing_status != "verified" or verification.ownership_status != "verified"
+                or panorama["verification_status"] != "approved"
+                or not self._has_final_approval(verification.verification_id, digest)
+            ):
+                raise ConflictError("Approve the submitted property evidence first.")
+            if bool(listing["is_published"]) == (action == "publish"):
+                raise ConflictError("The property already has the requested publication state.")
+            self._set_final_publication(property_id, panorama if action == "publish" else None, now)
+            record("property_published" if action == "publish" else "property_unpublished")
+        else:
+            dimension = "ownership" if component == "ownership" else "listing"
+            attr = f"{dimension}_status"
+            previous = getattr(verification, attr)
+            if previous not in (*DECISIONABLE, "verified"):
+                raise ConflictError("That evidence component is not awaiting a decision.")
+            note = f"{component.replace('_', ' ').title()}: {reason.strip()}"
+            status = "rejected" if action == "reject" else "information_requested"
+            setattr(verification, attr, status)
+            verification.latest_note = note
+            verification.publication_eligible = False
+            if dimension == "listing" and assignment and assignment["workflow_status"] == "submitted":
+                self.session.execute(text("""
+                    UPDATE fyp.agent_listing_assignment SET workflow_status='needs_correction', updated_at=:now
+                    WHERE listing_id=:id
+                """), {"id": property_id, "now": now})
+            if component == "panorama" and panorama:
+                self.session.execute(text("""
+                    UPDATE fyp.panoramas SET verification_status='rejected', reviewed_by=:admin,
+                        reviewed_at=:now, review_reason=:reason, updated_at=:now
+                    WHERE panorama_id=:id
+                """), {"id": panorama["panorama_id"], "admin": admin_id, "now": now, "reason": note})
+            self._set_final_publication(property_id, None, now)
+            aggregate = "rejected" if "rejected" in (verification.listing_status, verification.ownership_status) else "draft"
+            FypPropertyRepository(self.session).set_listing_verification_status(
+                property_id, aggregate, note if aggregate == "rejected" else None,
+            )
+            record(f"{dimension}_{status}", dimension, previous, status, note)
+            record("property_rejected" if action == "reject" else "property_information_requested", note=note)
+        verification.reviewed_by = admin_id
+        verification.updated_at = now
+        verification.version += 1
+        self.session.add_all(audit)
+        self.session.flush()
+        result = self.final_review_state(property_id)
+        self.session.commit()
+        return result
+
+    def _set_final_publication(self, property_id: int, panorama, now) -> None:
+        # Both rows are changed in the caller's property-locked transaction.
+        self.session.execute(text("""
+            UPDATE fyp.panoramas SET published_at=NULL, updated_at=:now
+            WHERE property_id=CAST(:id AS text) AND published_at IS NOT NULL
+        """), {"id": property_id, "now": now})
+        if panorama:
+            self.session.execute(text("""
+                UPDATE fyp.panoramas SET published_at=:now, updated_at=:now WHERE panorama_id=:id
+            """), {"id": panorama["panorama_id"], "now": now})
+        self.session.execute(text("""
+            UPDATE fyp.rental_properties SET is_published=:visible, published_at=:published, updated_at=:now
+            WHERE id=:id
+        """), {"id": property_id, "visible": panorama is not None,
+                "published": now if panorama else None, "now": now})
 
     def start_review(self, property_id: int, dimension: str, admin_id: uuid.UUID) -> dict[str, Any]:
         return self._decide(

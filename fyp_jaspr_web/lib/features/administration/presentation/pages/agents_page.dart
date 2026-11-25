@@ -44,11 +44,7 @@ class AdminAgentsPage extends StatefulComponent {
 }
 
 // Company and identity are entered together, then reviewed before sending.
-const _steps = <String>[
-  'Agent details',
-  'Review',
-  'Invitation',
-];
+const _steps = <String>['Agent details', 'Review', 'Invitation'];
 const _existingMode = 'Existing company';
 const _newMode = 'New company';
 
@@ -56,12 +52,14 @@ final _emailPattern = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
 
 /// Presentation-only initials, never used as an account identifier.
 String _agentInitials(String fullName) {
-  final words = fullName.trim().split(RegExp(r'\s+'))
-      .where((word) => word.isNotEmpty).toList(growable: false);
+  final words = fullName
+      .trim()
+      .split(RegExp(r'\s+'))
+      .where((word) => word.isNotEmpty)
+      .toList(growable: false);
   if (words.isEmpty) return 'A';
   final first = words.first.substring(0, 1).toUpperCase();
-  final last = words.length > 1
-      ? words.last.substring(0, 1).toUpperCase() : '';
+  final last = words.length > 1 ? words.last.substring(0, 1).toUpperCase() : '';
   return '$first$last';
 }
 
@@ -333,9 +331,9 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
   /// error the administrator would retry against an already-applied change.
   static String _auditSuffix(Map<String, dynamic> result) =>
       result['audit_recorded'] == false
-          ? ' NOTE: the change is applied but the audit log write failed — '
-              'the server logged the cause; report it to the operator.'
-          : '';
+      ? ' NOTE: the change is applied but the audit log write failed — '
+            'the server logged the cause; report it to the operator.'
+      : '';
 
   void _setNotice(String text, {required bool error}) {
     setState(() {
@@ -352,7 +350,10 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
     };
     setState(() => _busyId = agent.userId);
     try {
-      final result = await AppLocator.adminApi.setAgentStatus(agent.userId, status);
+      final result = await AppLocator.adminApi.setAgentStatus(
+        agent.userId,
+        status,
+      );
       await _load(silent: true);
       if (!mounted) return;
       setState(() => _confirmingId = null);
@@ -581,7 +582,8 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
     Future<void>.delayed(const Duration(milliseconds: 30), () {
       if (!mounted) return;
       // Prefer the first form field instead of placing focus on the stepper.
-      final target = web.document.querySelector(
+      final target =
+          web.document.querySelector(
             '.ag-invite-form select, .ag-invite-form input',
           ) ??
           web.document.querySelector(
@@ -898,60 +900,64 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
         ]),
       ]),
       DataTable(
-      columns: const [
-        DataColumn('Agent'),
-        DataColumn('Company'),
-        DataColumn('Account status'),
-        DataColumn('Invitation status'),
-        DataColumn('Joined'),
-        DataColumn('Actions', actions: true),
-      ],
-      rows: [
-        for (final agent in rows)
-          [
-            div(classes: 'ag-agent', [
-              span(
-                classes: 'ag-agent__avatar',
-                attributes: const {'aria-hidden': 'true'},
-                [Component.text(_agentInitials(agent.displayName))],
-              ),
-              div(classes: 'ag-agent__text', [
-                CellIdentity(
-                  title: agent.displayName.isEmpty
-                      ? 'Unnamed agent'
-                      : agent.displayName,
-                  caption: agent.email,
+        columns: const [
+          DataColumn('Agent'),
+          DataColumn('Company'),
+          DataColumn('Account status'),
+          DataColumn('Invitation status'),
+          DataColumn('Joined'),
+          DataColumn('Actions', actions: true),
+        ],
+        rows: [
+          for (final agent in rows)
+            [
+              div(classes: 'ag-agent', [
+                span(
+                  classes: 'ag-agent__avatar',
+                  attributes: const {'aria-hidden': 'true'},
+                  [Component.text(_agentInitials(agent.displayName))],
                 ),
-              ]),
-            ]),
-            Component.text(
-              agent.companyName.isEmpty
-                  ? (agent.companyId.isEmpty
-                        ? 'Unassigned'
-                        : '#${agent.companyId}')
-                  : agent.companyName,
-            ),
-            agent.status.isEmpty
-                ? const StatusBadge('Unknown', tone: 'neutral')
-                : StatusBadge(_label(agent.status), tone: _tone(agent.status), dot: true),
-            agent.invitationStatus.isEmpty
-                ? const StatusBadge('None', tone: 'neutral')
-                : StatusBadge(
-                    _label(agent.invitationStatus),
-                    tone: _tone(agent.invitationStatus),
-                    dot: true,
+                div(classes: 'ag-agent__text', [
+                  CellIdentity(
+                    title: agent.displayName.isEmpty
+                        ? 'Unnamed agent'
+                        : agent.displayName,
+                    caption: agent.email,
                   ),
-            Component.text(_shortDate(agent.createdAt)),
-            div(classes: 'ag-actions', [
-              ActionButton(
-                'View details',
-                variant: 'ghost',
-                onClick: () => _openDetails(agent.userId),
+                ]),
+              ]),
+              Component.text(
+                agent.companyName.isEmpty
+                    ? (agent.companyId.isEmpty
+                          ? 'Unassigned'
+                          : '#${agent.companyId}')
+                    : agent.companyName,
               ),
-              _statusAction(agent),
-            ]),
-          ],
-      ],
+              agent.status.isEmpty
+                  ? const StatusBadge('Unknown', tone: 'neutral')
+                  : StatusBadge(
+                      _label(agent.status),
+                      tone: _tone(agent.status),
+                      dot: true,
+                    ),
+              agent.invitationStatus.isEmpty
+                  ? const StatusBadge('None', tone: 'neutral')
+                  : StatusBadge(
+                      _label(agent.invitationStatus),
+                      tone: _tone(agent.invitationStatus),
+                      dot: true,
+                    ),
+              Component.text(_shortDate(agent.createdAt)),
+              div(classes: 'ag-actions', [
+                ActionButton(
+                  'View details',
+                  variant: 'ghost',
+                  onClick: () => _openDetails(agent.userId),
+                ),
+                _statusAction(agent),
+              ]),
+            ],
+        ],
       ),
     ]);
   }
@@ -1046,6 +1052,7 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
           : DataTable(
               columns: const [
                 DataColumn('Invited address'),
+                DataColumn('Role'),
                 DataColumn('State'),
                 DataColumn('Created'),
                 DataColumn('Expires'),
@@ -1059,6 +1066,13 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
                       caption: invite.invitedById.isEmpty
                           ? 'Invitation record'
                           : 'By ${invite.invitedById}',
+                    ),
+                    Component.text(
+                      invite.invitedRole == 'owner'
+                          ? 'Property Owner'
+                          : invite.invitedRole == 'agent'
+                          ? 'Agent'
+                          : 'Unknown',
                     ),
                     StatusBadge(
                       invite.status.isEmpty ? 'Unknown' : _label(invite.status),
@@ -1077,14 +1091,12 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
                         )
                       else
                         span(classes: 'ag-muted', [
-                          Component.text(
-                            switch (invite.status.toLowerCase()) {
-                              'accepted' => 'Completed',
-                              'revoked' => 'Cancelled',
-                              'expired' => 'Expired',
-                              _ => '—',
-                            },
-                          ),
+                          Component.text(switch (invite.status.toLowerCase()) {
+                            'accepted' => 'Completed',
+                            'revoked' => 'Cancelled',
+                            'expired' => 'Expired',
+                            _ => '—',
+                          }),
                         ]),
                     ]),
                   ],
@@ -1593,7 +1605,8 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
         Field(
           labelText: 'Reason (required)',
           error: _mfaError,
-          hint: 'Stored in the audit event, e.g. "Lost phone, identity verified by phone".',
+          hint:
+              'Stored in the audit event, e.g. "Lost phone, identity verified by phone".',
           child: _textInput(
             value: _mfaReason,
             placeholder: 'Why is this reset authorised?',
@@ -1731,4 +1744,3 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
     );
   }
 }
-

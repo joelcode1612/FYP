@@ -6,9 +6,11 @@ verification, active check, staff role, ``aal2``) is exercised for real.
 """
 
 import uuid
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from sitewise.core.supabase_admin import SupabaseAdminError
 from sitewise.domain import rbac
 from tests.conftest import TEST_EMAIL_DOMAIN, make_token, register_user_id
 from tests.fakes import FakeSupabaseAdmin
@@ -117,6 +119,7 @@ def test_admin_creates_agent_and_supabase_invites(client, cleanup_users, fake_ad
     assert len(fake_admin.invitations) == 1
     assert fake_admin.invitations[0]["invited_email"] == "new.agent@staff.example"
     assert fake_admin.invitations[0]["invited_by_user_id"] == str(admin_sub)
+    assert fake_admin.invitations[0]["invited_role"] == "agent"
     assert any(a["action"] == "staff.invited" for a in fake_admin.audit)
 
     # Local enforcement mirror is agent/pending too.
@@ -543,3 +546,485 @@ def test_suspend_unknown_agent_returns_meaningful_404(client, cleanup_users, fak
     )
     assert r.status_code == 404
     assert "User not found" in r.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# Property Owner invitation + guarded onboarding
+# ---------------------------------------------------------------------------
+
+OWNER_BODY = {
+    "full_name": "Aina Owner",
+    "email": "new.owner@staff.example",
+    "phone_number": "+60125550999",
+}
+
+
+def _track_owner(cleanup_users, body: dict) -> None:
+    register_user_id(cleanup_users, uuid.UUID(body["owner_user_id"]))
+
+
+def _confirmed_owner_token(fake_admin: FakeSupabaseAdmin, body: dict) -> str:
+    email = body["email"]
+    user_id = body["owner_user_id"]
+    fake_admin.auth_users[email]["email_confirmed_at"] = "2026-11-25T00:00:00+00:00"
+    fake_admin.factors[user_id] = [
+        {"id": "owner-totp", "status": "verified", "factor_type": "totp"}
+    ]
+    return make_token(
+        sub=user_id,
+        email=email,
+        aal="aal2",
+        amr=[{"method": "password"}, {"method": "totp"}],
+    )
+
+
+def test_create_owner_requires_admin_and_aal2(client, cleanup_users, fake_admin):
+    sub = uuid.uuid4()
+    register_user_id(cleanup_users, sub)
+    email = f"civilian-{sub.hex[:8]}@{TEST_EMAIL_DOMAIN}"
+    civilian = make_token(sub=str(sub), email=email)
+    client.get("/api/v1/auth/me", headers=auth(civilian))
+    assert client.post(
+        "/api/v1/staff/owners", headers=auth(civilian), json=OWNER_BODY
+    ).status_code == 403
+
+    admin_sub, admin_token = _admin_token(client, cleanup_users)
+    noaal = make_token(sub=str(admin_sub), email=f"admin-{admin_sub.hex[:10]}@{TEST_EMAIL_DOMAIN}")
+    response = client.post(
+        "/api/v1/staff/owners", headers=auth(noaal), json=OWNER_BODY
+    )
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "staff_mfa_required"
+    assert fake_admin.invite_calls == []
+
+
+def test_admin_creates_pending_owner_without_agent_profile(client, cleanup_users, fake_admin):
+    admin_sub, admin_token = _admin_token(client, cleanup_users)
+    response = client.post(
+        "/api/v1/staff/owners", headers=auth(admin_token), json=OWNER_BODY
+    )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    _track_owner(cleanup_users, body)
+    assert body["invited"] is True
+    assert body["role"] == "owner"
+    assert body["account_status"] == "pending"
+    assert body["invitation_status"] == "sent"
+    assert body["mirror"]["role"] == "owner"
+    assert fake_admin.invite_calls == [OWNER_BODY["email"]]
+    assert fake_admin.agents == []
+    assert fake_admin.identity[body["owner_user_id"]]["role"] == "owner"
+    assert fake_admin.identity[body["owner_user_id"]]["account_status"] == "pending"
+    assert fake_admin.invitations[0]["invited_role"] == "owner"
+    assert fake_admin.invitations[0]["invited_user_id"] == body["owner_user_id"]
+    assert any(a["action"] == "staff.owner_invited" for a in fake_admin.audit)
+
+    status = client.get(
+        "/api/v1/users/me/status",
+        headers=auth(make_token(sub=body["owner_user_id"], email=OWNER_BODY["email"])),
+    )
+    assert status.status_code == 403
+
+
+def test_owner_request_cannot_supply_role(client, cleanup_users, fake_admin):
+    _, admin_token = _admin_token(client, cleanup_users)
+    response = client.post(
+        "/api/v1/staff/owners",
+        headers=auth(admin_token),
+        json={**OWNER_BODY, "role": "admin"},
+    )
+    assert response.status_code == 422
+    assert fake_admin.invite_calls == []
+    assert fake_admin.invitations == []
+
+
+def test_owner_retry_reconciles_without_second_invite(client, cleanup_users, fake_admin):
+    _, admin_token = _admin_token(client, cleanup_users)
+    first = client.post(
+        "/api/v1/staff/owners", headers=auth(admin_token), json=OWNER_BODY
+    )
+    assert first.status_code == 201, first.text
+    _track_owner(cleanup_users, first.json())
+    second = client.post(
+        "/api/v1/staff/owners", headers=auth(admin_token), json=OWNER_BODY
+    )
+    assert second.status_code == 201, second.text
+    assert second.json()["invited"] is False
+    assert second.json()["owner_user_id"] == first.json()["owner_user_id"]
+    assert fake_admin.invite_calls == [OWNER_BODY["email"]]
+    assert len(fake_admin.invitations) == 1
+
+
+def test_owner_retry_cannot_demote_concurrently_activated_identity(
+    client, cleanup_users, fake_admin, monkeypatch
+):
+    _, admin_token = _admin_token(client, cleanup_users)
+    first = client.post(
+        "/api/v1/staff/owners", headers=auth(admin_token), json=OWNER_BODY
+    )
+    assert first.status_code == 201, first.text
+    body = first.json()
+    _track_owner(cleanup_users, body)
+    reconcile = fake_admin.reconcile_invited_owner_profile
+
+    def activate_then_reconcile(**kwargs):
+        fake_admin.update_identity_profile(
+            kwargs["user_id"], {"account_status": "active"}
+        )
+        return reconcile(**kwargs)
+
+    monkeypatch.setattr(
+        fake_admin, "reconcile_invited_owner_profile", activate_then_reconcile
+    )
+    response = client.post(
+        "/api/v1/staff/owners", headers=auth(admin_token), json=OWNER_BODY
+    )
+    assert response.status_code == 409, response.text
+    assert fake_admin.identity[body["owner_user_id"]]["account_status"] == "active"
+
+
+def test_owner_onboarding_cannot_overwrite_concurrent_suspension(
+    client, cleanup_users, fake_admin, monkeypatch
+):
+    _, admin_token = _admin_token(client, cleanup_users)
+    invited = client.post(
+        "/api/v1/staff/owners", headers=auth(admin_token), json=OWNER_BODY
+    )
+    assert invited.status_code == 201, invited.text
+    body = invited.json()
+    _track_owner(cleanup_users, body)
+    token = _confirmed_owner_token(fake_admin, body)
+    transition = fake_admin.update_identity_profile_if
+
+    def suspend_then_transition(*args, **kwargs):
+        fake_admin.update_identity_profile(
+            body["owner_user_id"], {"account_status": "suspended"}
+        )
+        return transition(*args, **kwargs)
+
+    monkeypatch.setattr(
+        fake_admin, "update_identity_profile_if", suspend_then_transition
+    )
+    response = client.post("/api/v1/staff/onboarding/complete", headers=auth(token))
+    assert response.status_code == 403, response.text
+    assert response.json()["detail"]["code"] == "onboarding_suspended"
+    assert fake_admin.identity[body["owner_user_id"]]["account_status"] == "suspended"
+    assert not any(
+        event["action"] == "staff.onboarding_completed"
+        for event in fake_admin.audit
+    )
+
+
+def test_owner_reconciles_only_unconfirmed_provisional_identity(
+    client, cleanup_users, fake_admin
+):
+    _, admin_token = _admin_token(client, cleanup_users)
+    email = "partial.owner@staff.example"
+    user_id = str(uuid.uuid4())
+    fake_admin.auth_users[email] = {"id": user_id, "email": email}
+    fake_admin.identity[user_id] = {
+        "user_id": user_id,
+        "email": email,
+        "role": "entrepreneur",
+        "account_status": "pending",
+    }
+    invitation = fake_admin.insert_invitation(
+        invited_user_id=None,
+        invited_email=email,
+        invited_by_user_id=uuid.uuid4(),
+        status="pending",
+        invited_role="owner",
+    )
+    response = client.post(
+        "/api/v1/staff/owners",
+        headers=auth(admin_token),
+        json={**OWNER_BODY, "email": email},
+    )
+    assert response.status_code == 201, response.text
+    _track_owner(cleanup_users, response.json())
+    assert response.json()["invited"] is False
+    assert response.json()["invitation"]["invitation_id"] == invitation["invitation_id"]
+    assert fake_admin.identity[user_id]["role"] == "owner"
+    assert fake_admin.invite_calls == []
+
+    confirmed_email = "confirmed.owner@staff.example"
+    confirmed_id = str(uuid.uuid4())
+    fake_admin.auth_users[confirmed_email] = {
+        "id": confirmed_id,
+        "email": confirmed_email,
+        "email_confirmed_at": "2026-11-25T00:00:00+00:00",
+    }
+    fake_admin.identity[confirmed_id] = {
+        "user_id": confirmed_id,
+        "email": confirmed_email,
+        "role": "entrepreneur",
+        "account_status": "active",
+    }
+    rejected = client.post(
+        "/api/v1/staff/owners",
+        headers=auth(admin_token),
+        json={**OWNER_BODY, "email": confirmed_email},
+    )
+    assert rejected.status_code == 409
+    assert fake_admin.identity[confirmed_id]["role"] == "entrepreneur"
+
+
+def test_owner_onboarding_requires_matching_invitation(client, cleanup_users, fake_admin):
+    sub = uuid.uuid4()
+    register_user_id(cleanup_users, sub)
+    email = f"owner-no-invite-{sub.hex[:8]}@{TEST_EMAIL_DOMAIN}"
+    from sqlmodel import Session
+
+    from sitewise.db.session import engine
+    from sitewise.repositories.user_repository import UserRepository
+
+    with Session(engine) as session:
+        repo = UserRepository(session)
+        repo.get_or_create_from_supabase(user_id=sub, email=email, email_verified=True)
+        repo.update(sub, {"role": "owner", "account_status": "pending"})
+    fake_admin.auth_users[email] = {
+        "id": str(sub),
+        "email": email,
+        "email_confirmed_at": "2026-11-25T00:00:00+00:00",
+    }
+    fake_admin.factors[str(sub)] = [
+        {"id": "totp", "status": "verified", "factor_type": "totp"}
+    ]
+    token = make_token(
+        sub=str(sub), email=email, aal="aal2",
+        amr=[{"method": "password"}, {"method": "totp"}],
+    )
+    response = client.post("/api/v1/staff/onboarding/complete", headers=auth(token))
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "owner_invitation_required"
+
+
+def test_owner_onboarding_activates_without_agent_verification(
+    client, cleanup_users, fake_admin
+):
+    _, admin_token = _admin_token(client, cleanup_users)
+    created = client.post(
+        "/api/v1/staff/owners", headers=auth(admin_token), json=OWNER_BODY
+    )
+    assert created.status_code == 201, created.text
+    body = created.json()
+    _track_owner(cleanup_users, body)
+    token = _confirmed_owner_token(fake_admin, body)
+
+    response = client.post("/api/v1/staff/onboarding/complete", headers=auth(token))
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["role"] == "owner"
+    assert result["account_status"] == "active"
+    assert result["invitation_status"] == "accepted"
+    assert result["account_verification_status"] is None
+    assert fake_admin.identity[body["owner_user_id"]]["account_status"] == "active"
+    assert fake_admin.identity[body["owner_user_id"]]["email_verified"] is True
+    assert fake_admin.invitations[0]["invitation_status"] == "accepted"
+    assert fake_admin.agents == []
+    assert fake_admin.verifications == []
+
+
+def test_owner_onboarding_rejects_revoked_and_suspended(client, cleanup_users, fake_admin):
+    _, admin_token = _admin_token(client, cleanup_users)
+    created = client.post(
+        "/api/v1/staff/owners", headers=auth(admin_token), json=OWNER_BODY
+    )
+    assert created.status_code == 201, created.text
+    body = created.json()
+    _track_owner(cleanup_users, body)
+    token = _confirmed_owner_token(fake_admin, body)
+    fake_admin.update_invitation(
+        body["invitation"]["invitation_id"], {"invitation_status": "revoked"}
+    )
+    revoked = client.post("/api/v1/staff/onboarding/complete", headers=auth(token))
+    assert revoked.status_code == 410
+    assert revoked.json()["detail"]["code"] == "invitation_revoked"
+
+    from sqlmodel import Session
+
+    from sitewise.db.session import engine
+    from sitewise.repositories.user_repository import UserRepository
+
+    with Session(engine) as session:
+        UserRepository(session).update(
+            uuid.UUID(body["owner_user_id"]), {"account_status": "suspended"}
+        )
+    fake_admin.update_identity_profile(
+        body["owner_user_id"], {"account_status": "suspended"}
+    )
+    suspended = client.post("/api/v1/staff/onboarding/complete", headers=auth(token))
+    assert suspended.status_code == 403
+    assert suspended.json()["detail"]["code"] == "onboarding_suspended"
+
+
+def test_owner_invitation_listing_reconciles_due_expiry(
+    client, cleanup_users, fake_admin
+):
+    _, admin_token = _admin_token(client, cleanup_users)
+    created = client.post(
+        "/api/v1/staff/owners", headers=auth(admin_token), json=OWNER_BODY
+    )
+    assert created.status_code == 201, created.text
+    body = created.json()
+    _track_owner(cleanup_users, body)
+    invitation_id = body["invitation"]["invitation_id"]
+    fake_admin.update_invitation(
+        invitation_id,
+        {"expires_at": (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()},
+    )
+
+    response = client.get("/api/v1/staff/invitations", headers=auth(admin_token))
+    assert response.status_code == 200, response.text
+    row = next(i for i in response.json() if i["invitation_id"] == invitation_id)
+    assert row["invitation_status"] == "expired"
+    assert fake_admin.identity[body["owner_user_id"]]["account_status"] == "pending"
+
+
+@pytest.mark.parametrize("closed_state", ["revoked", "expired"])
+def test_owner_replacement_resends_for_same_unconfirmed_identity(
+    client, cleanup_users, fake_admin, closed_state
+):
+    _, admin_token = _admin_token(client, cleanup_users)
+    first = client.post(
+        "/api/v1/staff/owners", headers=auth(admin_token), json=OWNER_BODY
+    )
+    assert first.status_code == 201, first.text
+    first_body = first.json()
+    _track_owner(cleanup_users, first_body)
+    first_id = first_body["invitation"]["invitation_id"]
+    if closed_state == "revoked":
+        fake_admin.update_invitation(first_id, {"invitation_status": "revoked"})
+    else:
+        fake_admin.update_invitation(
+            first_id,
+            {"expires_at": (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()},
+        )
+
+    replacement = client.post(
+        "/api/v1/staff/owners", headers=auth(admin_token), json=OWNER_BODY
+    )
+    assert replacement.status_code == 201, replacement.text
+    body = replacement.json()
+    assert body["invited"] is False
+    assert body["email_sent"] is True
+    assert body["invitation_status"] == "sent"
+    assert body["owner_user_id"] == first_body["owner_user_id"]
+    assert body["invitation"]["invitation_id"] != first_id
+    assert fake_admin.invite_calls == [OWNER_BODY["email"]]
+    assert fake_admin.resend_calls == [OWNER_BODY["email"]]
+    assert len(fake_admin.invitations) == 2
+    assert fake_admin.get_invitation(first_id)["invitation_status"] == closed_state
+    audit = fake_admin.audit[-1]
+    assert audit["details"]["replaced_invitation_id"] == first_id
+    assert audit["details"]["email_sent"] is True
+
+
+def test_confirmed_pending_owner_replacement_needs_no_email(
+    client, cleanup_users, fake_admin
+):
+    _, admin_token = _admin_token(client, cleanup_users)
+    first = client.post(
+        "/api/v1/staff/owners", headers=auth(admin_token), json=OWNER_BODY
+    )
+    assert first.status_code == 201, first.text
+    first_body = first.json()
+    _track_owner(cleanup_users, first_body)
+    fake_admin.auth_users[OWNER_BODY["email"]]["email_confirmed_at"] = (
+        "2026-11-25T00:00:00+00:00"
+    )
+    fake_admin.update_invitation(
+        first_body["invitation"]["invitation_id"],
+        {"invitation_status": "revoked"},
+    )
+
+    replacement = client.post(
+        "/api/v1/staff/owners", headers=auth(admin_token), json=OWNER_BODY
+    )
+    assert replacement.status_code == 201, replacement.text
+    body = replacement.json()
+    assert body["invited"] is False
+    assert body["email_sent"] is False
+    assert body["invitation_status"] == "accepted"
+    assert body["invitation"]["invited_user_id"] == body["owner_user_id"]
+    assert fake_admin.invite_calls == [OWNER_BODY["email"]]
+    assert fake_admin.resend_calls == []
+    assert fake_admin.identity[body["owner_user_id"]]["account_status"] == "pending"
+
+
+def test_owner_dispatch_rejects_active_claim_and_recovers_stale_claim(
+    client, cleanup_users, fake_admin
+):
+    _, admin_token = _admin_token(client, cleanup_users)
+    invitation = fake_admin.insert_invitation(
+        invited_user_id=None,
+        invited_email=OWNER_BODY["email"],
+        invited_by_user_id=uuid.uuid4(),
+        status="pending",
+        invited_role="owner",
+        expires_at=(datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+    )
+    fake_admin.update_invitation(
+        invitation["invitation_id"],
+        {"provisioning_claimed_at": datetime.now(timezone.utc).isoformat()},
+    )
+    blocked = client.post(
+        "/api/v1/staff/owners", headers=auth(admin_token), json=OWNER_BODY
+    )
+    assert blocked.status_code == 409
+    assert fake_admin.invite_calls == []
+
+    fake_admin.update_invitation(
+        invitation["invitation_id"],
+        {
+            "provisioning_claimed_at": (
+                datetime.now(timezone.utc) - timedelta(hours=1)
+            ).isoformat()
+        },
+    )
+    recovered = client.post(
+        "/api/v1/staff/owners", headers=auth(admin_token), json=OWNER_BODY
+    )
+    assert recovered.status_code == 201, recovered.text
+    _track_owner(cleanup_users, recovered.json())
+    assert recovered.json()["email_sent"] is True
+    assert fake_admin.invite_calls == [OWNER_BODY["email"]]
+    assert recovered.json()["invitation"]["provisioning_claimed_at"] is None
+
+
+def test_owner_provider_failure_releases_exact_dispatch_claim(
+    client, cleanup_users, fake_admin, monkeypatch
+):
+    _, admin_token = _admin_token(client, cleanup_users)
+    invitation = fake_admin.insert_invitation(
+        invited_user_id=None,
+        invited_email=OWNER_BODY["email"],
+        invited_by_user_id=uuid.uuid4(),
+        status="pending",
+        invited_role="owner",
+        expires_at=(datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+    )
+    invite = fake_admin.invite_staff_user
+
+    def _fail(**_kwargs):
+        raise SupabaseAdminError("Supabase invite failed.")
+
+    monkeypatch.setattr(fake_admin, "invite_staff_user", _fail)
+    failed = client.post(
+        "/api/v1/staff/owners", headers=auth(admin_token), json=OWNER_BODY
+    )
+    assert failed.status_code == 502
+    assert fake_admin.get_invitation(invitation["invitation_id"])[
+        "provisioning_claimed_at"
+    ] is None
+    assert fake_admin.get_invitation(invitation["invitation_id"])[
+        "invitation_status"
+    ] == "pending"
+
+    monkeypatch.setattr(fake_admin, "invite_staff_user", invite)
+    retry = client.post(
+        "/api/v1/staff/owners", headers=auth(admin_token), json=OWNER_BODY
+    )
+    assert retry.status_code == 201, retry.text
+    _track_owner(cleanup_users, retry.json())
+    assert retry.json()["invitation_status"] == "sent"

@@ -1,0 +1,358 @@
+"""User profile routes.
+
+Self-service endpoints (``/users/me*``) operate on the authenticated identity;
+administrative endpoints operate on any user but require the administrator
+role. Registration is NOT exposed here: identities are created in Supabase
+Auth (the frontend uses the Supabase SDK) and local profiles are provisioned
+on the first authenticated request.
+"""
+
+import logging
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sitewise.api.v1.staff import _record_audit
+from sitewise.core.exceptions import ForbiddenActionError
+from sitewise.core.supabase_admin import SupabaseAdminError, get_admin_service
+from sitewise.dependencies import (
+    ActiveUser,
+    AuthenticatedUser,
+    CurrentUser,
+    get_user_service,
+    require_admin_mfa,
+)
+from sitewise.domain import rbac
+from sitewise.services.user_service import UserService
+
+router = APIRouter()
+
+logger = logging.getLogger("sitewise.users")
+
+
+def _profile_payload(user, listing_count: int | None = None) -> dict:
+    payload = {
+        "user_id": str(user.user_id),
+        "email": user.email,
+        "full_name": user.full_name,
+        "phone_number": user.phone_number,
+        "profile_picture_url": user.profile_picture_url,
+        "role": user.role,
+        "account_status": user.account_status,
+        "email_verified": user.email_verified,
+        "last_login": user.last_login.isoformat() if user.last_login else None,
+        "created_at": user.created_at.isoformat() if user.created_at else None,
+        "updated_at": user.updated_at.isoformat() if user.updated_at else None,
+    }
+    # Absent means "not computed", which the UI renders as unknown. A computed
+    # zero is a real answer and is always sent.
+    if listing_count is not None:
+        payload["listing_count"] = listing_count
+    return payload
+
+
+# ---------------------------------------------------------------------------
+# Self-service (authenticated identity)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/me")
+def get_own_profile(user: CurrentUser) -> dict:
+    return _profile_payload(user.profile)
+
+
+@router.get("/me/status")
+def get_own_status(user: ActiveUser) -> dict:
+    """Authoritative account status and role for the authenticated caller."""
+    return {
+        "user_id": str(user.user_id),
+        "role": user.role,
+        "account_status": user.account_status,
+        "email_verified": user.profile.email_verified,
+    }
+
+
+@router.patch("/me")
+def update_own_profile(
+    data: dict,
+    user: CurrentUser,
+    service: UserService = Depends(get_user_service),
+) -> dict:
+    """Update permitted personal fields.
+
+    Role, account status, email verification and identity columns are
+    authoritative server-side values; attempting to change them returns 403
+    rather than being silently ignored.
+    """
+    try:
+        updated = service.update_own_profile(user.user_id, data)
+    except ForbiddenActionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    if updated is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return _profile_payload(updated)
+
+
+# ---------------------------------------------------------------------------
+# Administration (administrator role required)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/")
+def list_users(
+    offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=200),
+    service: UserService = Depends(get_user_service),
+    _: AuthenticatedUser = Depends(require_admin_mfa),
+) -> list[dict]:
+    # One grouped query for the whole page, never one query per account.
+    counts = service.listing_counts_by_owner()
+    return [
+        _profile_payload(u, counts.get(u.user_id, 0))
+        for u in service.list_users(offset, limit)
+    ]
+
+
+@router.get("/{user_id}")
+def get_user(
+    user_id: uuid.UUID,
+    service: UserService = Depends(get_user_service),
+    current: AuthenticatedUser = Depends(require_admin_mfa),
+) -> dict:
+    target = service.get_user(user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    return _profile_payload(target, service.listing_count_for(user_id))
+
+
+@router.patch("/{user_id}")
+def admin_update_user(
+    user_id: uuid.UUID,
+    data: dict,
+    service: UserService = Depends(get_user_service),
+    current: AuthenticatedUser = Depends(require_admin_mfa),
+) -> dict:
+    """Administrative update (account status / profile fields only).
+
+    ROLES ARE NOT EDITABLE THROUGH THIS ENDPOINT. A role is established by the
+    authorised provisioning workflows (registration, invitation and onboarding)
+    and written through those paths only, so the user-management API refuses
+    any role payload outright — before any identity or local write, with no
+    audit event. The structured ``role_change_not_supported`` detail lets the
+    Admin UI state the policy instead of a generic validation failure.
+
+    Administrator-submitted changes skip the self-service field filter but
+    are still validated against the domain status vocabulary.
+
+    The authoritative Supabase ``public.users`` row and the local enforcement
+    mirror live in two databases, so the write cannot be atomic. The order is
+    therefore fixed and the failure modes are explicit:
+
+    1. Authoritative row first. If it fails, nothing local is touched and the
+       request fails closed - a status change that only half-exists would let
+       an account keep a state the administrator just removed.
+    2. Local mirror second. If this fails after step 1 succeeded, the response
+       is an explicit partial result naming both states. Recovery is to retry
+       the same change: the write is idempotent, so retrying converges without
+       overwriting or deleting anybody's record.
+    3. Audit last. A failed audit write never masks the applied change, and is
+       reported as ``audit_recorded: false`` rather than silently claimed.
+       ``null`` means no status change happened, so no event was due.
+    """
+    if "role" in data:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "role_change_not_supported",
+                "message": (
+                    "Roles cannot be changed through user management. A role "
+                    "is assigned by the authorised registration, invitation "
+                    "and onboarding workflows only."
+                ),
+            },
+        )
+    if "account_status" in data and not rbac.is_valid_status(data["account_status"]):
+        raise HTTPException(status_code=422, detail="Unknown account status value.")
+
+    # Defense in depth: even an administrator cannot push arbitrary column
+    # names into the local mirror. Protected identity/role fields are rejected
+    # before either database is touched.
+    allowed_fields = {
+        "account_status",
+        "full_name",
+        "phone_number",
+        "profile_picture_url",
+    }
+    unsupported = sorted(set(data) - allowed_fields)
+    if unsupported:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "unsupported_profile_fields",
+                "message": "These fields cannot be changed: " + ", ".join(unsupported),
+            },
+        )
+    data = {key: value for key, value in data.items() if key in allowed_fields}
+
+    target = service.get_user(user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if (
+        rbac.canonical_role(target.role) == rbac.ROLE_OWNER
+        and target.account_status == rbac.STATUS_PENDING
+        and data.get("account_status") == rbac.STATUS_ACTIVE
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "onboarding_required",
+                "message": (
+                    "An invited Owner must complete verified email, MFA and "
+                    "invitation onboarding before the account can be activated."
+                ),
+            },
+        )
+    previous_status = target.account_status
+    email = target.email
+
+    admin = get_admin_service()  # AuthUnavailableError -> 503, nothing applied.
+    try:
+        admin.update_identity_profile(user_id, data)
+    except SupabaseAdminError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "The identity service rejected this change, so no change was "
+                f"applied to the account. Reason: {exc}"
+            ),
+        ) from exc
+
+    try:
+        updated = service.update_user(user_id, data)
+    except Exception as exc:
+        logger.exception("local mirror update failed after identity sync for %s", user_id)
+        updated = None
+        mirror_error = str(exc)
+    else:
+        mirror_error = None if updated else "The local account row no longer exists."
+
+    if updated is None:
+        # The authoritative row already carries the new values. Say so, and
+        # record the partial application instead of pretending it did not happen.
+        partial_status = data.get("account_status", previous_status)
+        if partial_status != previous_status:
+            _record_audit(
+                admin,
+                affected_user_id=user_id,
+                affected_email=email,
+                performed_by_user_id=current.user_id,
+                performed_by_email=current.email,
+                action="status.changed",
+                previous_role=rbac.canonical_role(target.role),
+                new_role=rbac.canonical_role(target.role),
+                previous_status=previous_status,
+                new_status=partial_status,
+                details={
+                    "identity_synced": True,
+                    "local_mirror_updated": False,
+                    "consistency": "partial",
+                },
+            )
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "Partially applied: the authoritative identity record was "
+                "updated, but the local access-control record was not "
+                f"({mirror_error}). The account may still be enforced under its "
+                "previous status. Submit the same change again to "
+                "finish it - no data was deleted or overwritten."
+            ),
+        )
+
+    new_status = updated.account_status
+    audit_recorded: bool | None = None
+    if new_status != previous_status:
+        audit_recorded = _record_audit(
+            admin,
+            affected_user_id=user_id,
+            affected_email=updated.email,
+            performed_by_user_id=current.user_id,
+            performed_by_email=current.email,
+            action="status.changed",
+            previous_role=rbac.canonical_role(updated.role),
+            new_role=rbac.canonical_role(updated.role),
+            previous_status=previous_status,
+            new_status=new_status,
+            details={"identity_synced": True, "local_mirror_updated": True},
+        )
+
+    return {
+        **_profile_payload(updated, service.listing_count_for(user_id)),
+        "identity_synced": True,
+        "audit_recorded": audit_recorded,
+    }
+
+
+@router.delete("/{user_id}", status_code=204, response_model=None)
+def delete_user(
+    user_id: uuid.UUID,
+    service: UserService = Depends(get_user_service),
+    current: AuthenticatedUser = Depends(require_admin_mfa),
+) -> None:
+    if user_id == current.user_id:
+        raise HTTPException(status_code=422, detail="Administrators cannot delete themselves.")
+    # Deletion is AUTHORITATIVE-FIRST. Removing only the local mirror row left
+    # the Supabase identity alive, so the "deleted" user re-provisioned a
+    # fresh profile on their very next request — an admin action that silently
+    # did nothing. An upstream failure fails closed with the mirror untouched.
+    mirror_exists = service.get_user(user_id) is not None
+    admin = get_admin_service()
+    try:
+        identity = admin.get_auth_user(str(user_id))
+    except SupabaseAdminError as exc:
+        logger.warning("supabase_lookup_failed user=%s error=%s", user_id, exc)
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "The authoritative identity service could not be reached. "
+                "Nothing was deleted, so the account remains consistent. "
+                "Retry once the identity service is available."
+            ),
+        ) from exc
+    if identity is None and not mirror_exists:
+        raise HTTPException(status_code=404, detail="User not found")
+    if identity is not None:
+        try:
+            admin.delete_auth_user(str(user_id))
+        except SupabaseAdminError as exc:
+            logger.warning("supabase_delete_failed user=%s error=%s", user_id, exc)
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "The authoritative identity service rejected or could not "
+                    "process the deletion. Nothing was deleted locally, so the "
+                    "account remains consistent. Retry once the identity "
+                    "service is available."
+                ),
+            ) from exc
+    if not service.delete_user(user_id):
+        # Upstream identity confirmed gone; a missing mirror row is the
+        # normal end state, not an error.
+        logger.info("user %s had no local mirror row to delete", user_id)
+    return None
+
+
+@router.post("/", status_code=201, include_in_schema=False)
+def create_user_deprecated() -> dict:
+    """Disabled: identity creation belongs to Supabase Auth.
+
+    Kept as an explicit 410 so stale clients get a clear signal instead of a
+    404/405, and so the open user-creation hole from the previous revision is
+    closed rather than merely hidden.
+    """
+    raise HTTPException(
+        status_code=410,
+        detail=(
+            "Direct user creation is disabled. Register through Supabase Auth; "
+            "the local profile is provisioned on first authenticated request."
+        ),
+    )

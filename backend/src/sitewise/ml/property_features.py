@@ -116,12 +116,14 @@ class PropertyFeatureRepository:
             except ValueError as exc:
                 raise FeatureResolutionError("Rental property ID must be a bigint") from exc
             match = _one(_rows(self.session, """
-                SELECT l.subject_id, l.sitewise_property_id
-                FROM fyp.property_subject_links l
-                WHERE l.property_id = :id AND l.match_verified IS TRUE LIMIT 2
+                SELECT f.subject_id, coalesce(l.sitewise_property_id, f.canonical_property_id) AS sitewise_property_id
+                FROM fyp.property_inference_features f
+                LEFT JOIN fyp.property_subject_links l
+                  ON l.property_id = f.property_id AND l.match_verified IS TRUE
+                WHERE f.property_id = :id LIMIT 2
             """, {"id": rental_id}), "verified rental-to-subject mapping")
             if match is None:
-                raise FeatureResolutionError("No verified analytical mapping for rental property")
+                raise FeatureResolutionError("No saved compatible feature snapshot for rental property")
             return str(match["subject_id"]), match.get("sitewise_property_id")
 
         # Do not attempt to cast a catalogue ID into a rental BIGINT.
@@ -140,12 +142,12 @@ class PropertyFeatureRepository:
         # Some imported U properties may lack a verified rental link. In that
         # case only the exact canonical_property_id + U label is acceptable.
         match = _one(_rows(self.session, """
-            SELECT f.subject_id FROM sitewise_analytics.subject_features f
-            WHERE f.canonical_property_id = :id AND btrim(f.sample_class) = 'U'
+            SELECT f.subject_id FROM fyp.property_inference_features f
+            WHERE f.canonical_property_id = :id
             LIMIT 2
         """, {"id": property_id}), "canonical U feature mapping")
         if match is None:
-            raise FeatureResolutionError("No U analytical subject for this catalogue property")
+            raise FeatureResolutionError("No saved compatible feature snapshot for this catalogue property")
         return str(match["subject_id"]), property_id
 
     def get(
@@ -160,11 +162,9 @@ class PropertyFeatureRepository:
         if not identifier:
             raise FeatureResolutionError("Property ID is required")
         subject_id, catalogue_id = self._resolve(identifier, source)
-        sf = _doc(self.session, "sitewise_analytics.subject_features", "subject_id", subject_id)
+        sf = _doc(self.session, "fyp.property_inference_features", "subject_id", subject_id)
         if not sf:
-            raise FeatureResolutionError("Subject mapping exists but its analysis row is missing")
-        if str(sf.get("sample_class") or "").strip() != "U":
-            raise FeatureResolutionError("Only unlabeled commercial property subjects may be scored")
+            raise FeatureResolutionError("Property feature snapshot is missing")
         demand = _doc(self.session, "demand_gen.features", "subject_id", subject_id)
         worldpop: dict = {}
         flags: list[str] = []
@@ -212,8 +212,8 @@ class PropertyFeatureRepository:
                         flags.append(f"{k}.{q}={status}: check licence before ML use")
 
         candidates: tuple[tuple[str, Mapping], ...] = (
-            ("sitewise_analytics.subject_features", sf),
-            ("sitewise_analytics.subject_features.other_features", extra),
+            ("fyp.property_inference_features", sf),
+            ("fyp.property_inference_features.other_features", extra),
             ("demand_gen.features", demand),
             ("fyp_features.property_population_spatial", worldpop),
         )
@@ -237,7 +237,7 @@ class PropertyFeatureRepository:
                 _, alias = UNVERIFIED_ALIASES[name]
                 value = _numeric(sf.get(alias))
                 if value is not None:
-                    sources[name] = "UNVERIFIED_ALIAS:sitewise_analytics.subject_features." + alias
+                    sources[name] = "UNVERIFIED_ALIAS:fyp.property_inference_features." + alias
                     flags.append(f"Check competitor source/method equivalence for {name}")
             values[name] = value
         missing = [name for name, value in values.items() if value is None]
@@ -255,45 +255,33 @@ class PropertyFeatureRepository:
     def background(
         self, required_features: list[str], *, limit: int = 50
     ) -> list[dict[str, float]]:
-        """Real reference rows for SHAP, with the exact training features.
+        """Frozen, real reference rows exported from the previous live resolver."""
+        import hashlib
+        import json
+        from pathlib import Path
 
-        Only analysed unlabeled subjects whose every required feature resolves
-        numerically are returned. Rows with a gap are skipped rather than
-        zero-filled, because a synthetic background changes the baseline and
-        would make the explanation describe a property that does not exist.
-        """
         if not required_features:
             return []
-        cap = max(1, min(int(limit), 100))
-        rows = _rows(
-            self.session,
-            """
-            SELECT to_jsonb(f) AS doc
-            FROM sitewise_analytics.subject_features f
-            WHERE btrim(f.sample_class) = 'U'
-              AND f.analysis_status = 'COMPLETED'
-            ORDER BY f.imported_at DESC NULLS LAST
-            LIMIT :scan
-            """,
-            # Over-scan: many rows are incomplete, so read more than we keep.
-            {"scan": cap * 6},
-        )
-        out: list[dict[str, float]] = []
-        for row in rows:
-            doc = dict(row["doc"] or {})
-            extra = doc.get("other_features") or {}
-            if not isinstance(extra, dict):
-                extra = {}
-            merged: dict[str, Any] = {**doc, **extra}
-            values: dict[str, float] = {}
-            for name in required_features:
-                number = _numeric(merged.get(name))
-                if number is None:
-                    values = {}
-                    break
-                values[name] = number
-            if values:
-                out.append(values)
-            if len(out) >= cap:
-                break
-        return out
+        path = Path(__file__).with_name("frozen_pu_shap_background.json")
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if payload["feature_names"] != list(required_features):
+                return []
+            rows = payload["rows"]
+            encoded = json.dumps(rows, sort_keys=True, separators=(",", ":"),
+                                 allow_nan=False).encode("utf-8")
+            if hashlib.sha256(encoded).hexdigest() != payload["rows_sha256"]:
+                return []
+            if not isinstance(rows, list) or not rows:
+                return []
+            result = []
+            for row in rows:
+                if set(row) != set(required_features):
+                    return []
+                numbers = {name: _numeric(row[name]) for name in required_features}
+                if any(value is None for value in numbers.values()):
+                    return []
+                result.append(numbers)
+            return result[:max(1, min(int(limit), 100))]
+        except (OSError, ValueError, TypeError, KeyError, AttributeError):
+            return []

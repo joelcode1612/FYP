@@ -29,8 +29,10 @@ class UiJpegFrameDecoder implements FramePixelsDecoder {
       final fullHeight = descriptor.height;
       if (fullWidth <= 0 || fullHeight <= 0) return null;
       final targetWidth = math.min(fullWidth, maxWidth);
-      final targetHeight =
-          (fullHeight * targetWidth / fullWidth).round().clamp(1, fullWidth);
+      final targetHeight = (fullHeight * targetWidth / fullWidth).round().clamp(
+        1,
+        fullWidth,
+      );
       codec = await descriptor.instantiateCodec(
         targetWidth: targetWidth,
         targetHeight: targetHeight,

@@ -24,7 +24,9 @@ abstract class AuthRepository {
   /// service cannot be reached — never a silent "not signed in".
   Future<SitewiseUser?> currentUser();
 
-  /// Convenience flag mirroring [currentUser] != null.
+  /// Whether the verified profile may enter an active workspace. A pending
+  /// invited Owner/Agent returned by [currentUser] is restricted to onboarding
+  /// and must not make this true.
   Future<bool> isAuthenticated();
 
   /// Email + password sign in. Throws [InvalidCredentialsFailure] on wrong

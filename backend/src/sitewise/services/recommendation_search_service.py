@@ -123,6 +123,13 @@ def _expanded_model_token() -> str:
 #: Strict PU eligibility threshold on the verified 0-100 scale. A property is
 #: eligible only when its PU score is STRICTLY greater than this value, so a
 #: score of exactly 50.0 is excluded.
+#:
+#: Operational25 reassessment (2026-11-25, shadow mode): 905 eligible canonical
+#: properties scored, median 37.34, mean 38.65, 111/905 (12.3%) exceeded 50;
+#: 11/916 had no measurable required input. The supplied artifact reports mean
+#: holdout AUC 0.704 and supplies no per-property held-out scores, so there is
+#: no evidence for changing the gate. It remains 50 for BOTH variants; do not
+#: lower it merely to increase recommendation volume.
 PU_ELIGIBILITY_THRESHOLD = 50.0
 PU_SCORE_SCALE = "0-100"
 
@@ -736,8 +743,11 @@ class RecommendationSearchService:
     #: can tell a cached ranking from a freshly computed one.
     _last_cache_hit: bool = False
 
-    def __init__(self, session: Session):
+    def __init__(self, session: Session, app_session: Session | None = None):
         self.session = session
+        # Operational25 snapshots live in the application database; the
+        # research catalogue used by this search service lives in analytics.
+        self.app_session = app_session or session
 
     # -- public API ---------------------------------------------------------
 
@@ -1058,9 +1068,16 @@ class RecommendationSearchService:
         """
         from sitewise.ml.pu_expanded import EXPANDED_MODEL_NAME, expanded_scores_many
         from sitewise.ml.model_loader import ModelLoader
+        from sitewise.ml import operational25 as op25
+        from sitewise.ml.pu_variant import resolve_variant
 
+        variant = resolve_variant()
         revision = self._catalogue_revision()
-        key = self._cache_key(criteria, revision, model_token=_expanded_model_token())
+        key = self._cache_key(
+            criteria, revision,
+            model_token=(f"operational25:{op25.ARTIFACT_SHA256}"
+                         if variant.key == "operational25" else _expanded_model_token()),
+        )
         cached = self._cache_get(key)
         if cached is not None:
             self._last_cache_hit = True
@@ -1069,9 +1086,18 @@ class RecommendationSearchService:
         self._last_cache_hit = False
         rows = self._query(criteria)
         if rows:
-            loaded = ModelLoader().load_cached(EXPANDED_MODEL_NAME)
-            version = str(loaded.meta.get("model_variant") or "unknown")
-            scores = expanded_scores_many(self.session, [row.id for row in rows])
+            if variant.key == "operational25":
+                from sitewise.services.operational25_enrichment import score_for_catalogue_id
+
+                version = variant.version or op25.MODEL_NAME
+                scores = {
+                    row.id: score_for_catalogue_id(self.app_session, row.id)
+                    for row in rows
+                }
+            else:
+                loaded = ModelLoader().load_cached(EXPANDED_MODEL_NAME)
+                version = str(loaded.meta.get("model_variant") or "unknown")
+                scores = expanded_scores_many(self.session, [row.id for row in rows])
             eligible: list[_Row] = []
             for row in rows:
                 row.matches = self._evaluate(row, criteria)
@@ -1103,11 +1129,13 @@ class RecommendationSearchService:
         """
         row = self.session.execute(
             text(
-                "SELECT count(*) AS total, max(imported_at) AS newest "
+                "SELECT count(*) AS total, max(imported_at) AS newest, "
+                "(SELECT max(created_at) FROM fyp.verification_audit "
+                "WHERE action IN ('property_published','property_unpublished','property_rejected','property_information_requested')) AS publication_revision "
                 "FROM fyp.catalogue_properties"
             )
         ).mappings().first()
-        return f"{int(row['total'])}:{row['newest']}"
+        return f"{int(row['total'])}:{row['newest']}:{row['publication_revision']}"
 
     @staticmethod
     def _cache_key(criteria: SearchCriteria, revision: str, model_token: str = "") -> str:

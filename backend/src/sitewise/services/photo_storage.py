@@ -10,9 +10,12 @@ authenticated; the two never share a bucket or an endpoint.
 
 from __future__ import annotations
 
+import logging
 import uuid
 
 from sitewise.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 BUCKET = "property-photos"
 PUBLIC_URL_TEMPLATE = "{base}/storage/v1/object/public/{bucket}/{path}"
@@ -185,5 +188,5 @@ def delete_photo(public_url: str) -> None:
     path = public_url[len(marker):]
     try:
         _client().storage.from_(BUCKET).remove([path])
-    except Exception:  # noqa: BLE001 - orphaned objects are cleaned up later
-        pass
+    except Exception as exc:  # noqa: BLE001 - best-effort compensation
+        logger.warning("Property photo cleanup failed for %s (%s)", path, type(exc).__name__)

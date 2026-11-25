@@ -19,9 +19,21 @@
     #hint { position: absolute; z-index: 2; left: 12px; bottom: 12px; padding: 7px 10px; border-radius: 999px; background: #0b0f19bc; color: #fff; font-size: 11px; pointer-events: none; }
     @media (max-width: 460px) { #hint { bottom: 60px; } }
     @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+  
+    /* SITEWISE_ADMIN_REVIEW_UI_V1 */
+    #sphere-fullscreen { position:absolute; z-index:6; top:12px; right:12px; min-height:48px; padding:0 14px; border:1px solid #ffffff66; border-radius:10px; color:#fff; background:#101b2eeb; font:600 14px system-ui; cursor:pointer; }
+    #sphere-fullscreen:focus-visible { outline:2px solid #93c5fd; outline-offset:3px; }
+    #controls { gap:8px; }
+    #controls button { min-width:48px; min-height:48px; }
+    #sphere-fullscreen[hidden] { display:none; }
+    #sphere-fullscreen-note { position:absolute; z-index:7; top:70px; right:12px; max-width:min(320px,85vw); padding:8px 12px; border-radius:8px; background:#101b2eeb; color:white; font-size:13px; }
+    #sphere-fullscreen-note[hidden] { display:none; }
+    @media(max-width:460px){ #hint { bottom:74px; } }
+
   </style>
   <script src="/vendor/three.min.js" defer></script>
   <script src="/sitewise_sphere_panorama.js" defer></script>
+  <script src="/sitewise_sphere_fullscreen.js" defer></script>
 </head>
 <body>
   <div id="viewer" tabindex="0" role="application" aria-label="360 degree panorama. Drag or swipe to turn, pinch or use plus and minus to zoom, arrow keys to look around."></div>
@@ -32,5 +44,7 @@
     <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
     <button id="reset" type="button" aria-label="Reset view">Reset</button>
   </div>
+  <button id="sphere-fullscreen" type="button" aria-label="Enter full screen" aria-pressed="false">⛶ Full screen</button>
+  <span id="sphere-fullscreen-note" role="status" hidden></span>
 </body>
 </html>

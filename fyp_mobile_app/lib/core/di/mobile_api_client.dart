@@ -222,6 +222,22 @@ class MobileApiClient implements ApiClient {
       final decoded = jsonDecode(body);
       final detail = decoded is Map ? decoded['detail'] : null;
       if (detail is String && detail.isNotEmpty) return detail;
+      if (detail is List) {
+        final messages = detail
+            .whereType<Map>()
+            .map((entry) {
+              final location = entry['loc'];
+              final field = location is List && location.length > 1
+                  ? location.last.toString().replaceAll('_', ' ')
+                  : '';
+              final message = entry['msg'];
+              if (message is! String) return '';
+              return "${field.isEmpty ? '' : '$field: '}${message.replaceFirst('Value error, ', '')}";
+            })
+            .where((message) => message.isNotEmpty)
+            .join(' ');
+        if (messages.isNotEmpty) return messages;
+      }
       if (detail is Map && detail['message'] is String) {
         return detail['message'] as String;
       }

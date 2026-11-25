@@ -6,14 +6,31 @@
 /// and the draft → review lifecycle are enforced by the backend, never here.
 library;
 
+import '../entities/address_preview.dart';
 import '../entities/owner_listing.dart';
 import '../entities/property_enrichment.dart';
 
 abstract class OwnerListingRepository {
+  Future<OwnerListing?> recoverDraft(String requestId);
+
   /// Verify the saved address and persist the provider's verdict.
   Future<String> validateSavedAddress(String id);
 
-  Future<OwnerListing> createDraft(Map<String, dynamic> fields);
+  /// Read-only Malaysian address preview for the Add Property wizards:
+  /// resolves the typed address server-side, classifies the match and returns
+  /// signed confirmation evidence. Persists nothing; Save Draft never depends
+  /// on it succeeding.
+  Future<AddressPreview> previewAddress({
+    required String address,
+    required String city,
+    required String state,
+    required String postcode,
+  });
+
+  Future<OwnerListing> createDraft(
+    Map<String, dynamic> fields, {
+    Map<String, dynamic>? replayPatch,
+  });
 
   Future<OwnerListing> updateDraft(String id, Map<String, dynamic> fields);
 

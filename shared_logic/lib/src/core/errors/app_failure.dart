@@ -89,10 +89,8 @@ class ResponseFormatFailure extends AppFailure {
 /// A business-rule conflict returned by FastAPI (HTTP 409). This is NOT a
 /// network error. FastAPI's `detail` is a deliberately user-facing reason.
 class ConflictFailure extends AppFailure {
-  const ConflictFailure(
-    String message, {
-    String? backendCode,
-  }) : super(message, statusCode: 409, backendCode: backendCode);
+  const ConflictFailure(String message, {String? backendCode})
+    : super(message, statusCode: 409, backendCode: backendCode);
 
   @override
   String get userMessage => message;
@@ -144,6 +142,12 @@ class CacheFailure extends AppFailure {
 
 class AuthFailure extends AppFailure {
   const AuthFailure([super.message = 'We could not sign you in.']);
+
+  const AuthFailure.response(
+    String message, {
+    int? statusCode,
+    String? backendCode,
+  }) : super(message, statusCode: statusCode, backendCode: backendCode);
 
   @override
   String get userMessage =>
@@ -216,9 +220,22 @@ class AccountInactiveFailure extends AuthFailure {
     'suspended' =>
       'This account has been suspended. Contact Sitewise support to restore access.',
     'pending' =>
-      'This account is not active yet. Sitewise must activate it before you can sign in.',
+      'This invited account must finish email verification, MFA and onboarding before it can enter the workspace.',
     _ => 'This account is not active. Contact Sitewise support.',
   };
+}
+
+/// A trusted invitation lifecycle response from the onboarding endpoint.
+/// The backend code drives recovery; the message is already user-facing.
+class StaffOnboardingFailure extends AuthFailure {
+  const StaffOnboardingFailure(
+    String message, {
+    int? statusCode,
+    String? backendCode,
+  }) : super.response(message, statusCode: statusCode, backendCode: backendCode);
+
+  @override
+  String get userMessage => message;
 }
 
 /// The authentication service itself could not be reached (offline, DNS,
@@ -286,8 +303,6 @@ String readableFailure(Object error, {required String fallback}) {
   return fallback;
 }
 
-
-
 class ThrottledFailure extends AppFailure {
   const ThrottledFailure(String message, {String? backendCode})
     : super(message, statusCode: 429, backendCode: backendCode);
@@ -308,6 +323,25 @@ AppFailure apiOperationFailure({
   final text = message != null && message.trim().isNotEmpty
       ? message
       : 'The data service could not complete this request.';
+  if (const {
+    'staff_mfa_required',
+    'invitation_expired',
+    'invitation_revoked',
+    'invitation_not_accepted',
+    'invitation_ownership',
+    'identity_mismatch',
+    'onboarding_suspended',
+    'owner_invitation_required',
+    'invitation_invalid',
+    'invitation_changed',
+    'onboarding_forbidden',
+  }.contains(safeCode)) {
+    return StaffOnboardingFailure(
+      text,
+      statusCode: status,
+      backendCode: safeCode,
+    );
+  }
   return switch (status) {
     null => NetworkFailure.transport(
       'The service response could not be verified. Reload saved data before starting another operation.',

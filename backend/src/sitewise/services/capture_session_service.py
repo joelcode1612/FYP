@@ -143,6 +143,14 @@ def create_capture_session(
     if capture_mode not in CAPTURE_MODES:
         modes = ", ".join(sorted(CAPTURE_MODES))
         raise ValidationError(f"capture_mode must be one of: {modes}.")
+    # capture_sessions.property_id is legacy TEXT with no FK, so a bad or
+    # deleted property would otherwise create an orphan capture session.
+    # Validate the typed id against the canonical table before inserting.
+    if property_id <= 0 or session.execute(
+        text("SELECT 1 FROM fyp.rental_properties WHERE id = :pid"),
+        {"pid": property_id},
+    ).scalar_one_or_none() is None:
+        raise ValidationError("Capture session requires an existing property.")
     fixed_id = (
         capture_session_id_for_key(idempotency_key) if idempotency_key else None
     )

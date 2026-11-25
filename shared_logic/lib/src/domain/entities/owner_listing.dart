@@ -59,6 +59,7 @@ class OwnerListing {
   /// Server-attested Google Address Validation verdict: `validated`,
   /// `partially_validated`, `unconfirmed` or null when never validated.
   final String? addressValidationStatus;
+  final String? addressFormatted;
   final double? latitude;
   final double? longitude;
   final double? rentalPrice;
@@ -103,6 +104,7 @@ class OwnerListing {
     this.state,
     this.postcode,
     this.addressValidationStatus,
+    this.addressFormatted,
     this.latitude,
     this.longitude,
     this.rentalPrice,
@@ -144,6 +146,7 @@ class OwnerListing {
     state: row['state']?.toString(),
     postcode: row['postcode']?.toString(),
     addressValidationStatus: row['address_validation_status']?.toString(),
+    addressFormatted: row['address_formatted']?.toString(),
     latitude: _d(row['latitude']),
     longitude: _d(row['longitude']),
     rentalPrice: _d(row['rental_price']),

@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/legacy.dart' as legacy;
 
 import 'package:fyp/core/config/mobile_config.dart';
 import 'package:fyp/features/authentication/application/bootstrap_aware_auth_service.dart';
+import 'package:fyp/features/authentication/data/api_staff_onboarding_repository.dart';
 import 'package:fyp/core/di/service_locator.dart';
 import 'package:fyp/features/assessment/domain/repositories/assessment_repository.dart';
 import 'package:fyp/features/assessment/domain/repositories/assessment_local_service.dart';
@@ -33,7 +34,9 @@ final assessmentRepositoryProvider = Provider<AssessmentRepository>((ref) {
 // Historical preview tests may override this provider explicitly. Normal app
 // composition always withholds the local synthetic questionnaire bank.
 final questionnaireRoutingServiceProvider =
-    Provider<QuestionnaireRoutingService>((ref) => const HeldQuestionnaireRoutingService());
+    Provider<QuestionnaireRoutingService>(
+      (ref) => const HeldQuestionnaireRoutingService(),
+    );
 
 final assessmentViewModelProvider =
     legacy.ChangeNotifierProvider<AssessmentViewModel>((ref) {
@@ -42,6 +45,10 @@ final assessmentViewModelProvider =
         routingService: ref.watch(questionnaireRoutingServiceProvider),
       );
     });
+
+final staffOnboardingRepositoryProvider = Provider<StaffOnboardingRepository>(
+  (ref) => ApiStaffOnboardingRepository(ServiceLocator.apiClient),
+);
 
 /// Composition-root overrides for the shared Riverpod providers.
 ///
@@ -90,7 +97,9 @@ List<Override> sitewiseOverrides({AuthService? auth}) {
   // repository.
   if (MobileConfig.usesLiveApi &&
       ServiceLocator.propertyRepo is! ApiPropertyRepository) {
-    ServiceLocator.propertyRepo = ApiPropertyRepository(ServiceLocator.apiClient);
+    ServiceLocator.propertyRepo = ApiPropertyRepository(
+      ServiceLocator.apiClient,
+    );
   }
 
   // The report and assessment-summary screens resolve their analysis through
@@ -102,6 +111,10 @@ List<Override> sitewiseOverrides({AuthService? auth}) {
 
   return [
     authServiceProvider.overrideWithValue(resolvedAuth),
+    staffOnboardingServiceProvider.overrideWith(
+      (ref) =>
+          StaffOnboardingService(ref.watch(staffOnboardingRepositoryProvider)),
+    ),
     getPropertiesProvider.overrideWithValue(
       GetProperties(ServiceLocator.propertyRepo),
     ),

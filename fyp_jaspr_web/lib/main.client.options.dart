@@ -68,14 +68,20 @@ import 'package:sitewise_jaspr_web/features/listing/presentation/pages/property_
     deferred as _property_detail_page;
 import 'package:sitewise_jaspr_web/features/listing/presentation/pages/saved_page.dart'
     deferred as _saved_page;
-import 'package:sitewise_jaspr_web/features/panorama_viewer/presentation/components/canonical_panorama_panel.dart'
-    deferred as _canonical_panorama_panel;
 import 'package:sitewise_jaspr_web/features/panorama_viewer/presentation/pages/tour_page.dart'
     deferred as _tour_page;
 import 'package:sitewise_jaspr_web/features/profile/presentation/pages/admin_profile_page.dart'
     deferred as _admin_profile_page;
 import 'package:sitewise_jaspr_web/features/profile/presentation/pages/entrepreneur_profile_page.dart'
     deferred as _entrepreneur_profile_page;
+import 'package:sitewise_jaspr_web/features/property_management/presentation/pages/owner_add_property_page.dart'
+    deferred as _owner_add_property_page;
+import 'package:sitewise_jaspr_web/features/property_management/presentation/pages/owner_dashboard_page.dart'
+    deferred as _owner_dashboard_page;
+import 'package:sitewise_jaspr_web/features/property_management/presentation/pages/owner_properties_page.dart'
+    deferred as _owner_properties_page;
+import 'package:sitewise_jaspr_web/features/property_management/presentation/pages/owner_property_detail_page.dart'
+    deferred as _owner_property_detail_page;
 import 'package:sitewise_jaspr_web/features/property_verification/presentation/components/verification_detail_view.dart'
     deferred as _verification_detail_view;
 import 'package:sitewise_jaspr_web/features/recommendations/presentation/pages/ai_recommendations_page.dart'
@@ -255,12 +261,6 @@ ClientOptions get defaultClientOptions => ClientOptions(
       (p) => _saved_page.SavedPage(),
       loader: _saved_page.loadLibrary,
     ),
-    'canonical_panorama_panel': ClientLoader(
-      (p) => _canonical_panorama_panel.CanonicalPanoramaPanel(
-        propertyId: p['propertyId'] as String,
-      ),
-      loader: _canonical_panorama_panel.loadLibrary,
-    ),
     'tour_page': ClientLoader(
       (p) => _tour_page.TourPage(id: p['id'] as String),
       loader: _tour_page.loadLibrary,
@@ -273,8 +273,29 @@ ClientOptions get defaultClientOptions => ClientOptions(
       (p) => _entrepreneur_profile_page.ProfilePage(),
       loader: _entrepreneur_profile_page.loadLibrary,
     ),
+    'owner_add_property_page': ClientLoader(
+      (p) => _owner_add_property_page.AddPropertyPage(
+        editingId: p['editingId'] as String?,
+      ),
+      loader: _owner_add_property_page.loadLibrary,
+    ),
+    'owner_dashboard_page': ClientLoader(
+      (p) => _owner_dashboard_page.DashboardPage(),
+      loader: _owner_dashboard_page.loadLibrary,
+    ),
+    'owner_properties_page': ClientLoader(
+      (p) => _owner_properties_page.PropertiesPage(),
+      loader: _owner_properties_page.loadLibrary,
+    ),
+    'owner_property_detail_page': ClientLoader(
+      (p) =>
+          _owner_property_detail_page.PropertyDetailPage(id: p['id'] as String),
+      loader: _owner_property_detail_page.loadLibrary,
+    ),
     'verification_detail_view': ClientLoader(
-      (p) => _verification_detail_view.VerificationDetailView(),
+      (p) => _verification_detail_view.VerificationDetailView(
+        showPanorama: p['showPanorama'] as bool,
+      ),
       loader: _verification_detail_view.loadLibrary,
     ),
     'ai_recommendations_page': ClientLoader(

@@ -74,7 +74,7 @@ class AuthNotifier extends Notifier<AuthState> {
       _hadAuthenticatedSession = user != null;
       state = user == null
           ? const AuthState(status: AuthStatus.unauthenticated)
-          : AuthState(status: AuthStatus.authenticated, user: user);
+          : _sessionState(user);
     } on AccountInactiveFailure catch (failure) {
       await _invalidate(
         AuthState(
@@ -114,7 +114,10 @@ class AuthNotifier extends Notifier<AuthState> {
       // unavailable state (each phrases it with its own retry guidance), so
       // this fallback states only the cause and never duplicates it.
       _publish(
-        _error(AuthErrorKind.unknown, 'Sitewise could not verify your session.'),
+        _error(
+          AuthErrorKind.unknown,
+          'Sitewise could not verify your session.',
+        ),
       );
     } finally {
       _starting = false;
@@ -126,7 +129,12 @@ class AuthNotifier extends Notifier<AuthState> {
   /// state from the MFA screen would unmount the guarded MFA route mid-await.
   /// The verified backend profile, not a client flag, updates assurance.
   Future<bool> refreshVerifiedSessionAfterMfa() async {
-    if (_starting || _busy || !state.isAuthenticated) return false;
+    if (_starting ||
+        _busy ||
+        (state.status != AuthStatus.authenticated &&
+            state.status != AuthStatus.staffOnboarding)) {
+      return false;
+    }
     final previous = state.user!;
     if (previous.role != AppRole.owner && previous.role != AppRole.agent) {
       return false;
@@ -141,7 +149,7 @@ class AuthNotifier extends Notifier<AuthState> {
         return false;
       }
       _hadAuthenticatedSession = true;
-      state = AuthState(status: AuthStatus.authenticated, user: updated);
+      state = _sessionState(updated);
       return true;
     } catch (_) {
       // Keep the existing aal1 state and the MFA screen; no Provider access.
@@ -149,14 +157,40 @@ class AuthNotifier extends Notifier<AuthState> {
     }
   }
 
+  /// Re-reads the authoritative profile after onboarding. The completion POST
+  /// alone never publishes an active workspace session.
+  Future<bool> refreshActiveSessionAfterStaffOnboarding() async {
+    if (_starting ||
+        _busy ||
+        state.status != AuthStatus.staffOnboarding ||
+        !state.user!.hasStaffAssurance) {
+      return false;
+    }
+    final previous = state.user!;
+    try {
+      final updated = await _auth.currentUser();
+      if (!ref.mounted ||
+          updated == null ||
+          updated.id != previous.id ||
+          updated.role != previous.role ||
+          !updated.isActiveProfile ||
+          !updated.hasStaffAssurance) {
+        return false;
+      }
+      _hadAuthenticatedSession = true;
+      state = AuthState(status: AuthStatus.authenticated, user: updated);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Signs in and returns whether the caller may now navigate onward.
-  Future<bool> signIn({
-    required String email,
-    required String password,
-  }) => _attempt(
-    () => _auth.signIn(email: email, password: password),
-    pendingEmail: email,
-  );
+  Future<bool> signIn({required String email, required String password}) =>
+      _attempt(
+        () => _auth.signIn(email: email, password: password),
+        pendingEmail: email,
+      );
 
   /// Registers a new account. Public registration always creates an
   /// entrepreneur; the role is never taken from the caller. [accountPurpose]
@@ -237,7 +271,7 @@ class AuthNotifier extends Notifier<AuthState> {
       final user = await request();
       if (!ref.mounted) return false;
       _hadAuthenticatedSession = true;
-      state = AuthState(status: AuthStatus.authenticated, user: user);
+      state = _sessionState(user);
       return true;
     } on EmailConfirmationRequiredFailure catch (failure) {
       if (ref.mounted) {
@@ -349,6 +383,13 @@ class AuthNotifier extends Notifier<AuthState> {
         errorKind: kind,
         email: email,
       );
+
+  AuthState _sessionState(SitewiseUser user) => AuthState(
+    status: user.isPendingProvider
+        ? AuthStatus.staffOnboarding
+        : AuthStatus.authenticated,
+    user: user,
+  );
 
   void _publish(AuthState next) {
     if (ref.mounted) state = next;

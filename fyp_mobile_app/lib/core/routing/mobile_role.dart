@@ -1,88 +1,149 @@
 import 'package:shared_logic/shared_logic.dart';
 
-/// The role gate for the mobile app.
-///
-/// `AppRole` keeps every role because `fyp_jaspr_web` and the seeded demo
-/// accounts resolve them; this maps a role onto navigation the mobile app
-/// can actually perform, so no screen has to know which workspaces shipped.
+/// Mobile workspace routes.
+const String _providerHome = '/provider';
+const String _entrepreneurHome = '/entrepreneur';
+const String providerOnboardingRoute = '/provider/onboarding';
 
-/// The mobile workspaces this build can actually open.
-///
-/// Entrepreneur and Owner / Agent are mobile; Admin remains the Jaspr web
-/// portal. `null` means "this role has no mobile route".
+/// Routes restricted to property owners.
+const Set<String> _ownerOnlyRoutes = {
+  '/provider/add-property',
+  '/provider/requests',
+};
+
+/// Routes restricted to property agents.
+const Set<String> _agentOnlyRoutes = {
+  '/provider/tasks',
+  '/provider/inspection',
+  '/provider/verification',
+  '/provider/submission-success',
+  '/owner/capture',
+};
+
+/// Shared authenticated routes.
+const Set<String> _sharedRoutes = {'/onboarding', '/tour-preview'};
+
+/// Public authentication and entry routes.
+const Set<String> _publicRoutes = {
+  '/',
+  '/landing',
+  '/auth',
+  '/signup',
+  '/forgot-password',
+};
+
+/// Whether the role belongs to the Provider workspace.
+bool _isProviderRole(AppRole role) =>
+    role == AppRole.owner || role == AppRole.agent;
+
+/// Resolve a route path safely.
+String? _routePath(String route) {
+  final uri = Uri.tryParse(route);
+  if (uri == null) {
+    return null;
+  }
+
+  return uri.path;
+}
+
+/// Return the mobile home route for a supported role.
 String? mobileHomeRouteFor(AppRole role) => switch (role) {
-  AppRole.entrepreneur => role.homeRoute,
-  // Owners and agents share one provider workspace. The backend role stays
-  // `agent`; the label is public-facing only.
-  AppRole.owner || AppRole.agent => '/provider',
+  AppRole.entrepreneur => _entrepreneurHome,
+  AppRole.owner || AppRole.agent => _providerHome,
   AppRole.admin => null,
 };
 
-/// Shown wherever a web-only account reaches the mobile app.
+/// Explain why a web-only account cannot enter mobile.
 String mobileUnsupportedRoleMessage(AppRole role) =>
-    '${role.label} works from the SiteWise Staff Web Portal, not the mobile '
-    'app, and signing in there requires multi-factor authentication. '
-    'Open the portal on a computer, or use a Property Owner / Agent or '
-    'F&B Entrepreneur account here.';
+    '${role.label} is available through the '
+    'SiteWise Web Portal. Please sign in using '
+    'the web application.';
 
-/// The workspace a mobile route belongs to, or `null` when the route is shared.
-///
-/// Two workspaces exist on mobile and they must not overlap: property
-/// management (`/provider...`) and discovery/assessment (`/entrepreneur...`).
-/// A route that belongs to neither is shared work — the 360° capture flow and
-/// the tour preview are used by both, so they are deliberately role-neutral.
-///
-/// This is a *presentation* boundary. It decides which shell a route may paint;
-/// it never grants data access. Every API call behind these routes is still
-/// authorized by the backend against the caller's ownership or assignment.
+/// Identify the workspace responsible for a route.
 String? mobileWorkspaceForRoute(String route) {
-  final path = Uri.parse(route).path;
-  if (path == '/provider' || path.startsWith('/provider/')) return '/provider';
-  if (path == '/entrepreneur' || path.startsWith('/entrepreneur/')) {
-    return '/entrepreneur';
+  final path = _routePath(route);
+
+  if (path == null) {
+    return null;
   }
+
+  // Legacy capture path belongs to the Agent workspace.
+  if (path == '/owner/capture') {
+    return _providerHome;
+  }
+
+  if (path == _providerHome || path.startsWith('$_providerHome/')) {
+    return _providerHome;
+  }
+
+  if (path == _entrepreneurHome || path.startsWith('$_entrepreneurHome/')) {
+    return _entrepreneurHome;
+  }
+
   return null;
 }
 
-/// Whether [role] may open [route] at all.
+/// Determine whether a role may enter a mobile route.
 ///
-/// Without this an Entrepreneur could navigate straight to `/provider/listings`
-/// and get a rendered shell over an inbox that answers 403 — an empty screen
-/// that looks like a bug rather than a boundary. The guard now refuses the
-/// route instead, and the backend refusal stays as the second, authoritative
-/// line of defence.
+/// Backend authorization remains authoritative for all data
+/// access, property mutations and inspection operations.
 bool canEnterMobileRoute(AppRole role, String route) {
-  final path = Uri.parse(route).path;
-  // Capture is always an Agent-only action, never a shared route.
-  if (path == '/owner/capture') return role == AppRole.agent;
-  if (path == '/provider/add-property' || path == '/provider/requests') {
+  final path = _routePath(route);
+
+  if (path == null) {
+    return false;
+  }
+
+  if (_publicRoutes.contains(path)) {
+    return true;
+  }
+
+  // Administrator has no authenticated mobile workspace.
+  if (mobileHomeRouteFor(role) == null) {
+    return false;
+  }
+
+  if (_ownerOnlyRoutes.contains(path)) {
     return role == AppRole.owner;
   }
-  final workspace = mobileWorkspaceForRoute(route);
-  if (workspace == null) return true;
-  return mobileHomeRouteFor(role) == workspace;
+
+  if (_agentOnlyRoutes.contains(path)) {
+    return role == AppRole.agent;
+  }
+
+  if (_sharedRoutes.contains(path)) {
+    return true;
+  }
+
+  final workspace = mobileWorkspaceForRoute(path);
+
+  return workspace != null && mobileHomeRouteFor(role) == workspace;
 }
 
-/// Roles that can be entered on mobile, in the shared enum's order.
-List<AppRole> get mobileSupportedRoles =>
-    AppRole.values.where((role) => mobileHomeRouteFor(role) != null).toList(
-      growable: false,
-    );
+/// Roles supported by the mobile application.
+List<AppRole> get mobileSupportedRoles => AppRole.values
+    .where((role) => mobileHomeRouteFor(role) != null)
+    .toList(growable: false);
 
-/// Whether the verified Owner / Agent session still needs authenticator MFA.
-/// Both roles must have a server-verified `aal2` session before using the
-/// Provider workspace. Entrepreneur is not required to use MFA, and Admin
-/// remains web-only. Unknown assurance is never treated as verified.
+/// Provider accounts require verified MFA assurance.
 bool requiresStaffMfa(SitewiseUser user) =>
-    (user.role == AppRole.owner || user.role == AppRole.agent) &&
-    !user.hasStaffAssurance;
+    _isProviderRole(user.role) && !user.hasStaffAssurance;
 
-/// The FIRST route to open after trusted authentication.
-/// Owner / Agent with `aal1` (or unknown assurance) -> authenticator MFA;
-/// Owner / Agent with `aal2` -> shared Provider workspace;
-/// Entrepreneur -> its own workspace; Admin -> web portal only.
+/// Determine the first route after authentication.
 String? authLandingRouteFor(SitewiseUser user) {
   final home = mobileHomeRouteFor(user.role);
-  if (home == null) return null;
-  return requiresStaffMfa(user) ? '/provider/mfa' : home;
+
+  if (home == null) {
+    return null;
+  }
+
+  if (user.isPendingProvider) {
+    return requiresStaffMfa(user) ? '/provider/mfa' : providerOnboardingRoute;
+  }
+
+  if (requiresStaffMfa(user)) {
+    return '/provider/mfa';
+  }
+
+  return home;
 }

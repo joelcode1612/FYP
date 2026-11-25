@@ -67,8 +67,20 @@ class MfaEntryRequest {
 ({String route, Object? arguments})? postAuthNavigation(SitewiseUser user) {
   final landing = authLandingRouteFor(user);
   if (landing == null) return null;
+  if (user.isPendingProvider) {
+    // A workspace deep link cannot be replayed through a restricted session.
+    AuthPendingDestination.clear();
+    if (landing == '/provider/mfa') {
+      return (
+        route: landing,
+        arguments: MfaEntryRequest(destination: providerOnboardingRoute),
+      );
+    }
+    return (route: providerOnboardingRoute, arguments: null);
+  }
   final destination =
-      AuthPendingDestination.takeFor(user.role) ?? mobileHomeRouteFor(user.role)!;
+      AuthPendingDestination.takeFor(user.role) ??
+      mobileHomeRouteFor(user.role)!;
   if (landing == '/provider/mfa') {
     return (
       route: landing,
@@ -173,6 +185,17 @@ class _AuthGuardState extends ConsumerState<AuthGuard> {
     });
   }
 
+  void _redirectToOnboarding() {
+    if (_redirecting) return;
+    _redirecting = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Navigator.of(
+        context,
+      ).pushNamedAndRemoveUntil(providerOnboardingRoute, (_) => false);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     // Development Demo Mode (debug builds only, opt-in via
@@ -235,15 +258,39 @@ class _AuthGuardState extends ConsumerState<AuthGuard> {
         if (user != null &&
             requiresStaffMfa(user) &&
             requestedRoute != null &&
-            requestedRoute != '/provider/mfa' &&
-            mobileWorkspaceForRoute(requestedRoute) == '/provider') {
+            Uri.tryParse(requestedRoute)?.path != '/provider/mfa') {
           _redirectToMfa(
             requestedRoute,
             ModalRoute.of(context)?.settings.arguments,
           );
+
           return const _AuthPendingView();
         }
         return widget.builder(context);
+      case AuthStatus.staffOnboarding:
+        final user = state.user;
+        if (user == null || !user.isPendingProvider) {
+          return const AccountStatusView(
+            message: 'This invitation session is not valid.',
+          );
+        }
+        final requestedRoute =
+            widget.routeName ?? ModalRoute.of(context)?.settings.name;
+        final path = requestedRoute == null
+            ? null
+            : Uri.tryParse(requestedRoute)?.path;
+        if (path == '/provider/mfa') {
+          return widget.builder(context);
+        }
+        if (path == providerOnboardingRoute && user.hasStaffAssurance) {
+          return widget.builder(context);
+        }
+        if (user.hasStaffAssurance) {
+          _redirectToOnboarding();
+        } else {
+          _redirectToMfa(providerOnboardingRoute, null);
+        }
+        return const _AuthPendingView();
       case AuthStatus.accountInactive:
         return AccountStatusView(message: state.message);
       case AuthStatus.sessionExpired:

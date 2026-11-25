@@ -16,6 +16,7 @@
 /// |--------|-----------------------------------------|---------|
 /// | GET    | `/api/v1/staff/agents`                  | Agent management directory |
 /// | POST   | `/api/v1/staff/agents`                  | Invite wizard (final step) |
+/// | POST   | `/api/v1/staff/owners`                  | Property Owner invitation |
 /// | PATCH  | `/api/v1/staff/agents/{id}/status`      | Suspend / reactivate |
 /// | GET    | `/api/v1/staff/summary`                 | Backend-computed KPI values |
 /// | GET    | `/api/v1/staff/companies`               | Company directory |
@@ -81,7 +82,8 @@ class StaffAgent {
   factory StaffAgent.fromJson(Map<String, dynamic> row) {
     final profile = row['agent_profile'];
     final company = row['company'];
-    final companyId = row['company_id'] ??
+    final companyId =
+        row['company_id'] ??
         (profile is Map<String, dynamic> ? profile['company_id'] : null) ??
         (company is Map<String, dynamic> ? company['company_id'] : null);
     return StaffAgent(
@@ -124,6 +126,8 @@ class StaffInvitation {
   final String expiresAt;
   final String invitedById;
   final String invitedUserId;
+  final String invitedRole;
+  final String acceptedAt;
 
   const StaffInvitation({
     required this.invitationId,
@@ -134,20 +138,27 @@ class StaffInvitation {
     required this.expiresAt,
     required this.invitedById,
     required this.invitedUserId,
+    required this.invitedRole,
+    required this.acceptedAt,
   });
 
-  factory StaffInvitation.fromJson(Map<String, dynamic> row) => StaffInvitation(
-    invitationId: '${row['invitation_id'] ?? ''}',
-    email: '${row['invited_email'] ?? row['email'] ?? ''}',
-    // The live column is `invitation_status`; `status` is kept only as a
-    // defensive fallback for an older deployment shape.
-    status: '${row['invitation_status'] ?? row['status'] ?? ''}',
-    createdAt: '${row['created_at'] ?? ''}',
-    sentAt: '${row['sent_at'] ?? ''}',
-    expiresAt: '${row['expires_at'] ?? ''}',
-    invitedById: '${row['invited_by_user_id'] ?? ''}',
-    invitedUserId: '${row['invited_user_id'] ?? ''}',
-  );
+  factory StaffInvitation.fromJson(Map<String, dynamic> row) {
+    final rawRole = '${row['invited_role'] ?? ''}'.trim().toLowerCase();
+    return StaffInvitation(
+      invitationId: '${row['invitation_id'] ?? ''}',
+      email: '${row['invited_email'] ?? row['email'] ?? ''}',
+      // The live column is `invitation_status`; `status` is kept only as a
+      // defensive fallback for an older deployment shape.
+      status: '${row['invitation_status'] ?? row['status'] ?? ''}',
+      createdAt: '${row['created_at'] ?? ''}',
+      sentAt: '${row['sent_at'] ?? ''}',
+      expiresAt: '${row['expires_at'] ?? ''}',
+      invitedById: '${row['invited_by_user_id'] ?? ''}',
+      invitedUserId: '${row['invited_user_id'] ?? ''}',
+      invitedRole: rawRole.isEmpty ? 'agent' : rawRole,
+      acceptedAt: '${row['accepted_at'] ?? ''}',
+    );
+  }
 
   /// Matches the backend's `staff_invitations_one_open_per_email` index.
   bool get isOpen =>
@@ -399,9 +410,9 @@ class SecurityAuditPage {
         total: (body['total'] as num?)?.toInt() ?? 0,
         page: (body['page'] as num?)?.toInt() ?? 1,
         pageSize: (body['page_size'] as num?)?.toInt() ?? 25,
-        notes: (body['notes'] as List? ?? const [])
-            .whereType<String>()
-            .toList(growable: false),
+        notes: (body['notes'] as List? ?? const []).whereType<String>().toList(
+          growable: false,
+        ),
       );
 }
 
@@ -514,6 +525,33 @@ class AdminApi {
     return const <String, dynamic>{};
   }
 
+  /// Owner-only provisioning. FastAPI enforces administrator + `aal2`, assigns
+  /// `owner`/`pending` itself, and returns either a newly sent invitation or a
+  /// safely reconciled existing one. `email_sent` distinguishes an actual send
+  /// or resend from reconciliation that deliberately sent no email.
+  Future<Map<String, dynamic>> invitePropertyOwner({
+    required String fullName,
+    required String email,
+    String? phoneNumber,
+  }) async {
+    final result = _object(
+      await WebAuth.request(
+        '/api/v1/staff/owners',
+        method: 'POST',
+        body: {
+          'full_name': fullName,
+          'email': email,
+          if (phoneNumber != null && phoneNumber.isNotEmpty)
+            'phone_number': phoneNumber,
+        },
+      ),
+    );
+    if (result['email_sent'] is! bool) {
+      throw StateError('The Owner invitation response omitted email delivery status.');
+    }
+    return result;
+  }
+
   // --- Agent management -----------------------------------------------------
 
   /// One server request, three Supabase reads for the full Agent Management page.
@@ -521,13 +559,18 @@ class AdminApi {
   Future<StaffOverviewSnapshot> overview() async {
     final payload = _object(await WebAuth.request('/api/v1/staff/overview'));
     return StaffOverviewSnapshot(
-      agents: _rows(payload['agents']).map(StaffAgent.fromJson).toList(growable: false),
-      companies: _rows(payload['companies']).map(CompanyRecord.fromJson).toList(growable: false),
-      invitations: _rows(payload['invitations']).map(StaffInvitation.fromJson).toList(growable: false),
+      agents: _rows(
+        payload['agents'],
+      ).map(StaffAgent.fromJson).toList(growable: false),
+      companies: _rows(
+        payload['companies'],
+      ).map(CompanyRecord.fromJson).toList(growable: false),
+      invitations: _rows(
+        payload['invitations'],
+      ).map(StaffInvitation.fromJson).toList(growable: false),
       summary: StaffSummary.fromJson(_object(payload['summary'])),
     );
   }
-
 
   /// `GET /api/v1/staff/agents` — accounts whose role is `agent`.
   Future<List<StaffAgent>> listAgents() async {
@@ -772,8 +815,7 @@ class AdminApi {
       'Source',
       'Summary',
     ];
-    final buffer = StringBuffer('\uFEFF')
-      ..writeln(headers.map(cell).join(','));
+    final buffer = StringBuffer('\uFEFF')..writeln(headers.map(cell).join(','));
     for (final event in events) {
       buffer.writeln(
         [
@@ -781,7 +823,9 @@ class AdminApi {
           event.categoryLabel,
           event.action,
           event.title,
-          event.affectedEmail.isNotEmpty ? event.affectedEmail : event.affectedUserId,
+          event.affectedEmail.isNotEmpty
+              ? event.affectedEmail
+              : event.affectedUserId,
           event.role ?? '',
           event.performedByEmail,
           event.createdAt,

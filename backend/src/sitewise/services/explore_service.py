@@ -86,7 +86,11 @@ class ExploreService:
         return {"data": data, "meta": {"available": data is not None}}
 
     def analysis(
-        self, ref: str, *, catalogue_score: Callable[[str], float | None] | None = None
+        self,
+        ref: str,
+        *,
+        catalogue_score: Callable[[str], float | None] | None = None,
+        measurements: Callable[[int, float, float], dict] | None = None,
     ) -> dict | None:
         """Cross-universe location analysis for one property reference.
 
@@ -95,6 +99,13 @@ class ExploreService:
         features are used when the row has them; otherwise competitor counts at
         500 m / 1 km are computed live from the indexed research geometry.
         ``None`` means nothing matches the reference.
+
+        ``measurements`` is injected by the route (this layer holds no session)
+        and supplies the informational Location Intelligence block: every
+        successfully calculated surrounding measurement with its own state. It
+        is additive, carries no score or explanation, and a failure to read it
+        degrades to ``available: false`` rather than failing the whole analysis
+        — an unavailable measurement must never hide the rest of the page.
         """
         resolved = self.repo.resolve_reference(ref)
         if resolved is None:
@@ -119,6 +130,19 @@ class ExploreService:
             geo and geo.get("competitor_count_500m") is not None
         ):
             counts = self.repo.competitor_counts(float(lat), float(lon))
+
+        location_measurements = None
+        if measurements is not None and fyp_id is not None and lat is not None and lon is not None:
+            try:
+                location_measurements = measurements(int(fyp_id), float(lat), float(lon))
+            except Exception:
+                location_measurements = {
+                    "available": False,
+                    "unavailable_reason": (
+                        "Location measurements could not be read for this "
+                        "property. Nothing is estimated in their place."
+                    ),
+                }
 
         return {
             "data": {
@@ -146,6 +170,11 @@ class ExploreService:
                 "competitor_counts": counts,
                 "research_link": research,
                 "population": population,
+                # Additive informational block: measured surroundings only.
+                # No score, no explanation, no model-eligibility gate — a
+                # calculated measurement is shown even when it is not approved
+                # as a model input.
+                "location_measurements": location_measurements,
                 # Additive freshness/provenance block. Read-only; an unknown
                 # state is explicit ("unavailable"), never a zero.
                 "freshness": self.refresh.freshness_payload(fyp_id),

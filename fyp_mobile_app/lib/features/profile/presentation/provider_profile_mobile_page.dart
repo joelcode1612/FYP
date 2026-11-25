@@ -19,18 +19,15 @@ import 'package:fyp/features/property_management/application/provider_listings_s
 /// maps `owner` and `agent` onto the same `/provider` stack — and the layout
 /// branches on the authenticated role, never on a client-side guess:
 ///
-/// * **Property Owner** — identity + account overview, the honest identity
-///   (e-KYC) state, the administrator-reviewed account verification, the
-///   listing destinations and account actions.
+/// * **Property Owner** — account overview, listing destinations and account
+///   actions. Account access comes from invitation activation.
 /// * **Agent** — the simplified agent details (verification status, agency,
 ///   joined date), per-listing authorizations and account actions.
 ///
 /// Every value is read from the authenticated API: `/auth/me` for the
 /// identity and the account's joined date, `ProviderListingsService` for the
-/// role's authorized listing counts, `/provider/verification` for the account
-/// verification, and `/staff/me/listings` for the agent's own profile row and
-/// assignments. Where the backend has no field (e-KYC, REN) the screen says
-/// so instead of inventing one.
+/// role's authorized listing counts, and the Agent API for account verification,
+/// profile and assignments.
 class ProviderProfileMobilePage extends ConsumerStatefulWidget {
   const ProviderProfileMobilePage({super.key});
 
@@ -59,7 +56,9 @@ class _ProviderProfileMobilePageState
     final role = ref.read(authNotifierProvider).user?.role;
     final me = ProviderWorkspaceService.profile();
     final workspace = ProviderListingsService.load(role ?? AppRole.owner);
-    final verification = ProviderWorkspaceService.verification();
+    final verification = role == AppRole.agent
+        ? ProviderWorkspaceService.verification()
+        : null;
     final agent = role == AppRole.agent ? _loadAgentSelf() : null;
     if (!mounted) return;
     setState(() {
@@ -73,7 +72,7 @@ class _ProviderProfileMobilePageState
     await Future.wait([
       settleRefresh(me),
       settleRefresh(workspace),
-      settleRefresh(verification),
+      if (verification != null) settleRefresh(verification),
       if (agent != null) settleRefresh(agent),
     ]);
   }
@@ -101,9 +100,7 @@ class _ProviderProfileMobilePageState
     ).pushNamedAndRemoveUntil('/auth', (route) => false);
   }
 
-  /// Opens a drill-in and reloads on return: the verification screen can
-  /// change the status this page summarises, and the authenticator screen
-  /// changes the assurance level.
+  /// Reload account information after returning from a drill-in.
   Future<void> _open(String route) async {
     final scope = ProviderTabScope.maybeOf(context);
     if (scope != null && scope.handlesRoute(route)) {
@@ -167,8 +164,8 @@ class _ProviderProfileMobilePageState
   // ---------------------------------------------------------------------------
 
   // SITEWISE_COMPACT_OWNER_PROFILE_20261123: owner-only, action-first screen.
-  // Technical account metadata and the e-KYC explanation live in the Account
-  // details sheet. All pre-existing routes and server-backed status are kept.
+  // Personal contact and account details live in the Account details sheet.
+  // Existing routes and server-backed status remain unchanged.
   List<Widget> _ownerBody(SitewiseUser? user) => [
     const Padding(
       padding: EdgeInsets.fromLTRB(2, 0, 2, 12),
@@ -198,22 +195,6 @@ class _ProviderProfileMobilePageState
           subtitle: 'Manage listings, documents and review progress',
           onTap: () => _open('/provider/listings'),
         ),
-        FutureBuilder<ProviderVerification>(
-          future: _verification,
-          builder: (context, snapshot) {
-            final status = snapshot.connectionState == ConnectionState.waiting
-                ? 'Loading'
-                : snapshot.hasError || snapshot.data == null
-                ? 'Status unavailable'
-                : _verificationPresentation(snapshot.data!.status).$1;
-            return _ActionRow(
-              icon: Icons.verified_user_outlined,
-              title: 'Account verification',
-              subtitle: 'SiteWise provider status: $status',
-              onTap: () => _open('/provider/verification'),
-            );
-          },
-        ),
       ],
     ),
     const _SectionHead(title: 'Account', hint: 'Personal settings'),
@@ -222,7 +203,7 @@ class _ProviderProfileMobilePageState
         _ActionRow(
           icon: Icons.manage_accounts_outlined,
           title: 'Account details',
-          subtitle: 'Your role, email and identity information',
+          subtitle: 'Full name, phone number and account information',
           greyIcon: true,
           onTap: _openOwnerAccountSheet,
         ),
@@ -389,112 +370,162 @@ class _ProviderProfileMobilePageState
   // Sheets
   // ---------------------------------------------------------------------------
 
-  /// Detailed information is intentionally not expanded on the main owner
-  /// screen. Keeping it in a scrollable sheet also preserves the identity
-  /// disclaimer and the previously available Privacy & terms action.
+  /// Personal and account information is presented in a compact bottom sheet.
+  /// The Security & sign-in action remains separate.
+  // Owner account profile: real authenticated fields, without the unsupported
+  // e-KYC card or the placeholder Privacy & terms action.
   void _openOwnerAccountSheet() {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      showDragHandle: true,
       backgroundColor: SitewiseM3.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (sheetContext) => FractionallySizedBox(
-        heightFactor: 0.78,
-        child: SafeArea(
-          top: false,
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-            children: [
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'Account details',
-                      style: TextStyle(
-                        fontFamily: kFontFamily,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        color: SitewiseM3.ink,
+      builder: (sheetContext) => SafeArea(
+        top: false,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.84,
+          ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Account details',
+                        style: TextStyle(
+                          fontFamily: kFontFamily,
+                          fontSize: 21,
+                          fontWeight: FontWeight.w800,
+                          color: SitewiseM3.ink,
+                        ),
                       ),
                     ),
-                  ),
-                  IconButton(
-                    tooltip: 'Close account details',
-                    onPressed: () => Navigator.of(sheetContext).pop(),
-                    icon: const Icon(Icons.close_rounded),
-                    constraints: const BoxConstraints(
-                      minWidth: 48,
-                      minHeight: 48,
+                    IconButton(
+                      tooltip: 'Close account details',
+                      onPressed: () => Navigator.of(sheetContext).pop(),
+                      icon: const Icon(Icons.close_rounded),
+                      constraints: const BoxConstraints(
+                        minWidth: 48,
+                        minHeight: 48,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'Information about your SiteWise account.',
-                style: TextStyle(
-                  fontFamily: kFontFamily,
-                  fontSize: 14,
-                  color: SitewiseM3.muted,
+                  ],
                 ),
-              ),
-              const SizedBox(height: 18),
-              FutureBuilder<Map<String, dynamic>>(
-                future: _me,
-                builder: (context, snapshot) {
-                  final me = snapshot.data;
-                  final status = me?['account_status']?.toString().trim();
-                  return _SummaryCard(
-                    rows: [
-                      _SummaryRow(
-                        'Account type',
-                        ref.read(authNotifierProvider).user?.role.label ??
-                            'Property Owner',
-                      ),
-                      _SummaryRow(
-                        'Email verification',
-                        null,
-                        badge: _emailVerifiedBadge(me),
-                      ),
-                      _SummaryRow(
-                        'Account status',
-                        status == null || status.isEmpty
-                            ? 'Unavailable'
-                            : status,
-                      ),
-                    ],
-                  );
-                },
-              ),
-              const SizedBox(height: 18),
-              const Text(
-                'Identity information',
-                style: TextStyle(
-                  fontFamily: kFontFamily,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: SitewiseM3.ink,
-                ),
-              ),
-              const _IdentityVerificationCard(),
-              const SizedBox(height: 16),
-              _ActionList(
-                rows: [
-                  _ActionRow(
-                    icon: Icons.shield_outlined,
-                    title: 'Privacy & terms',
-                    subtitle: 'How your account information is used',
-                    greyIcon: true,
-                    onTap: () {
-                      Navigator.of(sheetContext).pop();
-                      _soon('Privacy & terms');
-                    },
+                const SizedBox(height: 4),
+                const Text(
+                  'Your personal details and account information.',
+                  style: TextStyle(
+                    fontFamily: kFontFamily,
+                    fontSize: 15,
+                    height: 1.45,
+                    color: SitewiseM3.muted,
                   ),
-                ],
-              ),
-            ],
+                ),
+                const SizedBox(height: 20),
+                FutureBuilder<Map<String, dynamic>>(
+                  future: _me,
+                  builder: (context, snapshot) {
+                    final me = snapshot.data;
+                    final phone = '${me?['phone_number'] ?? ''}'.trim();
+                    final apiEmail = '${me?['email'] ?? ''}'.trim();
+                    final sessionEmail =
+                        ref.read(authNotifierProvider).user?.email.trim() ?? '';
+                    final email =
+                        apiEmail.isNotEmpty ? apiEmail : sessionEmail;
+                    final accountStatus =
+                        '${me?['account_status'] ?? ''}'.trim();
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Personal information',
+                          style: TextStyle(
+                            fontFamily: kFontFamily,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                            color: SitewiseM3.ink,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        _SummaryCard(
+                          rows: [
+                            _SummaryRow('Full name', _displayName(me)),
+                            _SummaryRow(
+                              'Phone number',
+                              phone.isNotEmpty
+                                  ? phone
+                                  : snapshot.connectionState ==
+                                          ConnectionState.waiting
+                                      ? 'Loading…'
+                                      : 'Not provided',
+                            ),
+                            _SummaryRow(
+                              'Email address',
+                              email.isEmpty ? 'Unavailable' : email,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 18),
+                        const Text(
+                          'Account information',
+                          style: TextStyle(
+                            fontFamily: kFontFamily,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                            color: SitewiseM3.ink,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        _SummaryCard(
+                          rows: [
+                            _SummaryRow(
+                              'Account type',
+                              ref.read(authNotifierProvider).user?.role.label ??
+                                  'Property Owner',
+                            ),
+                            _SummaryRow(
+                              'Email verification',
+                              null,
+                              badge: _emailVerifiedBadge(me),
+                            ),
+                            _SummaryRow(
+                              'Account status',
+                              accountStatus.isEmpty
+                                  ? 'Unavailable'
+                                  : accountStatus,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.of(sheetContext).pop();
+                            _editProfile(me);
+                          },
+                          icon: const Icon(Icons.edit_outlined, size: 20),
+                          label: const Text('Edit full name or phone number'),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(48),
+                            foregroundColor: SitewiseColors.action,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1468,331 +1499,6 @@ class _SignOutButton extends StatelessWidget {
       ),
     ),
   );
-}
-
-// ---------------------------------------------------------------------------
-// Identity verification (owner) — honest about what the backend supports
-// ---------------------------------------------------------------------------
-
-class _IdentityVerificationCard extends StatefulWidget {
-  const _IdentityVerificationCard();
-
-  @override
-  State<_IdentityVerificationCard> createState() =>
-      _IdentityVerificationCardState();
-}
-
-class _IdentityVerificationCardState extends State<_IdentityVerificationCard> {
-  bool _expanded = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(17),
-        decoration: BoxDecoration(
-          color: SitewiseM3.surface,
-          borderRadius: BorderRadius.circular(21),
-          border: Border.all(color: SitewiseM3.line),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Container(
-                  width: 47,
-                  height: 47,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEBF2FF),
-                    borderRadius: BorderRadius.circular(15),
-                  ),
-                  child: const Icon(
-                    Icons.badge_outlined,
-                    size: 22,
-                    color: SitewiseColors.action,
-                  ),
-                ),
-                const SizedBox(width: 13),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Your identity check',
-                        style: TextStyle(
-                          fontFamily: kFontFamily,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w800,
-                          color: SitewiseM3.ink,
-                        ),
-                      ),
-                      SizedBox(height: 3),
-                      Text(
-                        'MyKad or passport, where supported',
-                        style: TextStyle(
-                          fontFamily: kFontFamily,
-                          fontSize: 11,
-                          color: SitewiseM3.muted,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const Divider(height: 30, color: Color(0xFFEEF1F6)),
-            Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    'Verification status',
-                    style: TextStyle(
-                      fontFamily: kFontFamily,
-                      fontSize: 11.8,
-                      color: SitewiseM3.muted,
-                    ),
-                  ),
-                ),
-                const _StatusBadge('Not confirmed', tone: StatusTone.amber),
-              ],
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              'Identity verification confirms who you are. Proof that you can '
-              'list a property is reviewed separately for each listing.',
-              style: TextStyle(
-                fontFamily: kFontFamily,
-                fontSize: 11.5,
-                height: 1.5,
-                color: Color(0xFF60728A),
-              ),
-            ),
-            TextButton(
-              onPressed: () => setState(() => _expanded = !_expanded),
-              style: TextButton.styleFrom(
-                foregroundColor: SitewiseColors.action,
-                minimumSize: const Size(0, 36),
-                padding: const EdgeInsets.symmetric(horizontal: 0),
-                textStyle: const TextStyle(
-                  fontFamily: kFontFamily,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('What does this check cover?'),
-                  AnimatedRotation(
-                    turns: _expanded ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 150),
-                    child: const Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      size: 16,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (_expanded)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.only(top: 12),
-                decoration: const BoxDecoration(
-                  border: Border(top: BorderSide(color: Color(0xFFEAEFF7))),
-                ),
-                child: const Text(
-                  'SiteWise does not verify identity documents (e-KYC) yet, '
-                  'so no identity status can be shown here. Property '
-                  'ownership is reviewed per listing through its own '
-                  'verification workflow — see Review progress below. The '
-                  'account verification below is a separate, '
-                  'administrator-reviewed check of your provider account.',
-                  style: TextStyle(
-                    fontFamily: kFontFamily,
-                    fontSize: 11.7,
-                    height: 1.55,
-                    color: Color(0xFF52647E),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Account verification (real backend state, both roles)
-// ---------------------------------------------------------------------------
-
-// Legacy account verification card, currently not mounted.
-// ignore: unused_element
-class _AccountVerificationCard extends StatelessWidget {
-  const _AccountVerificationCard({
-    required this.verification,
-    required this.loading,
-    required this.error,
-    required this.onOpen,
-  });
-
-  final ProviderVerification? verification;
-  final bool loading;
-  final Object? error;
-  final VoidCallback onOpen;
-
-  @override
-  Widget build(BuildContext context) {
-    final (String status, StatusTone tone) = loading
-        ? ('Loading', StatusTone.grey)
-        : verification == null
-        ? (
-            isMfaRequired(error ?? '')
-                ? 'Second factor required'
-                : 'Could not be read',
-            StatusTone.grey,
-          )
-        : switch (verification!.status) {
-            'approved' => ('Verified', StatusTone.green),
-            'pending' => ('Awaiting review', StatusTone.amber),
-            'rejected' => ('Needs correction', StatusTone.red),
-            _ => ('Not submitted', StatusTone.neutral),
-          };
-    final verification_ = verification;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(17),
-      decoration: BoxDecoration(
-        color: SitewiseM3.surface,
-        borderRadius: BorderRadius.circular(21),
-        border: Border.all(color: SitewiseM3.line),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 47,
-                height: 47,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEBF2FF),
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                child: const Icon(
-                  Icons.verified_user_outlined,
-                  size: 22,
-                  color: SitewiseColors.action,
-                ),
-              ),
-              const SizedBox(width: 13),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Account verification',
-                      style: TextStyle(
-                        fontFamily: kFontFamily,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        color: SitewiseM3.ink,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      verification_ == null
-                          ? 'Your provider account with SiteWise'
-                          : verification_.businessName.isEmpty
-                          ? 'Your provider account with SiteWise'
-                          : verification_.businessName,
-                      style: const TextStyle(
-                        fontFamily: kFontFamily,
-                        fontSize: 11,
-                        color: SitewiseM3.muted,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const Divider(height: 30, color: Color(0xFFEEF1F6)),
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Status',
-                  style: TextStyle(
-                    fontFamily: kFontFamily,
-                    fontSize: 11.8,
-                    color: SitewiseM3.muted,
-                  ),
-                ),
-              ),
-              _StatusBadge(status, tone: tone),
-            ],
-          ),
-          if (verification_ != null &&
-              verification_.decisionNote?.trim().isNotEmpty == true) ...[
-            const SizedBox(height: 10),
-            Text(
-              verification_.decisionNote!.trim(),
-              style: const TextStyle(
-                fontFamily: kFontFamily,
-                fontSize: 11.5,
-                height: 1.5,
-                color: Color(0xFF60728A),
-              ),
-            ),
-          ],
-          const SizedBox(height: 6),
-          const Text(
-            'This verifies your provider account with SiteWise. It is '
-            'separate from your identity and from each listing\'s own '
-            'verification.',
-            style: TextStyle(
-              fontFamily: kFontFamily,
-              fontSize: 11,
-              height: 1.5,
-              color: SitewiseM3.muted,
-            ),
-          ),
-          TextButton(
-            onPressed: onOpen,
-            style: TextButton.styleFrom(
-              foregroundColor: SitewiseColors.action,
-              minimumSize: const Size(0, 40),
-              padding: const EdgeInsets.symmetric(horizontal: 0),
-              textStyle: const TextStyle(
-                fontFamily: kFontFamily,
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  verification_?.canSubmit == true
-                      ? 'Start verification'
-                      : 'View verification',
-                ),
-                const Icon(Icons.chevron_right_rounded, size: 16),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 // ---------------------------------------------------------------------------

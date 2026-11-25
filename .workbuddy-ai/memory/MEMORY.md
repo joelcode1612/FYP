@@ -30,3 +30,11 @@
 - `AssessmentReportView` 9 sections, no route; production mount `assessment_workspace_page.dart:3953`, browser test via `/dev/report`. `/entrepreneur/report?id=` is a different report. `.asw-rpt` CSS source: `artifacts/stage34_integration_20261119/isolated_build_workspace/…/styles.css`.
 - RP-13 BLOCKED (no revisions/snapshots; the only confirmed BCB belongs to another assessment — never join).
 - RI-V2 (`artifacts/cq_fc4d_report_integration_v2/`): RP-02 20 charts / 8 principled refusals; RP-04 third param `measurementChart` separate from `chartSpec`/`q01Preview`; provenance label = `metadata_json.routing_version`, not contract `spec_version`.
+
+## Location Intelligence (informational measurements)
+- Valid lat/long is the ONLY precondition to queue measurements. The address verdict is reported (`address_validation_status`) but never a gate — requiring it left all 944 catalogue properties (verdict NULL) permanently unmeasured.
+- `informational_measurements()` is the measurement-only projection (no score/SHAP). Model eligibility lives in `VALIDATED_COORDINATE_INPUTS*`; the 18 diagnostic features are measured and shown as `calculated_unvalidated`, never scored.
+- `enqueue()`'s in-flight guard is scoped to the categories being queued, not all of them.
+- `network` category needs `STATEMENT_TIMEOUTS['network']=180s` (pgRouting reach + hull + WorldPop overlay); everything else 25s. `Connection.exec_driver_sql` needs positional `%s`, not `:named`.
+- Entry points: `scripts/backfill_location_intelligence.py` (enqueue all), `scripts/drain_location_intelligence.py` (parallel drain). `GET /explore/analysis` returns `data.location_measurements`.
+

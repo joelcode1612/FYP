@@ -155,3 +155,6 @@ key.properties
 /fyp_jaspr_web/web/map-config.js
 
 /backend/var/db_sync_audit_ref/
+
+# Local migration backups
+/backend/var/static_pu_migration/

@@ -10,7 +10,6 @@ import 'package:fyp/features/capture_360/domain/sphere/sphere_capture_session.da
 import 'package:fyp/features/capture_360/domain/services/panorama_stitcher.dart';
 import 'package:fyp/features/capture_360/application/sphere/sphere_platform_ports.dart';
 import 'package:fyp/features/capture_360/application/sphere/sphere_capture_controller.dart';
-import 'package:fyp/features/capture_360/domain/quality/capture_quality_models.dart';
 import 'package:fyp/features/capture_360/domain/quality/frame_quality_analyzer.dart';
 import 'package:fyp/features/capture_360/domain/sphere/sphere_projection.dart';
 import 'package:fyp/features/capture_360/domain/sphere/sphere_target.dart';
@@ -99,8 +98,10 @@ class SphereCaptureScreen extends StatefulWidget {
   /// starts during capture, never after stitching.
   final void Function(CapturedFrame frame)? onFrameSaved;
 
-  /// The per-photograph quality verifier. Warnings surface in the capture
-  /// UI only — nothing is ever deleted, re-shot, or auto-retaken.
+  /// The per-photograph quality verifier. Its findings are recorded as
+  /// per-frame diagnostic metadata and logged; they are deliberately NOT
+  /// surfaced in the capture UI, where they would be an alarm the agent
+  /// cannot act on. Nothing is ever deleted, re-shot, or auto-retaken.
   final FrameQualityAnalyzer? qualityAnalyzer;
 
   @override
@@ -403,7 +404,8 @@ class _StartScreen extends StatelessWidget {
               'Hold the phone level and face the first wall, then tap Start. '
               'The $kSphereTargetCount targets are levelled to gravity — turn '
               'to bring the next one into the centre ring and the photograph '
-              'is taken automatically.',
+              'is taken automatically. Try to turn around one spot and keep '
+              'the phone at a similar height as you move between targets.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: CaptureColors.mutedOnDark,
@@ -730,20 +732,8 @@ class _Viewfinder extends StatelessWidget {
             right: 16,
             child: AnimatedBuilder(
               animation: controller,
-              builder: (BuildContext context, Widget? child) => Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Center(
-                    child: _CapturedBanner(visible: controller.banner != null),
-                  ),
-                  const SizedBox(height: 6),
-                  Center(
-                    child: _QualityNotice(
-                      report: controller.lastQualityReport,
-                      onOpen: () => _showQualitySheet(context, controller),
-                    ),
-                  ),
-                ],
+              builder: (BuildContext context, Widget? child) => Center(
+                child: _CapturedBanner(visible: controller.banner != null),
               ),
             ),
           ),
@@ -988,8 +978,6 @@ class _BottomPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final aligned = controller.activeErrorDeg <= controller.toleranceDeg;
-    final warnings = controller.qualityWarningCount;
-    final invalid = controller.qualityInvalidCount;
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
       decoration: BoxDecoration(
@@ -1033,260 +1021,10 @@ class _BottomPanel extends StatelessWidget {
               valueColor: const AlwaysStoppedAnimation<Color>(CaptureColors.ok),
             ),
           ),
-          // Quality summary — informational only. The photographs are all
-          // still saved; nothing here offers or performs an automatic retake.
-          if (warnings > 0 || invalid > 0) ...[
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(
-                  invalid > 0 ? Icons.error_outline : Icons.info_outline,
-                  size: 13,
-                  color: invalid > 0
-                      ? Colors.redAccent
-                      : Colors.orangeAccent,
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    invalid > 0
-                        ? '$warnings photo(s) with quality warnings, '
-                            '$invalid unreadable — review before submitting.'
-                        : '$warnings photo(s) with quality warnings — '
-                            'review before submitting.',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 11.5,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
         ],
       ),
     );
   }
-}
-
-/// The quality notice under the "Captured!" banner: appears only when the
-/// most recent photograph carries a warning or is invalid, and tapping it
-/// opens the review sheet. An accepted photograph shows nothing here.
-class _QualityNotice extends StatelessWidget {
-  const _QualityNotice({required this.report, required this.onOpen});
-
-  final FrameQualityReport? report;
-  final VoidCallback onOpen;
-
-  @override
-  Widget build(BuildContext context) {
-    final report = this.report;
-    if (report == null || report.verdict == QualityVerdict.accepted) {
-      return const SizedBox.shrink();
-    }
-    final invalid = report.verdict == QualityVerdict.invalid;
-    final headline = report.headline;
-    return GestureDetector(
-      onTap: onOpen,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-        decoration: BoxDecoration(
-          color: (invalid ? Colors.redAccent : Colors.orangeAccent)
-              .withValues(alpha: 0.94),
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x55000000),
-              blurRadius: 12,
-              offset: Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              invalid ? Icons.error_outline : Icons.warning_amber_rounded,
-              color: Colors.white,
-              size: 16,
-            ),
-            const SizedBox(width: 6),
-            Flexible(
-              child: Text(
-                headline?.message ??
-                    (invalid
-                        ? 'This photo could not be checked properly.'
-                        : 'Saved with a quality warning.'),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// The per-photograph quality review sheet: the findings, the evidence, and
-/// the two manual choices — retake this one photograph, or keep it. Nothing
-/// in this sheet happens without a tap: keeping the photograph is always the
-/// safe default, and the previous capture is never deleted either way (a
-/// retake replaces it only when the new photograph actually saves).
-Future<void> _showQualitySheet(
-  BuildContext context,
-  SphereCaptureController controller,
-) async {
-  final report = controller.lastQualityReport;
-  if (report == null) return;
-  await showModalBottomSheet<void>(
-    context: context,
-    backgroundColor: const Color(0xF2121212),
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
-    builder: (BuildContext sheetContext) => SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  report.verdict == QualityVerdict.invalid
-                      ? Icons.error_outline
-                      : report.verdict == QualityVerdict.warning
-                      ? Icons.warning_amber_rounded
-                      : Icons.check_circle_outline,
-                  size: 20,
-                  color: report.verdict == QualityVerdict.invalid
-                      ? Colors.redAccent
-                      : report.verdict == QualityVerdict.warning
-                      ? Colors.orangeAccent
-                      : CaptureColors.ok,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Photo check — target ${report.targetId}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              report.verdict == QualityVerdict.invalid
-                  ? 'This photograph is unreadable and needs a retake. It is '
-                      'kept on the device either way.'
-                  : report.verdict == QualityVerdict.warning
-                  ? 'The photograph is saved and usable. You can retake it or '
-                      'keep it — nothing is changed automatically.'
-                  : 'All checks passed for this photograph.',
-              style: const TextStyle(color: Colors.white70, fontSize: 12.5),
-            ),
-            const SizedBox(height: 12),
-            for (final finding in report.findings)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      switch (finding.severity) {
-                        QualitySeverity.critical => Icons.error_outline,
-                        QualitySeverity.warning => Icons.warning_amber_rounded,
-                        QualitySeverity.info => Icons.info_outline,
-                      },
-                      size: 15,
-                      color: switch (finding.severity) {
-                        QualitySeverity.critical => Colors.redAccent,
-                        QualitySeverity.warning => Colors.orangeAccent,
-                        QualitySeverity.info => Colors.white54,
-                      },
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            finding.message,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12.5,
-                              height: 1.35,
-                            ),
-                          ),
-                          if (finding.evidence.isNotEmpty)
-                            Text(
-                              finding.evidence.entries
-                                  .map(
-                                    (entry) =>
-                                        '${entry.key}: ${entry.value.toStringAsFixed(2)}',
-                                  )
-                                  .join(' · '),
-                              style: const TextStyle(
-                                color: Colors.white38,
-                                fontSize: 10.5,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            const SizedBox(height: 4),
-            if (report.verdict != QualityVerdict.accepted) ...[
-              FilledButton.icon(
-                style: FilledButton.styleFrom(
-                  backgroundColor: Colors.orangeAccent,
-                  foregroundColor: Colors.black,
-                ),
-                icon: const Icon(Icons.refresh, size: 18),
-                label: const Text('Retake this photo'),
-                onPressed: () {
-                  Navigator.of(sheetContext).pop();
-                  controller.retakeTarget(report.targetId);
-                },
-              ),
-              const SizedBox(height: 8),
-              OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  side: const BorderSide(color: Colors.white24),
-                ),
-                onPressed: () => Navigator.of(sheetContext).pop(),
-                child: const Text('Keep it'),
-              ),
-            ] else
-              OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  side: const BorderSide(color: Colors.white24),
-                ),
-                onPressed: () => Navigator.of(sheetContext).pop(),
-                child: const Text('Close'),
-              ),
-          ],
-        ),
-      ),
-    ),
-  );
 }
 
 class _MotionChip extends StatelessWidget {
@@ -1470,25 +1208,29 @@ class _PanoramaStatus extends StatelessWidget {
             child: CircularProgressIndicator(strokeWidth: 2),
           ),
           const SizedBox(width: 10),
-          Expanded(
+          // The stitcher's per-stage wording ("Matching overlaps: 12/38
+          // pairs") is an image-processing diagnostic and is logged by the
+          // controller instead. Progress itself stays visible: spinner here,
+          // plus the capture's own progress bar.
+          const Expanded(
             child: Text(
-              controller.stitchStage ?? 'Stitching the panorama…',
-              style: const TextStyle(
-                color: CaptureColors.mutedOnDark,
-                fontSize: 12,
-              ),
+              'Creating the 360° panorama…',
+              style: TextStyle(color: CaptureColors.mutedOnDark, fontSize: 12),
             ),
           ),
         ],
       );
     }
     if (controller.stitchError != null) {
+      // The stitcher's own message — frame indices, inlier counts, OpenCV
+      // failures — is a diagnostic. The controller has already written it to
+      // the device log, so the screen shows only what the agent can act on.
       return Column(
         children: [
-          Text(
-            controller.stitchError!,
+          const Text(
+            'Unable to generate the panorama. Please try again.',
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               color: CaptureColors.warn,
               fontSize: 11.5,
               height: 1.4,

@@ -17,32 +17,10 @@ import 'package:fyp/features/authentication/presentation/widgets/auth_terms_row.
 import 'package:fyp/features/authentication/presentation/widgets/signup_decorations.dart';
 import 'package:fyp/features/authentication/presentation/widgets/signup_password_rules.dart';
 import 'package:fyp/features/authentication/presentation/widgets/signup_role_card.dart';
-import 'package:fyp/features/authentication/presentation/widgets/signup_step_indicator.dart';
 
-/// The two in-page stages of the mobile registration funnel.
-///
-/// There is deliberately NO "Verify" stage. The trusted backend provisions a
-/// new Entrepreneur identity already email-confirmed, and Supabase issues a
-/// genuine session from a real password sign-in, so an email-verification
-/// screen would be a dead end. Owner / Agent accounts are staff: their third
-/// step is the existing authenticator (MFA) screen, which is a ROUTE after
-/// registration, not a third page in this funnel — so the indicator shows it
-/// as an upcoming step without ever labelling it "Verify".
-enum SignupStage { accountType, accountDetails }
-
-/// Complete mobile registration flow:
-/// Account Type -> Account Details -> (MFA for staff) -> workspace.
-///
-/// One [State] owns every [TextEditingController] for the whole funnel, so
-/// stepping back from Details to Account Type (by arrow or by Android's
-/// system back) never clears the name, email, passwords, consent or purpose.
-/// No account is created at Step 1.
-///
-/// All credential work goes through the existing [AuthNotifier] ->
-/// [AuthService] -> [AuthRepository] chain. This page never reads a token,
-/// never invents a role, never marks an address verified, and never navigates
-/// to a workspace on anything other than a backend-validated
-/// [AuthStatus.authenticated] session.
+// SITEWISE_OWNER_INVITE_UI_V1
+/// Public registration is Entrepreneur-only. Invited provider accounts
+/// complete their invitation separately. All credentials still use AuthNotifier.
 class SignupMobilePage extends ConsumerStatefulWidget {
   const SignupMobilePage({super.key});
 
@@ -52,9 +30,6 @@ class SignupMobilePage extends ConsumerStatefulWidget {
 
 class _SignupMobilePageState extends ConsumerState<SignupMobilePage> {
   static final RegExp _emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
-
-  SignupStage _stage = SignupStage.accountType;
-  AccountPurpose? _purpose;
 
   // Deliberately kept for the lifetime of this page: no form value is
   // persisted to preferences, and passwords never leave these controllers.
@@ -94,7 +69,9 @@ class _SignupMobilePageState extends ConsumerState<SignupMobilePage> {
       // the workspace once, guarded by _enteredWorkspace.
       final state = ref.read(authNotifierProvider);
       final user = state.user;
-      if (state.isAuthenticated && user != null) {
+      if ((state.isAuthenticated ||
+              state.status == AuthStatus.staffOnboarding) &&
+          user != null) {
         _enterVerifiedWorkspace(user);
       }
     });
@@ -112,28 +89,15 @@ class _SignupMobilePageState extends ConsumerState<SignupMobilePage> {
   }
 
   void _onFieldChanged() {
-    if (mounted && _stage == SignupStage.accountDetails) setState(() {});
+    if (mounted) setState(() {});
   }
 
   // ── Navigation ──────────────────────────────────────────────────────────
 
-  /// The only back handler: the top-left arrow and Android's system back both
-  /// land here, so they cannot disagree about where Back goes. Form state is
-  /// deliberately preserved when stepping back from Account Details.
+  /// Single-step signup returns to Login, not the removed account-type step.
   void _handleBack() {
-    switch (_stage) {
-      case SignupStage.accountType:
-        if (Navigator.of(context).canPop()) {
-          Navigator.of(context).pop();
-        } else {
-          _exitToLogin();
-        }
-      case SignupStage.accountDetails:
-        setState(() {
-          _stage = SignupStage.accountType;
-          _error = null;
-        });
-    }
+    if (_submitting) return;
+    _exitToLogin();
   }
 
   /// Clears the stack to exactly one Login route.
@@ -169,20 +133,7 @@ class _SignupMobilePageState extends ConsumerState<SignupMobilePage> {
 
   // ── Business rules ──────────────────────────────────────────────────────
 
-  /// Entrepreneur registration is two steps. An Owner / Agent account has a
-  /// third, security step — the authenticator screen opened after a genuine
-  /// session exists. It is never presented as email confirmation.
-  List<String> get _stepLabels => switch (_purpose) {
-    AccountPurpose.ownerAgent => const <String>[
-      'Account Type',
-      'Account Details',
-      'Authenticator',
-    ],
-    _ => const <String>['Account Type', 'Account Details'],
-  };
-
   String? _validateDetails() {
-    if (_purpose == null) return 'Choose how you plan to use SiteWise.';
     if (_name.text.trim().length < 2) return 'Please enter your full name.';
     if (!_emailPattern.hasMatch(_email.text.trim())) {
       return 'Please enter a valid email address.';
@@ -228,17 +179,6 @@ class _SignupMobilePageState extends ConsumerState<SignupMobilePage> {
             'try again.';
   }
 
-  void _continue() {
-    if (_purpose == null) {
-      setState(() => _error = 'Choose how you plan to use SiteWise.');
-      return;
-    }
-    setState(() {
-      _stage = SignupStage.accountDetails;
-      _error = null;
-    });
-  }
-
   Future<void> _submit() async {
     if (_submitting) return;
     final problem = _validateDetails();
@@ -257,7 +197,7 @@ class _SignupMobilePageState extends ConsumerState<SignupMobilePage> {
           email: email,
           password: _password.text,
           fullName: _name.text.trim(),
-          accountPurpose: _purpose!.wireValue,
+          accountPurpose: AccountPurpose.entrepreneur.wireValue,
           acceptTerms: _terms,
         );
     if (!mounted) return;
@@ -274,14 +214,10 @@ class _SignupMobilePageState extends ConsumerState<SignupMobilePage> {
 
   Future<void> _google() async {
     if (_submitting) return;
-    if (_purpose == null) {
-      setState(() => _error = 'Choose how you plan to use SiteWise first.');
-      return;
-    }
     if (!_terms) {
       setState(
-        () => _error =
-            'Please agree to the Terms of Service and Privacy Policy.',
+        () =>
+            _error = 'Please agree to the Terms of Service and Privacy Policy.',
       );
       return;
     }
@@ -293,7 +229,7 @@ class _SignupMobilePageState extends ConsumerState<SignupMobilePage> {
         .read(authNotifierProvider.notifier)
         .signInWithProvider(
           AuthProvider.google,
-          accountPurpose: _purpose!.wireValue,
+          accountPurpose: AccountPurpose.entrepreneur.wireValue,
         );
     if (!mounted) return;
     final state = ref.read(authNotifierProvider);
@@ -328,7 +264,9 @@ class _SignupMobilePageState extends ConsumerState<SignupMobilePage> {
     // A restored or newly verified session is the only thing that may open a
     // protected dashboard. Deferred so no provider is mutated during build.
     ref.listen<AuthState>(authNotifierProvider, (previous, next) {
-      if (!next.isAuthenticated) return;
+      if (!next.isAuthenticated && next.status != AuthStatus.staffOnboarding) {
+        return;
+      }
       final user = next.user;
       if (user == null) return;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -347,23 +285,12 @@ class _SignupMobilePageState extends ConsumerState<SignupMobilePage> {
           child: Column(
             children: <Widget>[
               SignupHeader(onBack: _handleBack),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-                child: SignupStepIndicator(
-                  currentStep: _stage.index,
-                  labels: _stepLabels,
-                ),
-              ),
               Expanded(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-                  child: switch (_stage) {
-                    SignupStage.accountType => _accountTypeStep(),
-                    SignupStage.accountDetails => _accountDetailsStep(),
-                  },
+                  child: _accountDetailsStep(),
                 ),
               ),
-              if (_stage == SignupStage.accountType) const SignupCityscape(),
             ],
           ),
         ),
@@ -425,56 +352,6 @@ class _SignupMobilePageState extends ConsumerState<SignupMobilePage> {
     ),
   );
 
-  Widget _accountTypeStep() => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: <Widget>[
-      _title('Create Your Account'),
-      _description(
-        'Join SiteWise to discover or manage commercial properties for '
-        'F&B businesses.',
-      ),
-      const SizedBox(height: 22),
-      _errorOrEmpty(),
-      const Text(
-        "I'm joining as...",
-        style: TextStyle(
-          fontSize: 17,
-          fontWeight: FontWeight.w800,
-          color: SitewiseColors.ink,
-        ),
-      ),
-      const SizedBox(height: 13),
-      for (final purpose in AccountPurpose.values) ...<Widget>[
-        SignupRoleCard(
-          icon: purpose == AccountPurpose.entrepreneur
-              ? Icons.storefront_rounded
-              : Icons.apartment_rounded,
-          title: purpose.label,
-          description: purpose.description,
-          selected: _purpose == purpose,
-          onTap: () => setState(() {
-            _purpose = purpose;
-            _error = null;
-          }),
-        ),
-        const SizedBox(height: 12),
-      ],
-      const SizedBox(height: 6),
-      const SignupInfoNote(
-        message:
-            'Property listings can only be created and managed by authorized '
-            'Property Owners or Agents.',
-      ),
-      const SizedBox(height: 22),
-      SitewiseCtaButton(
-        label: _submitting ? 'Please wait…' : 'Continue  →',
-        onPressed: _submitting ? null : _continue,
-      ),
-      const SizedBox(height: 16),
-      _loginLink(),
-    ],
-  );
-
   Widget _visibilityToggle({
     required bool hidden,
     required VoidCallback onTap,
@@ -488,14 +365,17 @@ class _SignupMobilePageState extends ConsumerState<SignupMobilePage> {
   );
 
   Widget _accountDetailsStep() {
-    final mismatch = _confirm.text.isNotEmpty &&
+    final mismatch =
+        _confirm.text.isNotEmpty &&
         _confirm.text != _password.text &&
         _password.text.isNotEmpty;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        _title('Your Account Details'),
-        _description('Create your SiteWise account to get started.'),
+        _title('Create Your Account'),
+        _description(
+          'Find the right commercial location for your F&B business.',
+        ),
         const SizedBox(height: 20),
         _errorOrEmpty(),
         AuthField(
@@ -579,6 +459,13 @@ class _SignupMobilePageState extends ConsumerState<SignupMobilePage> {
         ),
         const SizedBox(height: 16),
         _loginLink(),
+        const SizedBox(height: 18),
+        const SignupInfoNote(
+          message:
+              'Property Owner or Agent? Your account must be invited by '
+              'a SiteWise administrator. If you have already received an '
+              'invitation, complete your account setup before signing in.',
+        ),
       ],
     );
   }

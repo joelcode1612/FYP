@@ -17,10 +17,10 @@ the configured database before making schema changes):
 * ``owner_id`` → ``fyp.users.id`` (legacy bigserial identity). These ids are
   NOT Supabase ``auth.users``/``public.users`` uuids and must never be mixed.
 * ``fyp.property_subject_links`` maps a rental property to a
-  ``sitewise_analytics.subject_features`` row (all 955 live links are
+  ``fyp.property_inference_features`` row (all 955 live links are
   ``match_verified``). The 955 linked subjects are class ``U``; the 894
   class ``P`` rows are PU training outlets with no rental_properties row.
-* ``sitewise_analytics.subject_features`` stores *features only* — there is
+* ``fyp.property_inference_features`` stores *features only* — there is
   no verified success-probability column. Never present one as such.
 * ``fyp.property_photos`` exists but is EMPTY live (the 5,979 image URLs of
   the brief were never imported). Reads must treat image absence as a normal
@@ -109,7 +109,7 @@ class FypPropertyPhoto(SQLModel, table=True):
 class FypPropertySubjectLink(SQLModel, table=True):
     """``fyp.property_subject_links`` — verified research linkage.
 
-    ``subject_id`` joins ``sitewise_analytics.subject_features``;
+    ``subject_id`` joins ``fyp.property_inference_features``;
     ``sitewise_property_id`` holds the workbook id (``MD-xxxxx`` /
     ``EP-xxxxx``) when one exists.
     """

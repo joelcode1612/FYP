@@ -250,7 +250,8 @@ class _UserDetailPageState extends State<UserDetailPage> {
   Component _details(_UserRecord record) {
     final user = record.user;
     final changed = _status != _savedStatus;
-    final canSave = _isAdmin && changed && !_saving;
+    final isSelf = WebAuth.profile?['user_id']?.toString() == user.id;
+    final canSave = _isAdmin && !isSelf && changed && !_saving;
 
     return div(classes: 'stack stack--md', [
       const Breadcrumbs(['Users', 'User detail']),
@@ -333,9 +334,13 @@ class _UserDetailPageState extends State<UserDetailPage> {
             'Account Status',
             _status,
             _statuses,
-            _isAdmin ? _setStatus : null,
+            _isAdmin && !isSelf ? _setStatus : null,
           ),
-          if (!_isAdmin)
+          if (isSelf)
+            span(classes: 'small muted', [
+              Component.text('You cannot disable your own administrator account.'),
+            ])
+          else if (!_isAdmin)
             span(classes: 'small muted', [
               Component.text(
                 'Only an authorized administrator can change the account '

@@ -227,8 +227,13 @@ class _ProviderTabHostState extends ConsumerState<ProviderTabHost> {
     }
   }
 
-  void _handleBack() {
+  Future<void> _handleBack() async {
     if (_pageIndex == ProviderTabHost.addTabIndex) {
+      // The Add wizard owns its unsaved state. Its registered guard shows the
+      // discard dialog; without confirmation the tab must not change.
+      final mayLeave =
+          await ref.read(addPropertyLeaveGuardProvider)?.call() ?? true;
+      if (!mayLeave || !mounted) return;
       _selectTab(
         ProviderTabHost.tabRoutes[_previousPageIndex],
         rememberPrevious: false,
@@ -254,7 +259,7 @@ class _ProviderTabHostState extends ConsumerState<ProviderTabHost> {
       child: PopScope<Object?>(
         canPop: _pageIndex == 0,
         onPopInvokedWithResult: (didPop, result) {
-          if (!didPop) _handleBack();
+          if (!didPop) unawaited(_handleBack());
         },
         child: Scaffold(
           // The form has its own Scaffold. Keep the tab stack at full height

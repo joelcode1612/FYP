@@ -35,6 +35,7 @@ from sitewise.dependencies import (
     AuthenticatedUser,
     require_property_owner,
 )
+from sitewise.domain import rbac
 from sitewise.services import capture_session_service as svc
 from sitewise.services import capture_storage, provider_scope
 from sitewise.services.agent_inspection_policy import (
@@ -80,15 +81,28 @@ def _frame_json(record, created: bool) -> dict[str, Any]:
 
 
 def _job_json(record) -> dict[str, Any]:
-    # Claim lease columns are worker internals and never leave the API.
+    # Worker stages and exception details stay in backend logs/database only;
+    # the polling contract exposes safe, actionable copy to the Agent.
+    failed = record.status == "failed"
+    stage = (
+        "Panorama ready"
+        if record.status == "done"
+        else "Panorama processing needs a retry"
+        if failed
+        else "Preparing your 360° preview"
+    )
     return {
         "jobId": str(record.id),
         "sessionId": str(record.session_id),
         "status": record.status,
         "progress": record.progress,
-        "processingStage": record.processing_stage,
+        "processingStage": stage,
         "retryCount": record.retry_count,
-        "errorMessage": record.error_message,
+        "errorMessage": (
+            "We couldn't prepare your 360° preview. Please retry processing or recapture manually."
+            if failed
+            else None
+        ),
         "outputStoragePath": record.output_storage_path,
         "createdAt": record.created_at.isoformat(),
         "startedAt": record.started_at.isoformat() if record.started_at else None,
@@ -139,7 +153,13 @@ class SessionCreate(BaseModel):
 # Pose keys beyond the orientation quaternion that the capture manifest may
 # carry — the stitcher consumes the normalizer's pre-crop geometry.
 FRAME_POSE_EXTRAS = frozenset(
-    {"sourceImageWidth", "sourceImageHeight", "cropOffsetX", "cropOffsetY"}
+    {
+        "sourceImageWidth", "sourceImageHeight", "cropOffsetX", "cropOffsetY",
+        "targetYawDegrees", "targetPitchDegrees", "alignmentErrorDeg",
+        "toleranceDeg", "quality", "captureTimestampNs", "focalLengthXPx",
+        "focalLengthYPx", "principalPointXPx", "principalPointYPx",
+        "cameraPosition",
+    }
 )
 
 
@@ -153,8 +173,14 @@ class FrameConfirm(BaseModel):
     # capture manifest writes it. The dict form may additionally carry the
     # capture manifest's source-geometry keys, which pass through to the
     # frame row verbatim instead of being stripped.
-    capture_pose: list[float] | dict[str, float | int] | None = None
+    capture_pose: list[float] | dict[str, Any] | None = None
     captured_at: datetime | None = None
+    # False when the device did NOT upload because storage already held the
+    # object (a resumed backup). The stored bytes are then read back and
+    # compared with `checksum_sha256` before any row is written, so a stale
+    # object from an interrupted attempt can never be registered as this
+    # capture's photograph.
+    uploaded: bool = True
 
     @field_validator("checksum_sha256")
     @classmethod
@@ -186,9 +212,25 @@ class FrameConfirm(BaseModel):
         pose: dict[str, Any] = {k: float(value[k]) for k in ("x", "y", "z", "w")}
         for key in sorted(keys & FRAME_POSE_EXTRAS):
             v = value[key]
+            if key == "quality":
+                if not isinstance(v, dict):
+                    raise ValueError("capture_pose.quality must be an object.")
+                pose[key] = v
+                continue
+            if key == "cameraPosition":
+                if not isinstance(v, (list, tuple)) or len(v) != 3 or not all(
+                    isinstance(n, (int, float)) and not isinstance(n, bool)
+                    for n in v
+                ):
+                    raise ValueError("capture_pose.cameraPosition must have 3 numbers.")
+                pose[key] = [float(n) for n in v]
+                continue
             if isinstance(v, bool) or not isinstance(v, (int, float)):
                 raise ValueError(f"capture_pose.{key} must be numeric.")
-            pose[key] = int(v)
+            pose[key] = int(v) if key in {
+                "sourceImageWidth", "sourceImageHeight", "cropOffsetX",
+                "cropOffsetY", "captureTimestampNs",
+            } else float(v)
         return pose
 
 
@@ -335,6 +377,9 @@ def confirm_frame(
     # A repaired checksum (the client found a hashing mistake, or a stale
     # manifest row) may replace metadata ONLY when the stored bytes really
     # match it. Without this check a retake could silently relabel old bytes.
+    # A frame the device did NOT upload (resumed backup) is always verified:
+    # the object predates this confirmation, so its bytes must be proven to
+    # be the photograph the device is registering.
     if body.checksum_sha256 is not None:
         previous = next(
             (
@@ -343,10 +388,14 @@ def confirm_frame(
             ),
             None,
         )
-        if require_original or (
-            previous is not None
-            and previous.checksum_sha256
-            and previous.checksum_sha256.lower() != body.checksum_sha256.lower()
+        if (
+            require_original
+            or not body.uploaded
+            or (
+                previous is not None
+                and previous.checksum_sha256
+                and previous.checksum_sha256.lower() != body.checksum_sha256.lower()
+            )
         ):
             try:
                 stored = capture_storage.download(path)
@@ -406,10 +455,19 @@ def list_frames(
 
 class UploadUrlRequest(BaseModel):
     targets: list[int] = Field(min_length=1)
+    # Targets whose stored object must be REPLACED (a stale or corrupt object
+    # for the same deterministic path). Everything else is create-only, so a
+    # resume can never destroy bytes that are already correct.
+    overwrite: list[int] = Field(default_factory=list)
 
     @field_validator("targets")
     @classmethod
     def _dedupe(cls, value: list[int]) -> list[int]:
+        return sorted(set(value))
+
+    @field_validator("overwrite")
+    @classmethod
+    def _dedupe_overwrite(cls, value: list[int]) -> list[int]:
         return sorted(set(value))
 
 
@@ -432,9 +490,15 @@ def issue_upload_urls(
     URL, then confirms the frame through POST /frames. Authorization happens
     HERE, once — the URL is pinned to this session's deterministic prefix and
     expires in minutes, so it cannot outlive the session or outspread its
-    scope. Supabase signed uploads do not accept upsert flags: a repeat PUT
-    of the SAME bytes answers 409 Duplicate, which IS the idempotent success
-    the retry flow needs — the object is already stored.
+    scope.
+
+    Each target is resolved independently because a resumed backup is the
+    normal case, not an error: Supabase Storage refuses to mint an upload
+    token for a path that already holds an object (``409 Duplicate``), which
+    used to abort the whole batch. An occupied path is therefore reported as
+    ``alreadyStored`` with no URL — the device confirms the stored bytes
+    instead of uploading them again — and only a target listed in
+    ``overwrite`` receives an upsert URL that may replace the object.
     """
     record = svc.require_mutable_capture_session(
         db, session_id=session_id, user_id=current.user_id, role=current.role
@@ -445,31 +509,45 @@ def issue_upload_urls(
         raise ValidationError(
             f"targets must be between 1 and {record.expected_frames}."
         )
-    urls = []
-    try:
-        for target in body.targets:
+    overwrite = {
+        t for t in body.overwrite if 1 <= t <= record.expected_frames
+    }
+    urls: list[dict[str, Any]] = []
+    for target in body.targets:
+        path = capture_storage.frame_object_path(
+            record.property_id, str(session_id), target
+        )
+        entry: dict[str, Any] = {
+            "targetIndex": target,
+            "storagePath": path,
+            "method": "PUT",
+            "headers": {"content-type": "image/jpeg"},
+            # A repeat PUT of the SAME bytes answers 409 Duplicate, which IS
+            # the idempotent success the retry flow needs — the object is
+            # already stored.
+            "duplicateStatusIsSuccess": True,
+            "alreadyStored": False,
+            "uploadUrl": None,
+        }
+        replace = target in overwrite
+        # Create-only first: the storage API itself reports an occupied path
+        # (``409 Duplicate``), so one request both mints the token and tells
+        # us whether the bytes are already there — no separate existence
+        # probe, and no window between the two.
+        try:
             signed = capture_storage.signed_upload_url(
-                storage_path=capture_storage.frame_object_path(
-                    record.property_id, str(session_id), target
-                ),
-                target_index=target,
+                storage_path=path, target_index=target, upsert=replace
             )
-            urls.append(
-                {
-                    "targetIndex": signed.target_index,
-                    "storagePath": signed.storage_path,
-                    "uploadUrl": signed.upload_url,
-                    "method": "PUT",
-                    "headers": {"content-type": "image/jpeg"},
-                    # Supabase signed uploads do not accept x-upsert: a
-                    # repeat PUT of the SAME bytes answers 409 Duplicate,
-                    # which IS the idempotent success the retry flow needs —
-                    # the object is already stored.
-                    "duplicateStatusIsSuccess": True,
-                }
-            )
-    except capture_storage.CaptureStorageUnavailable as exc:
-        raise _storage_unavailable(exc) from exc
+        except capture_storage.ObjectAlreadyStored:
+            # The stored object wins; the device verifies its bytes at
+            # confirmation instead of uploading them again.
+            entry["alreadyStored"] = True
+            urls.append(entry)
+            continue
+        except capture_storage.CaptureStorageUnavailable as exc:
+            raise _storage_unavailable(exc) from exc
+        entry["uploadUrl"] = signed.upload_url
+        urls.append(entry)
     return {
         "sessionId": str(session_id),
         "expiresInSeconds": capture_storage.UPLOAD_URL_TTL_SECONDS,
@@ -489,16 +567,50 @@ def issue_upload_urls(
 # --------------------------------------------------------------------------
 
 
+def _require_replaceable_panorama(db: Session, session_id: uuid.UUID) -> None:
+    """An approved or published tour must never be overwritten in place.
+
+    ``confirm_device_panorama`` already refuses to re-point a published row,
+    but that check runs AFTER the bytes are stored — too late, the evidence
+    would already be gone. This guard runs before an upsert URL is issued.
+    """
+    row = db.execute(
+        text(
+            "SELECT verification_status, published_at FROM fyp.panoramas "
+            "WHERE session_id = :sid"
+        ),
+        {"sid": str(session_id)},
+    ).mappings().first()
+    if row is None:
+        return
+    if row["published_at"] is not None:
+        raise ConflictError(
+            "This 360° tour is already published; unpublish it before "
+            "replacing the panorama."
+        )
+    if row["verification_status"] == "approved":
+        raise ConflictError(
+            "This 360° panorama has been approved; it cannot be replaced by "
+            "a new upload."
+        )
+
+
 @router.post("/sessions/{session_id}/panorama/upload-url")
 def issue_panorama_upload_url(
     session_id: uuid.UUID,
     db: DbSession,
     current: ProviderUser,
+    overwrite: bool = False,
 ) -> dict[str, Any]:
     """A short-lived signed upload permission for the session's panorama.
 
     Same authorization and transport as the frame upload URLs, pinned to the
-    session's single deterministic panorama object.
+    session's single deterministic panorama object. When the object already
+    exists and no replacement is requested, the response reports
+    ``alreadyStored`` with no URL: the device confirms the stored panorama it
+    produced, which is exactly the resumed-upload case. ``overwrite=true`` is
+    the explicit replacement path and is refused for an approved or published
+    tour.
     """
     record = svc.require_mutable_capture_session(
         db, session_id=session_id, user_id=current.user_id, role=current.role
@@ -509,8 +621,26 @@ def issue_panorama_upload_url(
             status_code=403, detail="Capture session belongs to a different Agent."
         )
     path = capture_storage.panorama_object_path(record.property_id, str(session_id))
+    if overwrite:
+        _require_replaceable_panorama(db, session_id)
     try:
-        signed = capture_storage.signed_upload_url(storage_path=path, target_index=0)
+        signed = capture_storage.signed_upload_url(
+            storage_path=path, target_index=0, upsert=overwrite
+        )
+    except capture_storage.ObjectAlreadyStored:
+        # The panorama from an interrupted attempt is already stored. The
+        # device confirms the object it produced; nothing is re-uploaded.
+        return {
+            "sessionId": str(session_id),
+            "storagePath": path,
+            "uploadUrl": None,
+            "method": "PUT",
+            "headers": {"content-type": "image/jpeg"},
+            "alreadyStored": True,
+            "duplicateStatusIsSuccess": True,
+            "expiresInSeconds": capture_storage.UPLOAD_URL_TTL_SECONDS,
+            "maxBytes": capture_storage.PANORAMA_MAX_BYTES,
+        }
     except capture_storage.CaptureStorageUnavailable as exc:
         raise _storage_unavailable(exc) from exc
     return {
@@ -519,6 +649,7 @@ def issue_panorama_upload_url(
         "uploadUrl": signed.upload_url,
         "method": "PUT",
         "headers": {"content-type": "image/jpeg"},
+        "alreadyStored": False,
         # A repeat PUT of the SAME panorama answers 409 Duplicate, which is
         # the idempotent success the retry flow needs.
         "duplicateStatusIsSuccess": True,
@@ -559,29 +690,6 @@ def _validated_panorama_path(
             f"({expected})."
         )
     return cleaned
-
-
-def _decode_panorama(data: bytes) -> tuple[int, int]:
-    """Decode the stored bytes as a JPEG and return ``(width, height)``.
-
-    A corrupt, truncated or non-image payload decodes to ``None`` and is
-    rejected before any canonical row can reference it. cv2 is imported
-    lazily: the router is imported at startup and the vision stack must not
-    pay for that.
-    """
-    if not data.startswith(b"\xff\xd8\xff"):
-        raise ValidationError("The stored panorama must be a JPEG image.")
-
-    import cv2
-    import numpy as np
-
-    decoded = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
-    if decoded is None:
-        raise ValidationError(
-            "The panorama is not a readable JPEG image; upload it again."
-        )
-    height, width = decoded.shape[:2]
-    return int(width), int(height)
 
 
 def _validate_reported_photo_coverage(report: dict[str, Any] | None, checksum: str) -> None:
@@ -657,7 +765,7 @@ def confirm_panorama(
         raise ConflictError(
             "The stored panorama does not match its checksum; upload it again."
         )
-    width, height = _decode_panorama(data)
+    width, height = capture_storage.decode_panorama(data)
     if height * 2 != width:
         raise ValidationError(
             "The panorama must be a 2:1 equirectangular image."
@@ -673,6 +781,7 @@ def confirm_panorama(
     # fails the confirmation and never alters the panorama bytes — a check
     # error simply leaves the device's report untouched.
     merged_report = dict(body.coverage_report or {})
+    merged_report["submitted_image_sha256"] = body.checksum_sha256.lower()
     try:
         from sitewise.services import panorama_quality_service
 
@@ -815,6 +924,28 @@ def property_panorama(
         role=current.role,
     )
     require_owner_published_view(db, property_id, current)
+    if rbac.can_administer_users(current.role):
+        if current.assurance_level != rbac.REQUIRED_STAFF_AAL:
+            raise HTTPException(403, "Administrator MFA is required.")
+        row = db.execute(text("""
+            SELECT p.panorama_id, cs.owner_id, a.agent_id
+            FROM fyp.agent_listing_assignment a
+            JOIN fyp.panoramas p ON p.panorama_id=a.panorama_id
+            JOIN fyp.capture_sessions cs ON cs.id=p.session_id
+            WHERE a.listing_id=:pid AND a.workflow_status='submitted'
+              AND p.property_id=CAST(:pid AS text) AND cs.property_id=p.property_id
+              AND cs.status='completed' AND p.created_at<=a.submitted_at
+              AND (cs.capture_plan_version='2' OR EXISTS (
+                SELECT 1 FROM fyp.panorama_jobs j WHERE j.session_id=cs.id AND j.status='done'
+              ))
+              AND p.storage_path IS NOT NULL AND p.verification_status<>'rejected'
+        """), {"pid": property_id}).mappings().first()
+        if row is None:
+            raise NotFoundError("No submitted inspection panorama is available.")
+        from sitewise.services.property_verification_service import AdminPropertyReviewService
+
+        AdminPropertyReviewService.verify_panorama_agent(row["agent_id"], row["owner_id"])
+        return _panorama_json(svc.get_panorama(db, row["panorama_id"]))
     submitted_id = db.execute(
         text(
             "SELECT panorama_id FROM fyp.agent_listing_assignment "
@@ -869,6 +1000,21 @@ def list_admin_panoramas(
     return {"panoramas": [_panorama_json(p) for p in panoramas]}
 
 
+def _require_standalone_panorama(db: Session, panorama_id: uuid.UUID) -> None:
+    current = svc.get_panorama(db, panorama_id)
+    if current is None:
+        raise NotFoundError("Panorama not found.")
+    if not str(current.property_id).isdigit():
+        return
+    pid = int(current.property_id)
+    db.execute(text("SELECT id FROM fyp.rental_properties WHERE id=:id FOR UPDATE"), {"id": pid})
+    if db.execute(text("""
+        SELECT 1 FROM fyp.agent_listing_assignment WHERE listing_id=:id
+        UNION ALL SELECT 1 FROM fyp.property_verification WHERE property_id=:id LIMIT 1
+    """), {"id": pid}).first():
+        raise ConflictError("Use the consolidated Admin property decision for this panorama.")
+
+
 @router.post("/admin/panoramas/{panorama_id}/review")
 def review_admin_panorama(
     panorama_id: uuid.UUID,
@@ -876,6 +1022,7 @@ def review_admin_panorama(
     db: DbSession,
     admin: AdminUser,
 ) -> dict[str, Any]:
+    _require_standalone_panorama(db, panorama_id)
     record = svc.review_panorama(
         db,
         panorama_id=panorama_id,
@@ -900,6 +1047,7 @@ def enhance_admin_panorama(
     fully intact. Reviewers choose which version to view through the
     ``version`` query parameter on the panorama view endpoint.
     """
+    _require_standalone_panorama(db, panorama_id)
     record = svc.enhance_panorama(db, panorama_id=panorama_id)
     return _panorama_json(record)
 
@@ -910,6 +1058,7 @@ def publish_admin_panorama(
     db: DbSession,
     admin: AdminUser,
 ) -> dict[str, Any]:
+    _require_standalone_panorama(db, panorama_id)
     record = svc.publish_panorama(
         db, panorama_id=panorama_id, publisher_id=admin.user_id
     )
@@ -922,4 +1071,5 @@ def unpublish_admin_panorama(
     db: DbSession,
     _admin: AdminUser,
 ) -> dict[str, Any]:
+    _require_standalone_panorama(db, panorama_id)
     return _panorama_json(svc.unpublish_panorama(db, panorama_id=panorama_id))

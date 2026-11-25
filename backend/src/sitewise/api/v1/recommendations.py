@@ -193,7 +193,9 @@ def search_recommendations(
         management_ids=assigned_ids,
     )
     try:
-        response = RecommendationSearchService(session).search(criteria)
+        response = RecommendationSearchService(
+            session, app_session=operational_db
+        ).search(criteria)
         ids = [row['property_id'] for row in response['data']]
         try:
             managers = management.resolve(ids)
@@ -336,7 +338,7 @@ def recommendation_facets(
         managed_only=managed_only,
         management_ids=assigned_ids,
     )
-    return {"data": RecommendationSearchService(session).facets(criteria)}
+    return {"data": RecommendationSearchService(session, app_session=operational_db).facets(criteria)}
 
 
 

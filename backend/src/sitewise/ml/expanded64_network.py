@@ -1,6 +1,7 @@
 """Coordinate measurements recovered from the original p_sense training jobs."""
 from __future__ import annotations
 
+from sitewise.ml.expanded64_feature_definitions import DEFINITIONS_VERSION
 from sitewise.ml.coordinate_features import (
     GROUP_DRIVE,
     GROUP_ISO,
@@ -42,6 +43,11 @@ class Expanded64CoordinateExtractor(CoordinateFeatureExtractor):
         result.sources[name] = (
             "public.ur_road (OSM); clipped line length / geodesic 1 km buffer area"
         )
+        # The 1 km ur_road definition is the validated original-model recipe.
+        # It is intentionally NOT replaced by the standardised roads_v2
+        # definition while the original Expanded64 artifact is active.
+        result.notes["definition_version"] = DEFINITIONS_VERSION
+        result.notes["standardised_features"] = ()
         if result.values[name] is not None:
             result.status = _status(result)
         return result
@@ -115,7 +121,14 @@ class Expanded64CoordinateExtractor(CoordinateFeatureExtractor):
             return result
         result.values[name] = _number(row["area"])
         result.sources[name] = source
-        result.notes.update(nodes=row["nodes"], snap_m=row["snap_m"], hull_ratio=0.90)
+        result.notes.update(
+            nodes=row["nodes"], snap_m=row["snap_m"], hull_ratio=0.90,
+            definition_version=DEFINITIONS_VERSION,
+            standardised_features=(
+                ("walk_isochrone_area_10min_km2", "worldpop_walk_reachable_10min")
+                if walk else ()
+            ),
+        )
         if walk:
             population = self._hull_population(row["hull"])
             result.values["worldpop_walk_reachable_10min"] = population["population"]
@@ -180,30 +193,75 @@ class Expanded64CoordinateExtractor(CoordinateFeatureExtractor):
         result.status = _status(result)
         return result
 
-    def parking_facilities(self, lat: float, lon: float) -> GroupResult:
-        """Rebuild the refined parking workbook measurement from facility geometry."""
-        source = "public.psense_parking (kept facilities; OSM and official park-and-ride inventory)"
+    def parking_facilities(
+        self, lat: float, lon: float, *, archive_point_inventory: bool = False,
+    ) -> GroupResult:
+        """Measure distinct kept facilities using either archived parking recipe.
+
+        Replay can use the Geofabrik and official park-and-ride representative
+        points that reproduce the archived U counts. Its link audit records
+        both centroid and nearest-geometry distances. The default remains the
+        P nearest-geometry recipe; neither recipe has shared P/U parity.
+        """
+        if archive_point_inventory:
+            source = "public.psense_parking (Geofabrik and official park-and-ride point inventory)"
+            distance = "ST_Distance(ST_SetSRID(ST_MakePoint(p.lon, p.lat), 4326)::geography, o.geom::geography)"
+            scope = """
+                abs(p.lon - :lon) < 0.035 AND abs(p.lat - :lat) < 0.035
+                AND p.source_kind IN ('OSM_GEOFABRIK_PBF','MRT_CORP_PARKRIDE','PRASARANA_PARKRIDE')
+            """
+            primary_nearest = "round(min(distance) FILTER (WHERE distance <= 3000)::numeric, 2)"
+            # This is the separate published recovery for missing U nearest values.
+            nearest = f"""coalesce({primary_nearest}, (
+                SELECT round(ST_Distance(closest.geom::geography, o.geom::geography)::numeric, 1)
+                FROM origin o CROSS JOIN LATERAL (
+                    SELECT geom FROM public.psense_parking
+                    WHERE geom IS NOT NULL
+                    ORDER BY geom <-> o.geom LIMIT 1
+                ) closest
+            ))"""
+            fallback_used = f"({primary_nearest}) IS NULL"
+            having = ""
+        else:
+            source = "public.psense_parking (kept facilities; OSM and official park-and-ride inventory)"
+            distance = "ST_Distance(p.geom::geography, o.geom::geography)"
+            scope = """
+                p.geom && ST_Expand(o.geom, 0.034)
+                AND ST_DWithin(p.geom::geography, o.geom::geography, 3000)
+            """
+            nearest = "round(min(distance)::numeric, 1)"
+            fallback_used = "false"
+            having = "HAVING count(*) > 0"
+
         result = GroupResult(GROUP_PARKING, attempted_source=source)
         row = self._row(f"""
             WITH origin AS ({_ORIGIN}),
             facilities AS (
-                SELECT p.facility_id, min(ST_Distance(p.geom::geography, o.geom::geography)) AS distance
-                FROM origin o JOIN public.psense_parking p
-                  ON p.geom && ST_Expand(o.geom, 0.034)
-                WHERE p.kept AND ST_DWithin(p.geom::geography, o.geom::geography, 3000)
+                SELECT p.facility_id, min({distance}) AS distance
+                FROM origin o JOIN public.psense_parking p ON {scope}
+                WHERE p.kept
                 GROUP BY p.facility_id
             )
             SELECT count(*) FILTER (WHERE distance <= 500) AS parking_facilities_500m,
                    count(*) FILTER (WHERE distance <= 1000) AS parking_facilities_1km,
-                   round(min(distance)::numeric, 1)::float8 AS nearest_parking_distance_m
-            FROM facilities HAVING count(*) > 0
+                   ({nearest})::float8 AS nearest_parking_distance_m,
+                   {fallback_used} AS used_geometry_fallback
+            FROM facilities {having}
             """, {"lat": lat, "lon": lon})
-        if row is None:
+        if row is None or row["nearest_parking_distance_m"] is None:
             result.status = STATUS_UNAVAILABLE
-            result.reason = "No kept parking facility within 3 km"
+            result.reason = "No kept parking facility in the selected source window"
             return result
+        used_fallback = row.pop("used_geometry_fallback")
         result.values = {name: _number(value) for name, value in row.items()}
         result.sources = {name: source for name in row}
+        if used_fallback:
+            result.sources["nearest_parking_distance_m"] = (
+                "public.psense_parking (archived recovery: nearest geometry beyond the U point search)"
+            )
+        result.notes.update(
+            archive_point_inventory=archive_point_inventory, used_geometry_fallback=used_fallback,
+        )
         result.status = _status(result)
         return result
 

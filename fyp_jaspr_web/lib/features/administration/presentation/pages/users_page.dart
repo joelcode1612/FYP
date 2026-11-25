@@ -8,6 +8,9 @@ import 'package:shared_logic/shared_logic.dart';
 import 'package:sitewise_jaspr_web/shared/presentation/components/dashboard_kit.dart';
 import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart';
 import 'package:sitewise_jaspr_web/shared/presentation/layouts/app_layout.dart';
+import 'package:universal_web/web.dart' as web;
+import 'package:sitewise_jaspr_web/core/di/app_locator.dart';
+import 'package:sitewise_jaspr_web/features/administration/data/admin_api.dart';
 
 /// Web user management, ported to the source `admin/users.html` structure: a
 /// `.filters` bar (Search + Status + Role, in a `.grid-3`) above an
@@ -16,9 +19,9 @@ import 'package:sitewise_jaspr_web/shared/presentation/layouts/app_layout.dart';
 ///
 /// Records are live: the user repository reads the authenticated FastAPI
 /// `/users` API (administrator + aal2 enforced server-side), not demo data.
-/// The screen is deliberately read-only: roles are assigned by the
-/// authorised registration / invitation / onboarding workflows and are shown
-/// for information only — never editable from user management. Account
+/// Existing account roles remain read-only. New owner accounts are issued
+/// only through the administrator invitation endpoint; status and role are
+/// decided by the trusted backend, never by this page. Account
 /// status is managed on the User Detail page, so no change is ever
 /// simulated here. A failed load surfaces an error state rather than an
 /// empty directory. The Listings column is the backend's per-owner count of
@@ -32,6 +35,247 @@ class UsersPage extends StatefulComponent {
 }
 
 class _UsersPageState extends State<UsersPage> {
+  // SITEWISE_OWNER_INVITE_UI_V1
+  bool _ownerInviteOpen = false;
+  bool _ownerInviteBusy = false;
+  String _ownerName = '';
+  String _ownerEmail = '';
+  String _ownerPhone = '';
+  String? _ownerInviteError;
+  String? _ownerInviteNotice;
+
+  void _openOwnerInvite() {
+    setState(() {
+      _ownerName = '';
+      _ownerEmail = '';
+      _ownerPhone = '';
+      _ownerInviteError = null;
+      _ownerInviteNotice = null;
+      _ownerInviteOpen = true;
+    });
+    Future<void>.delayed(const Duration(milliseconds: 30), () {
+      if (!mounted || !_ownerInviteOpen) return;
+      final target = web.document.querySelector('.owner-invite-dialog input');
+      (target as web.HTMLElement?)?.focus();
+    });
+  }
+
+  void _closeOwnerInvite() {
+    if (_ownerInviteBusy) return;
+    setState(() {
+      _ownerInviteOpen = false;
+      _ownerInviteError = null;
+    });
+    _restoreOwnerInviteFocus();
+  }
+
+  void _restoreOwnerInviteFocus() {
+    Future<void>.delayed(const Duration(milliseconds: 30), () {
+      if (!mounted || _ownerInviteOpen) return;
+      final target = web.document.querySelector('.page-head__actions button');
+      (target as web.HTMLElement?)?.focus();
+    });
+  }
+
+  Future<void> _sendOwnerInvite() async {
+    if (_ownerInviteBusy || !_ownerInviteOpen) return;
+    final name = _ownerName.trim();
+    final email = _ownerEmail.trim().toLowerCase();
+    final phone = _ownerPhone.trim();
+    String? validation;
+    if (name.length < 2 || name.length > 120) {
+      validation = 'Enter a full name between 2 and 120 characters.';
+    } else if (email.length > 254 ||
+        !RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email)) {
+      validation = 'Enter a valid email address.';
+    } else if (phone.isNotEmpty &&
+        (phone.length > 20 ||
+            !RegExp(r'^\+?[0-9 ()-]+$').hasMatch(phone) ||
+            phone.replaceAll(RegExp(r'[^0-9]'), '').length < 7 ||
+            phone.replaceAll(RegExp(r'[^0-9]'), '').length > 15)) {
+      validation = 'Enter a valid phone number, or leave it blank.';
+    }
+    if (validation != null) {
+      setState(() => _ownerInviteError = validation);
+      return;
+    }
+    setState(() {
+      _ownerInviteBusy = true;
+      _ownerInviteError = null;
+    });
+    try {
+      final result = await AppLocator.adminApi.invitePropertyOwner(
+        fullName: name,
+        email: email,
+        phoneNumber: phone.isEmpty ? null : phone,
+      );
+      if (!mounted) return;
+      final invitation = result['invitation'];
+      final mirror = result['mirror'];
+      final ownerUserId = '${result['owner_user_id'] ?? ''}';
+      final invitationStatus = '${result['invitation_status'] ?? ''}'
+          .trim()
+          .toLowerCase();
+      final nestedStatus = invitation is Map
+          ? '${invitation['invitation_status'] ?? ''}'.trim().toLowerCase()
+          : '';
+      final confirmed =
+          result['invited'] is bool &&
+          result['email_sent'] is bool &&
+          ownerUserId.isNotEmpty &&
+          '${result['email'] ?? ''}'.trim().toLowerCase() == email &&
+          result['role'] == 'owner' &&
+          result['account_status'] == 'pending' &&
+          (invitationStatus == 'sent' || invitationStatus == 'accepted') &&
+          invitationStatus == nestedStatus &&
+          invitation is Map &&
+          '${invitation['invitation_id'] ?? ''}'.isNotEmpty &&
+          '${invitation['invited_email'] ?? ''}'.trim().toLowerCase() ==
+              email &&
+          '${invitation['invited_role'] ?? ''}'.trim().toLowerCase() ==
+              'owner' &&
+          '${invitation['invited_user_id'] ?? ''}' == ownerUserId &&
+          mirror is Map &&
+          '${mirror['user_id'] ?? ''}' == ownerUserId &&
+          '${mirror['email'] ?? ''}'.trim().toLowerCase() == email &&
+          mirror['role'] == 'owner' &&
+          mirror['account_status'] == 'pending';
+      // A retry may reconcile an already-sent or already-accepted invitation.
+      // Success still requires the exact Owner identity and pending mirror.
+      if (!confirmed) {
+        setState(() {
+          _ownerInviteError =
+              'The server did not confirm a pending Owner '
+              'account with a matching invitation. Check the user directory '
+              'before retrying.';
+          _ownerInviteBusy = false;
+        });
+        return;
+      }
+      final emailSent = result['email_sent'] == true;
+      final notice = emailSent
+          ? 'Invitation email sent for $email. The Owner account is pending '
+                'until email confirmation, MFA and onboarding are complete.'
+          : invitationStatus == 'accepted'
+          ? 'The accepted Owner invitation for $email was reconciled. No '
+                'email was needed because the address is already confirmed; '
+                'the account remains pending until onboarding completes.'
+          : 'The existing Owner invitation for $email was reconciled. No '
+                'second email was sent; the account remains pending until '
+                'onboarding completes.';
+      setState(() {
+        _ownerInviteBusy = false;
+        _ownerInviteOpen = false;
+        _ownerInviteNotice = notice;
+        _ownerName = '';
+        _ownerEmail = '';
+        _ownerPhone = '';
+      });
+      _restoreOwnerInviteFocus();
+      // Keep the existing notifier and directory as the only user-list source.
+      unawaited(context.read(adminNotifierProvider.notifier).loadUsers());
+    } catch (error) {
+      if (!mounted) return;
+      final message = AdminApi.message(error);
+      setState(() {
+        _ownerInviteBusy = false;
+        _ownerInviteError = 'Invitation could not be confirmed: $message';
+      });
+    }
+  }
+
+  Component _ownerInviteField({
+    required String labelText,
+    required String value,
+    required String placeholder,
+    required String autocomplete,
+    required void Function(String) onInput,
+    InputType type = InputType.text,
+  }) => Field(
+    labelText: labelText,
+    child: input(
+      type: type,
+      attributes: {
+        'value': value,
+        'placeholder': placeholder,
+        'autocomplete': autocomplete,
+        'aria-label': labelText,
+        if (_ownerInviteBusy) 'disabled': '',
+      },
+      events: events<String>(onInput: onInput),
+    ),
+  );
+
+  Component _ownerInviteDialog() => SitewiseDialog(
+    panelClass: 'dialog--owner-invite owner-invite-dialog',
+    title: 'Invite Property Owner',
+    ariaLabel: 'Invite Property Owner',
+    onClose: _closeOwnerInvite,
+    body: div(classes: 'stack', [
+      p(classes: 'body', [
+        Component.text(
+          'Create an owner account and send a secure '
+          'password-setup invitation.',
+        ),
+      ]),
+      _ownerInviteField(
+        labelText: 'Full name *',
+        value: _ownerName,
+        placeholder: 'Enter full name',
+        autocomplete: 'name',
+        onInput: (value) => setState(() => _ownerName = value),
+      ),
+      _ownerInviteField(
+        labelText: 'Email address *',
+        value: _ownerEmail,
+        placeholder: 'name@example.com',
+        autocomplete: 'email',
+        type: InputType.email,
+        onInput: (value) => setState(() => _ownerEmail = value),
+      ),
+      _ownerInviteField(
+        labelText: 'Phone number (optional)',
+        value: _ownerPhone,
+        placeholder: '+60',
+        autocomplete: 'tel',
+        onInput: (value) => setState(() => _ownerPhone = value),
+      ),
+      Field(
+        labelText: 'Account role',
+        child: div(classes: 'panel', [Component.text('Property Owner')]),
+      ),
+      Callout(
+        'The account remains pending until the recipient accepts the '
+        'invitation and completes account setup. No password is created '
+        'or displayed by the administrator.',
+        tone: 'info',
+        icon: 'info',
+      ),
+      if (_ownerInviteError != null)
+        div(
+          attributes: const {'role': 'alert'},
+          [ActionNotice(_ownerInviteError!, tone: 'danger')],
+        ),
+      if (_ownerInviteBusy)
+        div(
+          attributes: const {'role': 'status'},
+          [Component.text('Sending invitation…')],
+        ),
+    ]),
+    actions: [
+      ActionButton(
+        'Cancel',
+        variant: 'secondary',
+        onClick: _ownerInviteBusy ? null : _closeOwnerInvite,
+      ),
+      ActionButton(
+        _ownerInviteBusy ? 'Sending…' : 'Send Invitation',
+        icon: 'send',
+        onClick: _ownerInviteBusy ? null : () => unawaited(_sendOwnerInvite()),
+      ),
+    ],
+  );
+
   @override
   void initState() {
     super.initState();
@@ -51,13 +295,27 @@ class _UsersPageState extends State<UsersPage> {
       title: 'Users',
       eyebrow: 'Accounts',
       subtitle:
-          'Live account records from the authenticated backend '
-          '(administrator sign-in with MFA required). Read-only: role and '
-          'status are shown here but not changed on this screen.',
+          'Manage registered accounts and invite property owners. '
+          'Administrator sign-in with MFA is required.',
+      actions: [
+        ActionButton(
+          'Invite Property Owner',
+          icon: 'person_add',
+          onClick: _openOwnerInvite,
+        ),
+      ],
       // The shells below re-render only on loading/error; the directory owns
       // its own subscription to the users slice, so the `AppLayout` chrome
       // (topbar, page head, footer) never rebuilds on a notification.
-      child: const _Shells(),
+      child: div(classes: 'stack stack--sections', [
+        if (_ownerInviteNotice != null)
+          div(
+            attributes: const {'role': 'status'},
+            [ActionNotice(_ownerInviteNotice!)],
+          ),
+        const _Shells(),
+        if (_ownerInviteOpen) _ownerInviteDialog(),
+      ]),
     );
   }
 }
@@ -113,9 +371,8 @@ class _Error extends StatelessComponent {
     action: ActionButton(
       'Try again',
       variant: 'primary',
-      onClick: () => unawaited(
-        context.read(adminNotifierProvider.notifier).loadUsers(),
-      ),
+      onClick: () =>
+          unawaited(context.read(adminNotifierProvider.notifier).loadUsers()),
     ),
   );
 }
@@ -166,7 +423,8 @@ class _DirectoryState extends State<_Directory> {
       final matchesStatus =
           statusFilter == 'all' ||
           user.status.toLowerCase() == statusFilter.toLowerCase();
-      final matchesRole = roleFilter == 'all' || _roleValue(user.role) == roleFilter;
+      final matchesRole =
+          roleFilter == 'all' || _roleValue(user.role) == roleFilter;
       return matchesQ && matchesStatus && matchesRole;
     }).toList();
   }
@@ -271,7 +529,10 @@ class _DirectoryState extends State<_Directory> {
                             Component.text(
                               user.name.trim().isEmpty
                                   ? 'U'
-                                  : user.name.trim().substring(0, 1).toUpperCase(),
+                                  : user.name
+                                        .trim()
+                                        .substring(0, 1)
+                                        .toUpperCase(),
                             ),
                           ],
                         ),
@@ -281,7 +542,9 @@ class _DirectoryState extends State<_Directory> {
                             classes: 'auu-person__name',
                             children: [
                               Component.text(
-                                user.name.trim().isEmpty ? 'Unnamed account' : user.name,
+                                user.name.trim().isEmpty
+                                    ? 'Unnamed account'
+                                    : user.name,
                               ),
                             ],
                           ),
@@ -296,18 +559,20 @@ class _DirectoryState extends State<_Directory> {
                         Component.text(_roleLabel(user.role)),
                       ]),
                     ]),
-                    td([
-                      StatusBadge.forText(user.status),
-                    ]),
+                    td([StatusBadge.forText(user.status)]),
                     td([
                       span(classes: 'auu-count', [
                         Component.text(
-                          user.listingCount == null ? '—' : '${user.listingCount}',
+                          user.listingCount == null
+                              ? '—'
+                              : '${user.listingCount}',
                         ),
                       ]),
                     ]),
                     td([
-                      span(classes: 'auu-date', [Component.text(_joined(user))]),
+                      span(classes: 'auu-date', [
+                        Component.text(_joined(user)),
+                      ]),
                     ]),
                     td([
                       div(classes: 'auu-actions', [

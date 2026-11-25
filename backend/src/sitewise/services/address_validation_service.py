@@ -130,6 +130,16 @@ def validate_address(
     address = result.get("address", {}) or {}
     components = result.get("addressComponents", []) or []
 
+    def _component_text(component_type: str) -> str | None:
+        return next(
+            (
+                c.get("text")
+                for c in components
+                if (c.get("componentType") or "") == component_type
+            ),
+            None,
+        )
+
     granularity = verdict.get("validationGranularity")
     complete = bool(verdict.get("addressComplete"))
     has_unconfirmed = bool(verdict.get("hasUnconfirmedComponents"))
@@ -152,14 +162,13 @@ def validate_address(
         "has_inferred_components": bool(verdict.get("hasInferredComponents")),
         "latitude": location.get("latitude"),
         "longitude": location.get("longitude"),
-        "postal_code": next(
-            (
-                c.get("text")
-                for c in components
-                if "postal_code" in (c.get("componentType") or "").lower()
-            ),
-            None,
-        ),
+        "postal_code": _component_text("postal_code"),
+        # Structured component texts the address preview uses to check the
+        # typed city/state/postcode against what the provider actually
+        # matched. Normalised application fields only — never raw payloads.
+        "locality": _component_text("locality"),
+        "administrative_area": _component_text("administrative_area_level_1"),
+        "country": _component_text("country"),
         "component_count": len(components),
         "provider": "google_address_validation",
         "provider_request_id": body.get("responseId"),

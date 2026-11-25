@@ -263,6 +263,35 @@ def test_role_changes_are_refused_before_any_write(client, cleanup_users, fake_a
         )
 
 
+def test_pending_owner_cannot_be_activated_through_user_management(
+    client, cleanup_users, fake_admin
+):
+    _, admin_token = _provision(cleanup_users, role="admin")
+    target, _ = _provision(cleanup_users, role="owner")
+    with Session(engine) as session:
+        UserRepository(session).update(target, {"account_status": "pending"})
+
+    response = client.patch(
+        f"/api/v1/users/{target}",
+        headers=auth(admin_token),
+        json={"account_status": "active"},
+    )
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["code"] == "onboarding_required"
+    assert fake_admin.identity == {}
+    assert fake_admin.audit == []
+    with Session(engine) as session:
+        assert UserRepository(session).get_by_id(target).account_status == "pending"
+
+    suspended = client.patch(
+        f"/api/v1/users/{target}",
+        headers=auth(admin_token),
+        json={"account_status": "suspended"},
+    )
+    assert suspended.status_code == 200, suspended.text
+    assert suspended.json()["account_status"] == "suspended"
+
+
 def test_successful_change_reports_the_recorded_audit_event(client, cleanup_users, fake_admin):
     _, admin_token = _provision(cleanup_users, role="admin")
     target, _ = _provision(cleanup_users)

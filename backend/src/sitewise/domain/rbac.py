@@ -13,8 +13,8 @@ Roles (authoritative SITEWISE model — exactly four, stored authoritatively in
                   role that may change another account's role.
 ``owner``         Property Owner. Manages the properties recorded against their
                   own account (``public.property.owner_id``) and the panoramas
-                  attached to them. Not staff: no MFA requirement and no
-                  administrative reach.
+                  attached to them. Not staff: no administrative reach, but the
+                  provider workspace requires verified TOTP MFA.
 ``agent``         Created by an administrator only. Email/password sign-in,
                   mandatory TOTP MFA, manages ONLY assigned listings.
 ``entrepreneur``  Public self-registration. Explores properties, creates
@@ -112,9 +112,12 @@ PUBLIC_REGISTRATION_ROLES = (ROLE_ENTREPRENEUR,)
 PROPERTY_MANAGEMENT_ROLES = (ROLE_OWNER, ROLE_ENTREPRENEUR, ROLE_AGENT, ROLE_ADMIN)
 
 # Staff portal roles (agents + administrators). Owners and entrepreneurs are NOT
-# staff: they must not inherit staff administrative permissions, and they are not
-# subject to the staff MFA requirement.
+# staff: they must not inherit staff administrative permissions. Owner access to
+# the shared provider workspace still uses the provider MFA policy below.
 STAFF_ROLES = (ROLE_AGENT, ROLE_ADMIN)
+
+# Accounts an administrator may invite into the provider onboarding flow.
+INVITED_PROVIDER_ROLES = (ROLE_OWNER, ROLE_AGENT)
 
 # Roles that may read any user's saved properties / recommendations
 # (administrative overview). Everyone else is limited to their own rows.
@@ -132,10 +135,10 @@ STATUS_ACTIVE = "active"
 STATUS_SUSPENDED = "suspended"
 STATUS_PENDING = "pending"
 
-# Authentication assurance level required for staff operations. Supabase
-# puts the verified level in the ``aal`` claim: ``aal1`` = password only,
-# ``aal2`` = password + a verified MFA factor. A password login alone
-# (``aal1``) must never authorize protected staff operations.
+# Authentication assurance level required for provider and staff operations.
+# Supabase puts the verified level in the ``aal`` claim: ``aal1`` = password
+# only, ``aal2`` = password + a verified MFA factor. A password login alone
+# (``aal1``) must never authorize protected provider or staff operations.
 REQUIRED_STAFF_AAL = "aal2"
 
 # Profile fields the authenticated owner may edit about themselves.

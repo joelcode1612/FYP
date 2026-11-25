@@ -58,7 +58,7 @@ def main() -> int:
     # ── 1. Invitation: identity creation (the GoTrue step) ──────────────────
     step("invite step 1/4 — GoTrue invite_user_by_email")
     try:
-        invited = svc.invite_agent(email=TEST_EMAIL, full_name=TEST_NAME)
+        invited = svc.invite_staff_user(email=TEST_EMAIL, full_name=TEST_NAME)
     except SupabaseAdminError as exc:
         print(f"BLOCKED: {exc}")
         print(
@@ -114,6 +114,7 @@ def main() -> int:
             invited_email=TEST_EMAIL,
             invited_by_user_id=admin_id,
             status="sent",
+            invited_role=rbac.ROLE_AGENT,
         )
         created["invitation_id"] = invitation.get("invitation_id")
         svc.insert_role_audit(

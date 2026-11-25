@@ -1,3 +1,4 @@
+// SITEWISE_ADMIN_REVIEW_UI_V1
 import 'dart:async';
 
 import 'package:jaspr/dom.dart';
@@ -6,7 +7,6 @@ import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import 'package:sitewise_jaspr_web/features/administration/presentation/components/agent_assignment_control.dart';
-import 'package:sitewise_jaspr_web/features/panorama_viewer/presentation/components/canonical_panorama_panel.dart';
 import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart';
 import 'package:sitewise_jaspr_web/features/property_verification/presentation/components/verification_detail_view.dart';
 import 'package:sitewise_jaspr_web/shared/presentation/layouts/app_layout.dart';
@@ -67,16 +67,17 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
 
     return _page(
       matches
-          ? div(classes: 'stack stack--sections', [
+          ? div(classes: 'stack stack--sections admin-listing-review-v3 sw-review-polish', [
               const ActionLink(
                 'Back to listings',
                 href: '/admin/listings',
                 variant: 'ghost',
                 icon: 'arrow_back',
               ),
-              const VerificationDetailView(),
-              AgentAssignmentControl(propertyId: _loadedId),
-              CanonicalPanoramaPanel(propertyId: _loadedId),
+              const VerificationDetailView(showPanorama: true),
+              div(classes: 'sw-review-agent-card', [
+                AgentAssignmentControl(propertyId: _loadedId),
+              ]),
             ])
           : div(classes: 'card stack', [
               if (error != null && !loading) ...[
@@ -101,9 +102,8 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
       title: 'Listing detail',
       eyebrow: 'Verification',
       subtitle:
-          'One listing as submitted, with the evidence and history you need '
-          'to decide each dimension independently.',
-      child: child,
+          'Review property details, inspection evidence and publication status.',
+      child: div(classes: 'sw-admin-review-v2', [child]),
     );
   }
 

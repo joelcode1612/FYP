@@ -18,6 +18,9 @@ class MobileAppShell extends ConsumerWidget {
 
   final bool brandTitle;
   final bool embeddedHeader;
+
+  /// Form-specific opt-out; other screens retain their existing header.
+  final bool hideTopBar;
   final bool? m3;
   final List<MobileDestination>? destinations;
   final bool? showBack;
@@ -43,6 +46,7 @@ class MobileAppShell extends ConsumerWidget {
     this.floatingActionButton,
     this.brandTitle = false,
     this.embeddedHeader = false,
+    this.hideTopBar = false,
     this.m3,
     this.destinations,
     this.showBack,
@@ -79,7 +83,7 @@ class MobileAppShell extends ConsumerWidget {
       Navigator.of(context).pushReplacementNamed(route);
     }
 
-    final showTopBar = useM3 || !embeddedHeader;
+    final showTopBar = !hideTopBar && (useM3 || !embeddedHeader);
 
     final dock = MobileBottomNav(
       destinations: navDestinations,

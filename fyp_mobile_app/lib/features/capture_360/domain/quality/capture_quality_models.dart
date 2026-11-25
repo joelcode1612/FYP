@@ -109,7 +109,8 @@ class QualityFinding {
       }
     }
     return QualityFinding(
-      check: QualityCheckId.fromWire(json['check'] as String?) ??
+      check:
+          QualityCheckId.fromWire(json['check'] as String?) ??
           QualityCheckId.jpegIntegrity,
       severity: severity,
       code: '${json['code'] ?? 'unknown'}',
@@ -153,15 +154,14 @@ class FrameQualityReport {
     int targetId,
     String thresholdsVersion, {
     List<QualityFinding> findings = const <QualityFinding>[],
-  }) =>
-      FrameQualityReport(
-        targetId: targetId,
-        verdict: QualityVerdict.accepted,
-        findings: findings,
-        analyzedAtMs: DateTime.now().toUtc().millisecondsSinceEpoch,
-        analyzerVersion: kAnalyzerVersion,
-        thresholdsVersion: thresholdsVersion,
-      );
+  }) => FrameQualityReport(
+    targetId: targetId,
+    verdict: QualityVerdict.accepted,
+    findings: findings,
+    analyzedAtMs: DateTime.now().toUtc().millisecondsSinceEpoch,
+    analyzerVersion: kAnalyzerVersion,
+    thresholdsVersion: thresholdsVersion,
+  );
 
   bool get hasWarnings => verdict != QualityVerdict.accepted;
 
@@ -197,9 +197,7 @@ class FrameQualityReport {
     if (raw is List) {
       for (final entry in raw) {
         if (entry is Map) {
-          findings.add(
-            QualityFinding.fromJson(entry.cast<String, Object?>()),
-          );
+          findings.add(QualityFinding.fromJson(entry.cast<String, Object?>()));
         }
       }
     }

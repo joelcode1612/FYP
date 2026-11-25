@@ -1,10 +1,11 @@
-"""Staff administration + staff-only endpoints (Agent & Admin portal).
+"""Staff administration plus trusted invited-provider onboarding.
 
-All routes here require a verified Supabase session, an ACTIVE account, a
-staff role (``agent`` / ``admin``) and completed MFA (the verified ``aal2``
-claim on the signed token). Password-only sessions receive a structured 403
+Administrator and Agent routes require a verified Supabase session, an ACTIVE
+account, the appropriate role and completed MFA (the verified ``aal2`` claim
+on the signed token). Password-only sessions receive a structured 403
 (``code: "staff_mfa_required"``) so the frontend can route to the MFA
-enrollment / challenge screens.
+enrollment / challenge screens. The onboarding-completion route intentionally
+uses ``CurrentUser`` and re-proves every pending Owner/Agent precondition.
 
 Administrator operations (create/suspend agents, invitations, listing
 assignment, MFA recovery, audit review) additionally require the ``admin``
@@ -20,13 +21,15 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy import text
 from sqlmodel import Session
 
+from sitewise.core.config import settings
+from sitewise.core.exceptions import ConflictError
 from sitewise.core.supabase_admin import SupabaseAdminError, SupabaseAdminService
 from sitewise.db.models.user import User
 from sitewise.db.session import get_db
@@ -103,6 +106,21 @@ class CreateAgentRequest(BaseModel):
     allow_existing: bool = False
 
 
+class CreateOwnerRequest(BaseModel):
+    """Administrator-supplied identity details for an invited Property Owner.
+
+    Role, account status and assurance are deliberately absent: the server
+    always provisions ``owner`` / ``pending`` and activation requires the
+    trusted onboarding checks.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    full_name: str = Field(min_length=2, max_length=120)
+    email: EmailStr
+    phone_number: str | None = Field(default=None, max_length=20)
+
+
 class CreateCompanyRequest(BaseModel):
     """Registration of a row in the existing ``public.company`` table.
 
@@ -168,6 +186,83 @@ def _invitation_state(row: dict) -> str:
     return str(row.get("invitation_status") or row.get("status") or "").lower()
 
 
+def _invitation_role(row: dict) -> str:
+    """Legacy rows predate role tracking and are therefore Agent invitations."""
+    raw = row.get("invited_role")
+    if raw is None or str(raw).strip() == "":
+        return rbac.ROLE_AGENT
+    role = rbac.canonical_role(str(raw))
+    return role if role in (rbac.ROLE_AGENT, rbac.ROLE_OWNER) else "invalid"
+
+
+def _owner_invitation_expiry() -> str:
+    return (
+        datetime.now(timezone.utc)
+        + timedelta(minutes=settings.staff_invitation_expiry_minutes)
+    ).isoformat()
+
+
+def _invitation_claim_is_active(row: dict) -> bool:
+    claimed = _parse_supabase_timestamp(row.get("provisioning_claimed_at"))
+    if claimed is None:
+        return False
+    return claimed > (
+        datetime.now(timezone.utc)
+        - timedelta(seconds=settings.staff_invitation_claim_seconds)
+    )
+
+
+def _claim_invitation_for_dispatch(
+    service: SupabaseAdminService, row: dict
+) -> tuple[dict, str]:
+    if _invitation_state(row) != "pending":
+        raise HTTPException(status_code=409, detail="Only pending invitations can be dispatched.")
+    previous_claim = row.get("provisioning_claimed_at")
+    if _invitation_claim_is_active(row):
+        raise HTTPException(
+            status_code=409,
+            detail="This invitation is already being dispatched by another request.",
+        )
+    claimed_at = datetime.now(timezone.utc).isoformat()
+    claimed = service.update_invitation(
+        str(row["invitation_id"]),
+        {"provisioning_claimed_at": claimed_at},
+        expected_statuses=("pending",),
+        expected_fields={"provisioning_claimed_at": previous_claim},
+    )
+    if claimed is None:
+        raise HTTPException(
+            status_code=409,
+            detail="This invitation changed while its dispatch was being claimed.",
+        )
+    return claimed, claimed_at
+
+
+def _release_invitation_claim(
+    service: SupabaseAdminService, row: dict, claimed_at: str
+) -> None:
+    try:
+        service.update_invitation(
+            str(row["invitation_id"]),
+            {"provisioning_claimed_at": None},
+            expected_statuses=("pending",),
+            expected_fields={"provisioning_claimed_at": claimed_at},
+        )
+    except Exception:
+        logger.exception("Failed to release invitation dispatch claim")
+
+
+def _expire_invitation_if_due(service: SupabaseAdminService, row: dict) -> dict:
+    if _invitation_state(row) not in _OPEN_INVITATION_STATES or not _invitation_is_expired(row):
+        return row
+    expired = service.update_invitation(
+        str(row["invitation_id"]),
+        {"invitation_status": "expired", "provisioning_claimed_at": None},
+        expected_statuses=_OPEN_INVITATION_STATES,
+    )
+    return expired or service.get_invitation(str(row["invitation_id"])) or row
+
+
 def _iso(value: object) -> str:
     """ISO-8601 for a datetime column, empty string when the mirror has none."""
     formatter = getattr(value, "isoformat", None)
@@ -175,14 +270,23 @@ def _iso(value: object) -> str:
 
 
 def _latest_invitations(
-    service: SupabaseAdminService, rows: list[dict] | None = None
+    service: SupabaseAdminService,
+    rows: list[dict] | None = None,
+    *,
+    role: str | None = None,
 ) -> dict[str, dict]:
-    """Newest invitation per email, keyed by the lower-cased address."""
+    """Newest invitation per email, optionally restricted to one role."""
     if rows is None:
         rows = service.list_invitations()
-    ordered = sorted(rows, key=lambda row: str(row.get("created_at") or ""), reverse=True)
+    ordered = sorted(
+        (_expire_invitation_if_due(service, row) for row in rows),
+        key=lambda row: str(row.get("created_at") or ""),
+        reverse=True,
+    )
     latest: dict[str, dict] = {}
     for row in ordered:
+        if role is not None and _invitation_role(row) != role:
+            continue
         email = str(row.get("invited_email") or "").lower()
         if email and email not in latest:
             latest[email] = row
@@ -221,7 +325,9 @@ def _agent_records(
         if uid:
             by_user[str(uid)] = agent
     companies = _company_index(service, company_rows)
-    invitations = _latest_invitations(service, invitation_rows)
+    invitations = _latest_invitations(
+        service, invitation_rows, role=rbac.ROLE_AGENT
+    )
     records: list[dict] = []
     for profile in user_service.list_users(limit=500):
         if not rbac.has_role(profile.role, (rbac.ROLE_AGENT,)):
@@ -351,7 +457,7 @@ def create_agent(
             )
         auth_user_id = str(existing["id"])
     else:
-        invited_user = service.invite_agent(
+        invited_user = service.invite_staff_user(
             email=email,
             full_name=payload.full_name,
             phone_number=payload.phone_number,
@@ -396,6 +502,7 @@ def create_agent(
             invited_email=email,
             invited_by_user_id=admin.user_id,
             status="sent",
+            invited_role=rbac.ROLE_AGENT,
         )
     audit_recorded = _record_audit(
         service,
@@ -411,6 +518,7 @@ def create_agent(
             "agent_id": agent_profile.get("agent_id"),
             "company_id": company_id,
             "invitation_id": (invitation or {}).get("invitation_id"),
+            "invited_role": rbac.ROLE_AGENT,
         },
     )
 
@@ -424,6 +532,360 @@ def create_agent(
         "invitation_status": _invitation_state(invitation or {}),
         "agent_profile": agent_profile,
         "company": {"company_id": company_id, "company_name": company_name},
+        "mirror": _mirror_payload(mirror),
+        "audit_recorded": audit_recorded,
+    }
+
+
+@router.post("/owners", status_code=201)
+def create_owner(
+    payload: CreateOwnerRequest,
+    admin: AdminMfaUser,
+    user_service: UserService = Depends(get_user_service),
+) -> dict:
+    """Invite or safely reconcile a Property Owner without Agent side effects.
+
+    Every new invitation starts as ``pending``. A compare-and-set dispatch
+    claim prevents concurrent administrators from sending the same email, and
+    a retry can finish partial provisioning without duplicating the identity.
+    Revoked/expired invitations may be replaced only for the same unconfirmed
+    provisional identity or an already-bound pending Owner. Confirmed pending
+    Owners receive a replacement ``accepted`` row without a redundant email;
+    established accounts are never promoted automatically.
+    """
+    service = _admin_service()
+    email = str(payload.email).strip().lower()
+    full_name = payload.full_name.strip()
+    phone_number = payload.phone_number.strip() if payload.phone_number else None
+    phone_number = phone_number or None
+    if len(full_name) < 2:
+        raise HTTPException(status_code=422, detail="Full name is required.")
+
+    existing = service.find_auth_user_by_email(email)
+    local_profile = user_service.get_user_by_email(email)
+    if local_profile is not None and (
+        existing is None or str(local_profile.user_id) != str(existing["id"])
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "A different local identity already uses this email. "
+                "Administrator identity reconciliation is required."
+            ),
+        )
+
+    authoritative = (
+        service.get_identity_profile(str(existing["id"])) if existing else None
+    )
+    if authoritative is not None:
+        if (
+            str(authoritative.get("user_id")) != str(existing["id"])
+            or str(authoritative.get("email") or "").strip().lower() != email
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="The existing identity and authoritative profile do not match.",
+            )
+    existing_role = (
+        rbac.canonical_role(str(authoritative.get("role")))
+        if authoritative is not None
+        else (rbac.canonical_role(local_profile.role) if local_profile else None)
+    )
+    existing_status = (
+        str(authoritative.get("account_status") or "").strip().lower()
+        if authoritative is not None
+        else (local_profile.account_status if local_profile else None)
+    )
+    existing_confirmed = bool(
+        existing and (existing.get("email_confirmed_at") or existing.get("confirmed_at"))
+    )
+    provisional_identity = bool(
+        existing
+        and not existing_confirmed
+        and existing_role in (None, rbac.ROLE_ENTREPRENEUR, rbac.ROLE_OWNER)
+        and existing_status in (None, rbac.STATUS_PENDING)
+    )
+    confirmed_pending_owner = bool(
+        existing_confirmed
+        and existing_role == rbac.ROLE_OWNER
+        and existing_status == rbac.STATUS_PENDING
+    )
+
+    invitation_rows = [
+        _expire_invitation_if_due(service, row)
+        for row in service.list_invitations(email)
+    ]
+    open_invitation = next(
+        (
+            row
+            for row in invitation_rows
+            if _invitation_state(row) in _OPEN_INVITATION_STATES
+        ),
+        None,
+    )
+    if open_invitation is not None and _invitation_role(open_invitation) != rbac.ROLE_OWNER:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "An open invitation already exists for this email for another "
+                "role. Revoke it before inviting an Owner."
+            ),
+        )
+
+    replaced_invitation_id = None
+    invitation = next(
+        (
+            row
+            for row in invitation_rows
+            if _invitation_state(row) in _OPEN_INVITATION_STATES
+            and _invitation_role(row) == rbac.ROLE_OWNER
+        ),
+        None,
+    )
+    if invitation is None:
+        latest = _newest_invitation(
+            service, email, role=rbac.ROLE_OWNER, rows=invitation_rows
+        )
+        state = _invitation_state(latest or {})
+        if latest is not None and state == "accepted":
+            invited_for = latest.get("invited_user_id")
+            if (
+                existing is None
+                or not invited_for
+                or str(invited_for) != str(existing["id"])
+                or not confirmed_pending_owner
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "The accepted invitation no longer matches a pending "
+                        "Owner account. Administrator reconciliation is required."
+                    ),
+                )
+            invitation = latest
+        elif latest is not None and state in ("revoked", "expired"):
+            invited_for = latest.get("invited_user_id")
+            if existing is not None:
+                if invited_for and str(invited_for) != str(existing["id"]):
+                    raise HTTPException(
+                        status_code=409,
+                        detail=(
+                            "The closed invitation belongs to a different identity. "
+                            "Administrator reconciliation is required."
+                        ),
+                    )
+                if not (provisional_identity or confirmed_pending_owner):
+                    raise HTTPException(
+                        status_code=409,
+                        detail=(
+                            "This email belongs to an established account. Owner "
+                            "invitations cannot change its role or status."
+                        ),
+                    )
+            replaced_invitation_id = latest.get("invitation_id")
+            invitation = service.insert_invitation(
+                invited_user_id=None,
+                invited_email=email,
+                invited_by_user_id=admin.user_id,
+                status="pending",
+                expires_at=_owner_invitation_expiry(),
+                invited_role=rbac.ROLE_OWNER,
+            )
+        elif latest is not None:
+            raise HTTPException(
+                status_code=409,
+                detail=f"The latest Owner invitation has invalid state {state or 'unknown'}.",
+            )
+        elif existing is not None:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "This email already belongs to an existing account. Owner "
+                    "invitations cannot change an established account's role."
+                ),
+            )
+        else:
+            invitation = service.insert_invitation(
+                invited_user_id=None,
+                invited_email=email,
+                invited_by_user_id=admin.user_id,
+                status="pending",
+                expires_at=_owner_invitation_expiry(),
+                invited_role=rbac.ROLE_OWNER,
+            )
+    else:
+        state = _invitation_state(invitation)
+        invited_for = invitation.get("invited_user_id")
+        if invited_for and (existing is None or str(invited_for) != str(existing["id"])):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "This invitation is bound to a different identity. "
+                    "Revoke it before issuing another invitation."
+                ),
+            )
+        if state == "sent" and existing is None:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "The invited identity is missing. Revoke this invitation "
+                    "before issuing a replacement."
+                ),
+            )
+        if existing is not None and not (
+            provisional_identity or confirmed_pending_owner
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="The existing account cannot be changed by an Owner invitation.",
+            )
+
+    auth_user_id = str(existing["id"]) if existing is not None else ""
+    new_identity = existing is None
+    email_sent = False
+    state = _invitation_state(invitation)
+
+    if state == "pending" and existing is not None and existing_confirmed:
+        if not confirmed_pending_owner:
+            raise HTTPException(
+                status_code=409,
+                detail="A confirmed account cannot be promoted by an Owner invitation.",
+            )
+        accepted = service.update_invitation(
+            str(invitation["invitation_id"]),
+            {
+                "invited_user_id": auth_user_id,
+                "invitation_status": "accepted",
+                "accepted_at": datetime.now(timezone.utc).isoformat(),
+                "provisioning_claimed_at": None,
+            },
+            expected_statuses=("pending",),
+        )
+        current = accepted or service.get_invitation(str(invitation["invitation_id"]))
+        if (
+            current is None
+            or _invitation_state(current) != "accepted"
+            or str(current.get("invited_user_id") or "") != auth_user_id
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="The replacement invitation changed during reconciliation.",
+            )
+        invitation = current
+    elif state == "pending":
+        claimed, claimed_at = _claim_invitation_for_dispatch(service, invitation)
+        try:
+            if existing is None:
+                invited_user = service.invite_staff_user(
+                    email=email,
+                    full_name=full_name,
+                    phone_number=phone_number,
+                )
+                if str(invited_user.get("email") or "").strip().lower() != email:
+                    raise SupabaseAdminError("Supabase returned a mismatched invited identity.")
+                existing = invited_user
+                auth_user_id = str(existing["id"])
+                new_identity = True
+            else:
+                service.resend_signup_confirmation(email=email)
+            email_sent = True
+        except Exception:
+            _release_invitation_claim(service, claimed, claimed_at)
+            raise
+        sent = service.update_invitation(
+            str(invitation["invitation_id"]),
+            {
+                "invited_user_id": auth_user_id,
+                "invitation_status": "sent",
+                "sent_at": datetime.now(timezone.utc).isoformat(),
+                "provisioning_claimed_at": None,
+            },
+            expected_statuses=("pending",),
+            expected_fields={"provisioning_claimed_at": claimed_at},
+        )
+        if sent is None:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "The invitation dispatch claim changed before completion. "
+                    "Retry to reconcile the identity safely."
+                ),
+            )
+        invitation = sent
+    elif state == "sent" and not invitation.get("invited_user_id"):
+        attached = service.update_invitation(
+            str(invitation["invitation_id"]),
+            {"invited_user_id": auth_user_id},
+            expected_statuses=("sent",),
+        )
+        invitation = attached or service.get_invitation(str(invitation["invitation_id"]))
+        if invitation is None or str(invitation.get("invited_user_id") or "") != auth_user_id:
+            raise HTTPException(
+                status_code=409,
+                detail="The invitation identity changed during reconciliation.",
+            )
+
+    if not auth_user_id:
+        raise SupabaseAdminError("Owner provisioning completed without an identity.")
+    profile_name = (
+        str(authoritative.get("full_name"))
+        if existing_role == rbac.ROLE_OWNER
+        and authoritative is not None
+        and authoritative.get("full_name")
+        else full_name
+    )
+    profile_phone = (
+        str(authoritative.get("phone_number"))
+        if existing_role == rbac.ROLE_OWNER
+        and authoritative is not None
+        and authoritative.get("phone_number")
+        else phone_number
+    )
+    service.reconcile_invited_owner_profile(
+        user_id=auth_user_id,
+        email=email,
+        full_name=profile_name,
+        phone_number=profile_phone,
+    )
+    mirror = user_service.ensure_staff_profile(
+        user_id=uuid.UUID(auth_user_id),
+        email=email,
+        full_name=profile_name,
+        phone_number=profile_phone,
+        role=rbac.ROLE_OWNER,
+        account_status=rbac.STATUS_PENDING,
+    )
+    audit_recorded = _record_audit(
+        service,
+        affected_user_id=auth_user_id,
+        affected_email=email,
+        performed_by_user_id=admin.user_id,
+        performed_by_email=admin.email,
+        action=(
+            "staff.owner_invited"
+            if email_sent
+            else "staff.owner_invitation_reconciled"
+        ),
+        previous_role=existing_role,
+        new_role=rbac.ROLE_OWNER,
+        new_status=rbac.STATUS_PENDING,
+        details={
+            "invitation_id": invitation.get("invitation_id"),
+            "replaced_invitation_id": replaced_invitation_id,
+            "invited_role": rbac.ROLE_OWNER,
+            "email_sent": email_sent,
+            "reconciled": not email_sent,
+        },
+    )
+    return {
+        "owner_user_id": auth_user_id,
+        "email": email,
+        "role": rbac.ROLE_OWNER,
+        "account_status": rbac.STATUS_PENDING,
+        "invited": new_identity,
+        "email_sent": email_sent,
+        "invitation": invitation,
+        "invitation_status": _invitation_state(invitation),
         "mirror": _mirror_payload(mirror),
         "audit_recorded": audit_recorded,
     }
@@ -460,9 +922,10 @@ def _parse_supabase_timestamp(value: object) -> datetime | None:
     if not value:
         return None
     try:
-        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
     except ValueError:
         return None
+    return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed
 
 
 def _invitation_is_expired(row: dict) -> bool:
@@ -470,12 +933,23 @@ def _invitation_is_expired(row: dict) -> bool:
     return expires is not None and expires <= datetime.now(timezone.utc)
 
 
-def _newest_invitation(service: SupabaseAdminService, email: str) -> dict | None:
-    rows = service.list_invitations(email)
-    if not rows:
+def _newest_invitation(
+    service: SupabaseAdminService,
+    email: str,
+    *,
+    role: str | None = None,
+    rows: list[dict] | None = None,
+) -> dict | None:
+    invitation_rows = rows if rows is not None else service.list_invitations(email)
+    matching = [
+        _expire_invitation_if_due(service, row)
+        for row in invitation_rows
+        if role is None or _invitation_role(row) == role
+    ]
+    if not matching:
         return None
     return sorted(
-        rows, key=lambda row: str(row.get("created_at") or ""), reverse=True
+        matching, key=lambda row: str(row.get("created_at") or ""), reverse=True
     )[0]
 
 
@@ -487,16 +961,21 @@ def _has_verified_totp_factor(service: SupabaseAdminService, auth_user_id: str) 
     )
 
 
-def invitation_accepted_for(service: SupabaseAdminService, email: str) -> bool:
-    """True when the address's newest invitation row is ``accepted``.
+def invitation_accepted_for(
+    service: SupabaseAdminService,
+    email: str,
+    *,
+    role: str = rbac.ROLE_AGENT,
+) -> bool:
+    """True when the address's newest invitation for ``role`` is ``accepted``.
 
-    The evidence gate for account verification: only a completed invitation
-    lifecycle counts. An open, expired, revoked or missing invitation is
-    never evidence — agents provisioned without an invite (allow_existing)
-    stay on the submission-review workflow, and merely selecting the agent
-    role verifies nobody.
+    The evidence gate for Agent account verification: only a completed Agent
+    invitation lifecycle counts. An open, expired, revoked or missing
+    invitation is never evidence — agents provisioned without an invite
+    (allow_existing) stay on the submission-review workflow, and merely
+    selecting the agent role verifies nobody.
     """
-    invitation = _newest_invitation(service, email)
+    invitation = _newest_invitation(service, email, role=role)
     if invitation is None:
         return False
     return _invitation_state(invitation) == "accepted"
@@ -508,13 +987,13 @@ def complete_onboarding(
     session: Session = Depends(get_db),
     user_service: UserService = Depends(get_user_service),
 ) -> dict:
-    """Trusted completion of the agent invitation lifecycle.
+    """Trusted completion of an invited Owner or Agent lifecycle.
 
     Preconditions re-proven here on every call (never trusted from the
-    client): the signed token's subject, an agent role, a signed ``aal2``
-    claim backed by a verified TOTP factor on the identity, Supabase's own
-    invitation-acceptance evidence (``email_confirmed_at``), and ownership
-    plus validity of the invitation row.
+    client): the signed token's subject, an invited provider role, a signed
+    ``aal2`` claim backed by a verified TOTP factor on the identity,
+    Supabase's own invitation-acceptance evidence (``email_confirmed_at``),
+    and ownership plus validity of a role-matched invitation row.
 
     Transitions are idempotent and reconciling: the invitation row moves to
     ``accepted`` with ``accepted_at``, the authoritative ``public.users``
@@ -522,26 +1001,47 @@ def complete_onboarding(
     ``role_change_audit`` entry records the real transition. Re-calling the
     endpoint after a partial failure completes only the missing writes.
     """
-    if not rbac.has_role(user.role, (rbac.ROLE_AGENT,)):
+    role = rbac.canonical_role(user.role)
+    if role not in rbac.INVITED_PROVIDER_ROLES:
         raise _structured_error(
             403,
             "onboarding_forbidden",
-            "Onboarding completion requires an invited agent account.",
+            "Onboarding completion requires an invited Owner or Agent account.",
         )
     if user.assurance_level != rbac.REQUIRED_STAFF_AAL:
         raise _staff_mfa_required()
+    if user.account_status == rbac.STATUS_SUSPENDED:
+        raise _structured_error(
+            403,
+            "onboarding_suspended",
+            "This account is suspended; activation is not possible.",
+        )
 
     service = _admin_service()
-    email = str(user.email or "").lower()
+    email = str(user.email or "").strip().lower()
 
     # 1. Supabase-verified acceptance evidence: the authoritative proof that
     # the invited user actually accepted the invite (set a password through
     # the emailed link) is the confirmation timestamp on the auth identity -
     # never "the email was sent" or "the invite link was opened".
     auth_user = service.get_auth_user(str(user.user_id))
-    accepted_at = None
-    if auth_user:
-        accepted_at = auth_user.get("email_confirmed_at") or auth_user.get("confirmed_at")
+    if auth_user is None:
+        raise _structured_error(
+            409,
+            "identity_unavailable",
+            "The invited identity could not be verified. Ask an administrator "
+            "to reconcile the account.",
+        )
+    if (
+        str(auth_user.get("id")) != str(user.user_id)
+        or str(auth_user.get("email") or "").strip().lower() != email
+    ):
+        raise _structured_error(
+            403,
+            "identity_mismatch",
+            "The authenticated identity does not match the invited account.",
+        )
+    accepted_at = auth_user.get("email_confirmed_at") or auth_user.get("confirmed_at")
     if not accepted_at:
         raise _structured_error(
             409,
@@ -560,16 +1060,29 @@ def complete_onboarding(
             "finishing onboarding.",
         )
 
-    # 3. Invitation ownership + validity. A missing invitation row is legal
-    # (the allow_existing workflow grants the role without an invite); an
-    # invitation issued to a DIFFERENT identity never is.
-    invitation = _newest_invitation(service, email)
+    # 3. Role-matched invitation ownership + validity. The legacy Agent
+    # allow_existing workflow may omit an invitation; Owner onboarding may not.
+    invitation = _newest_invitation(service, email, role=role)
     invitation_id = ""
     state = ""
+    if invitation is None and role == rbac.ROLE_OWNER:
+        raise _structured_error(
+            409,
+            "owner_invitation_required",
+            "A matching Owner invitation is required before activation.",
+        )
     if invitation is not None:
         invitation_id = str(invitation.get("invitation_id") or "")
         state = _invitation_state(invitation)
         invited_for = invitation.get("invited_user_id")
+        if role == rbac.ROLE_OWNER and (
+            not invited_for or str(invited_for) != str(user.user_id)
+        ):
+            raise _structured_error(
+                403,
+                "invitation_ownership",
+                "This invitation was issued to a different identity.",
+            )
         if invited_for and str(invited_for) != str(user.user_id):
             raise _structured_error(
                 403,
@@ -589,75 +1102,133 @@ def complete_onboarding(
             # Lifecycle reconciliation: persist the expired state so the
             # administrator's directory stops showing a dead invite as open.
             if state in _OPEN_INVITATION_STATES:
-                service.update_invitation(
-                    invitation_id, {"invitation_status": "expired"}
+                expired = service.update_invitation(
+                    invitation_id,
+                    {"invitation_status": "expired", "provisioning_claimed_at": None},
+                    expected_statuses=_OPEN_INVITATION_STATES,
                 )
+                if expired is None:
+                    current = service.get_invitation(invitation_id) or {}
+                    current_state = _invitation_state(current)
+                    if current_state == "revoked":
+                        raise _structured_error(
+                            410,
+                            "invitation_revoked",
+                            "This invitation was revoked while onboarding was being completed.",
+                        )
+                    raise _structured_error(
+                        409,
+                        "invitation_changed",
+                        "This invitation changed while onboarding was being completed.",
+                    )
             raise _structured_error(
                 410,
                 "invitation_expired",
                 "This invitation has expired. Ask an administrator to send "
                 "a new one.",
             )
-
-    # 4. Activation - authoritative identity row first, then the enforcement
-    # mirror, mirroring the ordering of every other status change. Skipped
-    # entirely when the account is already active (idempotent retries).
-    activated = False
-    audit_recorded = True
-    if user.account_status != rbac.STATUS_ACTIVE:
-        if user.account_status == rbac.STATUS_SUSPENDED:
+        if state not in (*_OPEN_INVITATION_STATES, "accepted"):
             raise _structured_error(
-                403,
-                "onboarding_suspended",
-                "This account is suspended; activation is not possible.",
+                409,
+                "invitation_invalid",
+                "This invitation is not in a state that permits activation.",
             )
-        service.update_identity_profile(
-            user.user_id, {"account_status": rbac.STATUS_ACTIVE}
-        )
-        updated = user_service.update_user(
-            user.user_id, {"account_status": rbac.STATUS_ACTIVE}
-        )
-        if updated is None:  # pragma: no cover - profile read above
-            raise HTTPException(status_code=404, detail="Local profile not found.")
-        audit_recorded = _record_audit(
-            service,
-            affected_user_id=user.user_id,
-            affected_email=user.email,
-            performed_by_user_id=user.user_id,
-            performed_by_email=user.email,
-            action="staff.onboarding_completed",
-            previous_status=user.account_status,
-            new_status=rbac.STATUS_ACTIVE,
-            details={
-                "invitation_id": invitation_id or None,
-                "email_confirmed_at": str(accepted_at),
-            },
-        )
-        activated = True
 
-    # 5. Invitation close (reconciliation): an open invitation is moved to
-    # ``accepted`` with ``accepted_at`` - also on idempotent retries where
-    # activation already happened, so a partial failure self-heals here.
+    # 4. Close an open invitation with a compare-and-set before activation.
+    # A concurrent revocation can no longer overwrite this accepted transition;
+    # if activation later fails, the accepted row lets an idempotent retry heal
+    # the remaining profile writes.
     if invitation is not None and state in _OPEN_INVITATION_STATES:
-        service.update_invitation(
+        closed = service.update_invitation(
             invitation_id,
             {
                 "invitation_status": "accepted",
                 "accepted_at": datetime.now(timezone.utc).isoformat(),
             },
+            expected_statuses=_OPEN_INVITATION_STATES,
         )
+        if closed is None:
+            current = service.get_invitation(invitation_id)
+            current_state = _invitation_state(current or {})
+            if current is None or current_state != "accepted":
+                code = "invitation_revoked" if current_state == "revoked" else "invitation_changed"
+                raise _structured_error(
+                    410 if current_state in ("revoked", "expired") else 409,
+                    code,
+                    "The invitation changed while onboarding was being completed.",
+                )
+            invitation = current
+        else:
+            invitation = closed
         state = "accepted"
 
-    # 6. Account verification: an agent whose official invitation was
-    # accepted and whose activation has completed is verified without a
-    # separate submission. Idempotent; an administrator's rejection is never
-    # overwritten. An agent provisioned without an invitation row
-    # (allow_existing) is not auto-verified and keeps the review workflow.
+    # 5. Activation - authoritative identity row first, then the enforcement
+    # mirror, mirroring the ordering of every other status change. Skipped
+    # entirely when the account is already active (idempotent retries).
+    activated = False
+    audit_recorded = True
+    if user.account_status != rbac.STATUS_ACTIVE:
+        transitioned = service.update_identity_profile_if(
+            user.user_id,
+            {"account_status": rbac.STATUS_ACTIVE, "email_verified": True},
+            expected_status=user.account_status,
+            expected_role=role,
+        )
+        if transitioned is None:
+            current = service.get_identity_profile(user.user_id) or {}
+            current_status = str(current.get("account_status") or "").lower()
+            current_role = rbac.canonical_role(str(current.get("role") or ""))
+            if current_role != role:
+                raise _structured_error(
+                    409,
+                    "invitation_changed",
+                    "The account role changed while onboarding was being completed.",
+                )
+            if current_status == rbac.STATUS_SUSPENDED:
+                raise _structured_error(
+                    403,
+                    "onboarding_suspended",
+                    "This account was suspended while onboarding was being completed.",
+                )
+            if current_status != rbac.STATUS_ACTIVE:
+                raise _structured_error(
+                    409,
+                    "invitation_changed",
+                    "The account status changed while onboarding was being completed.",
+                )
+        updated = user_service.update_user(
+            user.user_id,
+            {"account_status": rbac.STATUS_ACTIVE, "email_verified": True},
+        )
+        if updated is None:  # pragma: no cover - profile read above
+            raise HTTPException(status_code=404, detail="Local profile not found.")
+        if transitioned is not None:
+            audit_recorded = _record_audit(
+                service,
+                affected_user_id=user.user_id,
+                affected_email=user.email,
+                performed_by_user_id=user.user_id,
+                performed_by_email=user.email,
+                action="staff.onboarding_completed",
+                previous_status=user.account_status,
+                new_status=rbac.STATUS_ACTIVE,
+                details={
+                    "invitation_id": invitation_id or None,
+                    "invited_role": role,
+                    "email_confirmed_at": str(accepted_at),
+                },
+            )
+            activated = True
+
+    # 6. Account verification remains Agent-only. An accepted Agent invitation
+    # verifies the provider without a separate submission; an allow_existing
+    # Agent keeps the review workflow. Owners never acquire an Agent profile or
+    # Agent verification record during onboarding.
     verification_status = ""
-    if invitation is not None and state == "accepted":
+    if role == rbac.ROLE_AGENT and invitation is not None and state == "accepted":
         verification = ProviderVerificationService(session).verify_from_invitation(
             user_id=user.user_id,
-            role=user.role,
+            role=role,
             full_name=user.profile.full_name or "",
             contact_phone=user.profile.phone_number or "",
         )
@@ -665,7 +1236,7 @@ def complete_onboarding(
 
     return {
         "account_status": rbac.STATUS_ACTIVE,
-        "role": user.role,
+        "role": role,
         "invitation_id": invitation_id,
         "invitation_status": state,
         "email_confirmed_at": str(accepted_at),
@@ -722,7 +1293,10 @@ def staff_summary(
     """
     service = _admin_service()
     agents = _agent_records(user_service, service)
-    invitations = service.list_invitations()
+    invitations = [
+        _expire_invitation_if_due(service, row)
+        for row in service.list_invitations()
+    ]
     return {
         "total_agents": len(agents),
         "active_agents": sum(
@@ -735,9 +1309,14 @@ def staff_summary(
             1 for a in agents if a["account_status"] == rbac.STATUS_SUSPENDED
         ),
         "open_invitations": sum(
-            1 for i in invitations if _invitation_state(i) in _OPEN_INVITATION_STATES
+            1
+            for i in invitations
+            if _invitation_role(i) == rbac.ROLE_AGENT
+            and _invitation_state(i) in _OPEN_INVITATION_STATES
         ),
-        "invitations": len(invitations),
+        "invitations": sum(
+            1 for i in invitations if _invitation_role(i) == rbac.ROLE_AGENT
+        ),
         "companies": len(service.list_companies()),
     }
 
@@ -756,6 +1335,10 @@ def staff_overview(
     agent_profiles = service.list_agent_profiles()
     company_rows = service.list_companies()
     invitation_rows = service.list_invitations()
+    invitation_rows = [
+        _expire_invitation_if_due(service, row)
+        for row in invitation_rows
+    ]
     agents = _agent_records(
         user_service, service,
         agent_profiles=agent_profiles,
@@ -774,10 +1357,16 @@ def staff_overview(
             1 for row in agents if row["account_status"] == rbac.STATUS_SUSPENDED
         ),
         "open_invitations": sum(
-            1 for row in invitation_rows
-            if _invitation_state(row) in _OPEN_INVITATION_STATES
+            1
+            for row in invitation_rows
+            if _invitation_role(row) == rbac.ROLE_AGENT
+            and _invitation_state(row) in _OPEN_INVITATION_STATES
         ),
-        "invitations": len(invitation_rows),
+        "invitations": sum(
+            1
+            for row in invitation_rows
+            if _invitation_role(row) == rbac.ROLE_AGENT
+        ),
         "companies": len(company_rows),
     }
     return {
@@ -818,8 +1407,10 @@ def update_agent_status(
     target = user_service.get_user(user_id)
     if target is None:
         raise HTTPException(status_code=404, detail="User not found.")
-    if not rbac.is_staff(target.role):
-        raise HTTPException(status_code=422, detail="Target account is not a staff account.")
+    if user_id == admin.user_id and new_status != rbac.STATUS_ACTIVE:
+        raise HTTPException(409, "You cannot disable your own administrator account.")
+    if rbac.canonical_role(target.role) != rbac.ROLE_AGENT:
+        raise HTTPException(status_code=422, detail="Target account is not an Agent account.")
     if target.account_status == new_status:
         raise HTTPException(status_code=409, detail="Account is already in that status.")
 
@@ -886,7 +1477,11 @@ def mfa_recovery(
 
 @router.get("/invitations")
 def list_invitations(admin: AdminMfaUser) -> list[dict]:
-    return _admin_service().list_invitations()
+    service = _admin_service()
+    return [
+        _expire_invitation_if_due(service, row)
+        for row in service.list_invitations()
+    ]
 
 
 @router.post("/invitations/{invitation_id}/revoke")
@@ -926,7 +1521,21 @@ def revoke_invitation(
             status_code=409,
             detail=f"Only open invitations can be revoked (current state: {state or 'unknown'}).",
         )
-    service.update_invitation(invite_key, {"invitation_status": "revoked"})
+    revoked = service.update_invitation(
+        invite_key,
+        {"invitation_status": "revoked", "provisioning_claimed_at": None},
+        expected_statuses=_OPEN_INVITATION_STATES,
+    )
+    if revoked is None:
+        current = service.get_invitation(invite_key)
+        current_state = _invitation_state(current or {})
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "The invitation changed while it was being revoked "
+                f"(current state: {current_state or 'unknown'})."
+            ),
+        )
     audit_recorded = _record_audit(
         service,
         # The audit table's user_id_affected has an FK to public.users; an
@@ -941,9 +1550,10 @@ def revoke_invitation(
             "invitation_id": invite_key,
             "previous_status": state,
             "invited_user_id": invitation.get("invited_user_id"),
+            "invited_role": _invitation_role(invitation),
         },
     )
-    return {**invitation, "invitation_status": "revoked", "audit_recorded": audit_recorded}
+    return {**revoked, "audit_recorded": audit_recorded}
 
 
 @router.get("/audit")
@@ -1179,6 +1789,19 @@ def assign_listing(
     profile = _agent_profile_or_empty(service, payload.agent_user_id)
     if profile is None:
         raise HTTPException(status_code=404, detail="Agent profile not found.")
+    eligible = session.execute(text("""
+        SELECT role, account_status FROM public.users WHERE user_id=:id
+    """), {"id": payload.agent_user_id}).first()
+    if not eligible or rbac.canonical_role(eligible[0]) != rbac.ROLE_AGENT or eligible[1] != "active":
+        raise HTTPException(409, "Choose an active Agent.")
+    # Match the Owner request policy for existing owned properties. Hold the
+    # property lock until the assignment write commits.
+    owned = session.execute(text("""
+        SELECT owner_user_id FROM fyp.rental_properties WHERE id=:id FOR UPDATE
+    """), {"id": listing_id}).first()
+    if owned and owned[0] is not None:
+        from sitewise.services.agent_inspection_policy import require_submitted_ownership_proof
+        require_submitted_ownership_proof(session, listing_id)
     try:
         updated = AgentAssignmentRepository(session).assign(
             listing_id,
