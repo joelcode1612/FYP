@@ -61,6 +61,31 @@ def _model_feature_count(model: object) -> int | None:
     return int(count) if count is not None else None
 
 
+def _imputable_features(estimator: object, names: list[str]) -> frozenset[str]:
+    """The columns this artifact's saved imputer was fitted to fill.
+
+    Read from the fitted ``SimpleImputer(indicator_)``: ``features_`` lists
+    exactly the columns that contained a missing value at fit time, which is
+    the only set the artifact can accept a NaN for. Falls back to the
+    residential prefix (the original artifact's contract) when the estimator
+    exposes no indicator.
+    """
+    steps = getattr(estimator, "steps", None)
+    imputer = None
+    if steps:
+        try:
+            imputer = dict(steps).get("imputer")
+        except (TypeError, ValueError):
+            imputer = None
+    indicator = getattr(imputer, "indicator_", None)
+    columns = getattr(indicator, "features_", None)
+    if columns is None:
+        return frozenset(n for n in names if n.startswith("residential_"))
+    return frozenset(
+        names[int(index)] for index in columns if 0 <= int(index) < len(names)
+    )
+
+
 class ModelLoader:
     def __init__(self, artifacts_dir: Path | str | None = None):
         self.artifacts_dir = Path(artifacts_dir) if artifacts_dir is not None else ARTIFACTS_DIR
@@ -173,6 +198,13 @@ class ModelLoader:
             ensemble.feature_names = names
             ensemble.n_features_in_ = len(names)
             ensemble.feature_names_in_ = names
+            # The columns the saved imputer was actually fitted to track. This
+            # is the artifact's own declaration of what may be missing, read
+            # from the fitted ``SimpleImputer(indicator_)`` rather than guessed
+            # from a name prefix: Expanded64_v2 tracks the walkway density in
+            # addition to the residential measurements, and the original
+            # artifact tracks only the residential ones.
+            ensemble.imputable_features = _imputable_features(estimators[0], names)
             model = ensemble
             meta = {
                 k: v for k, v in info.items()

@@ -163,12 +163,38 @@ def submit_for_verification(
         is_admin=_is_admin(current),
         role=current.role,
     )
+    from sitewise.services.expanded64_enrichment import VERIFIED_ADDRESS_STATUSES
     from sitewise.services.property_enrichment_service import _valid_coordinates
 
-    if listing.get("address_validation_status") != "validated" or not _valid_coordinates(
+    # Automatic location resolution BEFORE the address gate. A listing whose
+    # owner never confirmed the preview has an address but no coordinates, and
+    # used to be refused outright — which made the whole Location Intelligence
+    # pipeline unreachable for it. The saved street, city and state are geocoded
+    # through the same provider pipeline the preview uses; only a genuine
+    # provider failure still refuses the submission, and then with the
+    # provider's own reason.
+    verdict = listing.get("address_validation_status")
+    if verdict not in VERIFIED_ADDRESS_STATUSES or not _valid_coordinates(
         listing.get("latitude"), listing.get("longitude")
     ):
-        raise HTTPException(409, "Verify and confirm the property address before submitting the listing for review.")
+        from sitewise.services.property_location_service import (
+            resolve_property_coordinates,
+        )
+
+        resolution = resolve_property_coordinates(session, property_id)
+        session.commit()
+        if not resolution.located:
+            raise HTTPException(
+                status_code=409,
+                detail=resolution.reason
+                or "Verify and confirm the property address before submitting the listing for review.",
+            )
+        listing = service.get_property_owned(
+            property_id,
+            current.user_id,
+            is_admin=_is_admin(current),
+            role=current.role,
+        )
     _guard_enrichment_before_submit(session, property_id, acknowledgement)
     return service.submit(
         property_id,
@@ -308,6 +334,7 @@ def review_detail(property_id: int, session: DbSession, admin: AdminUser) -> dic
 @staff_router.get("/{property_id}/location-intelligence")
 def location_intelligence_status(property_id: int, session: DbSession, admin: AdminUser) -> dict:
     from sitewise.services.expanded64_enrichment import persisted_association
+    from sitewise.services.property_location_service import address_is_geocodable
     from sqlalchemy import text
 
     coordinates = session.execute(text(
@@ -320,6 +347,11 @@ def location_intelligence_status(property_id: int, session: DbSession, admin: Ad
     # Reported so the reviewer can tell "never queued" from "queued but the
     # address verdict was not server-derived".
     payload["address_validation_status"] = coordinates[2]
+    # Whether an analysis can be started AT ALL. A listing with an address but
+    # no coordinates is not a dead end: the analysis action geocodes it first.
+    # Without this flag the UI had to disable the action on `has_coordinates`
+    # alone and a geocodable listing could never be analysed.
+    payload["address_resolution"] = address_is_geocodable(session, property_id)
     return payload
 
 
@@ -331,14 +363,39 @@ def analyze_location_intelligence(
 
     ``full=true`` is the explicit full recalculation. Nothing is ever
     recalculated merely because the review page was opened.
+
+    A listing that has an address but no coordinates is geocoded first, through
+    the same provider pipeline the owner-facing preview uses. That is the only
+    way "Run location analysis" can work for a listing whose location was never
+    confirmed: the queue refuses to measure an unknown point, so without this
+    step the action could never do anything. The resolution outcome is returned
+    in ``location`` so the reviewer sees exactly what happened.
     """
     from sitewise.services.expanded64_enrichment import enqueue_outstanding
+    from sitewise.services.property_location_service import (
+        resolve_property_coordinates,
+    )
 
+    try:
+        # Coordinates only: what to queue is this endpoint's decision, and
+        # letting the resolver queue as well would leave the caller reporting
+        # "already queued" for work it had just created itself.
+        location = resolve_property_coordinates(
+            session, property_id, queue_measurements=False
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="Property not found.") from exc
     try:
         result = enqueue_outstanding(session, property_id, full=full)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail="Property not found.") from exc
     session.commit()
+    result["location"] = location.as_dict()
+    # The provider's own explanation is the actionable part; surface it as the
+    # reason so the caller does not have to read a nested object to learn why
+    # nothing was queued.
+    if not location.located and location.reason:
+        result["reason"] = location.reason
     return result
 
 
@@ -348,15 +405,21 @@ def queue_location_intelligence(
     property_id: int, session: DbSession, admin: AdminUser, category: str | None = None,
 ) -> dict:
     from sitewise.services.expanded64_enrichment import CATEGORIES, enqueue
+    from sitewise.services.property_location_service import (
+        resolve_property_coordinates,
+    )
 
     if category is not None and category not in CATEGORIES:
         raise HTTPException(status_code=404, detail="Unknown measurement category.")
     try:
+        location = resolve_property_coordinates(
+            session, property_id, queue_measurements=False
+        )
         queued = enqueue(session, property_id, category=category, force=True)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail="Property not found.") from exc
     session.commit()
-    return {"queued": queued}
+    return {"queued": queued, "location": location.as_dict()}
 
 
 class FinalDecisionRequest(BaseModel):

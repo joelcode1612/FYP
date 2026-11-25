@@ -98,8 +98,10 @@ class _DocumentShell extends StatelessComponent {
       head: [
         link(rel: 'icon', type: 'image/png', href: '/assets/sitewise-icon-32.png'),
         link(rel: 'apple-touch-icon', href: '/assets/sitewise-icon-180.png'),
-        link(rel: 'stylesheet', type: 'text/css', href: 'styles.css'),
-        link(rel: 'stylesheet', type: 'text/css', href: 'staff-mfa.css'),
+        link(rel: 'stylesheet', type: 'text/css', href: '/styles.css'),
+        link(rel: 'stylesheet', href: '/admin_listings_v2.css'),
+        link(rel: 'stylesheet', href: '/admin_listings_ui.css'),
+        link(rel: 'stylesheet', type: 'text/css', href: '/staff-mfa.css'),
         link(rel: 'preconnect', href: 'https://fonts.googleapis.com'),
         link(
           rel: 'preconnect',
@@ -114,6 +116,8 @@ class _DocumentShell extends StatelessComponent {
           rel: 'stylesheet',
           href: 'https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0&display=block',
         ),
+        link(rel: 'stylesheet', href: '/admin_accessibility.css?v=1'),
+        link(rel: 'stylesheet', href: '/admin_property_review_accessibility.css?v=1'),
         script(src: 'vendor/three.min.js', defer: true),
         script(src: 'three_scene.js', defer: true),
         script(src: 'reveal.js', defer: true),

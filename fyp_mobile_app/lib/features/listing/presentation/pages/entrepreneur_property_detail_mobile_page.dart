@@ -1,4 +1,6 @@
 // SITEWISE_PROPERTY_DETAIL_REFERENCE_UI_V1
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
@@ -53,6 +55,58 @@ class _EntrepreneurPropertyDetailMobilePageState
   /// — the two scoring systems are never merged into one number.
   late final Future<PropertyInsightsModel?> _insightsFuture =
       ApiPropertyInsightsRepository(ServiceLocator.apiClient).fetch(widget.propertyId);
+
+  /// One-shot timer that re-reads the analysis while the backend is still
+  /// measuring this property.
+  ///
+  /// A newly added listing is measured by the enrichment worker after the page
+  /// has already rendered, so the first response is legitimately "queued" for
+  /// most categories. Without this the user had to leave and re-open the page
+  /// (or press refresh) to see numbers that had arrived in the meantime. The
+  /// poll is bounded — [maxAnalysisRefreshes] attempts, then it stops — so a
+  /// genuinely stuck category cannot make the page poll forever.
+  Timer? _analysisTimer;
+  int _analysisRefreshes = 0;
+
+  /// Attempts before giving up. At [analysisRefreshDelay] each, this covers
+  /// roughly three minutes, which is longer than a full eight-category pass
+  /// including the routing-heavy network category.
+  static const int maxAnalysisRefreshes = 30;
+  static const Duration analysisRefreshDelay = Duration(seconds: 6);
+
+  /// Keeps a single refresh scheduled while measurements are still running.
+  ///
+  /// Called from `build`: the guards make it idempotent, so a rebuild caused by
+  /// the refresh itself cannot stack a second timer.
+  void _syncAnalysisPolling(LocationAnalysis? analysis) {
+    final processing = analysis != null &&
+        analysis.propertyId == widget.propertyId &&
+        analysis.measurementGroups
+            .any((group) => group.status == 'pending' || group.status == 'running');
+    if (!processing) {
+      _analysisTimer?.cancel();
+      _analysisTimer = null;
+      return;
+    }
+    if (_analysisTimer != null || _analysisRefreshes >= maxAnalysisRefreshes) {
+      return;
+    }
+    _analysisTimer = Timer(analysisRefreshDelay, () {
+      _analysisTimer = null;
+      if (!mounted) return;
+      _analysisRefreshes++;
+      ref.read(entrepreneurNotifierProvider.notifier).loadAnalysis(
+            widget.propertyId,
+          );
+    });
+  }
+
+  @override
+  void dispose() {
+    _analysisTimer?.cancel();
+    _analysisTimer = null;
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -148,6 +202,10 @@ class _EntrepreneurPropertyDetailMobilePageState
   Widget build(BuildContext context) {
     final appState = ref.watch(appNotifierProvider);
     final model = ref.watch(entrepreneurNotifierProvider);
+    // Keeps the measured-surroundings block current while the backend is still
+    // working through this property's categories. Idempotent, so it is safe to
+    // call from build.
+    _syncAnalysisPolling(model.analysis);
     return Scaffold(
       backgroundColor: SitewiseColors.surface,
       appBar: AppBar(
@@ -654,6 +712,17 @@ class _EntrepreneurPropertyDetailMobilePageState
               return _assessmentBlock(p, model, a, error);
             },
           ),
+          // Measured surroundings, rendered once for BOTH paths.
+          //
+          // These are calculations, not model output: they stay visible when
+          // the model scores the property and when it declines to, which is
+          // why the block is not nested inside either branch. It is the same
+          // exhaustive 64-row list the web property page renders, so the two
+          // clients never disagree about what was measured.
+          if (a != null && a.hasMeasurementReport) ...[
+            const SizedBox(height: 18),
+            SitewiseLocationMeasurements(analysis: a),
+          ],
         ],
       ),
     );
@@ -722,13 +791,6 @@ class _EntrepreneurPropertyDetailMobilePageState
           ),
           const SizedBox(height: 4),
           for (final f in a.factors) SitewiseFactorRow(factor: f),
-          // Measured surroundings. Rendered independently of the score: these
-          // are calculations, and they stay visible even when the model
-          // declines to score the property. Absent block → nothing rendered.
-          if (a.hasMeasurementReport) ...[
-            const Divider(height: 26),
-            SitewiseLocationMeasurements(analysis: a),
-          ],
         ] else if (error != null)
           // A failed analysis read is a failure, not "no analysis exists":
           // say so and offer the real retry.

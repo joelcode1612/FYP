@@ -443,3 +443,94 @@ double cameraElevationDeg(Quat deviceToWorld, {Vec3 worldUp = Vec3.unitY}) {
   final forward = deviceToWorld.rotate(const Vec3(0, 0, -1));
   return math.asin(clampDouble(forward.dot(up), -1, 1)) * radToDeg;
 }
+
+
+// SITEWISE_CAPTURE_PLAN_WIRING_V2: backend-verified v3 geometry, existing standard generator retained.
+const int kSitewiseEnhancedTargetCount = 56;
+
+int sitewisePlanVersionForCount(int count) {
+  if (count == 38) return 2;
+  if (count == kSitewiseEnhancedTargetCount) return 3;
+  throw StateError('Unsupported sphere capture plan: $count');
+}
+
+List<SphereTargetSpec> buildSitewiseSessionTargets(int count) {
+  sitewisePlanVersionForCount(count);
+  if (count == 38) {
+    final standard = buildSphereTargets(planVersion: 2);
+    if (standard.length != 38) throw StateError('Standard sphere plan must have 38 targets.');
+    return standard;
+  }
+  const directions = <(double, double)>[
+    (0.000000, 0.000000),
+    (20.000000, 0.000000),
+    (40.000000, 0.000000),
+    (60.000000, 0.000000),
+    (80.000000, 0.000000),
+    (100.000000, 0.000000),
+    (120.000000, 0.000000),
+    (140.000000, 0.000000),
+    (160.000000, 0.000000),
+    (-180.000000, 0.000000),
+    (-160.000000, 0.000000),
+    (-140.000000, 0.000000),
+    (-120.000000, 0.000000),
+    (-100.000000, 0.000000),
+    (-80.000000, 0.000000),
+    (-60.000000, 0.000000),
+    (-40.000000, 0.000000),
+    (-20.000000, 0.000000),
+    (0.000000, 90.000000),
+    (-20.000000, 40.000000),
+    (-40.000000, 40.000000),
+    (-60.000000, 40.000000),
+    (-80.000000, 40.000000),
+    (-100.000000, 40.000000),
+    (-120.000000, 40.000000),
+    (-140.000000, 40.000000),
+    (-160.000000, 40.000000),
+    (-180.000000, 40.000000),
+    (160.000000, 40.000000),
+    (140.000000, 40.000000),
+    (120.000000, 40.000000),
+    (100.000000, 40.000000),
+    (80.000000, 40.000000),
+    (60.000000, 40.000000),
+    (40.000000, 40.000000),
+    (20.000000, 40.000000),
+    (0.000000, 40.000000),
+    (0.000000, -40.000000),
+    (20.000000, -40.000000),
+    (40.000000, -40.000000),
+    (60.000000, -40.000000),
+    (80.000000, -40.000000),
+    (100.000000, -40.000000),
+    (120.000000, -40.000000),
+    (140.000000, -40.000000),
+    (160.000000, -40.000000),
+    (-180.000000, -40.000000),
+    (-160.000000, -40.000000),
+    (-140.000000, -40.000000),
+    (-120.000000, -40.000000),
+    (-100.000000, -40.000000),
+    (-80.000000, -40.000000),
+    (-60.000000, -40.000000),
+    (-40.000000, -40.000000),
+    (-20.000000, -40.000000),
+    (0.000000, -90.000000),
+  ];
+  final enhanced = buildSphereTargets(planVersion: 3);
+  if (enhanced.length != directions.length) {
+    throw StateError('Mobile enhanced plan count does not match backend v3.');
+  }
+  for (var i = 0; i < directions.length; i++) {
+    final (yaw, pitch) = directions[i];
+    final t = enhanced[i];
+    final yawError = ((t.yawDeg - yaw + 180) % 360 - 180).abs();
+    if (t.targetId != i + 1 || yawError > 0.0001 ||
+        (t.pitchDeg - pitch).abs() > 0.0001) {
+      throw StateError('Mobile enhanced plan differs from backend v3 at target ${i + 1}.');
+    }
+  }
+  return List<SphereTargetSpec>.unmodifiable(enhanced);
+}

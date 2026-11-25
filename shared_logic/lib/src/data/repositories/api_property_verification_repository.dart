@@ -105,15 +105,33 @@ class ApiPropertyVerificationRepository
     ),
   );
 
-  Future<void> queueLocationIntelligence(
+  /// Queues one category (or every category) for recalculation.
+  ///
+  /// Returns the backend's own explanation when the request could not do any
+  /// work — most often because the listing has no usable location — so the
+  /// reviewer is told what is wrong instead of being shown a success message
+  /// for a queue entry that was never created.
+  Future<String?> queueLocationIntelligence(
     String propertyId, {
     String? category,
   }) async {
     final action = category == null ? 'recalculate' : 'retry/$category';
-    await _client.post(
+    final response = await _client.post(
       '/api/v1/staff/properties/$propertyId/location-intelligence/$action',
       {},
     );
+    final location = response['location'];
+    if (location is Map && location['located'] != true) {
+      final reason = location['reason'];
+      if (reason is String && reason.isNotEmpty) return reason;
+    }
+    if (response['queued'] == true) {
+      return category == null
+          ? 'Queued every measurement category for recalculation.'
+          : 'Queued $category for recalculation.';
+    }
+    final reason = response['reason'];
+    return reason is String && reason.isNotEmpty ? reason : null;
   }
 
   /// Queues only the measurement categories that are missing, failed or stale

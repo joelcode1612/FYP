@@ -90,10 +90,8 @@ class SitewiseSphereSessionStore implements CaptureSessionStore {
           jsonDecode(await file.readAsString()) as Map<String, dynamic>;
       return _SessionDocument.fromJson(json, fallbackId: _stationId);
     } catch (error) {
-      // A truncated or corrupt file must not lose the capture: start from an
-      // empty document and let the next successful write replace it. The
-      // JPEGs and records.json are the evidence of record either way.
-      return _SessionDocument.empty(_stationId);
+      // Do not silently replace a corrupt plan with a fresh 38-target session.
+      throw StateError('Saved capture session cannot be read. Photos are kept.');
     }
   }
 
@@ -118,6 +116,7 @@ class SitewiseSphereSessionStore implements CaptureSessionStore {
   }) {
     return _enqueue(() async {
       final document = await _read();
+      sitewisePlanVersionForCount(requiredTargetCount);
       final now = DateTime.now().toUtc();
       final session =
           document.session ??
@@ -157,6 +156,11 @@ class SitewiseSphereSessionStore implements CaptureSessionStore {
   Future<CapturedFrame> saveFrame(CapturedFrame frame) {
     return _enqueue(() async {
       final document = await _read();
+      final plan = document.session;
+      if (plan == null || frame.sessionId != plan.sessionId ||
+          frame.targetId < 1 || frame.targetId > plan.requiredTargetCount) {
+        throw StateError('Photo does not belong to the saved capture plan.');
+      }
       document.frames.removeWhere((f) => f.targetId == frame.targetId);
       document.frames.add(frame);
       document.frames.sort((a, b) => a.targetId.compareTo(b.targetId));

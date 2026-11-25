@@ -389,7 +389,16 @@ def run_next(session: Session) -> bool:
               WHERE r.property_id=q.property_id AND (r.category IN :categories OR r.category='operational25')
                 AND r.status='running' AND r.started_at >= now()-interval '5 minutes'
           )
-        ORDER BY q.updated_at, q.property_id, q.category
+        -- Category first, then property. All eight categories of one listing are
+        -- queued in the same transaction, so their ``updated_at`` is identical;
+        -- ordering by property before category therefore puts one listing's
+        -- whole group at the front, and every other worker's candidate is a row
+        -- of the listing another worker is already measuring. Those claims are
+        -- refused by the per-property guard below, so N-1 workers spin while one
+        -- makes progress. Ordering by category first spreads the front across N
+        -- distinct listings, which is what lets the queue be drained in
+        -- parallel without relaxing the one-category-per-property rule.
+        ORDER BY q.updated_at, q.category, q.property_id
         LIMIT 1 FOR UPDATE OF p SKIP LOCKED
         """).bindparams(bindparam("categories", expanding=True)),
         {"categories": JOB_KEYS}).mappings().first()
@@ -516,6 +525,20 @@ def explain_prediction(model, variant, vector, imputable, score):
 def _save_expanded_prediction(session: Session, property_id: int, latitude, longitude) -> None:
     current = persisted_association(session, property_id, latitude, longitude, read_score=False)
     vector = current.pop("_validated_vector")
+    # Two states are not scored, and neither writes a record:
+    #
+    # * still being measured (pending/running) — the queue will call back;
+    # * settled but missing a REQUIRED input — the vector cannot be scored
+    #   without inventing a value.
+    #
+    # The second case deliberately leaves ``pu_inference_snapshot.expanded64``
+    # untouched rather than storing an ``available:false`` row. The missing
+    # inputs are already reported by the enrichment category rows and by the
+    # analysis projection (``missing_required_inputs`` /
+    # ``unavailable_reason``), and a stored non-prediction is a second, weaker
+    # copy of that state which readers can mistake for model output. It also
+    # has to be re-examined on every measurement change to avoid going stale,
+    # whereas deriving it from the measurements cannot.
     if current["calculation_status"] in ("running", "pending") or current["_required_missing"]:
         return
     digest = _vector_digest(vector)
@@ -620,11 +643,11 @@ def persisted_association(session: Session, property_id: int, latitude, longitud
                            if status == "not_calculated" else None)),
         }
     missing = [name for name in features if name not in validated]
-    imputable, required = expanded_policy_split(missing)
+    active_model = active_expanded_model_name()
+    imputable, required = expanded_policy_split(missing, model_name=active_model)
     statuses = {item["status"] for item in categories.values()}
     overall = next((state for state in ("running", "pending", "failed", "stale", "unavailable", "not_calculated")
                     if state in statuses), "current")
-    active_model = active_expanded_model_name()
     result = {"available": False, "score": None, "model_version": active_model,
               "model_name": active_model,
               "definition_version": DEFINITIONS_VERSION,
@@ -657,10 +680,30 @@ def persisted_association(session: Session, property_id: int, latitude, longitud
                 and score.get("model_sha256") == _model_digest()
                 and score.get("feature_digest") == _vector_digest(vector)):
             result.update(score)
+            # A scored property has no unavailability to report. The base dict
+            # always carries the "N required inputs await validation" string,
+            # which is true only of an unscored vector; leaving it beside an
+            # available score invites a client to render the reason instead of
+            # the number.
+            result["unavailable_reason"] = None
         elif not required:
             result["unavailable_reason"] = "The current vector has no persisted prediction yet."
             if not score and overall not in ("pending", "running"):
                 result["prediction_pending"] = True
+        else:
+            # Required inputs are absent for these coordinates, so the property
+            # is unscored. The reason is DERIVED from the measurement state,
+            # not read from a stored non-prediction: naming the exact inputs
+            # lets an operator tell a source gap from a defect, and it stays
+            # correct by construction when the measurements change.
+            missing_required = sorted(required)
+            result["missing_required_inputs"] = missing_required
+            if overall not in ("pending", "running"):
+                result["unavailable_reason"] = (
+                    "Not scored: required inputs unavailable at these coordinates — "
+                    + ", ".join(missing_required)
+                )
+                result["prediction_unavailable"] = True
     elif variant == "operational25":
         from sitewise.services.operational25_enrichment import persisted
 
@@ -724,7 +767,141 @@ def informational_measurements(
     payload["property_id"] = property_id
     payload["available"] = bool(state.get("calculated_features"))
     payload["address_validation_status"] = address_validation_status
+    payload.update(measurement_report(state))
     return payload
+
+
+def measurement_report(state: dict) -> dict:
+    """Presentation layer over one measurement state.
+
+    Every contract feature is reported with its human label, unit, radius,
+    group, own state and the category's last successful measurement time, so a
+    client never has to know a column name and never has to invent a zero. A
+    feature with no measurement is reported with ``value: None`` and the reason
+    its category gives; a genuine measured zero is reported as ``0.0`` and is
+    therefore distinguishable.
+
+    ``used_by_model`` marks eligibility, not availability: a feature can be
+    measured (``value`` present, ``state: calculated_unvalidated``) and still
+    not be an input to the active artifact. Keeping the two flags separate is
+    what lets the UI say "measured, but not used in the score" instead of
+    hiding a real measurement or implying an unavailable one was used.
+    """
+    from sitewise.ml.expanded64_display import (
+        GROUP_DESCRIPTIONS, GROUP_ORDER, GROUP_TITLES, SOCIOECONOMIC_AFTER,
+        SOCIOECONOMIC_GROUP, catalogue, coverage_gap, district_rows, orphaned,
+    )
+
+    values = state.get("feature_values") or {}
+    states = state.get("feature_states") or {}
+    sources = state.get("feature_sources") or {}
+    methods = state.get("feature_methods") or {}
+    categories = state.get("categories") or {}
+    contract_names = list(state.get("feature_order") or ()) or list(values)
+    model_inputs = set(contract_names)
+
+    rows = []
+    for entry in catalogue():
+        category = categories.get(entry.group) or {}
+        measured_at = category.get("last_success_at")
+        rows.append({
+            "name": entry.name,
+            "label": entry.label,
+            "unit": entry.unit,
+            "radius_m": entry.radius_m,
+            "group": entry.group,
+            "group_title": GROUP_TITLES.get(entry.group, entry.group),
+            "value": values.get(entry.name),
+            "state": states.get(entry.name, "not_calculated"),
+            "source": sources.get(entry.name),
+            "method": methods.get(entry.name),
+            "measured_at": measured_at,
+            "reason": None if entry.name in values else category.get("reason"),
+            "used_by_model": entry.name in model_inputs,
+            "informational_only": (
+                states.get(entry.name) == "calculated_unvalidated"
+            ),
+        })
+
+    groups = []
+    for key in GROUP_ORDER:
+        category = categories.get(key) or {}
+        group_rows = [row for row in rows if row["group"] == key]
+        groups.append({
+            "key": key,
+            "title": GROUP_TITLES.get(key, key),
+            "description": GROUP_DESCRIPTIONS.get(key, ""),
+            "status": category.get("status", "not_calculated"),
+            "reason": category.get("reason"),
+            "measured": sum(1 for row in group_rows if row["value"] is not None),
+            "used_by_model": sum(1 for row in group_rows if row["used_by_model"]),
+            "total": len(group_rows),
+            "measured_at": category.get("last_success_at"),
+        })
+
+    # District statistics sit between two measured groups in the UI and are
+    # never model inputs: they describe the wider area, not this property.
+    district = state.get("district_context") or {}
+    if district:
+        district_rows_ = [
+            {
+                "name": f"district_{field}",
+                "label": label,
+                "unit": unit,
+                "radius_m": None,
+                "group": SOCIOECONOMIC_GROUP,
+                "group_title": GROUP_TITLES.get(SOCIOECONOMIC_GROUP, SOCIOECONOMIC_GROUP),
+                "value": district.get(field),
+                "state": "validated",
+                "source": ", ".join(
+                    str(part) for part in (district.get("district"), district.get("state"))
+                    if part
+                ) or None,
+                "method": "DOSM district household statistics",
+                "measured_at": district.get("source_year"),
+                "reason": None,
+                "used_by_model": False,
+                "informational_only": True,
+            }
+            for field, label, unit in district_rows()
+            if district.get(field) is not None
+        ]
+        if district_rows_:
+            insert_at = GROUP_ORDER.index(SOCIOECONOMIC_AFTER) + 1 \
+                if SOCIOECONOMIC_AFTER in GROUP_ORDER else len(groups)
+            groups.insert(insert_at, {
+                "key": SOCIOECONOMIC_GROUP,
+                "title": GROUP_TITLES.get(SOCIOECONOMIC_GROUP, SOCIOECONOMIC_GROUP),
+                "description": GROUP_DESCRIPTIONS.get(SOCIOECONOMIC_GROUP, ""),
+                "status": "current",
+                "reason": None,
+                "measured": len(district_rows_),
+                "used_by_model": 0,
+                "total": len(district_rows_),
+                "measured_at": district.get("source_year"),
+            })
+            rows.extend(district_rows_)
+
+    gap, stale = coverage_gap(contract_names), orphaned(contract_names)
+    if gap:
+        logger.warning(
+            "Expanded64 measurements have no display entry: %s", ", ".join(gap)
+        )
+    return {
+        "measurements": rows,
+        "measurement_groups": groups,
+        "measurement_coverage": {
+            "total": len(rows),
+            "measured": sum(1 for row in rows if row["value"] is not None),
+            "used_by_model": sum(1 for row in rows if row["used_by_model"]),
+            "informational_only": sum(1 for row in rows if row["informational_only"]),
+            "display_gap": list(gap),
+            "orphaned_display_entries": list(stale),
+        },
+        "measurement_calculation_status": state.get("calculation_status"),
+        "measurement_definition_version": state.get("definition_version"),
+        "measurement_model_name": state.get("model_name"),
+    }
 
 
 def enqueue_all_missing(session: Session, *, limit: int | None = None) -> dict:

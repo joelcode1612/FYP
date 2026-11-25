@@ -151,10 +151,15 @@ key.properties
 /out/
 /fyp_mobile_app/assets/config/dev.json
 /fyp_mobile_app/assets/config/sitewise_dev.json
+# Repair backups written by tool/ensure_sitewise_dev_config.js when the local
+# config is unparseable. Per-machine by definition, never committed.
+/fyp_mobile_app/assets/config/sitewise_dev.json.invalid-*.bak
 /fyp_jaspr_web/web/auth-config.json
 /fyp_jaspr_web/web/map-config.js
 
 /backend/var/db_sync_audit_ref/
 
 # Local migration backups
+/backend/var/static_pu_migration/
+
 /backend/var/static_pu_migration/

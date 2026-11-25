@@ -156,6 +156,7 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
         _ => (index - 1 + _tabIds.length) % _tabIds.length,
       };
       setState(() => _tab = _tabIds[next]);
+      if (_tabIds[next] == 'intelligence') unawaited(_refreshLocation());
       // Move focus with the selection (roving tabindex).
       (el.querySelector('[data-vd-tab="${_tabIds[next]}"]') as web.HTMLElement?)
           ?.focus();
@@ -358,9 +359,23 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
         'tabindex': selected ? '0' : '-1',
         'data-vd-tab': id,
       },
-      events: events(onClick: () => setState(() => _tab = id)),
+      events: events(onClick: () => _selectTab(id)),
       [Component.text(label)],
     );
+  }
+
+  /// Switches tabs and loads the selected panel's live state.
+  ///
+  /// The Intelligence panel has to read the persisted measurement state
+  /// directly. The association embedded in the review detail was assembled when
+  /// the page was opened: it carries neither the live queue status nor the
+  /// address-resolution capability, and those are exactly what the action
+  /// buttons and the feature counters depend on. Without this fetch the panel
+  /// renders stale counters and disabled actions until the reviewer presses
+  /// something first.
+  void _selectTab(String id) {
+    setState(() => _tab = id);
+    if (id == 'intelligence') unawaited(_refreshLocation());
   }
 
   // --- Tab 1: Property Overview -------------------------------------------------
@@ -531,6 +546,39 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
 
   // --- Tab 2: Location Intelligence ----------------------------------------------
 
+  /// The pipeline's actual state, in the order the work happens.
+  ///
+  /// The distinction that matters is not "has a score" but "how far did this
+  /// listing get": an address that cannot be geocoded is a different problem
+  /// from a queue that has not been started, and both are different from
+  /// measurements that were attempted and partly failed. Each label is derived
+  /// from persisted state only — nothing here is inferred from a timer.
+  String _pipelineLabel(LocationResearchAssociation location) {
+    if (!location.hasCoordinates) {
+      if (location.addressGeocodable) {
+        return 'Geocoding required';
+      }
+      return location.addressMissingFields.isEmpty
+          ? 'Data unavailable'
+          : 'Address verification required';
+    }
+    if (_locationActive(location)) {
+      return location.calculationStatus == 'running'
+          ? 'Analysis processing'
+          : 'Analysis queued';
+    }
+    return switch (location.calculationStatus) {
+      'failed' => 'Analysis failed',
+      'stale' => 'Stale · recalculate',
+      'current' when location.calculatedFeatures >= 64 => 'Analysis completed',
+      'current' when location.calculatedFeatures > 0 =>
+        'Analysis partially completed',
+      _ => location.calculatedFeatures > 0
+          ? 'Analysis partially completed'
+          : 'Not calculated',
+    };
+  }
+
   Component _intelligencePanel(VerificationDetail detail) {
     final property = detail.property;
     final geo = detail.geoFeatures;
@@ -538,18 +586,7 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
     final location =
         _liveLocation ?? detail.locationAnalysis.partB.researchAssociation;
     final calculated = geo != null || location.calculatedFeatures > 0;
-    final state = _locationActive(location)
-        ? 'Calculating'
-        : location.calculationStatus == 'failed'
-        ? 'Analysis failed'
-        : location.calculatedFeatures == 64 &&
-              location.calculationStatus == 'current'
-        ? 'Calculated'
-        : location.calculatedFeatures > 0
-        ? 'Partially available'
-        : location.calculationStatus == 'stale'
-        ? 'Stale · recalculate'
-        : 'Not calculated';
+    final state = _pipelineLabel(location);
 
     return section(
       id: 'vd-panel-intelligence',
@@ -1126,6 +1163,16 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
       value.calculationStatus == 'pending' ||
       value.calculationStatus == 'running';
 
+  /// Whether an analysis action can do real work for this listing.
+  ///
+  /// Stored coordinates are the direct case. A listing with a saved street,
+  /// city and state is the indirect one: the backend geocodes it before
+  /// queueing, so disabling the action on `hasCoordinates` alone made a
+  /// perfectly analysable listing unreachable. Only a listing with neither
+  /// coordinates nor a geocodable address is genuinely blocked.
+  bool _canAnalyse(LocationResearchAssociation value) =>
+      value.hasCoordinates || value.addressGeocodable;
+
   void _scheduleLocationRefresh() {
     if (_tab != 'intelligence' ||
         _locationTimer?.isActive == true ||
@@ -1202,13 +1249,12 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
       _locationNotice = null;
     });
     try {
-      await AppLocator.propertyVerificationRepo.queueLocationIntelligence(
-        component.detail.property.propertyId.toString(),
-        category: category,
-      );
-      if (mounted && category != null) {
-        setState(() => _locationNotice = 'Queued $category for recalculation.');
-      }
+      final notice = await AppLocator.propertyVerificationRepo
+          .queueLocationIntelligence(
+            component.detail.property.propertyId.toString(),
+            category: category,
+          );
+      if (mounted && notice != null) setState(() => _locationNotice = notice);
     } catch (_) {
       if (mounted) {
         setState(
@@ -1251,15 +1297,14 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
     'validated' =>
       'Location confirmed by the address check (precise premise-level match).',
     'partially_validated' =>
-      'Location confirmed by the user from an approximate or ambiguous match. '
-          'Measurements use these confirmed coordinates.',
+      'Location obtained from an approximate or ambiguous provider match. '
+          'Measurements use these coordinates; the pin may need confirming.',
     'invalid' || 'invalidated' =>
       'The stored location is no longer confirmed. Re-verify the address before '
           'relying on these measurements.',
     _ =>
-      'No address confirmation is on record for this listing, so measurements '
-          'are not queued automatically. Use Run location analysis to measure '
-          'the stored coordinates explicitly.',
+      'The stored coordinates were entered without a provider verdict, so they '
+          'are measured but not described as confirmed.',
   };
 
   String _measurementStatus(String state) => switch (state) {
@@ -1477,9 +1522,22 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
       p(classes: 'small muted', [
         Component.text(_measurementStatus(research.calculationStatus)),
       ]),
-      if (!research.hasCoordinates)
+      if (!_canAnalyse(research))
         p(classes: 'small muted', [
-          Component.text('Save a valid property location before calculating.'),
+          Component.text(
+            research.addressMissingFields.isEmpty
+                ? 'Save a valid property location before calculating.'
+                : 'Save the ${research.addressMissingFields.join(', ')} on the '
+                      'listing before calculating — a location is never '
+                      'inferred from a partial address.',
+          ),
+        ]),
+      if (!research.hasCoordinates && research.addressGeocodable)
+        p(classes: 'small muted', [
+          Component.text(
+            'No coordinates are stored yet. Running the analysis resolves them '
+            'from the saved address first, then measures the result.',
+          ),
         ]),
       if (research.hasCoordinates)
         p(classes: 'small muted', [
@@ -1492,7 +1550,7 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
       button(
         attributes: {
           'type': 'button',
-          if (active || _locationRequest || !research.hasCoordinates)
+          if (active || _locationRequest || !_canAnalyse(research))
             'disabled': '',
         },
         events: events(onClick: () => unawaited(_runAnalysis())),
@@ -1511,10 +1569,7 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
       button(
         attributes: {
           'type': 'button',
-          if (active ||
-              _locationRequest ||
-              !research.hasCoordinates ||
-              research.calculatedFeatures == 0)
+          if (active || _locationRequest || !_canAnalyse(research))
             'disabled': '',
         },
         events: events(onClick: () => unawaited(_runAnalysis(full: true))),
@@ -1593,7 +1648,7 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
                 button(
                   attributes: {
                     'type': 'button',
-                    if (active || _locationRequest || !research.hasCoordinates)
+                    if (active || _locationRequest || !_canAnalyse(research))
                       'disabled': '',
                   },
                   events: events(

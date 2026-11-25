@@ -4,11 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:fyp/features/capture_360/domain/sphere/sphere_target.dart';
 import 'package:fyp/features/capture_360/presentation/widgets/capture_theme.dart';
 
-/// Presentation-only guide. The enhanced plan is a preview, not a capture
-/// capability: the current mobile controller still owns the standard plan.
+/// Guide for selecting the plan before a session starts.
 class CapturePlanGuide extends StatefulWidget {
-  const CapturePlanGuide({super.key, required this.onStart});
-  final VoidCallback onStart;
+  const CapturePlanGuide({super.key, required this.onStart, this.allowEnhanced = false});
+  final ValueChanged<int> onStart;
+  final bool allowEnhanced;
 
   @override
   State<CapturePlanGuide> createState() => _CapturePlanGuideState();
@@ -18,7 +18,7 @@ class _CapturePlanGuideState extends State<CapturePlanGuide> {
   int _step = 0;
   bool _enhancedPreview = false;
 
-  int get _count => _enhancedPreview ? 56 : buildSphereTargets().length;
+  int get _count => _enhancedPreview ? 56 : 38;
   int get _perRing => (_count - 2) ~/ 3;
   String get _spacing => (360 / _perRing).toStringAsFixed(0);
 
@@ -33,10 +33,9 @@ class _CapturePlanGuideState extends State<CapturePlanGuide> {
   void _next() {
     if (_step < 2) {
       setState(() => _step++);
-    } else if (_enhancedPreview) {
-      setState(() => _enhancedPreview = false);
     } else {
-      widget.onStart();
+      if (_enhancedPreview && !widget.allowEnhanced) return;
+      widget.onStart(_count);
     }
   }
 
@@ -87,10 +86,9 @@ class _CapturePlanGuideState extends State<CapturePlanGuide> {
                   foregroundColor: Colors.white,
                 ),
                 onPressed: _next,
-                icon: Icon(_step == 2 && !_enhancedPreview
+                icon: Icon(_step == 2
                     ? Icons.camera_alt_outlined : Icons.arrow_forward),
-                label: Text(_step < 2 ? 'Continue' : _enhancedPreview
-                    ? 'Switch to standard plan' : 'Start capture',
+                label: Text(_step < 2 ? 'Continue' : 'Start capture',
                     style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
               ),
             ),
@@ -116,7 +114,7 @@ class _CapturePlanGuideState extends State<CapturePlanGuide> {
       borderRadius: BorderRadius.circular(16)),
     padding: const EdgeInsets.all(12),
     child: Semantics(
-      label: '$_count planned photo directions${_enhancedPreview ? ', preview only' : ''}',
+      label: '$_count planned photo directions',
       child: CustomPaint(painter: _PlanSpherePainter(enhanced: _enhancedPreview)),
     ),
   );
@@ -130,10 +128,10 @@ class _CapturePlanGuideState extends State<CapturePlanGuide> {
     _heading('Capture plan'),
     _option(false, '38 targets (Standard)', '12 per ring · 30° spacing'),
     const SizedBox(height: 10),
-    _option(true, '56 targets (Preview only)', '18 per ring · 20° spacing'),
+    if (widget.allowEnhanced) _option(true, '56 targets (Experimental)', '18 per ring · 20° spacing'),
     const SizedBox(height: 14),
     _notice(_enhancedPreview
-      ? 'The enhanced layout is a preview. Live capture is not enabled until the mobile capture and processing pipeline supports it.'
+      ? 'Closer spacing may improve overlap. Capture takes longer.'
       : 'The standard plan uses the existing working capture and panorama generation.'),
   ];
 
@@ -197,7 +195,7 @@ class _CapturePlanGuideState extends State<CapturePlanGuide> {
 
   List<Widget> _overview() => [
     _heading('$_count photo directions'),
-    _body(_enhancedPreview ? 'Experimental layout preview — not a live capture plan.'
+    _body(_enhancedPreview ? 'Experimental plan with closer photo spacing.'
       : 'Start with the middle ring and follow the live camera targets.'),
     const SizedBox(height: 16), _sphere(height: 260), const SizedBox(height: 16),
     _legend(const Color(0xFF2563EB), 'Upper ring', _perRing),
@@ -207,7 +205,7 @@ class _CapturePlanGuideState extends State<CapturePlanGuide> {
     _legend(const Color(0xFF7C3AED), 'Floor', 1),
     const SizedBox(height: 14),
     _notice('$_count total directions · $_spacing° horizontal spacing. '
-      '${_enhancedPreview ? 'Switch to the standard plan to start a real capture.' : 'The app takes photographs using the existing capture engine.'}'),
+      '${_enhancedPreview ? 'Follow each of the 56 camera targets.' : 'The app takes photographs using the existing capture engine.'}'),
   ];
 
   Widget _legend(Color color, String name, int count) => Padding(
@@ -258,14 +256,8 @@ class _PlanSpherePainter extends CustomPainter {
       canvas.drawCircle(p, 4.8, Paint()..color = Colors.white);
       canvas.drawCircle(p, 3.8, Paint()..color = color);
     }
-    if (!enhanced) {
-      for (final target in buildSphereTargets()) { dot(target.yawDeg, target.pitchDeg); }
-    } else {
-      // Illustrative geometry only; never used to create a capture session.
-      for (final pitch in <double>[0, kSphereRingPitchDeg, -kSphereRingPitchDeg]) {
-        for (var i = 0; i < 18; i++) { dot(i * 20.0, pitch); }
-      }
-      dot(0, 90); dot(0, -90);
+    for (final target in buildSitewiseSessionTargets(enhanced ? 56 : 38)) {
+      dot(target.yawDeg, target.pitchDeg);
     }
   }
 

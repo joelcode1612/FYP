@@ -10,8 +10,6 @@ import 'package:sitewise_jaspr_web/features/administration/presentation/componen
     deferred as _agent_assignment_control;
 import 'package:sitewise_jaspr_web/features/administration/presentation/components/agent_change_requests_panel.dart'
     deferred as _agent_change_requests_panel;
-import 'package:sitewise_jaspr_web/features/administration/presentation/pages/activity_page.dart'
-    deferred as _activity_page;
 import 'package:sitewise_jaspr_web/features/administration/presentation/pages/agents_page.dart'
     deferred as _agents_page;
 import 'package:sitewise_jaspr_web/features/administration/presentation/pages/campaigns_page.dart'
@@ -124,10 +122,6 @@ ClientOptions get defaultClientOptions => ClientOptions(
     'agent_change_requests_panel': ClientLoader(
       (p) => _agent_change_requests_panel.AgentChangeRequestsPanel(),
       loader: _agent_change_requests_panel.loadLibrary,
-    ),
-    'activity_page': ClientLoader(
-      (p) => _activity_page.AdminActivityPage(),
-      loader: _activity_page.loadLibrary,
     ),
     'agents_page': ClientLoader(
       (p) => _agents_page.AdminAgentsPage(),

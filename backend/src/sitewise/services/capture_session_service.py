@@ -351,7 +351,7 @@ def request_processing(
         raise NotFoundError("Capture session not found.")
     if record_session.status == "cancelled":
         raise ValidationError("A cancelled capture session cannot be processed.")
-    if record_session.capture_mode == BACKEND_38_MODE:
+    if record_session.capture_mode in {BACKEND_38_MODE, "device_56_backend"}:
         frames = list_capture_frames(session, session_id)
         ready_targets = {
             frame.target_index for frame in frames
@@ -359,7 +359,7 @@ def request_processing(
         }
         expected_targets = set(range(1, record_session.expected_frames + 1))
         if ready_targets != expected_targets:
-            raise ValidationError("Confirm every original 38-target frame and checksum before processing.")
+            raise ValidationError("Confirm every required original frame and checksum before processing.")
     confirmed = confirmed_frame_count(session, session_id)
     if confirmed < record_session.expected_frames:
         raise ValidationError(
@@ -372,7 +372,7 @@ def request_processing(
             "AND (status IN ('queued', 'processing') OR (:retain_result AND status = 'done')) "
             "ORDER BY created_at DESC LIMIT 1"
         ),
-        {"sid": str(session_id), "retain_result": record_session.capture_mode == BACKEND_38_MODE},
+        {"sid": str(session_id), "retain_result": record_session.capture_mode in {BACKEND_38_MODE, "device_56_backend"}},
     ).first()
     if live is not None:
         job = session.get(PanoramaJob, live[0])

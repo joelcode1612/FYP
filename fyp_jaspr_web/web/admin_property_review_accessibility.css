@@ -1,0 +1,98 @@
+/* Property verification detail: stacked labels and decisions; no workflow changes. */
+.app-shell.app-shell--admin .sw-review-polish:has(> .vd) {
+  display: grid !important; grid-template-columns: minmax(0,1fr) !important;
+  grid-template-rows: auto !important; gap: 1.25rem; min-width: 0;
+}
+.app-shell.app-shell--admin .sw-review-polish:has(> .vd) > * {
+  grid-column: 1 / -1 !important; grid-row: auto !important; min-width: 0;
+}
+.app-shell.app-shell--admin .sw-review-polish:has(> .vd) > .sw-review-agent-card {
+  width: 100%; max-width: none; margin: 0; justify-self: stretch;
+}
+.app-shell.app-shell--admin .vd {
+  --vd-readable-text: #f9f9fd; --vd-readable-muted: #c4cada; --vd-readable-line: #596378;
+  display: grid !important; grid-template-columns: minmax(0,1fr); gap: 1.25rem;
+  min-width: 0; font-size: 1rem; line-height: 1.6;
+}
+.app-shell.app-shell--admin .vd .vd-layout {
+  display: grid !important; grid-template-columns: minmax(0,1fr) !important;
+  grid-template-rows: auto !important; gap: 1.25rem; min-width: 0;
+}
+.app-shell.app-shell--admin .vd .vd-layout > :is(.vd-main,.vd-side) {
+  grid-column: 1 / -1 !important; grid-row: auto !important; min-width: 0;
+  width: 100%; box-sizing: border-box;
+}
+.app-shell.app-shell--admin .vd .vd-side {
+  position: static !important; max-height: none !important; overflow: visible !important;
+  border: 1px solid var(--vd-readable-line); border-radius: 12px; box-shadow: none;
+}
+.app-shell.app-shell--admin .vd :is(.vd-panel,.vd-hero) {
+  min-width: 0; box-sizing: border-box; border-radius: 12px;
+  padding: clamp(1rem,2vw,1.5rem); gap: 1rem;
+}
+.app-shell.app-shell--admin .vd #vd-panel-overview .vd-overview-grid {
+  grid-template-columns: minmax(0,1fr) !important; gap: 1.25rem;
+}
+.app-shell.app-shell--admin .vd #vd-panel-overview .vd-overview-grid > * {
+  min-width: 0; max-width: 100%; grid-row: auto !important;
+}
+/* At most two readable columns; each field itself always reads vertically. */
+.app-shell.app-shell--admin .vd :is(.vd-info,.vd-info--two),
+.app-shell.app-shell--admin .vd #vd-panel-overview :is(.vd-info,.vd-info--two) {
+  display: grid !important; grid-template-columns: repeat(auto-fit,minmax(min(100%,max(20rem,45%)),1fr)) !important;
+  gap: .75rem 1rem !important; min-width: 0; width: 100%; box-sizing: border-box;
+}
+.app-shell.app-shell--admin .vd .vd-row,
+.app-shell.app-shell--admin .vd #vd-panel-overview .vd-row {
+  display: flex !important; flex-direction: column !important; align-items: stretch !important;
+  justify-content: flex-start !important; gap: .35rem !important;
+  min-width: 0 !important; width: auto !important; max-width: 100%; height: auto;
+  min-height: 0; padding: .85rem 1rem !important; box-sizing: border-box;
+  background: #181b29; border: 1px solid var(--vd-readable-line) !important; border-radius: 8px;
+}
+.app-shell.app-shell--admin .vd .vd-row :is(.vd-row__label,.vd-row__value),
+.app-shell.app-shell--admin .vd #vd-panel-overview .vd-row :is(.vd-row__label,.vd-row__value) {
+  display: block !important; flex: 0 1 auto !important; min-width: 0 !important;
+  width: 100% !important; max-width: 100% !important; text-align: start !important;
+  white-space: normal !important; writing-mode: horizontal-tb !important;
+  word-break: normal !important; overflow-wrap: break-word !important;
+  box-sizing: border-box; font-size: 1rem !important; line-height: 1.55 !important;
+}
+.app-shell.app-shell--admin .vd .vd-row .vd-row__label { color: var(--vd-readable-muted); font-weight: 500; }
+.app-shell.app-shell--admin .vd .vd-row .vd-row__value { color: var(--vd-readable-text); font-weight: 650; }
+.app-shell.app-shell--admin .vd :is(.vd-group-title,.vd-section-head h3,.vd-side__top h3) {
+  font-size: 1.25rem !important; line-height: 1.4; font-weight: 650; text-transform: none !important;
+  letter-spacing: normal !important; color: var(--vd-readable-text); margin-block: 0 .5rem;
+}
+.app-shell.app-shell--admin .vd :is(.vd-description,.vd-section-head p,.vd-side p,.vd-side .small,.vd-event p,.vd-event strong,.vd-hero__address,.vd-fact__label,.vd-fact__note,.vd-source,.vd-notes) {
+  font-size: 1rem !important; line-height: 1.6 !important; overflow-wrap: break-word;
+  color: var(--vd-readable-muted);
+}
+.app-shell.app-shell--admin .vd :is(.vd-side__top,.vd-side__body,.vd-activity) { padding: clamp(1rem,2vw,1.5rem); gap: .85rem; min-width: 0; }
+.app-shell.app-shell--admin .vd .vd-check {
+  display: flex !important; align-items: center; gap: .75rem; min-height: 48px;
+  font-size: 1rem !important; line-height: 1.5; color: var(--vd-readable-text);
+  border: 1px solid var(--vd-readable-line); border-radius: 8px; padding: .75rem; box-sizing: border-box;
+}
+.app-shell.app-shell--admin .vd .vd-check input { width: 24px !important; height: 24px !important; flex: 0 0 24px; margin: 0; accent-color: #a8d3ff; }
+.app-shell.app-shell--admin .vd .vd-check span { min-width: 0; overflow-wrap: break-word; }
+.app-shell.app-shell--admin .vd .vd-check:has(input:disabled) { cursor: default; }
+.app-shell.app-shell--admin .vd .vd-side__body > p.small { background: #262b3b; padding: .7rem .85rem; border-left: 3px solid #e8c17b; border-radius: 4px; margin: 0; }
+.app-shell.app-shell--admin .vd :is(.vd-side .btn,.vd-history-toggle,.vd-side summary,.vd-tab) {
+  min-height: 48px !important; height: auto; font-size: 1rem !important; line-height: 1.5;
+  white-space: normal !important; padding: .75rem 1rem; border-radius: 8px; box-sizing: border-box;
+}
+.app-shell.app-shell--admin .vd .vd-side :is(.btn,.vd-history-toggle) { width: 100%; max-width: 100%; }
+.app-shell.app-shell--admin .vd .vd-history-toggle {
+  display: flex; align-items: center; justify-content: space-between; gap: .75rem;
+  background: #262b3b !important; color: var(--vd-readable-text) !important;
+  border: 1px solid var(--vd-readable-line) !important; font-weight: 600; text-align: start; cursor: pointer;
+}
+.app-shell.app-shell--admin .vd .vd-side :is(.btn:disabled,button:disabled) { opacity: 1; background: #303546; color: #c4cada; cursor: not-allowed; }
+.app-shell.app-shell--admin .vd .vd-side :is(select,textarea) { min-height: 48px; width: 100%; max-width: 100%; font-size: 1rem; box-sizing: border-box; }
+.app-shell.app-shell--admin .vd .vd-tabs { flex-wrap: wrap; gap: .5rem; min-width: 0; }
+.app-shell.app-shell--admin .vd :is(button,a,input,select,textarea,summary,[tabindex]):focus-visible { outline: 3px solid #a8d3ff !important; outline-offset: 3px; }
+.app-shell.app-shell--admin .vd #vd-review-history[hidden] { display: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .app-shell.app-shell--admin .vd :is(button,a,input,select,textarea) { transition: none; animation: none; }
+}

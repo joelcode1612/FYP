@@ -10,9 +10,19 @@ database passwords, and paid API keys in the backend
 environment. The separate Express test service uses `test/.env.example`.
 
 Flutter bundles `fyp_mobile_app/assets/config/sitewise_dev.json`. On a new
-checkout, copy `sitewise_dev.example.json` to that filename and fill in the
-public settings. Use a Supabase publishable key and public Google OAuth client
-IDs. The JSON is distributed in the app, so keep server credentials out of it.
+checkout, worktree or branch switch, that asset is absent because it is
+git-ignored; run
+
+    node fyp_mobile_app/tool/ensure_sitewise_dev_config.js
+
+which writes it from the authorised public defaults in
+`fyp_mobile_app/config/sitewise_dev.defaults.json` (Supabase project URL,
+publishable key, public Google OAuth web client ID, and the
+`adb-reverse` / `http://127.0.0.1:8090` development origin). Both
+`Start-SiteWise-All*.ps1` launchers run it before the Flutter build, so no
+manual step is needed there. An existing valid file is never overwritten.
+Use a Supabase publishable key and public Google OAuth client IDs. The JSON is
+distributed in the app, so keep server credentials out of it.
 The existing mobile `config/sitewise_dev.env` can still be used for public
 Dart defines.
 

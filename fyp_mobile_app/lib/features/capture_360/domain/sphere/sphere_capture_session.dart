@@ -145,6 +145,21 @@ class CaptureSession {
   /// a future layout change is a data migration, not a code hunt.
   final int requiredTargetCount;
 
+  int get capturePlanVersion => sitewisePlanVersionForCount(requiredTargetCount);
+
+  static int _readPlanCount(Map<String, Object?> row) {
+    final raw = row['required_target_count'];
+    final count = raw ?? kSphereTargetCount;
+    if (count is! int || (count != 38 && count != 56)) {
+      throw const FormatException('Invalid saved capture plan count');
+    }
+    final version = row['capture_plan_version'];
+    if (version != null && '$version' != '${sitewisePlanVersionForCount(count)}') {
+      throw const FormatException('Saved capture plan version does not match its count');
+    }
+    return count;
+  }
+
   final CaptureSessionStatus status;
 
   final DateTime createdAt;
@@ -251,6 +266,7 @@ class CaptureSession {
     'user_id': userId,
     'property_id': propertyId,
     'required_target_count': requiredTargetCount,
+    'capture_plan_version': capturePlanVersion,
     'status': status.wireName,
     'created_at': createdAt.toUtc().millisecondsSinceEpoch,
     'updated_at': updatedAt.toUtc().millisecondsSinceEpoch,
@@ -271,8 +287,7 @@ class CaptureSession {
     sessionId: row['session_id']! as String,
     userId: row['user_id'] as String?,
     propertyId: (row['property_id'] as num?)?.toInt(),
-    requiredTargetCount:
-        (row['required_target_count'] as num?)?.toInt() ?? kSphereTargetCount,
+    requiredTargetCount: _readPlanCount(row),
     status: CaptureSessionStatus.fromWire(row['status'] as String?),
     createdAt: _time(row['created_at']),
     updatedAt: _time(row['updated_at']),

@@ -14,7 +14,10 @@ from sqlalchemy import text
 from sitewise.domain.business_concept_compatibility import FEATURES, evaluate_concepts
 from sitewise.ml.fnb_category import category_prediction
 from sitewise.ml.property_features import FeatureResolutionError, PropertyFeatureRepository
-from sitewise.ml.pu_expanded import EXPANDED_MODEL_NAME, expanded_display_scores
+from sitewise.ml.pu_expanded import (
+    active_expanded_model_name,
+    expanded_display_scores,
+)
 from sitewise.repositories.catalog_repository import CatalogRepository
 from sitewise.services.catalog_listing_details_service import CatalogListingDetailsService
 
@@ -79,7 +82,10 @@ class BusinessConceptService:
             general_error = f"{type(exc).__name__}: general PU score unavailable"
         general_pu = {
             "available": general_score is not None,
-            "model": EXPANDED_MODEL_NAME,
+            # Name the artifact that actually produced the score: the display
+            # index follows the active artifact, so a fixed name would
+            # misattribute a v2 score to the original model.
+            "model": active_expanded_model_name(),
             "association_index_0_100": general_score,
             "score_meaning": "research_P_vs_U_association_NOT_business_success_probability",
             "note": general_error or "Shared property-wide context only; identical for all five concepts and excluded from their ranking.",

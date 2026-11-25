@@ -622,6 +622,51 @@ def _queue_expanded64(session: Session, property_id: int) -> None:
         logger.warning("Expanded64 enqueue failed for listing %s (%s)", property_id, type(exc).__name__)
 
 
+def _resolve_location_after_save(
+    session: Session,
+    repo: FypPropertyRepository,
+    property_id: int,
+    row: dict,
+) -> dict:
+    """Obtain coordinates from the saved address when none are stored yet.
+
+    Runs AFTER the caller's commit and in its own transaction. Geocoding is an
+    outbound HTTP call with a bounded retry, and holding the property row lock
+    across it would block every other writer for the duration of a provider
+    timeout. The caller keeps its committed draft either way.
+
+    This is the automatic half of the location workflow: a client that did not
+    send an address-confirmation token still ends up with a measured listing,
+    because the saved street, city and state are geocoded through the same
+    provider pipeline the preview uses. Nothing is inferred when the provider
+    cannot place the address — the draft simply stays unlocated and the reason
+    is logged.
+    """
+    if row.get("latitude") is not None and row.get("longitude") is not None:
+        return row
+    try:
+        from sitewise.services.property_location_service import (
+            resolve_property_coordinates,
+        )
+
+        resolution = resolve_property_coordinates(session, property_id)
+        session.commit()
+    except Exception as exc:  # noqa: BLE001 - the saved draft must still return
+        session.rollback()
+        logger.warning(
+            "Automatic location resolution failed for listing %s (%s)",
+            property_id, type(exc).__name__,
+        )
+        return row
+    if not resolution.located:
+        logger.info(
+            "Listing %s saved without coordinates: %s (%s)",
+            property_id, resolution.status, resolution.reason,
+        )
+        return row
+    return repo.owner_listing(property_id) or row
+
+
 def _apply_address_confirmation(
     session: Session,
     repo: FypPropertyRepository,
@@ -739,6 +784,9 @@ def create_owner_draft(
     except Exception:
         session.rollback()
         raise
+    # Location last: the draft is already durable, so a provider outage cannot
+    # lose it, and a successful geocode returns the listing WITH coordinates.
+    row = _resolve_location_after_save(session, repo, int(row["id"]), row)
     return {
         "data": row,
         "meta": {
@@ -889,6 +937,10 @@ def update_own_listing(
     )
     _queue_expanded64(session, property_id)
     session.commit()
+    # An edited address invalidates the previous location, so the same
+    # automatic resolution applies here: the new address is geocoded before the
+    # owner has to think about coordinates at all.
+    row = _resolve_location_after_save(session, repo, property_id, row)
     return {"data": row, "meta": {"address_confirmation": confirmation}}
 
 

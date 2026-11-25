@@ -35,6 +35,7 @@ class SphereCaptureScreen extends StatefulWidget {
   const SphereCaptureScreen({
     super.key,
     this.autoStart = false,
+    this.requiredTargetCount = kSphereTargetCount,
     this.camera,
     this.rotation,
     this.repository,
@@ -55,6 +56,7 @@ class SphereCaptureScreen extends StatefulWidget {
   /// True only when entered after completing the SiteWise guide.
   /// The camera starts after the first frame, using the same _start() flow.
   final bool autoStart;
+  final int requiredTargetCount;
 
   /// Injection points for tests and for callers that already hold a station.
   final SphereCamera? camera;
@@ -196,7 +198,7 @@ class _SphereCaptureScreenState extends State<SphereCaptureScreen>
     if (controller == null) return;
     if (widget.backendProcessing) {
       if (controller.phase != SphereCapturePhase.complete ||
-          controller.capturedCount < kSphereTargetCount) {
+          controller.capturedCount < controller.targets.length) {
         return;
       }
       if (_captureCompleteNotified) return;
@@ -264,6 +266,7 @@ class _SphereCaptureScreenState extends State<SphereCaptureScreen>
         repository: repository,
         stitcher: widget.stitcher ?? defaults.stitcher,
         backendProcessing: widget.backendProcessing,
+        planVersion: sitewisePlanVersionForCount(widget.requiredTargetCount),
         stationId: stationId,
         // The 4:3 normaliser links OpenCV, so it is supplied here rather than
         // defaulted inside the controller: that keeps the controller — and its
@@ -327,6 +330,7 @@ class _SphereCaptureScreenState extends State<SphereCaptureScreen>
         onStart: _starting ? null : _start,
         starting: _starting,
         error: _startError,
+        requiredTargetCount: widget.requiredTargetCount,
       );
     }
     return _LiveCapture(
@@ -343,11 +347,13 @@ class _StartScreen extends StatelessWidget {
   const _StartScreen({
     required this.onStart,
     required this.starting,
+    required this.requiredTargetCount,
     this.error,
   });
 
   final VoidCallback? onStart;
   final bool starting;
+  final int requiredTargetCount;
   final String? error;
 
   @override
@@ -389,8 +395,8 @@ class _StartScreen extends StatelessWidget {
             const Spacer(flex: 2),
             const Center(child: _SphereDiagram(size: 220)),
             const SizedBox(height: 30),
-            const Text(
-              'AR 360° Capture ($kSphereTargetCount Targets)',
+            Text(
+              'AR 360° Capture ($requiredTargetCount Targets)',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Colors.white,
@@ -400,9 +406,9 @@ class _StartScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 10),
-            const Text(
+            Text(
               'Hold the phone level and face the first wall, then tap Start. '
-              'The $kSphereTargetCount targets are levelled to gravity — turn '
+              'The $requiredTargetCount targets are levelled to gravity — turn '
               'to bring the next one into the centre ring and the photograph '
               'is taken automatically. Try to turn around one spot and keep '
               'the phone at a similar height as you move between targets.',
@@ -1214,6 +1220,7 @@ class _CompletionOverlay extends StatelessWidget {
                         MaterialPageRoute<void>(
                           builder: (_) => SpherePanoramaScreen(
                             panoramaPath: controller.panoramaPath!,
+                            photoCount: controller.targetCount,
                           ),
                         ),
                       ),
@@ -1322,8 +1329,8 @@ class _PanoramaStatus extends StatelessWidget {
         ],
       );
     }
-    return const Text(
-      'The panorama will be generated from the $kSphereTargetCount saved '
+    return Text(
+      'The panorama will be generated from the ${controller.targetCount} saved '
       'photographs.',
       textAlign: TextAlign.center,
       style: TextStyle(color: CaptureColors.mutedOnDark, fontSize: 11.5),

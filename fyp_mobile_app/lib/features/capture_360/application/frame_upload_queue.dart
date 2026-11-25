@@ -5,6 +5,7 @@ import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
+import 'package:shared_logic/shared_logic.dart' show VirtualTourStatus;
 
 import 'package:fyp/core/di/service_locator.dart';
 import 'package:fyp/core/utils/capture_log.dart';
@@ -433,6 +434,15 @@ class FrameUploadQueue {
   /// Queues the stitched panorama (the cloud draft). The panorama is drained
   /// with priority over the frame backups.
   Future<void> enqueuePanorama(String panoramaPath, {int? propertyId}) async {
+    final plan = await _sessions.getSession(_stationId);
+    if (plan?.requiredTargetCount == 56) {
+      // This is the cached backend result, not an upload candidate.
+      if (plan?.localPanoramaPath == panoramaPath &&
+          plan?.panoramaSyncStatus == FrameSyncStatus.ready) {
+        return;
+      }
+      throw StateError('Enhanced captures use the server-generated panorama.');
+    }
     final checksum = await _checksum(panoramaPath);
     var doc = await _loadOrCreate();
     final existing = doc.panorama;
@@ -538,6 +548,19 @@ class FrameUploadQueue {
       return;
     }
     doc.propertyId = propertyId;
+    final plan = await _sessions.getSession(_stationId);
+    if (plan == null) return;
+    if (doc.frames.keys.any((id) => id < 1 || id > plan.requiredTargetCount)) {
+      throw StateError('Queued photos do not match the saved plan.');
+    }
+    if (doc.frames.isEmpty && doc.panorama == null) return;
+    if (plan.requiredTargetCount == 56 && doc.panorama?.confirmed == true &&
+        plan.panoramaSyncStatus == FrameSyncStatus.ready &&
+        plan.backendPanoramaId == doc.panorama?.panoramaId &&
+        plan.localPanoramaPath == doc.panorama?.localFilePath &&
+        File(doc.panorama!.localFilePath).existsSync()) {
+      return;
+    }
 
     String? sessionId;
     try {
@@ -552,9 +575,61 @@ class FrameUploadQueue {
       return;
     }
 
-    await _drainPanorama(doc, sessionId, propertyId);
-    await _drainFrames(doc, sessionId, propertyId);
-    await _recordTotals(doc);
+    if (plan.requiredTargetCount == 56) {
+      await _drainFrames(doc, sessionId, propertyId);
+      await _finishEnhancedPanorama(doc, sessionId, propertyId);
+    } else {
+      await _drainPanorama(doc, sessionId, propertyId);
+      await _drainFrames(doc, sessionId, propertyId);
+      await _recordTotals(doc);
+    }
+  }
+
+  Future<void> _finishEnhancedPanorama(_QueueDoc doc, String sessionId, int propertyId) async {
+    final plan = await _sessions.getSession(_stationId);
+    final expectedCount = plan?.requiredTargetCount;
+    if (expectedCount == null || expectedCount != 56 ||
+        doc.frames.length != expectedCount ||
+        !List<int>.generate(expectedCount, (i) => i + 1).every((id) =>
+          doc.frames[id]?.status == FrameUploadState.confirmed)) {
+      return;
+    }
+    final frames = await _sessions.loadFrames(_stationId);
+    if (frames.length != expectedCount ||
+        frames.map((f) => f.targetId).toSet().length != expectedCount ||
+        frames.any((f) => f.targetId < 1 || f.targetId > expectedCount ||
+            !File(f.imagePath).existsSync())) {
+      throw StateError('Enhanced capture is incomplete.');
+    }
+    // Prevent replacing an existing device-generated or different artifact.
+    final previous = doc.panorama;
+    if (previous != null && !previous.confirmed) {
+      throw StateError('Unexpected queued device panorama in enhanced session.');
+    }
+    final result = await _coordinator.finishEnhanced(stationId: _stationId,
+      sessionId: sessionId, directory: await frameStore.tourRoot(tourId));
+    final path = result['localPath'] as String;
+    final id = result['id'] as String;
+    if (previous != null && previous.panoramaId != id) {
+      throw StateError('Existing panorama differs from the completed job.');
+    }
+    final tour = await ServiceLocator.tourRepo.tourById(tourId);
+    if (tour == null || tour.propertyId != '$propertyId') {
+      throw StateError('Panorama property association could not be verified.');
+    }
+    await _sessions.savePanorama(sessionId: _stationId,
+      localPanoramaPath: path, status: PanoramaGenerationStatus.ready, error: null);
+    await ServiceLocator.tourRepo.updateTour(tour.copyWith(
+      panoramaPath: path, status: VirtualTourStatus.ready));
+    await _sessions.saveBackendHandoff(sessionId: _stationId,
+      syncStatus: FrameSyncStatus.ready, backendSessionId: sessionId,
+      panoramaSyncStatus: FrameSyncStatus.ready,
+      backupSyncStatus: FrameSyncStatus.ready, backupUploaded: 56, backupTotal: 56,
+      backendPanoramaId: id, clearLastError: true);
+    doc.panorama = PanoramaQueueRecord(localFilePath: path,
+      checksumSha256: await _checksum(path), status: FrameUploadState.confirmed,
+      panoramaId: id, storagePath: result['storagePath'] as String);
+    await _flush();
   }
 
   Future<void> _drainPanorama(
@@ -646,11 +721,12 @@ class FrameUploadQueue {
     var confirmedCount = doc.frames.values
         .where((r) => r.status == FrameUploadState.confirmed)
         .length;
-    final total = doc.frames.length;
+    final total = (await _sessions.getSession(_stationId))?.requiredTargetCount ?? doc.frames.length;
 
     while (true) {
       // A panorama may be queued while a frame batch is uploading.
-      if (doc.panorama?.status == FrameUploadState.pending) {
+      if ((await _sessions.getSession(_stationId))?.requiredTargetCount != 56 &&
+          doc.panorama?.status == FrameUploadState.pending) {
         await _drainPanorama(doc, sessionId, propertyId);
       }
       final batch = <FrameUploadRecord>[
@@ -786,7 +862,7 @@ class FrameUploadQueue {
   }
 
   Future<void> _recordTotals(_QueueDoc doc) async {
-    final total = doc.frames.length;
+    final total = (await _sessions.getSession(_stationId))?.requiredTargetCount ?? doc.frames.length;
     final confirmed = doc.frames.values
         .where((r) => r.status == FrameUploadState.confirmed)
         .length;

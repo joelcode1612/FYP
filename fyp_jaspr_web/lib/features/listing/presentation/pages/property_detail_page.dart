@@ -13,6 +13,7 @@ import 'package:sitewise_jaspr_web/features/listing/presentation/components/prop
 import 'package:sitewise_jaspr_web/features/listing/presentation/components/property_detail/compact_location_explanation.dart';
 import 'package:sitewise_jaspr_web/features/listing/presentation/components/property_detail/district_demographics_panel.dart';
 import 'package:sitewise_jaspr_web/features/listing/presentation/components/property_detail/location_fit_score.dart';
+import 'package:sitewise_jaspr_web/features/listing/presentation/components/property_detail/location_measurements_panel.dart';
 import 'package:sitewise_jaspr_web/features/listing/presentation/components/property_detail/location_overview_comparison.dart';
 import 'package:sitewise_jaspr_web/shared/presentation/components/property_leaflet_map.dart';
 import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart';
@@ -192,7 +193,7 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
     if (failure != null) {
       setState(() {
         _saveMessage =
-            'Could not ${savedNow ? 'remove' : 'save'} — $failure '
+        'Could not ${savedNow ? 'remove' : 'save'} — $failure '
             'Your shortlist was not changed.';
       });
       return;
@@ -238,9 +239,9 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
   /// category, which the score tab says plainly. Demo Mode never
   /// reads the account preference: it has no authenticated session.
   Future<PropertyInsights> _loadInsights(
-    String id, {
-    required bool isCatalog,
-  }) async {
+      String id, {
+        required bool isCatalog,
+      }) async {
     var type = component.businessType.trim();
     var source = '';
     if (type.isNotEmpty) {
@@ -287,51 +288,52 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
       child: component.id.isEmpty
           ? const _NotFound()
           : FutureBuilder<PropertyDetailLoad?>(
-              future: _detailFuture,
-              builder: (c, snap) {
-                if (snap.connectionState != ConnectionState.done) {
-                  return const _Loading();
-                }
-                final load = snap.data;
-                if (load == null) return const _NotFound();
-                final p = load.property;
-                return _Detail(
-                  key: ValueKey('detail-${p.id}'),
-                  property: p,
-                  imageUrls: load.imageUrls,
-                  source: load.source,
-                  evidenceFuture: _evidenceFuture,
-                  insightsFuture: _insightsFuture,
-                  explanationFuture: _explanationFuture,
-                  appliedFilters: _appliedFilters,
-                  saved: saved.contains(p.id),
-                  compared: compared.contains(p.id),
-                  saveMessage: _saveMessage,
-                  compareLinkShown: _compareLinkShown,
-                  compareMessage: _compareNotice,
-                  onToggleSaved: () => _toggleSaved(p.id),
-                  onCompareTapped: () {
-                    final notifier = context
-                        .read(appNotifierProvider.notifier);
-                    // Already selected: the button itself opens Compare (see
-                    // _Detail), so this tap can never remove the property.
-                    if (notifier.compared.contains(p.id)) return;
-                    if (!notifier.addCompared(p.id)) {
-                      setState(() {
-                        _compareNotice =
-                            'You can compare up to three properties. Remove '
-                            'one from the comparison first.';
-                      });
-                      return;
-                    }
-                    setState(() {
-                      _compareNotice = null;
-                      _compareLinkShown = true;
-                    });
-                  },
-                );
-              },
-            ),
+        future: _detailFuture,
+        builder: (c, snap) {
+          if (snap.connectionState != ConnectionState.done) {
+            return const _Loading();
+          }
+          final load = snap.data;
+          if (load == null) return const _NotFound();
+          final p = load.property;
+          return _Detail(
+            key: ValueKey('detail-${p.id}'),
+            property: p,
+            analysisRef: component.id,
+            imageUrls: load.imageUrls,
+            source: load.source,
+            evidenceFuture: _evidenceFuture,
+            insightsFuture: _insightsFuture,
+            explanationFuture: _explanationFuture,
+            appliedFilters: _appliedFilters,
+            saved: saved.contains(p.id),
+            compared: compared.contains(p.id),
+            saveMessage: _saveMessage,
+            compareLinkShown: _compareLinkShown,
+            compareMessage: _compareNotice,
+            onToggleSaved: () => _toggleSaved(p.id),
+            onCompareTapped: () {
+              final notifier = context
+                  .read(appNotifierProvider.notifier);
+              // Already selected: the button itself opens Compare (see
+              // _Detail), so this tap can never remove the property.
+              if (notifier.compared.contains(p.id)) return;
+              if (!notifier.addCompared(p.id)) {
+                setState(() {
+                  _compareNotice =
+                  'You can compare up to three properties. Remove '
+                      'one from the comparison first.';
+                });
+                return;
+              }
+              setState(() {
+                _compareNotice = null;
+                _compareLinkShown = true;
+              });
+            },
+          );
+        },
+      ),
     );
   }
 }
@@ -352,6 +354,7 @@ class PropertyDetailLoad {
 
 class _Detail extends StatefulComponent {
   final CommercialProperty property;
+  final String analysisRef;
   final List<String> imageUrls;
   final String source;
   final Future<PropertyEvidence>? evidenceFuture;
@@ -374,6 +377,7 @@ class _Detail extends StatefulComponent {
   const _Detail({
     super.key,
     required this.property,
+    required this.analysisRef,
     required this.imageUrls,
     required this.source,
     required this.evidenceFuture,
@@ -452,7 +456,7 @@ class _DetailState extends State<_Detail> {
     // The score sections read the future directly so they can show a skeleton;
     // this mirror only feeds the gallery and the map.
     component.insightsFuture?.then<void>(
-      (value) {
+          (value) {
         if (!mounted) return;
         setState(() => _insights = value);
       },
@@ -559,7 +563,7 @@ class _DetailState extends State<_Detail> {
     if (property.tenure != null && property.tenure!.trim().isNotEmpty)
       property.tenure!,
     ...property.tags.where(
-      (tag) => tag != 'Imported dataset' && !tag.startsWith('Quality:'),
+          (tag) => tag != 'Imported dataset' && !tag.startsWith('Quality:'),
     ),
     ...property.requirements,
   }.toList();
@@ -605,12 +609,12 @@ class _DetailState extends State<_Detail> {
             if (tab == 1) unawaited(_loadPublishedPanorama());
           },
           onIndex: (index) => setState(
-            () =>
-                _gallery = _gallery.copyWith(index: index, photoFailed: false),
+                () =>
+            _gallery = _gallery.copyWith(index: index, photoFailed: false),
           ),
           onStep: _stepPhoto,
           onToggleFull: () => setState(
-            () => _gallery = _gallery.copyWith(full: !_gallery.full),
+                () => _gallery = _gallery.copyWith(full: !_gallery.full),
           ),
           onPhotoError: () =>
               setState(() => _gallery = _gallery.copyWith(photoFailed: true)),
@@ -662,8 +666,8 @@ class _DetailState extends State<_Detail> {
           p(classes: 'sw-info__lede', [
             Component.text(
               'Review the reasons behind your selected-business '
-              'recommendation, understand the area score and explore nearby '
-              'services.',
+                  'recommendation, understand the area score and explore nearby '
+                  'services.',
             ),
           ]),
         ]),
@@ -807,17 +811,17 @@ class _DetailState extends State<_Detail> {
             if (loading) return const _InsightsLoading();
             final insights =
                 snap.data ??
-                PropertyInsights.unavailable(
-                  property.id,
-                  'We could not load the area information right now.',
-                );
+                    PropertyInsights.unavailable(
+                      property.id,
+                      'We could not load the area information right now.',
+                    );
             return div(classes: 'sw-pd__insights', [
               LocationFitScore(insights: insights),
               CompactLocationExplanation(insights: insights),
               p(classes: 'sw-pd__footnote', [
                 Component.text(
                   'This score measures location similarity. It does not '
-                  'predict sales, customer numbers or business success.',
+                      'predict sales, customer numbers or business success.',
                 ),
               ]),
             ]);
@@ -882,8 +886,25 @@ class _DetailState extends State<_Detail> {
           error: snap.error,
         ),
       ),
+      _measurementsSection(),
       _districtSection(),
     ]);
+  }
+
+  /// The full measured surroundings, grouped and collapsible.
+  ///
+  /// The analysis in the shared entrepreneur state belongs to whichever
+  /// property was last analysed, so the payload's own property reference is
+  /// what decides whether it may be shown here. Trusting the state's
+  /// `analysisPropertyId` alone would render a previous listing's
+  /// measurements beside this address whenever a load failed after the id was
+  /// switched — showing none is the only safe answer in that case.
+  Component _measurementsSection() {
+    final analysis = context.watch(entrepreneurNotifierProvider).analysis;
+    if (analysis == null || analysis.propertyId != component.analysisRef) {
+      return Component.fragment(const []);
+    }
+    return LocationMeasurementsPanel(analysis: analysis);
   }
 
   /// The DOSM district demographics block, fed by the same cached evidence
@@ -906,9 +927,9 @@ class _DetailState extends State<_Detail> {
   }
 
   static EvidenceMetric? _evidenceMetric(
-    PropertyEvidence? evidence,
-    String key,
-  ) {
+      PropertyEvidence? evidence,
+      String key,
+      ) {
     if (evidence == null) return null;
     for (final group in evidence.groups) {
       for (final metric in group.metrics) {
@@ -983,7 +1004,7 @@ class _DetailState extends State<_Detail> {
   Component _summaryCard() {
     final facilities = _facilities;
     final management =
-        property.managerName == null || property.managerName!.trim().isEmpty
+    property.managerName == null || property.managerName!.trim().isEmpty
         ? property.managementLabel
         : '${property.managementLabel} — ${property.managerName}';
     final description = property.description?.trim() ?? '';
@@ -1085,9 +1106,9 @@ class _DetailState extends State<_Detail> {
   // ----------------------------------------------------------------- details
 
   Component _detailRow(
-    String label,
-    String? value,
-  ) => div(classes: 'sw-pd__detail-row', [
+      String label,
+      String? value,
+      ) => div(classes: 'sw-pd__detail-row', [
     span([Component.text(label)]),
     span(classes: value == null || value.trim().isEmpty ? 'is-absent' : null, [
       Component.text(
@@ -1118,54 +1139,54 @@ class _DetailState extends State<_Detail> {
       ('Furnishing', text(property.furnishing)),
       ('Tenure', text(property.tenure)),
       (
-        'Parking',
-        property.hasParking == null
-            ? null
-            : (property.hasParking! ? 'Onsite parking' : 'No onsite parking'),
+      'Parking',
+      property.hasParking == null
+          ? null
+          : (property.hasParking! ? 'Onsite parking' : 'No onsite parking'),
       ),
       (
-        'Suitable for a food business',
-        property.isFnbSuitable == null
-            ? null
-            : (property.isFnbSuitable! ? 'Yes' : 'No'),
+      'Suitable for a food business',
+      property.isFnbSuitable == null
+          ? null
+          : (property.isFnbSuitable! ? 'Yes' : 'No'),
       ),
       (
-        'Corner lot',
-        property.isCornerLot == null
-            ? null
-            : (property.isCornerLot! ? 'Yes' : 'No'),
+      'Corner lot',
+      property.isCornerLot == null
+          ? null
+          : (property.isCornerLot! ? 'Yes' : 'No'),
       ),
       (
-        'Freehold',
-        property.isFreehold == null
-            ? null
-            : (property.isFreehold! ? 'Yes' : 'No'),
+      'Freehold',
+      property.isFreehold == null
+          ? null
+          : (property.isFreehold! ? 'Yes' : 'No'),
       ),
       ('Availability', text(property.availability)),
       (
-        'Monthly rental',
-        'RM ${property.rentalRm.toStringAsFixed(2)}',
+      'Monthly rental',
+      'RM ${property.rentalRm.toStringAsFixed(2)}',
       ),
       (
-        'Rental per sq ft',
-        property.sizeSqft > 0
-            ? 'RM ${(property.rentalRm / property.sizeSqft).toStringAsFixed(2)} / sq ft'
-            : null,
+      'Rental per sq ft',
+      property.sizeSqft > 0
+          ? 'RM ${(property.rentalRm / property.sizeSqft).toStringAsFixed(2)} / sq ft'
+          : null,
       ),
       (
-        'Minimum rental period',
-        property.leaseDurationNegotiable == true
-            ? 'Negotiable'
-            : property.leaseDurationMonths == null
-                ? null
-                : '${property.leaseDurationMonths} months',
+      'Minimum rental period',
+      property.leaseDurationNegotiable == true
+          ? 'Negotiable'
+          : property.leaseDurationMonths == null
+          ? null
+          : '${property.leaseDurationMonths} months',
       ),
       ('Available from', text(property.availableFrom)),
       (
-        'Rental deposit',
-        property.rentalDepositMyr == null
-            ? null
-            : 'RM ${property.rentalDepositMyr!.toStringAsFixed(2)}',
+      'Rental deposit',
+      property.rentalDepositMyr == null
+          ? null
+          : 'RM ${property.rentalDepositMyr!.toStringAsFixed(2)}',
       ),
       ('Property title type', text(property.titleType)),
       ('Landlord permission for F&B', text(property.landlordFnbPermission)),
@@ -1173,8 +1194,8 @@ class _DetailState extends State<_Detail> {
       if (property.availabilityVerifiedAt != null &&
           property.availabilityVerifiedAt!.trim().isNotEmpty)
         (
-          'Availability verified',
-          property.availabilityVerifiedAt!.split('T').first,
+        'Availability verified',
+        property.availabilityVerifiedAt!.split('T').first,
         ),
     ].where(((row) => row.$2 != null && row.$2!.trim().isNotEmpty)).toList();
     final notice = text(property.listingDataNotice);
@@ -1287,10 +1308,10 @@ class _DetailState extends State<_Detail> {
       p(classes: 'sw-pd__footnote', [
         Component.text(
           'The circles show straight-line distances of 500 m and 1 km, not '
-          'actual walking or driving routes. The counts come from recorded '
-          'nearby-location data, and the location itself may be approximate. '
-          'These visuals help you investigate a site — they do not predict '
-          'customers, sales or success.',
+              'actual walking or driving routes. The counts come from recorded '
+              'nearby-location data, and the location itself may be approximate. '
+              'These visuals help you investigate a site — they do not predict '
+              'customers, sales or success.',
         ),
         // Google is a separate, keyless, provider-branded experience: routing
         // happens on Google's page, never inside the Leaflet frame.
@@ -1366,13 +1387,13 @@ class _DetailState extends State<_Detail> {
       li([
         Component.text(
           'Check with the local council about business licences, kitchen '
-          'ventilation and grease-trap requirements before renting.',
+              'ventilation and grease-trap requirements before renting.',
         ),
       ]),
       li([
         Component.text(
           'The information here cannot tell you how many customers you '
-          'will get or how much your business will earn.',
+              'will get or how much your business will earn.',
         ),
       ]),
       li([
@@ -1384,7 +1405,7 @@ class _DetailState extends State<_Detail> {
     p(classes: 'disclaimer', [
       Component.text(
         'The location score helps you compare areas. It does not predict '
-        'profit, confirm regulatory approval or guarantee success.',
+            'profit, confirm regulatory approval or guarantee success.',
       ),
     ]),
   ]);
@@ -1426,7 +1447,7 @@ class _NotFound extends StatelessComponent {
     EmptyState(
       title: 'Property unavailable',
       body:
-          'This property could not be loaded. It may have been removed, or '
+      'This property could not be loaded. It may have been removed, or '
           'the link is incomplete.',
       action: const ActionLink(
         'Browse properties',

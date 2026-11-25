@@ -102,10 +102,7 @@ const Map<String, _TrailSpec> _trails = {
       _TrailSpec('Listing detail', sectionRoute: '/admin/listings'),
   '/admin/agents': _TrailSpec('Agents'),
   '/admin/surveys': _TrailSpec('Surveys'),
-  // Not in the navbar any more, but the routes (and the audit data behind
-  // them) stay live for direct links — they still earn a breadcrumb.
   '/admin/campaigns': _TrailSpec('Campaigns'),
-  '/admin/activity': _TrailSpec('Activity'),
   '/admin/profile': _TrailSpec('Profile'),
 
   // --- Agent ---------------------------------------------------------------

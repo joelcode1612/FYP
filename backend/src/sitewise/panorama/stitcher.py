@@ -229,6 +229,14 @@ def stitch_equirectangular(
     cos_lat = np.cos(lat_table)
 
     frame_records = [FrameRecord.from_dict(r) for r in sorted_records]
+    # Target IDs 13/38 are the zenith/nadir only in the standard v1/v2
+    # capture plan. Version 3 has 56 targets, with poles at 19/56. Use the
+    # complete manifest to identify the plan so lower-ring target 38 is never
+    # treated as the nadir photograph in an enhanced session.
+    target_ids = {record.target_id for record in frame_records}
+    is_enhanced_plan = target_ids == set(range(1, 57))
+    pole_target_ids = {19, 56} if is_enhanced_plan else {13, 38}
+    nadir_target_id = None if is_enhanced_plan else 38
     for frame_index, record in enumerate(frame_records):
         path = record.image_path
         if not path or not Path(path).exists():
@@ -265,8 +273,8 @@ def stitch_equirectangular(
         )
 
         target_id = record.target_id
-        is_pole = target_id == 13 or target_id == 38
-        is_nadir = target_id == 38
+        is_pole = target_id in pole_target_ids
+        is_nadir = target_id == nadir_target_id
         margin_x = (0.16 if is_pole else 0.05) * image_width
         margin_y = (0.16 if is_pole else 0.05) * image_height
 

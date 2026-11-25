@@ -100,21 +100,28 @@ def _artifact_digest_cached(path: str, mtime_ns: int, size: int) -> str:
 
 
 def _expanded_model_token() -> str:
-    """Content fingerprint of the expanded64 artifact, for cache/cursor keys.
+    """Content fingerprint of the ACTIVE expanded64 artifact, for cache keys.
 
     A replaced PU artifact changes every live score, so the ranking cache and
     the cursor fingerprint must change with it. The digest reads the file
     bytes only (cheap); it does not deserialise the model.
-    """
-    from sitewise.ml.pu_expanded import EXPANDED_MODEL_NAME
 
-    path = Path(__file__).resolve().parent.parent / "ml" / f"{EXPANDED_MODEL_NAME}.joblib"
+    The active model name is part of the token as well as its digest. Reading a
+    fixed artifact name here meant that switching the configured artifact left
+    the cache key unchanged, so a ranking produced by the previous model could
+    be served — and labelled — as if it came from the new one.
+    """
+    from sitewise.ml.model_loader import ModelLoader
+    from sitewise.ml.pu_expanded import active_expanded_model_name
+
+    model_name = active_expanded_model_name()
     try:
+        path = ModelLoader()._find_artifact(model_name)
         stat = path.stat()
         digest = _artifact_digest_cached(str(path), stat.st_mtime_ns, stat.st_size)
-    except OSError:
+    except Exception:  # noqa: BLE001 - a missing artifact must not break the cache key
         digest = "missing"
-    return f"expanded64:{digest}"
+    return f"expanded64:{model_name}:{digest}"
 
 # ---------------------------------------------------------------------------
 # PU eligibility gate
@@ -755,9 +762,9 @@ class RecommendationSearchService:
         """The Layer-1 PU provenance block for one search response."""
         try:
             from sitewise.ml.model_loader import ModelLoader
-            from sitewise.ml.pu_expanded import EXPANDED_MODEL_NAME
+            from sitewise.ml.pu_expanded import active_expanded_model_name
 
-            loaded = ModelLoader().load_cached(EXPANDED_MODEL_NAME)
+            loaded = ModelLoader().load_cached(active_expanded_model_name())
             return {
                 "available": True,
                 "version": str(loaded.meta.get("model_variant") or "unknown"),
@@ -1066,7 +1073,7 @@ class RecommendationSearchService:
         ranking — it is never imputed, never borrowed, and never gated on the
         stored legacy score it does have.
         """
-        from sitewise.ml.pu_expanded import EXPANDED_MODEL_NAME, expanded_scores_many
+        from sitewise.ml.pu_expanded import active_expanded_model_name, expanded_scores_many
         from sitewise.ml.model_loader import ModelLoader
         from sitewise.ml import operational25 as op25
         from sitewise.ml.pu_variant import resolve_variant
@@ -1095,7 +1102,7 @@ class RecommendationSearchService:
                     for row in rows
                 }
             else:
-                loaded = ModelLoader().load_cached(EXPANDED_MODEL_NAME)
+                loaded = ModelLoader().load_cached(active_expanded_model_name())
                 version = str(loaded.meta.get("model_variant") or "unknown")
                 scores = expanded_scores_many(self.session, [row.id for row in rows])
             eligible: list[_Row] = []

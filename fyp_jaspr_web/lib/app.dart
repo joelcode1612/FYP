@@ -72,8 +72,6 @@ import 'package:sitewise_jaspr_web/features/panorama_viewer/presentation/pages/t
 import 'package:sitewise_jaspr_web/features/administration/presentation/pages/agents_page.dart';
 import 'package:sitewise_jaspr_web/features/property_management/presentation/pages/agent_retired_page.dart';
 import 'package:sitewise_jaspr_web/features/property_management/presentation/pages/owner_retired_page.dart';
-import 'package:sitewise_jaspr_web/features/administration/presentation/pages/activity_page.dart'
-    as a_activity;
 import 'package:sitewise_jaspr_web/features/administration/presentation/pages/campaigns_page.dart'
     as a_campaigns;
 import 'package:sitewise_jaspr_web/features/administration/presentation/pages/dashboard_page.dart'
@@ -351,7 +349,7 @@ class SitewiseApp extends StatelessComponent {
             ),
           ),
           // --- Administrator operations (five-screen suite) ------------------
-          // Ownership reviews, Survey campaigns, System activity and
+          // Ownership reviews, Survey campaigns and
           // Community surveys — the new screens of the five-screen admin
           // suite. Agent management keeps its pre-existing `/admin/agents`
           // route and page class, so no bookmarked URL is replaced.
@@ -363,15 +361,6 @@ class SitewiseApp extends StatelessComponent {
               description:
                   'Area research campaign lifecycles (backend not yet '
                   'provisioned).',
-            ),
-          ),
-          Route(
-            path: '/admin/activity',
-            builder: (context, state) => _page(
-              const a_activity.AdminActivityPage(),
-              title: 'System activity — Sitewise admin',
-              description:
-                  'Privileged actions from the server-side audit feed.',
             ),
           ),
           Route(
