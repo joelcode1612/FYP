@@ -4,6 +4,9 @@ import 'package:crypto/crypto.dart';
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart' show DomElement;
 import 'package:shared_logic/shared_logic.dart';
+import 'package:sitewise_jaspr_web/features/assessment/data/assessment_api.dart';
+import 'package:sitewise_jaspr_web/features/assessment/data/bdj_objective_proposal.dart';
+import 'package:sitewise_jaspr_web/features/assessment/data/bdj_objective_proposal_api.dart';
 import 'package:sitewise_jaspr_web/features/assessment/presentation/components/project1_research_stage_panel.dart';
 import 'package:sitewise_jaspr_web/core/di/app_locator.dart';
 import 'm2_autosave_verification_test.dart' as fixture;
@@ -271,6 +274,38 @@ class GovernedClient extends fixture.SaveClient {
   }
 }
 
+/// A proposal read that succeeds and returns nothing approved.
+///
+/// This is the seam the panel's own `proposalApi` parameter exists for: the
+/// concrete client reaches the network through the `WebAuth` bridge, which only
+/// resolves in a web build, so without a substituted port a component test can
+/// only ever observe a *failed* read. A failed read and an empty read are the
+/// two states DD-047 exists to keep apart.
+class _EmptyProposalPort implements BdjObjectiveProposalPort {
+  final listCalls = <String>[];
+
+  @override
+  Future<ApiResult<BdjObjectiveProposalList>> list({
+    required String assessmentId,
+    required int expectedRevision,
+    required String contextId,
+  }) async {
+    listCalls.add('$assessmentId|$expectedRevision|$contextId');
+    return ApiResult.success(
+      BdjObjectiveProposalList(
+        assessmentId: assessmentId,
+        contextId: contextId,
+        proposalCount: 0,
+        proposals: const [],
+      ),
+    );
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw StateError('Stage 4 must not write through the proposal port.');
+}
+
 void main() {
   late ApiM2Repository original;
   late ApiConfirmedReviewRepository originalReview;
@@ -333,14 +368,24 @@ void main() {
 
   testComponents('Stage 4 refuses an unapproved objective', (tester) async {
     client.withObjective = true;
+    // The objective read only happens once a current business context resolves.
+    // Without this the panel cannot tell "nothing is approved" from "the read
+    // failed" and correctly renders DD-047's "could not be read" instead, which
+    // is a different state from the one this case is about.
+    client.withVerifiedCandidate = true;
+    final proposals = _EmptyProposalPort();
     tester.pumpComponent(
-      const Project1ResearchStagePanel(
+      Project1ResearchStagePanel(
         marketplaceAssessmentId: fixture.mid,
         propertyId: 'SYNTHETIC',
         stageNumber: 4,
+        proposalApi: proposals,
       ),
     );
     await tester.pump();
+    // The read has to have happened: "nothing is approved" is only a statement
+    // the panel may make after a read that succeeded.
+    expect(proposals.listCalls, isNotEmpty);
     expect(find.text('No approved objective'), findsOneComponent);
     expect(find.text('AI Execution Status'), findsOneComponent);
     expect(

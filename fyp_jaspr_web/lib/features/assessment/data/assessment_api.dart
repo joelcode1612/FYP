@@ -28,6 +28,8 @@ import 'package:shared_logic/shared_logic.dart' hide ApiPropertyRepository;
 import 'package:sitewise_jaspr_web/features/listing/data/api_property_repository.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/assessment_report.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/business_description.dart';
+import 'package:sitewise_jaspr_web/features/assessment/data/chart_preview.dart';
+import 'package:sitewise_jaspr_web/features/assessment/data/report_measurement.dart';
 import 'package:sitewise_jaspr_web/features/authentication/data/auth_service.dart';
 
 /// Why a call failed, reduced to the states the workspace must render.
@@ -916,6 +918,89 @@ final class AssessmentApi {
         '/api/v1/assessments/$assessmentId/report',
         parse: AssessmentReportPayload.fromJson,
       );
+
+  /// The frozen EE-01 measurement for one snapshot.
+  ///
+  /// DD-RT-03: the report can describe a measurement association, but the
+  /// numbers live behind this endpoint and its admission gate. The identifiers
+  /// are the ones the server resolved and published in the report's
+  /// `measurement` section — never a campaign or snapshot guessed here, which
+  /// is why the convenience overload below takes the section itself.
+  ///
+  /// Failure codes this must survive, each surfacing as [AssessmentFailure]
+  /// rather than as a fabricated snapshot:
+  ///
+  /// * `401` — the session is not authenticated; nothing is retried.
+  /// * `403 SYNTHETIC_DATA_NOT_REPORTABLE` — evidence exists and may not be
+  ///   disclosed. This is the *expected* answer today, not an error to hide.
+  /// * `403 EE01_RESTRICTED_ROLE_REQUIRED` / `503` — the measurement principal
+  ///   is not the one the engine demands.
+  /// * `404 EE01_SNAPSHOT_NOT_FOUND` — the snapshot is not this assessment's.
+  /// * `409` — the snapshot or readback contract moved under us.
+  /// * `503 EE01_SNAPSHOT_INTEGRITY_INVALID` — the stored bytes no longer
+  ///   reproduce their hashes. Never rendered as a zero.
+  Future<ApiResult<MeasurementSnapshot>> measurementSnapshot({
+    required String m2AssessmentId,
+    required String campaignId,
+    required String snapshotId,
+  }) =>
+      _call(
+        '/api/v1/cq/assessments/${Uri.encodeComponent(m2AssessmentId)}'
+        '/campaigns/${Uri.encodeComponent(campaignId)}'
+        '/measurements/${Uri.encodeComponent(snapshotId)}',
+        parse: (json) {
+          final snapshot = MeasurementSnapshot.tryParse(json);
+          if (snapshot == null) {
+            throw const FormatException('Unrecognized measurement response.');
+          }
+          return snapshot;
+        },
+      );
+
+  /// Reads the measurement the report already named, if the server permits it.
+  ///
+  /// Returns `null` — without issuing a request — when the section says the
+  /// detail is not readable. That is the current state: admission is held, so
+  /// no measurement value may be fetched for the report at all, and the section
+  /// renders the association instead.
+  Future<ApiResult<MeasurementSnapshot>?> measurementFor(
+    ReportMeasurement measurement,
+  ) {
+    if (!measurement.detailReadable) return Future.value(null);
+    final identity = measurement.identity;
+    final snapshotId = identity?.snapshotId;
+    if (identity == null || snapshotId == null || snapshotId.isEmpty) {
+      return Future.value(null);
+    }
+    return measurementSnapshot(
+      m2AssessmentId: identity.m2AssessmentId,
+      campaignId: identity.campaignId,
+      snapshotId: snapshotId,
+    );
+  }
+
+  /// Synthetic chart preview for every measured slot of one campaign.
+  ///
+  /// Developer diagnostic only. The server enforces three controls before it
+  /// answers — the module switch, the per-run developer grant, and the frozen
+  /// instrument gate — so this call is not an authorization of its own and a
+  /// 403/503 here is the correct outcome for a caller without a grant. The
+  /// response is marked `synthetic`/`reportable: false`, and nothing it carries
+  /// can enter the ordinary report.
+  Future<ApiResult<ChartPreviewBundle>> chartPreviews({
+    required String m2AssessmentId,
+    required String campaignId,
+  }) => _call(
+    '/api/v1/cq/assessments/${Uri.encodeComponent(m2AssessmentId)}'
+    '/campaigns/${Uri.encodeComponent(campaignId)}/chart-previews',
+    parse: (json) {
+      final bundle = ChartPreviewBundle.tryParse(json);
+      if (bundle == null) {
+        throw const FormatException('Unrecognized chart preview response.');
+      }
+      return bundle;
+    },
+  );
 
   /// RP-13: the confirmed business description bound to this assessment.
   ///

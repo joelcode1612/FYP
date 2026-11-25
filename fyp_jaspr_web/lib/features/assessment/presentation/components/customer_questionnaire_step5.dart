@@ -1,7 +1,11 @@
+import 'dart:async';
+import 'dart:math';
+
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 
 import 'package:sitewise_jaspr_web/core/di/app_locator.dart';
+import 'package:sitewise_jaspr_web/features/assessment/data/stage5_collection_api.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/stage5_composed_api.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/stage5_composed_questionnaire.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/stage5_publication_api.dart';
@@ -53,6 +57,14 @@ class CustomerQuestionnaireStep5 extends StatefulComponent {
   /// ability to mint the instrument it renders.
   final Stage5PublicationPort publication;
 
+  /// The collection transport: the authoritative respondent target, the
+  /// progress derived from persisted records, and End Collection.
+  ///
+  /// A separate port for the same reason publication is one: configuring a
+  /// collection and ending it are different acts from publishing the
+  /// instrument, and they run as a different principal.
+  final Stage5CollectionPort collection;
+
   /// Returns to Stage 4. Null when the caller cannot navigate.
   final void Function()? onBack;
 
@@ -65,6 +77,7 @@ class CustomerQuestionnaireStep5 extends StatefulComponent {
     this.m2AssessmentId = '',
     this.api = const Stage5ComposedApi(),
     this.publication = const Stage5PublicationApi(),
+    this.collection = const Stage5CollectionApi(),
     this.onBack,
     this.busy = false,
   });
@@ -139,6 +152,31 @@ class _CustomerQuestionnaireStep5State
   /// committed with "Set" yet.
   int _candidateDraft = 100;
 
+  // -- collection (authoritative target, progress, lifecycle) ----------------
+  //
+  // Read from the server, never computed here. `_candidateTarget` above is now a
+  // *view* of `_collection.respondentTarget`; it survives a reload because the
+  // figure is persisted, and it is no longer possible for the screen to show a
+  // target the server does not hold.
+  CollectionSnapshot? _collection;
+  String? _collectionNote;
+  String? _collectionCode;
+  bool _collectionBusy = false;
+
+  /// Whether the owner has acknowledged closing below target. Defaults to false
+  /// so a below-target closure is never the path of least resistance.
+  bool _allowBelowTarget = false;
+
+  /// Why the collection is being closed below target.
+  ///
+  /// The owner adopted `OWNER_DISCRETION` with a **mandatory recorded reason**
+  /// (2026-11-25), so this is not decoration: the server refuses a below-target
+  /// closure that does not carry one (`CQ_COLLECTION_REASON_REQUIRED`) and the
+  /// database refuses it again behind that. Typed by the owner, never filled in
+  /// with a sentence of our own — a generic string would satisfy the rule and
+  /// defeat it at the same time.
+  String _closureReason = '';
+
   // -- business context (BCB) ------------------------------------------------
   //
   // Resolved because the questionnaire is composed against a *confirmed*
@@ -197,6 +235,12 @@ class _CustomerQuestionnaireStep5State
       _publication = null;
       _publishNote = null;
       _publishCode = null;
+      // Same reasoning for the collection: a target and a progress count belong
+      // to one campaign and must not be carried across a reload.
+      _collection = null;
+      _collectionNote = null;
+      _collectionCode = null;
+      _candidateTarget = null;
     });
 
     try {
@@ -222,6 +266,16 @@ class _CustomerQuestionnaireStep5State
       final draft = await AppLocator.m2.read(m2Id);
       if (!mounted || request != _loadRequest) return;
       _m2Id = m2Id;
+
+      // Collection state is INDEPENDENT of the composed document. A campaign can
+      // be open, ended or absent while composition is stale, blocked or failed,
+      // and the reader still needs to see the target, the progress and whether
+      // collection is closed. So it starts here, before the composition gate,
+      // and is deliberately not awaited: every early return below (stale
+      // declaration, unreadable assessment, revision mismatch) would otherwise
+      // leave the card stuck on "Reading collection state from the server",
+      // which reads as a hang rather than as the real answer.
+      unawaited(_loadCollection(m2Id, request));
 
       final confirmation = await AppLocator.m2.currentConfirmation(m2Id);
       if (!mounted || request != _loadRequest) return;
@@ -310,6 +364,10 @@ class _CustomerQuestionnaireStep5State
       // publication service that is down must not hide it. The failure is
       // recorded on the publish card only.
       await _loadPublication(m2Id, request);
+
+      // Collection state was already requested before the composition gate (see
+      // above), so there is nothing to do here. Re-reading it would only risk
+      // overwriting a newer answer with an older one.
     } on Object catch (error) {
       if (!mounted || request != _loadRequest) return;
       _fail('The questionnaire could not be retrieved: $error', null);
@@ -1234,6 +1292,7 @@ class _CustomerQuestionnaireStep5State
             ),
           ]),
           _candidateTargetBlock(),
+          _collectionBlock(),
           div(classes: 'cqr-gate__act', [
             button(
               classes: 'cq-publish',
@@ -1427,11 +1486,16 @@ class _CustomerQuestionnaireStep5State
         span(classes: 'cq-candidate__unit', [Component.text('candidates')]),
         button(
           classes: 'cq-candidate__set',
-          attributes: const {'type': 'button'},
+          attributes: {
+            'type': 'button',
+            if (_collectionBusy || _collection?.isEnded == true) 'disabled': '',
+          },
           events: events(
-            onClick: () => setState(() {
-              _candidateTarget = _candidateDraft;
-            }),
+            // The figure is persisted, not merely remembered: this call is what
+            // makes it survive a reload, a logout and a different device.
+            onClick: (_collectionBusy || _collection?.isEnded == true)
+                ? null
+                : _saveTarget,
           ),
           [Component.text(committed == null ? 'Set' : 'Update')],
         ),
@@ -1449,6 +1513,164 @@ class _CustomerQuestionnaireStep5State
           ],
         ]),
       ]),
+    ]);
+  }
+
+  /// Collection progress and the explicit End Collection act.
+  ///
+  /// Every number here is the server's. Nothing is derived on the client, and a
+  /// value the server did not send is rendered as "—" rather than as zero: a
+  /// zero would read as "nobody responded", which is a different fact from
+  /// "this has not been measured".
+  Component _collectionBlock() {
+    final state = _collection;
+    if (state == null) {
+      return div(classes: 'cqr-card', [
+        div(classes: 'cqr-card__head', [
+          h3([Component.text('Collection')]),
+          span(classes: 'cqr-card__state', [
+            Component.text(
+              _collectionCode == 'CQ_COLLECTION_CAMPAIGN_NOT_FOUND'
+                  ? 'Not published'
+                  : 'Unavailable',
+            ),
+          ]),
+        ]),
+        small(classes: 'cqr-gate__cap', [
+          Component.text(
+            _collectionCode == 'CQ_COLLECTION_CAMPAIGN_NOT_FOUND'
+                ? 'Publish the questionnaire first. Collection begins when a '
+                      'release and a campaign exist.'
+                : (_collectionNote ?? 'Reading collection state from the server.'),
+          ),
+        ]),
+      ]);
+    }
+
+    String show(int? value) => value == null ? '—' : '$value';
+
+    return div(classes: 'cqr-card', [
+      div(classes: 'cqr-card__head', [
+        h3([Component.text('Collection')]),
+        span(classes: 'cqr-card__state', [
+          Component.text(state.isEnded ? 'Ended' : 'Open'),
+        ]),
+      ]),
+      div(classes: 'cq-candidate__meta', [
+        span([
+          Component.text(
+            'Target ${state.respondentTarget ?? 'not set'} · ',
+          ),
+          strong([
+            Component.text(show(state.eligibleSubmittedRespondents)),
+          ]),
+          Component.text(' eligible respondents submitted'),
+        ]),
+        span([
+          Component.text(
+            'Remaining ${show(state.remainingRespondents)} · '
+            '${state.progressPercent == null ? '—' : '${state.progressPercent!.toStringAsFixed(1)}%'}',
+          ),
+        ]),
+        span([
+          Component.text(
+            'Sessions ${show(state.totalSessions)} · '
+            'submitted ${show(state.submittedSessions)} · '
+            'open ${show(state.openSessions)} · '
+            'receipts ${show(state.validReceipts)}',
+          ),
+        ]),
+        span([
+          Component.text(
+            state.targetReached == null
+                ? 'Target not set, so achievement is unknown.'
+                : state.targetReached!
+                ? 'Target reached.'
+                : 'Target not yet reached.',
+          ),
+        ]),
+        if (state.isSynthetic)
+          span([
+            Component.text(
+              'Developer-preview evidence. These counts are not customer '
+              'research and cannot support a research finding.',
+            ),
+          ]),
+        if (state.isEnded && state.closure != null)
+          span([
+            Component.text(
+              'Closed under ${state.closure!['completion_policy']} · '
+              'evidence cutoff ${state.closure!['evidence_cutoff']}'
+              '${state.closedBelowTarget ? ' · closed below target' : ''}',
+            ),
+          ]),
+      ]),
+      if (!state.isEnded)
+        div(classes: 'cqr-gate__act', [
+          // The acknowledgement is a real choice, not a formality: the server
+          // records which policy was used, and refuses a below-target closure
+          // that claims the target was met.
+          div(classes: 'cq-candidate__row', [
+            input(
+              type: InputType.checkbox,
+              classes: 'cq-candidate__num',
+              attributes: {
+                'aria-label': 'Close below target',
+                if (_allowBelowTarget) 'checked': '',
+              },
+              events: events<String>(
+                onInput: (_) => setState(() {
+                  _allowBelowTarget = !_allowBelowTarget;
+                }),
+              ),
+            ),
+            span(classes: 'cq-candidate__unit', [
+              Component.text('Close below target (recorded as my decision)'),
+            ]),
+          ]),
+          // The reason is required, so the field appears with the choice that
+          // makes it necessary rather than being asked for afterwards.
+          if (_allowBelowTarget)
+            input(
+              type: InputType.text,
+              classes: 'cq-candidate__num',
+              attributes: {
+                'value': _closureReason,
+                'maxlength': '200',
+                'placeholder': 'Why is collection ending below target?',
+                'aria-label': 'Reason for closing below target',
+              },
+              events: events<String>(
+                onInput: (value) => setState(() {
+                  _closureReason = value;
+                }),
+              ),
+            ),
+          button(
+            classes: 'cq-publish',
+            attributes: {
+              'type': 'button',
+              if (_collectionBusy ||
+                  (_allowBelowTarget && _closureReason.trim().isEmpty))
+                'disabled': '',
+              'aria-disabled': _collectionBusy.toString(),
+            },
+            events: events(
+              onClick: _collectionBusy
+                  ? null
+                  : () => _endCollection(allowBelowTarget: _allowBelowTarget),
+            ),
+            [Component.text('End Collection')],
+          ),
+          small(classes: 'cqr-gate__cap', [
+            Component.text(
+              'Ending collection stops new respondents. Sessions already in '
+              'progress stay open and every accepted answer is kept.',
+            ),
+          ]),
+        ]),
+      if (_collectionNote != null)
+        small(classes: 'cqr-gate__cap', [Component.text(_collectionNote!)]),
     ]);
   }
 
@@ -1477,6 +1699,160 @@ class _CustomerQuestionnaireStep5State
         _publishNote = 'Publication readiness could not be read: $error';
       });
     }
+  }
+
+  // -- collection (authoritative target, progress, lifecycle) ----------------
+
+  /// Reads the authoritative collection state for this campaign.
+  ///
+  /// A campaign that does not exist yet answers `CQ_COLLECTION_CAMPAIGN_NOT_FOUND`,
+  /// which is rendered as "not published" rather than as an error: the card must
+  /// not claim the deployment is broken because the questionnaire has not been
+  /// published.
+  Future<void> _loadCollection(String m2Id, int request) async {
+    try {
+      final result = await component.collection.read(assessmentId: m2Id);
+      if (!mounted || request != _loadRequest) return;
+      setState(() {
+        _collection = result.ok ? result.value : null;
+        _collectionCode = result.ok ? null : result.failure?.code;
+        _collectionNote = result.ok ? null : result.failure?.message;
+        final target = result.ok ? result.value?.respondentTarget : null;
+        // The committed figure comes from the server. The draft follows it only
+        // when the reader has not typed something of their own.
+        _candidateTarget = target;
+        if (target != null) _candidateDraft = target;
+      });
+    } on Object catch (error) {
+      if (!mounted || request != _loadRequest) return;
+      setState(() {
+        _collection = null;
+        _collectionCode = null;
+        _collectionNote = 'Collection state could not be read: $error';
+      });
+    }
+  }
+
+  /// Commits the planning figure to the server.
+  ///
+  /// The response is the normalised state the server actually stored, so the
+  /// number on screen after this call is the stored one and not the typed one.
+  Future<void> _saveTarget() async {
+    final m2Id = _m2Id;
+    if (m2Id == null || _collectionBusy) return;
+    setState(() {
+      _collectionBusy = true;
+      _collectionNote = null;
+      _collectionCode = null;
+    });
+    try {
+      final result = await component.collection.setTarget(
+        assessmentId: m2Id,
+        target: _candidateDraft,
+        requestId: _requestId(),
+      );
+      if (!mounted) return;
+      setState(() {
+        _collectionBusy = false;
+        if (result.ok) {
+          _collection = result.value;
+          final saved = result.value?.respondentTarget;
+          _candidateTarget = saved;
+          if (saved != null) _candidateDraft = saved;
+          _collectionNote = 'Saved.';
+        } else {
+          _collectionCode = result.failure?.code;
+          _collectionNote =
+              result.failure?.message ?? 'The target could not be saved.';
+        }
+      });
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _collectionBusy = false;
+        _collectionNote = 'The target could not be saved: $error';
+      });
+    }
+  }
+
+  /// Ends collection, explicitly, with the policy stated rather than assumed.
+  ///
+  /// The policy is read from the two controls beside the button. Closing below
+  /// target is only ever sent as `OWNER_DISCRETION`, which the server records as
+  /// such, and a closure under `TARGET_REACHED_ONLY` that the server refuses is
+  /// shown as the refusal it is instead of being retried silently.
+  Future<void> _endCollection({required bool allowBelowTarget}) async {
+    final m2Id = _m2Id;
+    if (m2Id == null || _collectionBusy) return;
+
+    // Below target needs the owner's own words. Refused here as well as on the
+    // server so the reader gets the reason immediately rather than after a
+    // round trip that would be rejected anyway.
+    final typed = _closureReason.trim();
+    if (allowBelowTarget && typed.isEmpty) {
+      setState(() {
+        _collectionCode = 'CQ_COLLECTION_REASON_REQUIRED';
+        _collectionNote = 'State why collection is ending below target. '
+            'The reason is recorded with the closure.';
+      });
+      return;
+    }
+
+    setState(() {
+      _collectionBusy = true;
+      _collectionNote = null;
+      _collectionCode = null;
+    });
+    try {
+      final result = await component.collection.endCollection(
+        assessmentId: m2Id,
+        requestId: _requestId(),
+        completionPolicy: allowBelowTarget
+            ? 'OWNER_DISCRETION'
+            : 'TARGET_REACHED_ONLY',
+        inProgressDisposition: 'LEAVE_OPEN',
+        // Under TARGET_REACHED_ONLY the policy is itself the statement, so the
+        // recorded label describes the act rather than inventing a motive.
+        reason: allowBelowTarget ? typed : 'Target reached.',
+      );
+      if (!mounted) return;
+      setState(() {
+        _collectionBusy = false;
+        if (result.ok) {
+          _collection = result.value;
+          _collectionNote = (result.value?.isEnded ?? false)
+              ? 'Collection has ended. Responses already accepted are unchanged.'
+              : null;
+        } else {
+          _collectionCode = result.failure?.code;
+          _collectionNote =
+              result.failure?.message ?? 'Collection could not be ended.';
+        }
+      });
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _collectionBusy = false;
+        _collectionNote = 'Collection could not be ended: $error';
+      });
+    }
+  }
+
+  /// A per-attempt idempotency key in the shape the server types as a UUID.
+  ///
+  /// A retried tap after a dropped response must not move the lifecycle twice,
+  /// and the server only recognises the retry if the id is the same shape it
+  /// validated the first time.
+  static String _requestId() {
+    final random = Random.secure();
+    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
+    bytes[8] = (bytes[8] & 0x3f) | 0x80; // variant 10
+    String hex(int start, int end) => bytes
+        .sublist(start, end)
+        .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+        .join();
+    return '${hex(0, 4)}-${hex(4, 6)}-${hex(6, 8)}-${hex(8, 10)}-${hex(10, 16)}';
   }
 
   /// Publishes this questionnaire as the publication principal.

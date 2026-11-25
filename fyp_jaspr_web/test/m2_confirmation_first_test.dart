@@ -20,6 +20,11 @@ class ConfirmationClient extends fixture.SaveClient {
   Object? confirmFailure;
   bool invalidDigest = false;
 
+  /// Models the readback race DD-134 fixed: the POST has committed, but the
+  /// owner-scoped current-confirmation read keeps answering "none" because it
+  /// has not caught up yet. Each read consumes one.
+  int staleConfirmationReads = 0;
+
   @override
   Future<Map<String, dynamic>> get(
     String path, {
@@ -27,6 +32,13 @@ class ConfirmationClient extends fixture.SaveClient {
   }) async {
     if (path.endsWith('/confirmation-current')) {
       calls.add('GET $path');
+      if (staleConfirmationReads > 0) {
+        staleConfirmationReads--;
+        throw const NotFoundFailure.response(
+          'No confirmation yet',
+          statusCode: 404,
+        );
+      }
       if (!confirmed) {
         throw const NotFoundFailure.response(
           'No confirmation',
@@ -295,6 +307,89 @@ void main() {
         find.textContaining('Business declaration confirmed at revision'),
         findsNothing,
       );
+    },
+  );
+
+  // DD-134. The opposite failure to the one above, and the one the owner hit:
+  // the POST returns a receipt the client CAN verify, but the follow-up read
+  // has not caught up. That used to be turned into
+  // "The service response could not be verified. Reload saved confirmation
+  // before retrying.", so the owner had to reload the browser to see a
+  // confirmation the server had already committed.
+  testComponents(
+    'a verified receipt is not discarded when the readback has not caught up',
+    (tester) async {
+      tester.pumpComponent(panel);
+      await tester.pump();
+      await tester.click(
+        find.ancestor(
+          of: find.text('Review business declaration'),
+          matching: find.tag('button'),
+        ),
+      );
+      await tester.pump();
+      // The confirmation commits, but every subsequent read answers "none".
+      client.staleConfirmationReads = 999;
+      await tester.click(
+        find.ancestor(
+          of: find.text('Confirm business declaration'),
+          matching: find.tag('button'),
+        ),
+      );
+      await tester.pump();
+      expect(
+        find.textContaining('Business declaration confirmed at revision'),
+        findsOneComponent,
+      );
+      expect(
+        find.textContaining('The service response could not be verified.'),
+        findsNothing,
+      );
+      // The owner is never told to reload, and the confirmation is never
+      // reported as missing.
+      expect(find.textContaining('Reload saved confirmation'), findsNothing);
+      expect(find.textContaining('could not be re-read'), findsNothing);
+    },
+  );
+
+  // DD-134 follow-up. `M2_ALREADY_CONFIRMED_OR_CHANGED` covers two different
+  // situations -- "this revision is already confirmed" and "the revision moved".
+  // Only the second needs a reload; telling the owner to reload when their
+  // confirmation already succeeded is what made a successful confirm look like
+  // a failure and invited the duplicate click that produced this refusal.
+  testComponents(
+    'a duplicate confirm reports the already-confirmed state, not a reload',
+    (tester) async {
+      tester.pumpComponent(panel);
+      await tester.pump();
+      await tester.click(
+        find.ancestor(
+          of: find.text('Review business declaration'),
+          matching: find.tag('button'),
+        ),
+      );
+      await tester.pump();
+      // The server refuses because this revision is already confirmed, and the
+      // current confirmation it returns agrees.
+      client.confirmed = true;
+      client.confirmFailure = const ConflictFailure(
+        'private diagnostics',
+        backendCode: 'M2_ALREADY_CONFIRMED_OR_CHANGED',
+      );
+      await tester.click(
+        find.ancestor(
+          of: find.text('Confirm business declaration'),
+          matching: find.tag('button'),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(
+        find.textContaining('is already confirmed, so nothing further'),
+        findsOneComponent,
+      );
+      expect(find.textContaining('Reload saved declarations'), findsNothing);
+      expect(find.textContaining('private diagnostics'), findsNothing);
     },
   );
 }

@@ -7,9 +7,11 @@ import 'package:sitewise_jaspr_web/features/assessment/data/assessment_api.dart'
 import 'package:sitewise_jaspr_web/features/assessment/data/assessment_report.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/business_description.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/chart_spec.dart';
+import 'package:sitewise_jaspr_web/features/assessment/data/chart_preview.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/explanation_candidate.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/measurement_chart_preview.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/q01_synthetic_preview.dart';
+import 'package:sitewise_jaspr_web/features/assessment/data/report_measurement.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/synthetic_preview_gate.dart';
 import 'package:sitewise_jaspr_web/features/assessment/presentation/components/chart_spec_view.dart';
 import 'package:sitewise_jaspr_web/features/recommendations/data/full_analysis_actions.dart';
@@ -80,6 +82,17 @@ final class AssessmentReportView extends StatelessComponent {
   /// Supplying it is not enough for it to be drawn — see [_boundMeasurement].
   final MeasurementChartPreview? measurementChart;
 
+  /// Development-only synthetic chart previews for the measured slots.
+  ///
+  /// `null` in every production build. Supplied only when the caller's synthetic
+  /// gate is open **and** the server answered the preview endpoint for this
+  /// campaign — the server enforces its own module switch and per-run developer
+  /// grant, so this parameter can widen what is *drawn* but never what is
+  /// *authorized*. Every spec here is `SYNTHETIC_PREVIEW_ONLY` with a `HELD`
+  /// admission block; [ChartPreviewSlot.isDrawable] refuses anything else, so a
+  /// withheld spec cannot be drawn by passing it.
+  final ChartPreviewBundle? chartPreviews;
+
   /// The server-rendered explanation for the questionnaire item in this section.
   ///
   /// `null` in V1's production path: every Q01–Q13 item is instrument-gated, so
@@ -130,6 +143,23 @@ final class AssessmentReportView extends StatelessComponent {
     return preview;
   }
 
+  /// The EE-01 measurement association, but only when the payload it arrived in
+  /// is **this** record's report.
+  ///
+  /// [report] is supplied by the caller, so it could in principle describe a
+  /// different assessment. Section 05 attributes a cohort, a campaign and a
+  /// hold reason to the assessment above it, so the identity is checked here
+  /// rather than trusted — the same rule [_boundMeasurement] applies to a
+  /// chart. An empty payload id is tolerated because a report assembled by an
+  /// older server does not carry one; a *different* id is not.
+  ReportMeasurement? get _boundAssociation {
+    final association = report.measurement;
+    if (association == null) return null;
+    final payloadId = report.assessmentId;
+    if (payloadId.isNotEmpty && payloadId != record.assessmentId) return null;
+    return association;
+  }
+
   /// Where Back goes. The report is reached from the entry page and from the
   /// step-5 checkpoint, so the caller names the destination rather than the
   /// document assuming one.
@@ -148,6 +178,7 @@ final class AssessmentReportView extends StatelessComponent {
     this.chartSpec,
     this.q01Preview,
     this.measurementChart,
+    this.chartPreviews,
     this.businessDescription,
     this.explanation,
     this.syntheticExplanations = const [],
@@ -719,24 +750,14 @@ final class AssessmentReportView extends StatelessComponent {
     // Only a readback that names *this* assessment may be drawn here.
     final measurement = _boundMeasurement;
 
+    // What the backend resolved for this assessment — marketplace → M2 →
+    // campaign → frozen snapshot, identity and admission only. It is what
+    // separates "nothing was measured" from "something was measured and is
+    // withheld", which the specification's default notice conflated.
+    final association = _boundAssociation;
+
     return [
-      _empty(
-        title: 'R03 · Concept intent distribution — held',
-        body:
-            'The report specification reserves R03 for the Q05 concept-intent '
-            'distribution, drawn as a horizontal bar chart of option counts '
-            'against V. No admitted measurement line exists for this '
-            'assessment, so the section shows its held state rather than an '
-            'empty chart — an empty chart would read as a measured zero.',
-        foot: respondents == null && responses == null
-            ? 'Held because no report-admission adapter is adopted: EE-01 '
-                  'withholds findings, and R03 is specification-only with '
-                  'gates G03–G08 and G10 open.'
-            : 'Held for the same reason. Participation on record: '
-                  '${respondents ?? 0} registered respondent(s), '
-                  '${responses ?? 0} submitted response(s) — participation is '
-                  'not a distribution.',
-      ),
+      ..._measurementStateSection(association, respondents, responses),
       ...explanationCards,
       ...syntheticCards,
       // Q01 sits in the same section as R03 because it is the other
@@ -745,6 +766,234 @@ final class AssessmentReportView extends StatelessComponent {
       if (measurement != null) ..._measurementChartSection(measurement),
       if (q01Preview != null) ..._q01PreviewSection(q01Preview!),
     ];
+  }
+
+  /// R03's state, driven by the server's measurement association.
+  ///
+  /// Four different facts used to print as one sentence. They are now four
+  /// sentences, because a reader acts differently on each:
+  ///
+  /// * the assessment has no M2 confirmation → no campaign can exist;
+  /// * the confirmation exists but owns no campaign → nothing was fielded;
+  /// * a campaign and frozen snapshots exist, and admission is withheld →
+  ///   evidence exists and may not be disclosed;
+  /// * the questionnaire store could not be read → we did not look
+  ///   successfully, which is not the same as finding nothing.
+  ///
+  /// None of them renders an empty chart. An empty chart reads as a measured
+  /// zero, and for the third case that would be a false statement about a
+  /// cohort that answered.
+  List<Component> _measurementStateSection(
+    ReportMeasurement? association,
+    int? respondents,
+    int? responses,
+  ) {
+    final participation = respondents == null && responses == null
+        ? null
+        : 'Participation on record: ${respondents ?? 0} registered '
+            'respondent(s), ${responses ?? 0} submitted response(s) — '
+            'participation is not a distribution.';
+
+    // No section, or a report composed without a resolver: the specification's
+    // own notice, unchanged. This is the only branch that may still say "no
+    // admitted measurement line exists", because here we genuinely do not know.
+    if (association == null ||
+        association.status == ReportMeasurement.statusNotResolved) {
+      return [
+        _empty(
+          title: 'R03 · Concept intent distribution — held',
+          body:
+              'The report specification reserves R03 for the Q05 concept-intent '
+              'distribution, drawn as a horizontal bar chart of option counts '
+              'against V. No measurement association was resolved for this '
+              'assessment, so the section shows its held state rather than an '
+              'empty chart — an empty chart would read as a measured zero.',
+          foot: participation ??
+              'Held because no report-admission adapter is adopted: EE-01 '
+                  'withholds findings, and R03 is specification-only with '
+                  'gates G03–G08 and G10 open.',
+        ),
+      ];
+    }
+
+    if (!association.evidenceExists) {
+      return [
+        _empty(
+          title: _measurementAbsentTitle(association),
+          body: association.reason,
+          foot: participation ?? _measurementAbsentFoot(association),
+        ),
+      ];
+    }
+
+    // HELD. The association is real, the numbers are not disclosable.
+    final identity = association.identity;
+    final slots = association.slots;
+    return [
+      _card(
+        icon: 'query_stats',
+        title: 'R03 · Concept intent distribution — held',
+        trailing: const Pill('Findings withheld', tone: 'warning'),
+        children: [
+          div(classes: 'asw-rpt__legend', [
+            StatusBadge(
+              association.reasonCode ?? 'WITHHELD_NOT_AUTHORIZED',
+              tone: 'warning',
+            ),
+          ]),
+          p(classes: 'asw-rpt__note', [Component.text(association.reason)]),
+          p(classes: 'asw-rpt__note', [
+            strong([Component.text('Measurement association: ')]),
+            Component.text(
+              [
+                ?association.cohortLabel,
+                if (identity?.snapshotId case final id?)
+                  'snapshot ${_shortId(id)}',
+                if (identity?.campaignId case final id?)
+                  'campaign ${_shortId(id)}',
+                if (identity?.questionVersion case final version?)
+                  'instrument $version',
+                'M2 assessment ${_shortId(identity?.m2AssessmentId ?? '')}',
+              ].join(' · '),
+            ),
+          ]),
+          p(classes: 'asw-rpt__note', [
+            strong([Component.text('Why no chart: ')]),
+            Component.text(
+              'The counts and the shares exist and are withheld — they are not '
+              'zero. Drawing the axis without them would read as a measured '
+              'zero for every option, so the section reports the association '
+              'and the hold instead.',
+            ),
+          ]),
+          if (slots.length > 1)
+            p(classes: 'asw-rpt__note', [
+              strong([Component.text('Frozen slots measured: ')]),
+              Component.text(
+                '${slots.map((slot) => slot.slotId).join(', ')} — '
+                '${slots.length} slots, each at its own cutoff. Slots that were '
+                'never shown are not zero demand; they were not asked.',
+              ),
+            ]),
+          if (participation != null)
+            p(classes: 'asw-rpt__note', [Component.text(participation)]),
+        ],
+      ),
+      // Developer diagnostic, below the hold and never instead of it. The hold
+      // is the report's statement; this is an inspection aid that says so.
+      if (chartPreviews != null) ..._chartPreviewSection(chartPreviews!),
+    ];
+  }
+
+  /// The synthetic chart preview for the measured slots of this campaign.
+  ///
+  /// Only [ChartPreviewSlot.isDrawable] slots are charted. A `NOT_SHOWN` slot
+  /// and a slot whose contract requires an approved stimulus are *described*,
+  /// never drawn: an empty axis would read as a measured zero, and for those two
+  /// states that is exactly the false statement the report must avoid.
+  List<Component> _chartPreviewSection(ChartPreviewBundle bundle) {
+    final drawn = bundle.drawable.length;
+    return [
+      _card(
+        icon: 'science',
+        title: 'Synthetic chart preview',
+        trailing: const Pill('Not reportable', tone: 'warning'),
+        children: [
+          p(classes: 'asw-rpt__note', [
+            Component.text(
+              'Developer diagnostic over frozen synthetic snapshots. These '
+              'counts are not findings, not calibrated demand estimates, and '
+              'cannot be admitted to a report. The hold above is unchanged.',
+            ),
+          ]),
+          p(classes: 'asw-rpt__note', [
+            strong([Component.text('Preview scope: ')]),
+            Component.text(
+              '$drawn of ${bundle.slots.length} measured slots drawn. '
+              'Campaign ${_shortId(bundle.campaignId)} · contract '
+              '${bundle.contractVersion} · admission HELD.',
+            ),
+          ]),
+          // Gate 3: a slot may have more than one stored snapshot. Say so,
+          // because "the measurement" would be a different claim when the
+          // server selected one revision out of several.
+          if (bundle.multiRevision.isNotEmpty)
+            p(classes: 'asw-rpt__note', [
+              strong([Component.text('Revision selection: ')]),
+              Component.text(
+                '${bundle.multiRevision.map((slot) => '${slot.slotId} (${slot.candidates})').join(', ')} '
+                'hold more than one frozen snapshot. One was selected by '
+                '${bundle.selectionPolicy ?? 'the server policy'}; the evidence '
+                'is not pinned to a report revision, so a later snapshot '
+                'replaces it on the next read.',
+              ),
+            ]),
+          for (final slot in bundle.slots) ...[
+            div(classes: 'asw-rpt__legend', [
+              StatusBadge(
+                slot.isDrawable
+                    ? 'SYNTHETIC_PREVIEW_ONLY'
+                    : (slot.spec?.renderState.wire ?? slot.refusalCode ?? 'HELD'),
+                tone: slot.isDrawable ? 'warning' : 'neutral',
+              ),
+            ]),
+            p(classes: 'asw-rpt__note', [
+              strong([Component.text('${slot.slotId} · ')]),
+              Component.text(
+                [
+                  ?slot.cutoff,
+                  if (slot.snapshotId case final id?) 'snapshot ${_shortId(id)}',
+                  if (slot.funnel case final funnel?)
+                    'Q ${funnel.qualified} · S ${funnel.shown} · '
+                        'A ${funnel.answered} · V ${funnel.substantive}',
+                ].join(' · '),
+              ),
+            ]),
+            if (slot.isDrawable)
+              ChartSpecView(
+                spec: slot.spec!,
+                note: 'Synthetic preview. V is the only denominator; shares are '
+                    'the diagnostic line, not an authorised estimate.',
+              )
+            else
+              p(classes: 'asw-rpt__note', [Component.text(slot.stateLine)]),
+          ],
+        ],
+      ),
+    ];
+  }
+
+  static String _shortId(String value) =>
+      value.length <= 8 ? value : '${value.substring(0, 8)}…';
+
+  String _measurementAbsentTitle(ReportMeasurement association) {
+    switch (association.status) {
+      case ReportMeasurement.statusNoM2Link:
+        return 'R03 · Concept intent distribution — no confirmed business';
+      case ReportMeasurement.statusUnavailable:
+        return 'R03 · Concept intent distribution — association unavailable';
+      default:
+        return 'R03 · Concept intent distribution — not yet fielded';
+    }
+  }
+
+  String _measurementAbsentFoot(ReportMeasurement association) {
+    switch (association.status) {
+      case ReportMeasurement.statusUnavailable:
+        // Deliberately not a restatement of the server's reason, which is
+        // already the body of this card. The reader's next question is what to
+        // do about it, and the answer is specific: the association is resolved
+        // on every read, so a re-read is enough — nothing was lost.
+        return 'The association is resolved again on every report read, so '
+            're-reading once the store is reachable recovers it. Until then '
+            'this section claims nothing about the questionnaire either way.';
+      case ReportMeasurement.statusNoM2Link:
+        return 'Stage 2 must be confirmed before a questionnaire campaign can '
+            'be associated with this assessment.';
+      default:
+        return 'No questionnaire has been fielded for the confirmed business '
+            'behind this assessment.';
+    }
   }
 
   /// The server-rendered explanation for this section's item, in the report's

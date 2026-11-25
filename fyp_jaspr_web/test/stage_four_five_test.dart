@@ -49,7 +49,6 @@ class _FakeStagePort implements StageFourFivePort {
     return ApiResult.success(admissionValue);
   }
 
-  @override
   /// The ledger reading. Defaults to a refusal, so a fixture that does not care
   /// about execution status renders the "unavailable" wording rather than a
   /// state nobody recorded.

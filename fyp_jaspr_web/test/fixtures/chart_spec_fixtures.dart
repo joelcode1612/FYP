@@ -124,6 +124,64 @@ Map<String, dynamic> heldChartPayload() => _base(
   S: 53,
 );
 
+/// Round 24: the developer-preview shape — counts disclosed, admission `HELD`.
+///
+/// This is the only state a synthetic chart preview may draw. It carries real
+/// counts and shares *and* a held admission block, which is exactly the
+/// combination a report must never mistake for a finding.
+///
+/// The percentage status is `SYNTHETIC_PREVIEW_ESTIMABLE`, not `ESTIMABLE`: the
+/// contract keeps the two apart so a demonstration share can never be read as an
+/// authorized one.
+Map<String, dynamic> syntheticPreviewChartPayload() {
+  final payload = _base(
+    renderState: 'SYNTHETIC_PREVIEW_ONLY',
+    estimable: true,
+    admissionStatus: 'HELD',
+    provenance: 'SYNTHETIC_TEST',
+    V: 50,
+    S: 53,
+  );
+  for (final option in payload['options'] as List<dynamic>) {
+    (option as Map<String, dynamic>)['percentage_status'] =
+        'SYNTHETIC_PREVIEW_ESTIMABLE';
+  }
+  for (final line in payload['derived_lines'] as List<dynamic>) {
+    (line as Map<String, dynamic>)['percentage_status'] =
+        'SYNTHETIC_PREVIEW_ESTIMABLE';
+  }
+  // A held admission must name the gates that hold it — `E_HELD_WITHOUT_GATE`
+  // otherwise. Disclosing counts does not open a single one of them.
+  final admission = payload['admission'] as Map<String, dynamic>;
+  admission['gates'] = <String>[
+    'EXPLANATION_TEMPLATE_AUTHORITY_UNVERIFIED',
+    'A10_ADAPTER_UNVERIFIED',
+    'REPORT_ADMISSION_REQUIRED',
+  ];
+  return payload;
+}
+
+/// A slot whose frozen contract requires an approved stimulus that is absent.
+///
+/// Counts are present and non-zero — that is the point. The slot is withheld
+/// because the question names an offer the respondent never saw in approved
+/// form, not because the measurement is thin. `highest_options` is empty for
+/// exactly that reason: the server names no highlight when the input is missing,
+/// so a fixture that named one would be describing a payload the server never
+/// sends.
+Map<String, dynamic> missingStimulusChartPayload() {
+  final payload = _base(
+    renderState: 'UNAVAILABLE_MISSING_APPROVED_STIMULUS',
+    estimable: false,
+    admissionStatus: 'HELD',
+    provenance: 'SYNTHETIC_TEST',
+    V: 50,
+    S: 53,
+  );
+  payload['highest_options'] = <String>[];
+  return payload;
+}
+
 /// Draft option labels, as the backend now supplies them from the contract
 /// matrix. They are candidates, not approved wording, and the payload says so.
 const _q05DraftLabels = {

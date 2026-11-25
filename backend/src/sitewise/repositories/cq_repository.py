@@ -287,6 +287,25 @@ class CqUnit:
             .where(db.participants.c.respondent_user_id==actor))
         return [dict(r) for r in self.session.execute(query).mappings()]
     def create_session(self,campaign,actor,locale):
+        # Closure gate. A closed campaign admits no *new* respondent, but an
+        # existing session keeps working (the adopted LEAVE_OPEN disposition), so
+        # the existing row is returned before the predicate is consulted.
+        #
+        # The campaign's advisory lock is taken first and shared: End Collection
+        # takes the same key exclusively, so the two either serialise or the
+        # closure is already visible here. A plain SELECT on cq_collection_state
+        # would not do: its policy is owner-scoped, and a respondent is not the
+        # owner, so it would show no row and read as "open" (that is why the
+        # predicate is a SECURITY DEFINER function returning only a boolean).
+        self.session.execute(text("SELECT pg_advisory_xact_lock_shared("
+            "hashtextextended('cq.collection/' || :cid, 12))"),{'cid':str(campaign['id'])})
+        existing=self.one(db.sessions,[db.sessions.c.campaign_id==campaign['id'],
+            db.sessions.c.respondent_user_id==actor])
+        if existing is not None:
+            return dict(existing)
+        if self.session.execute(text('SELECT public.cq_collection_closed(:cid)'),
+                {'cid':str(campaign['id'])}).scalar():
+            raise CqRefused('CQ_COLLECTION_CLOSED',409)
         row={'id':uuid4(),'campaign_id':campaign['id'],'release_id':campaign['release_id'],
              'respondent_user_id':actor,'locale':locale,'revision':0,'state':'ACTIVE','consented':False,'consent_version':None}
         result=self.session.execute(insert(db.sessions).values(**row).on_conflict_do_nothing(

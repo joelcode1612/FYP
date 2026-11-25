@@ -74,13 +74,22 @@ String _humanise(String token) {
   return '${words[0].toUpperCase()}${words.substring(1)}';
 }
 
-/// Every token `assessment_progress.evaluate()` can emit, plus the composition
-/// and preview codes it forwards from their own contracts.
+/// Every token that can reach a stage's `reason` field, plus the composition
+/// and preview codes forwarded from their own contracts.
+///
+/// Two vocabularies, because the backend has two channels:
+///
+/// * `sitewise-assessment-progress/1` constants, for stages 1, 2 and 5 and for
+///   stage 3's *fallback* reason;
+/// * `sitewise-stage3-completion/2` predicate reasons, which
+///   `assessment_progress._stage3_reason()` forwards verbatim as stage 3's
+///   reason whenever a T3 predicate fails.
 ///
 /// Keys are the wire values and must not be reworded here; only the sentences
 /// are presentation. A token absent from this map still renders (see
 /// [stageReasonCopy]), so adding a reason on the server can never blank a
-/// section of the page.
+/// section of the page — but it *will* read like a machine code, which is why
+/// the completeness test enumerates both vocabularies.
 const Map<String, StageReasonCopy> _known = {
   // -- stage 1 --------------------------------------------------------------
   'PROPERTY_NOT_SELECTED': StageReasonCopy(
@@ -133,6 +142,124 @@ const Map<String, StageReasonCopy> _known = {
     'The Stage 3 completion contract is not satisfied for this assessment yet. '
         'Its own conditions decide completion, not the number of objectives '
         'recorded.',
+    StageReasonOwner.system,
+  ),
+
+  // -- stage 3: the completion contract's own predicate vocabulary ----------
+  //
+  // `assessment_progress._stage3_reason()` does not emit a progress-contract
+  // constant. It forwards `blockers[0]["reason"]` — the **first failing T3
+  // predicate's** reason — verbatim. So stage 3 can surface the whole
+  // `sitewise-stage3-completion/2` vocabulary, which is a different set of
+  // strings from everything above. Until these were mapped, every one of them
+  // fell through to the de-tokenising fallback and printed a machine code at
+  // the reader ("Held: No evaluation").
+  //
+  // T3-01 assessment ownership
+  'SUBJECT_NOT_FOUND': StageReasonCopy(
+    'This assessment could not be read for your account, so no stage evidence '
+        'can be verified.',
+    StageReasonOwner.system,
+  ),
+  'OWNERSHIP_MISMATCH': StageReasonCopy(
+    'This assessment is not owned by the signed-in account, so its evidence '
+        'cannot be verified here.',
+    StageReasonOwner.system,
+  ),
+
+  // T3-02 M2 confirmation
+  'NO_CURRENT_CONFIRMATION': StageReasonCopy(
+    'Your business preferences have not been confirmed, so the research stage '
+        'has no agreed starting point.',
+    StageReasonOwner.you,
+  ),
+  'CONFIRMATION_STALE': StageReasonCopy(
+    'Your preferences changed after they were confirmed, so the confirmation '
+        'no longer covers your current answers. Confirm them again.',
+    StageReasonOwner.you,
+  ),
+
+  // T3-03 business context
+  'NO_CONTEXT_FOR_CONFIRMATION': StageReasonCopy(
+    'No business context was stored with that confirmation, so the research '
+        'stage has nothing to build on.',
+    StageReasonOwner.system,
+  ),
+  'CONTEXT_NOT_CURRENT': StageReasonCopy(
+    'The stored business context belongs to an earlier revision of your '
+        'preferences, so it no longer matches what was confirmed.',
+    StageReasonOwner.system,
+  ),
+
+  // T3-04 BDJ execution disposition
+  'NO_EVALUATION': StageReasonCopy(
+    'No business evaluation (BDJ) has been recorded for this assessment yet, so '
+        'the research stage has no findings to build on. The evaluation is a '
+        'governed dispatch, not a button on this page.',
+    StageReasonOwner.system,
+  ),
+  'EVALUATION_NOT_VALID': StageReasonCopy(
+    'The last business evaluation did not produce a valid result, so it cannot '
+        'count as evidence for this stage.',
+    StageReasonOwner.system,
+  ),
+  'EVALUATION_NOT_AUTHORIZED': StageReasonCopy(
+    'The business evaluation ran without a recorded authorisation, so its '
+        'result cannot be used as evidence.',
+    StageReasonOwner.system,
+  ),
+  'EVALUATION_PROVENANCE_MISMATCH': StageReasonCopy(
+    'The business evaluation was computed from an earlier version of your '
+        'preferences, so it no longer describes your current answers.',
+    StageReasonOwner.system,
+  ),
+  'EVALUATION_CONTEXT_MISMATCH': StageReasonCopy(
+    'The business evaluation was computed against a different business context '
+        'than the one on this assessment.',
+    StageReasonOwner.system,
+  ),
+  'EVALUATION_RULESET_SUPERSEDED': StageReasonCopy(
+    'The evaluation rules changed after this evaluation ran, so it has to be '
+        're-run before it can count.',
+    StageReasonOwner.system,
+  ),
+  'SOURCE_FINGERPRINT_UNAVAILABLE': StageReasonCopy(
+    'The fingerprint of your confirmed answers could not be computed, so the '
+        'evaluation cannot be tied to what you actually said.',
+    StageReasonOwner.system,
+  ),
+
+  // T3-05 objective resolution
+  'ZERO_PROPOSALS_WITHOUT_EVALUATION': StageReasonCopy(
+    'No research objective has been proposed, and no evaluation established '
+        'that having none was the right answer. An empty list is not evidence.',
+    StageReasonOwner.system,
+  ),
+  'UNDECIDED_PROPOSAL': StageReasonCopy(
+    'A proposed research objective is still waiting for your approve or reject '
+        'decision.',
+    StageReasonOwner.you,
+  ),
+  'APPROVED_NOT_ADMITTED': StageReasonCopy(
+    'A research objective was approved but never admitted, so it cannot count '
+        'as resolved yet.',
+    StageReasonOwner.system,
+  ),
+
+  // T3-06 registration of the six fixed objectives
+  'OBJECTIVES_NOT_REGISTERED': StageReasonCopy(
+    'Not all six fixed research objectives are accounted for. Each one has to '
+        'be either selected with its own objective or explicitly left out.',
+    StageReasonOwner.you,
+  ),
+  'RESEARCH_TOPIC_ANSWER_UNAVAILABLE': StageReasonCopy(
+    'Your preferences have no research-topic answer recorded, so the six fixed '
+        'objectives cannot be registered.',
+    StageReasonOwner.you,
+  ),
+  'BLOCKERS_PRESENT': StageReasonCopy(
+    'An earlier research-stage condition is still failing, so this stage cannot '
+        'close yet.',
     StageReasonOwner.system,
   ),
 

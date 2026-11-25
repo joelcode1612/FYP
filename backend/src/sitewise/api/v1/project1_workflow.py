@@ -232,9 +232,53 @@ def business_understanding_model_assisted(
         packet_source=packet_source, runtime=runtime, runner_factory=runner_factory)
 
 
+def require_ai_processing_consent(session, user, assessment_id, revision):
+    """Refuse BDJ dispatch unless the owner's *current* confirmation grants it.
+
+    The findings route used to dispatch without consulting ``ai_processing`` at
+    all: ``ConsentAuthorization`` / ``verify_consent`` were wired only into the
+    objective route (``project1_objective_proposals.py``), so a confirmation that
+    recorded ``NOT_GRANTED`` still let the worksheet reach the provider. The
+    permission already existed and its purpose already describes this evaluation
+    ("Derive research objectives for this assessment from its confirmed business
+    declarations, using an external AI model"); it was simply never read here.
+
+    Reusing the existing permission means no new consent subsystem, no new table
+    and no change to any source fingerprint.
+
+    Ordering is the point. This runs before ``ensure_run``, before any attempt
+    reservation and before any provider call, so a refusal creates no run row,
+    consumes no attempt and incurs no charge.
+
+    Staleness is enforced by reading through ``get_confirmation``, whose
+    predicate requires ``revision == confirmed_revision == the snapshot's
+    revision``. A permission given for a superseded revision therefore reads
+    exactly like a missing one, which is the fail-closed answer.
+    """
+    from sitewise.project1.ai_processing_consent import verify_consent
+    from sitewise.project1.provider import ENDPOINT, MODEL
+
+    repo = SqlModelM2Repository(session)
+    latest = repo.latest_confirmation(assessment_id, user.user_id)
+    if latest is None:
+        raise ConflictError('Confirm the current M2 declarations before BDJ evaluation.')
+    record = repo.get_confirmation(UUID(str(latest['id'])), user.user_id)
+    if record is None:
+        # Superseded or already moved on: not this revision's permission.
+        raise WorkflowHeld('AI_PROCESSING_CONSENT_REQUIRED')
+    if int(record['assessment_revision']) != int(revision):
+        raise WorkflowHeld('AI_PROCESSING_CONSENT_REQUIRED')
+    verify_consent((record.get('snapshot_json') or {}).get('ai_processing'),
+                   endpoint=ENDPOINT, model=MODEL, owner_id=user.user_id)
+
+
 def execute_model_assisted_source(*, session, user, assessment_id, revision,
                                   packet_source, runtime, runner_factory):
     """Shared by both existing BDJ routes; selection is server-only and default-off."""
+    # Every BDJ route funnels through here, so a direct API call cannot reach a
+    # provider without the owner's recorded permission. Checked before the
+    # synthetic-trial branch as well: both dispatch the same declarations.
+    require_ai_processing_consent(session, user, assessment_id, revision)
     if settings.project1_synthetic_bdj_trial_enabled:
         from sitewise.services.bdj_synthetic_execution import execute_registered_trial
         return execute_registered_trial(session=session, user=user,

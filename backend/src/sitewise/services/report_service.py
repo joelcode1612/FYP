@@ -18,6 +18,9 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session
 
 from sitewise.repositories.fyp_property_repository import FypPropertyRepository
+from sitewise.services.report_measurement import (
+    default_section as default_measurement_section,
+)
 
 
 def _section(data, available: bool, reason: str) -> dict:
@@ -153,6 +156,7 @@ class ReportService:
         property_report: dict | None,
         explanation: dict | None,
         evidence: dict | None = None,
+        measurement: dict | None = None,
     ) -> dict:
         """The five-stage report: property + answers + evidence + model + checks.
 
@@ -161,10 +165,20 @@ class ReportService:
         verified SHAP payload (or None) and ``evidence`` the Stage-3 payload.
         Every section is included with an explicit availability flag; nothing
         is invented to make the document look complete.
+
+        ``measurement`` is the EE-01 association resolved by
+        :func:`sitewise.services.report_measurement.resolve_report_measurement`.
+        It carries identity and admission only — no counts, no percentages — so
+        section 05 can say "a measurement exists and is withheld" instead of the
+        specification's default "no measurement line exists". Omitting it is
+        supported and yields an explicit ``NOT_RESOLVED`` section rather than a
+        silently absent key: a consumer that reads ``measurement`` always finds
+        the same shape.
         """
         requirements = assessment.get("requirements") or {}
         prop = (property_report or {}).get("property") or {}
         checks = requirement_matching(requirements, prop, evidence)
+        measurement_section = measurement if measurement is not None else default_measurement_section()
 
         return {
             "assessment_id": assessment.get("assessment_id"),
@@ -177,6 +191,7 @@ class ReportService:
                 bool(requirements),
                 "No business preferences have been saved for this assessment.",
             ),
+            "measurement": measurement_section,
             "property": _section(
                 prop or None,
                 bool(prop),

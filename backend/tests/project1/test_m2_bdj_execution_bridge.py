@@ -97,6 +97,12 @@ def test_bridge_reuses_existing_gates_source_and_runner(monkeypatch):
     packet = {'source_fingerprint': 'synthetic-fixture', 'data_class': 'SYNTHETIC_NONHUMAN'}
     monkeypatch.setattr(workflow, 'configuration_gate', lambda s: events.append(('config', s)))
     monkeypatch.setattr(workflow, 'model_assisted_gate', lambda: events.append(('policy',)))
+    # The owner's AI-processing permission is now a precondition of dispatch.
+    # This test is about gate ordering and runner reuse, so the permission is
+    # granted here rather than rebuilt; the refusal path has its own suite in
+    # test_bdj_findings_requires_ai_consent.py.
+    monkeypatch.setattr(workflow, 'require_ai_processing_consent',
+                        lambda *a, **k: events.append(('consent',)))
     monkeypatch.setattr(workflow, 'source', lambda s, u, a, r: packet)
     monkeypatch.setattr(workflow, 'get_runtime_engine', lambda: runtime)
     runner = object()
@@ -105,10 +111,13 @@ def test_bridge_reuses_existing_gates_source_and_runner(monkeypatch):
         events.append(('orchestrator', kw))
         assert kw['current_fingerprint']() == packet['source_fingerprint']
         return {'outcome': 'synthetic-orchestrator-double'}
-    monkeypatch.setattr(m2_bdj_execution, 'run_model_assisted', orchestrator)
+    # ``run_model_assisted`` is imported into the workflow module, not into the
+    # bridge, so patching it on the bridge raised AttributeError and this test
+    # could never have run its assertions.
+    monkeypatch.setattr(workflow, 'run_model_assisted', orchestrator)
     result = m2_bdj_execution.execute_confirmed_bdj(service, user, ASSESSMENT, 4)
     assert result['outcome'] == 'synthetic-orchestrator-double'
-    assert [x[0] for x in events] == ['config', 'policy', 'orchestrator']
+    assert [x[0] for x in events] == ['config', 'policy', 'consent', 'orchestrator']
     assert events[-1][1]['runner_factory'] is runner
     assert events[-1][1]['runtime_engine'] is runtime
     assert events[-1][1]['packet'] is packet

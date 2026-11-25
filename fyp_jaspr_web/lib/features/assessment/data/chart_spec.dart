@@ -457,7 +457,7 @@ class ChartSpecModel {
     }
 
     final highest = (json['highest_options'] as List<dynamic>? ?? const []).cast<String>();
-    final expectedHighest = _computeHighest(options, V);
+    final expectedHighest = _computeHighest(options, V, renderState);
     if (highest.length != expectedHighest.length ||
         !highest.toSet().containsAll(expectedHighest)) {
       throw const ChartSpecException('E_HIGHEST_OPTIONS_MISMATCH');
@@ -544,7 +544,26 @@ class ChartSpecModel {
     );
   }
 
-  static List<String> _computeHighest(List<ChartOptionModel> options, int V) {
+  /// The codes tied at the maximum non-zero count, mirroring
+  /// `chart_spec.ChartSpecModel._compute_highest` exactly.
+  ///
+  /// The input-missing branch is not a detail. A state that describes a missing
+  /// input — no approved stimulus, an unauthorized claim — has no interpretable
+  /// ordering, so the server names no highlight and sends `highest_options: []`
+  /// while still sending the counts. Recomputing a highlight from those counts
+  /// made every such slot look like an invalid chart, and the client reported it
+  /// as `CHART_SPEC_INVALID` ("not convertible") for two slots whose real state
+  /// is a scientific hold — the wrong statement about them, and the reason Q05
+  /// and Q07 were described as unconvertible instead of withheld.
+  static List<String> _computeHighest(
+    List<ChartOptionModel> options,
+    int V,
+    ChartRenderState state,
+  ) {
+    if (state == ChartRenderState.unavailableMissingApprovedStimulus ||
+        state == ChartRenderState.unauthorizedClaim) {
+      return const [];
+    }
     if (V == 0) return const [];
     final ranked = options.where((option) => option.count > 0).toList();
     if (ranked.isEmpty) return const [];

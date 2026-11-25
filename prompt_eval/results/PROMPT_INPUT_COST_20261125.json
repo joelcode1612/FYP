@@ -1,0 +1,58 @@
+{
+  "checkpoint": "CP-06-INPUT-COST",
+  "generated_at": "2026-11-25",
+  "network_calls": 0,
+  "note": "Character counts, not token counts. The ratio transfers; the absolute number does not.",
+  "measurements": [
+    {
+      "family": "bdj",
+      "baseline_version": "BDJ-OBJECTIVE-4-M2V2-CAND",
+      "candidate_version": "BDJ-OBJECTIVE-5-M2V2-CAND",
+      "baseline": {
+        "messages": 8,
+        "system_chars": 5907,
+        "instruction_chars": 3276,
+        "example_messages": 6,
+        "example_chars": 3184,
+        "total_chars": 14244,
+        "total_bytes_utf8": 14244
+      },
+      "candidate": {
+        "messages": 2,
+        "system_chars": 8187,
+        "instruction_chars": 4544,
+        "example_messages": 0,
+        "example_chars": 0,
+        "total_chars": 13023,
+        "total_bytes_utf8": 13023
+      },
+      "delta_total_chars": -1221,
+      "delta_pct": -8.6
+    },
+    {
+      "family": "qg",
+      "baseline_version": "QG-FIXED-OPTION-4-CAND",
+      "candidate_version": "QG-FIXED-OPTION-5-CAND",
+      "baseline": {
+        "messages": 2,
+        "system_chars": 7865,
+        "instruction_chars": 3751,
+        "example_messages": 0,
+        "example_chars": 0,
+        "total_chars": 9775,
+        "total_bytes_utf8": 9775
+      },
+      "candidate": {
+        "messages": 2,
+        "system_chars": 8172,
+        "instruction_chars": 4058,
+        "example_messages": 0,
+        "example_chars": 0,
+        "total_chars": 10095,
+        "total_bytes_utf8": 10095
+      },
+      "delta_total_chars": 320,
+      "delta_pct": 3.3
+    }
+  ]
+}

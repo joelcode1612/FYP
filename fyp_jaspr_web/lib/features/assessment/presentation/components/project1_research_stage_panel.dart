@@ -543,7 +543,11 @@ class _Project1ResearchStageState extends State<Project1ResearchStagePanel> {
         objectiveReadUnavailable = true;
       } else {
         try {
-          final listed = await const BdjObjectiveProposalApi().list(
+          // The port, not the default implementation: [proposalApi] exists so a
+          // component test can render a recorded proposal list without reaching
+          // the network. Calling the concrete client here bypassed the seam and
+          // made the "no approved objective" branch unreachable under test.
+          final listed = await component.proposalApi.list(
             assessmentId: m2Id,
             expectedRevision: draft.revision,
             contextId: proposalContextId,
@@ -1317,8 +1321,9 @@ class _Project1ResearchStageState extends State<Project1ResearchStagePanel> {
   Future<void> _reviseCandidate(Map<String, dynamic> candidate) async {
     if (_saving ||
         candidate['context_id'] is! String ||
-        candidate['source_revision'] is! int)
+        candidate['source_revision'] is! int) {
       return;
+    }
     setState(() {
       _saving = true;
       _message = null;
@@ -2969,8 +2974,9 @@ class _Project1ResearchStageState extends State<Project1ResearchStagePanel> {
                               id,
                               candidate['source_revision'] as int,
                             );
-                        if (readback['option_code'] != value)
+                        if (readback['option_code'] != value) {
                           throw StateError('Prediction readback mismatch.');
+                        }
                       })
                     : null,
               ),

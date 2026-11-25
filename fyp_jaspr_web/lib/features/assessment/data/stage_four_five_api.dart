@@ -1279,7 +1279,7 @@ final class StageFourFiveApi implements StageFourFivePort {
     method: 'POST',
     body: {
       'proposal_id': proposalId,
-      if (contextId != null) 'context_id': contextId,
+      'context_id': ?contextId,
       'request_id': _requestId(),
       ...echo,
     },

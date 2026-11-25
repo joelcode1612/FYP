@@ -1,0 +1,313 @@
+{
+  "checkpoint": "CP-05-PERF-BASELINE",
+  "generated_at": "2026-11-25",
+  "evidence_class": "RECORDED_PRIOR_RUN_NOT_REMEASURED",
+  "source_recorded_at": "2026-11-21T19:34:08.042405+00:00",
+  "source_mode": "LIVE_CLOUD_SYNTHETIC_AB",
+  "source_budget": 14,
+  "source_dispatched": 14,
+  "source_retries": 0,
+  "model_requested": "deepseek-v4.1-flash-1017",
+  "structured_mode": "json_schema",
+  "generation_settings": {
+    "temperature": 0,
+    "max_tokens": 4000,
+    "stream": false
+  },
+  "data_classification": "SYNTHETIC_ONLY",
+  "families": {
+    "bdj": {
+      "prompt_versions_observed": [
+        "BDJ-OBJECTIVE-3-CAND",
+        "BDJ-OBJECTIVE-4-CAND"
+      ],
+      "summary": {
+        "dispatches": 6,
+        "returned": 6,
+        "held_or_failed": 0,
+        "status_counts": {
+          "RETURNED": 6
+        },
+        "latency_ms": {
+          "n": 6,
+          "min": 4340,
+          "median": 5564.0,
+          "mean": 6105.7,
+          "max": 9734,
+          "p95": "WITHHELD \u2014 n too small for a reliable percentile"
+        },
+        "usage_tokens": {
+          "prompt_tokens": 15733,
+          "completion_tokens": 2652,
+          "total_tokens": 18385
+        },
+        "dispatches_without_usage": 0,
+        "max_tokens_cap": 4000,
+        "note": "max_tokens is a configured cap, not observed consumption."
+      },
+      "target_check": {
+        "target_median_ms": 15000,
+        "observed_median_ms": 5564.0,
+        "median_met": true,
+        "target_p95_ms": 30000,
+        "observed_worst_case_ms": 9734,
+        "p95_verdict": "NOT_ASSESSABLE \u2014 sample too small; worst case reported instead",
+        "worst_case_within_target": true
+      },
+      "runs": [
+        {
+          "case": "clear_confirmed_uncertainty::original",
+          "prompt_version": "BDJ-OBJECTIVE-3-CAND",
+          "prompt_fingerprint": "76027bfffbce17711fe2c9190bc610eb8e8bfaf8a57cf4a16913b87cddd7b8ab",
+          "status": "RETURNED",
+          "code": null,
+          "http_status": 200,
+          "latency_ms": 4854,
+          "prompt_tokens": 2550,
+          "completion_tokens": 220,
+          "total_tokens": 2770,
+          "usage_reported": true,
+          "finish_reason": null,
+          "identity_verified": true
+        },
+        {
+          "case": "clear_confirmed_uncertainty::enhanced",
+          "prompt_version": "BDJ-OBJECTIVE-4-CAND",
+          "prompt_fingerprint": "81bf8ae4e6a5b1d59a0e0c2693cfecb2a5a996fa1a8550b588be9e95f79714a2",
+          "status": "RETURNED",
+          "code": null,
+          "http_status": 200,
+          "latency_ms": 5467,
+          "prompt_tokens": 2699,
+          "completion_tokens": 373,
+          "total_tokens": 3072,
+          "usage_reported": true,
+          "finish_reason": null,
+          "identity_verified": true
+        },
+        {
+          "case": "multiple_supported_uncertainties::original",
+          "prompt_version": "BDJ-OBJECTIVE-3-CAND",
+          "prompt_fingerprint": "76027bfffbce17711fe2c9190bc610eb8e8bfaf8a57cf4a16913b87cddd7b8ab",
+          "status": "RETURNED",
+          "code": null,
+          "http_status": 200,
+          "latency_ms": 9734,
+          "prompt_tokens": 2543,
+          "completion_tokens": 911,
+          "total_tokens": 3454,
+          "usage_reported": true,
+          "finish_reason": null,
+          "identity_verified": true
+        },
+        {
+          "case": "multiple_supported_uncertainties::enhanced",
+          "prompt_version": "BDJ-OBJECTIVE-4-CAND",
+          "prompt_fingerprint": "81bf8ae4e6a5b1d59a0e0c2693cfecb2a5a996fa1a8550b588be9e95f79714a2",
+          "status": "RETURNED",
+          "code": null,
+          "http_status": 200,
+          "latency_ms": 6578,
+          "prompt_tokens": 2692,
+          "completion_tokens": 545,
+          "total_tokens": 3237,
+          "usage_reported": true,
+          "finish_reason": null,
+          "identity_verified": true
+        },
+        {
+          "case": "no_supported_uncertainty::original",
+          "prompt_version": "BDJ-OBJECTIVE-3-CAND",
+          "prompt_fingerprint": "76027bfffbce17711fe2c9190bc610eb8e8bfaf8a57cf4a16913b87cddd7b8ab",
+          "status": "RETURNED",
+          "code": null,
+          "http_status": 200,
+          "latency_ms": 4340,
+          "prompt_tokens": 2550,
+          "completion_tokens": 237,
+          "total_tokens": 2787,
+          "usage_reported": true,
+          "finish_reason": null,
+          "identity_verified": true
+        },
+        {
+          "case": "no_supported_uncertainty::enhanced",
+          "prompt_version": "BDJ-OBJECTIVE-4-CAND",
+          "prompt_fingerprint": "81bf8ae4e6a5b1d59a0e0c2693cfecb2a5a996fa1a8550b588be9e95f79714a2",
+          "status": "RETURNED",
+          "code": null,
+          "http_status": 200,
+          "latency_ms": 5661,
+          "prompt_tokens": 2699,
+          "completion_tokens": 366,
+          "total_tokens": 3065,
+          "usage_reported": true,
+          "finish_reason": null,
+          "identity_verified": true
+        }
+      ]
+    },
+    "qg": {
+      "prompt_versions_observed": [
+        "QG-PROPOSE-6-CAND",
+        "QG-PROPOSE-7-CAND"
+      ],
+      "summary": {
+        "dispatches": 8,
+        "returned": 7,
+        "held_or_failed": 1,
+        "status_counts": {
+          "RETURNED": 7,
+          "HELD": 1
+        },
+        "latency_ms": {
+          "n": 8,
+          "min": 10891,
+          "median": 20106.5,
+          "mean": 20731,
+          "max": 30037,
+          "p95": "WITHHELD \u2014 n too small for a reliable percentile"
+        },
+        "usage_tokens": {
+          "prompt_tokens": 13971,
+          "completion_tokens": 16409,
+          "total_tokens": 30380
+        },
+        "dispatches_without_usage": 1,
+        "max_tokens_cap": 4000,
+        "note": "max_tokens is a configured cap, not observed consumption."
+      },
+      "target_check": {
+        "target_median_ms": 10000,
+        "observed_median_ms": 20106.5,
+        "median_met": false,
+        "target_p95_ms": 25000,
+        "observed_worst_case_ms": 30037,
+        "p95_verdict": "NOT_ASSESSABLE \u2014 sample too small; worst case reported instead",
+        "worst_case_within_target": false
+      },
+      "runs": [
+        {
+          "case": "complete_offer_single_choice::original",
+          "prompt_version": "QG-PROPOSE-6-CAND",
+          "prompt_fingerprint": "587882a7c8df6d434cf5cc69ef16ed3d8de9c399fc313902d14645aff0500300",
+          "status": "RETURNED",
+          "code": null,
+          "http_status": 200,
+          "latency_ms": 18636,
+          "prompt_tokens": 1933,
+          "completion_tokens": 2331,
+          "total_tokens": 4264,
+          "usage_reported": true,
+          "finish_reason": null,
+          "identity_verified": true
+        },
+        {
+          "case": "complete_offer_single_choice::enhanced",
+          "prompt_version": "QG-PROPOSE-7-CAND",
+          "prompt_fingerprint": "5cca21f2ef4b7e51ea160cd96551afa6de5ee0aa050ea7788d488aed4e399e7a",
+          "status": "HELD",
+          "code": "E_PROVIDER_TIMEOUT_OUTCOME_UNKNOWN",
+          "http_status": null,
+          "latency_ms": 30037,
+          "prompt_tokens": null,
+          "completion_tokens": null,
+          "total_tokens": null,
+          "usage_reported": false,
+          "finish_reason": null,
+          "identity_verified": false
+        },
+        {
+          "case": "missing_price::original",
+          "prompt_version": "QG-PROPOSE-6-CAND",
+          "prompt_fingerprint": "587882a7c8df6d434cf5cc69ef16ed3d8de9c399fc313902d14645aff0500300",
+          "status": "RETURNED",
+          "code": null,
+          "http_status": 200,
+          "latency_ms": 16341,
+          "prompt_tokens": 1930,
+          "completion_tokens": 1875,
+          "total_tokens": 3805,
+          "usage_reported": true,
+          "finish_reason": null,
+          "identity_verified": true
+        },
+        {
+          "case": "missing_price::enhanced",
+          "prompt_version": "QG-PROPOSE-7-CAND",
+          "prompt_fingerprint": "5cca21f2ef4b7e51ea160cd96551afa6de5ee0aa050ea7788d488aed4e399e7a",
+          "status": "RETURNED",
+          "code": null,
+          "http_status": 200,
+          "latency_ms": 10891,
+          "prompt_tokens": 2096,
+          "completion_tokens": 1065,
+          "total_tokens": 3161,
+          "usage_reported": true,
+          "finish_reason": null,
+          "identity_verified": true
+        },
+        {
+          "case": "single_choice_acceptability::original",
+          "prompt_version": "QG-PROPOSE-6-CAND",
+          "prompt_fingerprint": "587882a7c8df6d434cf5cc69ef16ed3d8de9c399fc313902d14645aff0500300",
+          "status": "RETURNED",
+          "code": null,
+          "http_status": 200,
+          "latency_ms": 14829,
+          "prompt_tokens": 1930,
+          "completion_tokens": 1861,
+          "total_tokens": 3791,
+          "usage_reported": true,
+          "finish_reason": null,
+          "identity_verified": true
+        },
+        {
+          "case": "single_choice_acceptability::enhanced",
+          "prompt_version": "QG-PROPOSE-7-CAND",
+          "prompt_fingerprint": "5cca21f2ef4b7e51ea160cd96551afa6de5ee0aa050ea7788d488aed4e399e7a",
+          "status": "RETURNED",
+          "code": null,
+          "http_status": 200,
+          "latency_ms": 27314,
+          "prompt_tokens": 2096,
+          "completion_tokens": 3818,
+          "total_tokens": 5914,
+          "usage_reported": true,
+          "finish_reason": null,
+          "identity_verified": true
+        },
+        {
+          "case": "multiple_choice_factors::original",
+          "prompt_version": "QG-PROPOSE-6-CAND",
+          "prompt_fingerprint": "587882a7c8df6d434cf5cc69ef16ed3d8de9c399fc313902d14645aff0500300",
+          "status": "RETURNED",
+          "code": null,
+          "http_status": 200,
+          "latency_ms": 26223,
+          "prompt_tokens": 1910,
+          "completion_tokens": 3144,
+          "total_tokens": 5054,
+          "usage_reported": true,
+          "finish_reason": null,
+          "identity_verified": true
+        },
+        {
+          "case": "multiple_choice_factors::enhanced",
+          "prompt_version": "QG-PROPOSE-7-CAND",
+          "prompt_fingerprint": "5cca21f2ef4b7e51ea160cd96551afa6de5ee0aa050ea7788d488aed4e399e7a",
+          "status": "RETURNED",
+          "code": null,
+          "http_status": 200,
+          "latency_ms": 21577,
+          "prompt_tokens": 2076,
+          "completion_tokens": 2315,
+          "total_tokens": 4391,
+          "usage_reported": true,
+          "finish_reason": null,
+          "identity_verified": true
+        }
+      ]
+    }
+  }
+}

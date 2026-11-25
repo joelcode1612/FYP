@@ -556,6 +556,56 @@ def load_evidence(session, actor_id, marketplace_ids: Iterable, *,
     return result
 
 
+def _current_source_fingerprint(session, m2_id, actor_id, revision):
+    """The projection fingerprint for this revision, or ``None``.
+
+    ``stage3_completion`` compares a stored ``bdj_results.source_fingerprint``
+    against the fingerprint of the source as it stands now, so the caller has to
+    supply it (DD-122).
+
+    The recipe is ``project1_workflow.source``'s, not the projection builder's:
+    the stored value is ``digest(packet + confirmation receipt)``. The builder's
+    own ``digest(packet)`` is a *different* hash -- measured on ``c3082df0``
+    revision 20, the builder produced ``49cefb93…`` while the ledger and the
+    candidate both recorded ``b404a3c8…``. Supplying the builder's digest would
+    have made T3-04 fail ``EVALUATION_PROVENANCE_MISMATCH`` for every valid
+    evaluation, which is a worse lie than the one DD-122 removed.
+
+    Built through the same ``M2SourceProjection.read`` every writer uses, with
+    ``read_only=True`` so the assessment row is not locked. A page read that
+    merely compares a hash must not serialise the list behind an assessment
+    someone else is editing.
+
+    Returns ``None`` on any failure: an uncomputable fingerprint leaves T3-04
+    failing closed with ``SOURCE_FINGERPRINT_UNAVAILABLE``, which is the honest
+    answer, rather than being guessed.
+    """
+    try:
+        from uuid import UUID
+
+        from sitewise.project1.contracts import digest
+        from sitewise.project1.projection import M2SourceProjection
+        from sitewise.repositories.m2_repository import SqlModelM2Repository
+
+        projected = M2SourceProjection(SqlModelM2Repository(session)).read(
+            UUID(str(m2_id)), UUID(str(actor_id)), int(revision), read_only=True)
+        if not isinstance(projected, dict):
+            return None
+        packet = dict(projected.get('projection')
+                      if 'projection' in projected else projected)
+        receipt = session.execute(
+            _sql("SELECT id, snapshot_digest FROM public.m2_confirmation_snapshots "
+                 "WHERE assessment_id = :id AND assessment_revision = :rev"),
+            {"id": str(m2_id), "rev": int(revision)}).first()
+        if receipt is None:
+            return None
+        packet['confirmation'] = {'confirmation_id': str(receipt[0]),
+                                  'snapshot_digest': str(receipt[1])}
+        return digest({k: v for k, v in packet.items() if k != 'source_fingerprint'})
+    except Exception:  # noqa: BLE001 - an uncomputable hash is a stated hold
+        return None
+
+
 def _attach_stage3(result: dict, session, actor_id, linked: list) -> None:
     """Attach the Stage 3 contract's own verdict to each confirmed assessment.
 
@@ -566,6 +616,14 @@ def _attach_stage3(result: dict, session, actor_id, linked: list) -> None:
     Constraint: only assessments with a current confirmation are evaluated (the
     rest cannot reach stage 3 anyway), and any failure degrades to "not
     evaluated" -- which reports BLOCKED rather than inventing progress.
+
+    DD-122: ``expected`` used to be passed empty, so T3-04 could never compare
+    the evaluation's provenance and always failed with
+    ``SOURCE_FINGERPRINT_UNAVAILABLE`` -- Stage 3 was unreachable by
+    construction, not by evidence. The fingerprint is now supplied, but only
+    after a first pass proves an *accepted* evaluation actually exists and the
+    comparison is the only thing missing. An assessment with no evaluation
+    therefore costs exactly what it cost before: no projection is built for it.
     """
     from sitewise.services import stage3_completion
 
@@ -584,19 +642,36 @@ def _attach_stage3(result: dict, session, actor_id, linked: list) -> None:
         savepoint = session.begin_nested()
         try:
             raw = session.connection().connection.cursor()
-            verdict = stage3_completion.evaluate(
-                raw,
-                marketplace_assessment_id=mid,
-                m2_assessment_id=m2_id,
-                actor_id=actor_id,
-                # Ownership is already established by the link join in
-                # ``_LINKS_SQL`` (assessment owner = link user = M2 owner), so the
-                # app-side record is supplied from that fact rather than re-read.
-                assessment={"assessment_id": mid, "user_id": actor_id},
-                link=None,
-                ledger_cur=None,
-                expected={},
-            )
+
+            def _evaluate(expected):
+                return stage3_completion.evaluate(
+                    raw,
+                    marketplace_assessment_id=mid,
+                    m2_assessment_id=m2_id,
+                    actor_id=actor_id,
+                    # Ownership is already established by the link join in
+                    # ``_LINKS_SQL`` (assessment owner = link user = M2 owner), so the
+                    # app-side record is supplied from that fact rather than re-read.
+                    assessment={"assessment_id": mid, "user_id": actor_id},
+                    link=None,
+                    ledger_cur=None,
+                    expected=expected,
+                )
+
+            verdict = _evaluate({})
+            t3_04 = (verdict.get("predicates") or {}).get("T3-04") or {}
+            # The fingerprint comparison is the only missing input; retry once
+            # with it. This runs only when an *accepted* evaluation exists and
+            # its provenance could not be checked, so the projection is built
+            # for at most the assessments that have one.
+            if t3_04.get("reason") == "SOURCE_FINGERPRINT_UNAVAILABLE":
+                revision = session.execute(
+                    _sql("SELECT revision FROM public.m2_assessments WHERE id = :id"),
+                    {"id": str(m2_id)}).scalar()
+                fingerprint = (None if revision is None else
+                               _current_source_fingerprint(session, m2_id, actor_id, revision))
+                if fingerprint:
+                    verdict = _evaluate({"source_fingerprint": fingerprint})
             savepoint.commit()
         except Exception:  # noqa: BLE001 - an unevaluated contract is a hold
             savepoint.rollback()

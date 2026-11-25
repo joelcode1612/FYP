@@ -12,6 +12,8 @@
 /// which is what makes it safe to call on page load.
 library;
 
+import 'package:sitewise_jaspr_web/features/assessment/data/report_measurement.dart';
+
 /// One `{available, data | reason}` block of the report.
 final class ReportSection {
   final bool available;
@@ -145,6 +147,15 @@ final class AssessmentReportPayload {
   final int requirementsVersion;
 
   final ReportSection questionnaire;
+
+  /// The questionnaire measurement this assessment is linked to, if any.
+  ///
+  /// `null` only when the server did not send the section at all (an older
+  /// report). When present it always carries an explicit status, so section 05
+  /// can distinguish "no campaign" from "measurement exists and is withheld" —
+  /// the distinction the specification's default notice could not make.
+  final ReportMeasurement? measurement;
+
   final ReportSection property;
   final ReportSection listingMedia;
   final ReportSection geospatialFeatures;
@@ -169,6 +180,10 @@ final class AssessmentReportPayload {
     required this.generatedAt,
     required this.requirementsVersion,
     required this.questionnaire,
+    // Optional on purpose: every caller that predates the measurement section
+    // keeps compiling, and a null here means "the server did not send one",
+    // which section 05 renders as not-resolved rather than as an empty result.
+    this.measurement,
     required this.property,
     required this.listingMedia,
     required this.geospatialFeatures,
@@ -191,6 +206,7 @@ final class AssessmentReportPayload {
       generatedAt: json['generated_at'] as String?,
       requirementsVersion: (json['requirements_version'] as num?)?.toInt() ?? 0,
       questionnaire: ReportSection.fromJson(json['questionnaire']),
+      measurement: ReportMeasurement.tryParse(json['measurement']),
       property: ReportSection.fromJson(json['property']),
       listingMedia: ReportSection.fromJson(json['listing_media']),
       geospatialFeatures: ReportSection.fromJson(json['geospatial_features']),

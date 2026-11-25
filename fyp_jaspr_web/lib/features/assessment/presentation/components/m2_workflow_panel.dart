@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:math';
 
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
@@ -6,6 +8,7 @@ import 'package:shared_logic/shared_logic.dart' show M2Draft, AppFailure, Networ
 
 import 'package:sitewise_jaspr_web/core/di/app_locator.dart';
 import 'bdj_objective_proposal_panel.dart' show BdjObjectiveProposalPanel;
+import 'research_workflow_panel.dart' show ResearchCandidatePanel;
 import 'stage_four_question_review.dart' show StageFourQuestionReview;
 import 'stage_five_questionnaire_preview.dart' show StageFiveQuestionnairePreview;
 import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart' show ActionButton;
@@ -115,6 +118,15 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
   bool _autoSaveQueued = false;
   bool _pauseReady = false;
 
+  /// Kept for standalone M2 workflow's manual discard-edits action.
+  ///
+  /// The staged layout below does not render that action, so nothing assigns
+  /// this field today. It is retained rather than deleted because the discard
+  /// path is expected to return with the staged editor; removing it would also
+  /// remove the only record of what the action was for.
+  // ignore: unused_field
+  bool _discardArmed = false;
+
   /// Whether the read-only review summary is expanded.
   bool _showReview = false;
   int? _reviewedRevision;
@@ -133,6 +145,10 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
   /// many there are; this index is only the position on screen.
   int _itemIndex = 0;
 
+  Map<String, dynamic>? _worksheet;
+  /// UI-01: finding decisions persisted for the current revision, by finding id.
+  /// Only codes the backend accepts are ever stored here.
+  Map<String, String> _decisions = {};
   Map<String, dynamic>? _confirmation;
   Map<String, dynamic>? _contextStatus;
 
@@ -161,6 +177,9 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
   String? _conceptPreviewError;
   bool _conceptPreviewLoading = false;
   int _conceptPreviewTicket = 0;
+  Map<String, dynamic>? _objective;
+  Map<String, dynamic>? _qjContext;
+  String _objectiveText = '';
 
   int _request = 0;
 
@@ -244,6 +263,8 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     setState(() {
       _selected = id;
       _draft = draft;
+      _worksheet = null;
+      _decisions = {};
       _confirmation = null;
       _contextStatus = null;
       // A preview belongs to one assessment at one revision. Opening another
@@ -251,6 +272,9 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
       // moment before its own preview arrives.
       _conceptPreview = null;
       _conceptPreviewError = null;
+      _objective = null;
+      _qjContext = null;
+      _objectiveText = '';
       _itemIndex = 0;
       _seedEditors(draft);
     });
@@ -258,6 +282,21 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     // different revision is loaded. It is not awaited: a slow preview must not
     // delay the questionnaire, and the card states plainly while it is loading.
     unawaited(_loadConceptPreview());
+    // CP-10 DEF-06 state restoration: worksheet and confirmation are server
+    // state and must survive a reload. Without this, 'Save research
+    // objective' was permanently dead after any reload while the server
+    // honestly refuses a duplicate confirm — the objective was unreachable.
+    if (!component.embedded) {
+      try {
+        final sheet = await AppLocator.m2.worksheet(draft);
+        if (!mounted || request != _request) return;
+        if (sheet['revision'] == draft.revision) {
+          _worksheet = sheet;
+        }
+      } catch (_) {
+        // No worksheet is available; do not fabricate one.
+      }
+    }
     try {
       final conf = await AppLocator.m2.currentConfirmation(draft.id);
       if (!mounted || request != _request) return;
@@ -927,6 +966,9 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
         _reviewedRevision = null;
         _showReview = false;
         _seedEditors(updated, preserve: preserved);
+        // A new revision invalidates decisions recorded against the old one.
+        _decisions = {};
+        _worksheet = null;
         notice = preserved.isEmpty
             ? 'Saved $key. Server revision is now ${updated.revision}.'
             : 'Saved $key. ${preserved.length} other unsaved edit(s) were kept. '
@@ -1198,6 +1240,10 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
           'Unsaved changes remain. Save and verify the current M2 revision before confirming.');
       return;
     }
+    // Nothing is unsaved (checked above), so cancelling a pending autosave
+    // debounce cannot lose an edit. It does stop one from writing *after* the
+    // confirmation and moving the revision out from under it.
+    _autoSaveTicket++;
     setState(() {
       busy = true;
       error = null;
@@ -1209,34 +1255,161 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
       // ``aiProcessing`` is omitted unless the owner checked the box, so an
       // untouched control records NOT_GRANTED rather than a silent grant.
       final consent = _aiConsentEcho();
-      await AppLocator.m2.confirm(draft, const <String>[],
+      // The POST's own receipt is the primary evidence. `confirm()` recomputes
+      // the snapshot digest locally and refuses a response that does not carry
+      // exactly the snapshot it just wrote, so a success here proves the server
+      // stored this revision. It is therefore adopted immediately, before any
+      // follow-up read: a committed confirmation must never be displayed as
+      // unverified merely because a later read has not caught up yet.
+      final receipt = await AppLocator.m2.confirm(draft, const <String>[],
           marketplaceAssessmentId: component.marketplaceAssessmentId,
           aiProcessing: consent);
-      final persisted = await AppLocator.m2.currentConfirmation(draft.id);
       if (!mounted) return;
-      if (persisted == null || persisted['assessment_revision'] != draft.revision) {
-        throw StateError('The server did not return a current confirmation receipt.');
-      }
-      final current = await AppLocator.m2.read(draft.id);
-      if (!mounted) return;
-      if (current.revision != draft.revision) {
-        throw StateError('M2 changed while confirmation was being recorded.');
-      }
       setState(() {
-        _draft = current;
-        _confirmation = persisted;
+        _confirmation = receipt;
         _showReview = false;
+        // The confirmation is recorded; nothing is still in flight from the
+        // owner's point of view. Holding `busy` through the reconciliation
+        // below would hide the outcome behind "Working…" for up to a second.
+        busy = false;
         notice = 'Business declaration confirmed at revision ${draft.revision}. '
             'Confirmation did not run BDJ. Open Stage 3 to continue.';
       });
       component.onDeclarationChanged?.call();
+      // Then settle against the server, bounded, exactly as the workspace
+      // settles readiness after a write. This is presentation only: it replaces
+      // the receipt with the persisted row and moves `_draft` to the revision
+      // the server now holds. A read that lands before the write is visible --
+      // or before a queued autosave has bumped the revision -- is a timing
+      // fact, not a failed confirmation.
+      await _settleConfirmedRevision(draft);
     } catch (failure) {
+      // A 200 whose snapshot the client cannot verify is NOT success, and it is
+      // not repaired by re-reading: the receipt is the only evidence that the
+      // bytes stored are the bytes reviewed, so an unverifiable receipt must
+      // stay an error (m2_confirmation_first_test.dart pins this). What is
+      // fixed here is the opposite case: a receipt that verified is no longer
+      // discarded because a subsequent read disagreed.
+      if (!mounted) return;
+      final code = failure is AppFailure ? failure.backendCode : null;
+      // ``M2_ALREADY_CONFIRMED_OR_CHANGED`` is raised by ``mark_confirmed`` when
+      // the revision is already confirmed *or* when it moved. Those are not the
+      // same situation, and "reload saved declarations" is the wrong advice for
+      // the first one: the owner's confirmation already succeeded, so there is
+      // nothing left to do but continue. Ask the server which it is, and report
+      // that -- never the guess.
+      if (code == 'M2_ALREADY_CONFIRMED_OR_CHANGED') {
+        final alreadyConfirmed = await _settleConfirmedRevision(draft);
+        if (!mounted) return;
+        if (alreadyConfirmed) {
+          setState(() {
+            _showReview = false;
+            notice = 'Revision ${draft.revision} is already confirmed, so '
+                'nothing further was written. Open Stage 3 to continue.';
+          });
+          component.onDeclarationChanged?.call();
+          return;
+        }
+        // The revision moved instead: the confirmation is not current, so the
+        // original refusal stands and reloading is the right advice.
+      }
+      setState(() => error = _confirmationError(failure));
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  /// Re-read the confirmation just written and adopt the persisted row.
+  ///
+  /// Returns true when the server reports a current confirmation at [draft]'s
+  /// revision. The retry is bounded and identical in shape to the workspace's
+  /// post-write readiness retry: the write is committed by the time the POST
+  /// returns, but a read issued immediately afterwards can still race the
+  /// transaction's visibility. A failed read is retried; it never unmakes the
+  /// confirmation and it never becomes the user's problem to fix by reloading.
+  Future<bool> _settleConfirmedRevision(M2Draft draft) async {
+    for (var attempt = 0; attempt < 4; attempt++) {
+      if (attempt > 0) {
+        await Future<void>.delayed(Duration(milliseconds: 150 * attempt));
+      }
+      if (!mounted) return false;
+      try {
+        final persisted = await AppLocator.m2.currentConfirmation(draft.id);
+        if (!mounted) return false;
+        if (persisted == null ||
+            persisted['assessment_revision'] != draft.revision) {
+          continue;
+        }
+        M2Draft? current;
+        try {
+          current = await AppLocator.m2.read(draft.id);
+        } catch (_) {
+          current = null;
+        }
+        if (!mounted) return false;
+        setState(() {
+          _confirmation = persisted;
+          if (current != null && current.revision == draft.revision) {
+            _draft = current;
+          }
+        });
+        return true;
+      } catch (_) {
+        // Retry. The confirmation stands; only the read failed.
+      }
+    }
+    return false;
+  }
+
+  /// UI-01: persist one permitted finding decision through the existing route.
+  ///
+  /// The backend accepts exactly two codes. `KEEP_ORIGINAL` means the
+  /// declaration stands as written — it is NOT scientific approval, NOT proof
+  /// the declaration is correct, and NOT resolution of the uncertainty.
+  /// `REVIEW_LATER` is recorded but never satisfies confirmation.
+  Future<void> _decide(String findingId, String decision) async {
+    final draft = _draft;
+    if (draft == null || busy) return;
+    setState(() {
+      busy = true;
+      error = null;
+      notice = '';
+    });
+    try {
+      final result =
+          await AppLocator.m2.decide(draft, findingId, decision, _uuid4());
+      if (!mounted) return;
+      final event = result['event'];
+      final saved = event is Map && event['decision'] is String
+          ? event['decision'] as String
+          : decision;
+      setState(() {
+        _decisions = {..._decisions, findingId: saved};
+        notice = saved == 'KEEP_ORIGINAL'
+            ? 'Decision recorded: the declaration stands as written. This is not '
+                  'scientific approval and does not resolve the uncertainty.'
+            : 'Decision recorded: review deferred. REVIEW_LATER does not satisfy '
+                  'confirmation.';
+      });
+    } catch (_) {
       if (mounted) {
-        setState(() => error = _confirmationError(failure));
+        setState(() => error =
+            'The finding decision was refused. Reload the current revision and '
+            'choose one of the two permitted decisions.');
       }
     } finally {
       if (mounted) setState(() => busy = false);
     }
+  }
+
+  String _uuid4() {
+    final rnd = Random.secure();
+    final bytes = List<int>.generate(16, (_) => rnd.nextInt(256));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    final hex = bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
+    return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-'
+        '${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
   }
 
   /// Restore the persisted BCB status when a confirmed assessment is reopened.
@@ -1396,6 +1569,110 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     for (final entry in raw is List ? raw : const [])
       if (entry is String) entry,
   ];
+
+  Future<void> _readContextStatus() async {
+    final draft = _draft;
+    final confirmation = _confirmation;
+    if (draft == null || confirmation == null || busy) return;
+    setState(() {
+      busy = true;
+      error = null;
+      notice = '';
+    });
+    try {
+      final status = await AppLocator.m2.contextStatus(
+        draft.id,
+        confirmation['id'] as String,
+        draft.revision,
+      );
+      if (!mounted) return;
+      setState(() => _contextStatus = status);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => error =
+              'The business-context status could not be read. Persisted BCB is '
+              'default-off and requires verified tenant/concept/geography/'
+              'purpose bindings.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<void> _createObjective() async {
+    final draft = _draft;
+    final confirmation = _confirmation;
+    if (draft == null || confirmation == null || busy) return;
+    if (_objectiveText.trim().isEmpty) {
+      setState(() => error = 'Enter the research objective before submitting.');
+      return;
+    }
+    setState(() {
+      busy = true;
+      error = null;
+      notice = '';
+    });
+    try {
+      final result = await AppLocator.m2.createObjective(
+        confirmation['id'] as String,
+        draft.revision,
+        _objectiveText,
+      );
+      if (!mounted) return;
+      setState(() {
+        _objective = result;
+        _qjContext = null;
+        notice =
+            'Research objective ${result['id']} persisted against the '
+            'confirmation revision.';
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => error =
+              'The research objective was not saved. It is bound to the '
+              'confirmation revision and must be current.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<void> _readQjContext() async {
+    final draft = _draft;
+    final objective = _objective;
+    if (draft == null || objective == null || busy) return;
+    setState(() {
+      busy = true;
+      error = null;
+      notice = '';
+    });
+    try {
+      final context = await AppLocator.m2.qjContext(
+        objective['id'] as String,
+        draft.revision,
+      );
+      if (!mounted) return;
+      setState(() {
+        _qjContext = context;
+        notice =
+            'QJ context read. This is the objective\'s judgement input, not a '
+            'QJ run: no QJ execution endpoint is registered.';
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => error =
+              'The QJ context could not be read for this objective revision.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
 
   // --- rendering -----------------------------------------------------------
 
@@ -2003,6 +2280,7 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
   /// under `PROJECT1_BDJ_CONTRACT=objective` is established. The copy below was
   /// corrected because it described the route as deterministic when it runs the
   /// governed model-assisted path.
+  // ignore: unused_element
   Component _bdj() {
     final sheet = _worksheet;
     final findings = [
@@ -2145,6 +2423,7 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     ];
   }
 
+  // ignore: unused_element
   Component _confirmationSection() {
     final result = _confirmation;
     final unresolved = _unresolvedRequired();
@@ -2212,6 +2491,7 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     ]);
   }
 
+  // ignore: unused_element
   Component _objectiveSection() {
     final result = _objective;
     return div(classes: 'stack', [
@@ -2864,6 +3144,8 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
         _confirmation = null;
         _reviewedRevision = null;
         _showReview = false;
+        _worksheet = null;
+        _decisions = {};
         saved++;
       } catch (failure) {
         failed.add(key);
@@ -2910,6 +3192,19 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     // leaves the revision untouched, and refetching would replace a readable
     // preview with a spinner for no new information.
     if (saved > 0) unawaited(_loadConceptPreview());
+  }
+
+  /// Abandon unsaved editor state. Stored answers are untouched.
+  // ignore: unused_element
+  void _discardEdits() {
+    final draft = _draft;
+    if (draft == null) return;
+    setState(() {
+      _seedEditors(draft);
+      _discardArmed = false;
+      error = null;
+      notice = 'Unsaved edits discarded. Stored answers are unchanged.';
+    });
   }
 
   /// DEF-11 unbound state.

@@ -105,6 +105,45 @@ def _title(slots) -> str:
 REQUIRED_SLOTS = ('named_area', 'exact_rm_price', 'product_spec',
                   'defined_item', 'concept_card_version')
 
+#: How many research objectives are actually authorised for this confirmation.
+#:
+#: Section B is *additive*: an empty Section B is a legitimate questionnaire
+#: (Path A), so this count is reported rather than gating anything. It is read
+#: here only so the composition can distinguish "nothing was admitted" from
+#: "something was admitted but no candidate is eligible" -- two states that
+#: otherwise produce the same empty section with no explanation.
+#:
+#: Both authorities are counted as distinct identities, exactly as
+#: ``api/v1/project1_stage5_composed.py`` does: a manual admission and an
+#: approved BDJ proposal are different records, and merging them in SQL would
+#: assert a correspondence between a registry code and a proposal that only the
+#: Python policy layer is entitled to make.
+_ADMITTED_OBJECTIVE_SQL = """
+    SELECT count(*) AS n FROM (
+        SELECT 'admission:' || objective_id AS identity
+          FROM public.m2_bdj_objective_admissions
+         WHERE assessment_id = :assessment_id
+           AND confirmation_id = :confirmation_id
+           AND confirmation_revision = :revision
+           AND decision = :decision
+           AND objective_id IS NOT NULL
+        UNION
+        SELECT 'proposal:' || d.proposal_id::text AS identity
+          FROM public.m2_bdj_objective_decisions d
+          JOIN public.m2_bdj_objective_proposals p
+            ON p.proposal_id = d.proposal_id
+         WHERE p.assessment_id = :assessment_id
+           AND d.confirmation_id = :confirmation_id
+           AND p.confirmation_revision = :revision
+           AND d.decision = 'APPROVED'
+    ) authorised
+"""
+
+#: The admission decision the schema actually permits. There is no ``ADMITTED``
+#: value in ``m2_bdj_objective_admissions``; the CHECK constraint allows only
+#: ``WORTH_RESEARCHING``, so counting ``ADMITTED`` would always return zero.
+ADMITTED_DECISION = 'WORTH_RESEARCHING'
+
 
 class PublicationService:
     """Publication bound to one store. Every method is owner-scoped by RLS."""
@@ -173,12 +212,37 @@ class PublicationService:
             concept_version=context['concept_version'],
             priced_offer=(offer['value_json'] if offer and offer['answer_state'] == 'ANSWERED' else None),
         )
+
+        # Section B: every persisted Direct-QG candidate for this assessment,
+        # read inside the transaction that just verified the revision. The
+        # eligibility filter is the composition's, not this query's, so an
+        # excluded candidate is reported with a reason instead of vanishing.
+        #
+        # ``list_candidates_in_session`` re-binds ``project1.actor_id`` locally,
+        # which is what makes the owner predicate on ``m2_assessments`` and the
+        # RLS policies on ``m2_qg_candidates`` both apply to the publisher's
+        # session.
+        from sitewise.project1.qg_candidate_read import list_candidates_in_session
+
+        candidates = list_candidates_in_session(
+            session, actor_id=actor_id, assessment_id=assessment_id,
+        )['candidates']
+
+        admitted = session.execute(text(_ADMITTED_OBJECTIVE_SQL), {
+            'assessment_id': assessment_id,
+            'confirmation_id': str(confirmation['id']),
+            'revision': revision,
+            'decision': ADMITTED_DECISION,
+        }).mappings().first()
+
         return {
             'assessment': dict(assessment),
             'confirmation': dict(confirmation),
             'context': {k: v for k, v in dict(context).items() if k != 'packet_json'},
             'packet': context['packet_json'],
             'slot_values': slots,
+            'candidates': candidates,
+            'admitted_objective_count': int(admitted['n']) if admitted else 0,
         }
 
     def _select_context(self, session, assessment_id: str, revision: int):
@@ -242,24 +306,45 @@ class PublicationService:
             {'aid': assessment_id, 'rev': revision}).mappings().first()
 
     def _compose(self, records: dict, contract, policy) -> tuple[dict, dict, dict]:
-        """Composition, binding block and stimuli -- the operator path verbatim."""
+        """Composition, binding block and stimuli -- the operator path verbatim.
+
+        The document is built by ``services.questionnaire_composition.compose``,
+        which is the *same* composer Stage 4 and the Stage 5 read route use.
+        Before this, the publisher assembled the 13 fixed items itself and never
+        called the composer, so Section B could not appear in a release no matter
+        how many additional questions had been approved: the release builder
+        supports additional items, but nothing ever handed it one. Composing
+        through one function is what keeps the published instrument and the
+        instrument Stage 5 displays from describing different questionnaires.
+        """
         from sitewise.cq_successor.preview_catalogue import PreviewQuestionCatalogue
         from sitewise.project1 import cq_entrepreneur_adapter as adapter
+        from sitewise.services import questionnaire_composition as composition
 
         slots = records['slot_values']
         populated = PreviewQuestionCatalogue.load().populate(slots)
-        items = [{
-            'item_id': row.question.question_id,
-            'stem': row.populated_stem,
-            'stem_template': row.question.stem_template,
-            'response_format': row.question.response_type,
-            'population_status': row.population_status,
-            'unresolved_slots': [{'slot': u.slot, 'required': u.required}
-                                 for u in row.unresolved],
-        } for row in populated.questions]
-        composed = {'items': items, 'declarations': {'slot_values': dict(slots)}}
-
         assessment, context = records['assessment'], records['context']
+
+        document = composition.compose(
+            populated=populated,
+            candidates=records.get('candidates') or [],
+            assessment_id=str(assessment['id']),
+            confirmation_id=str(records['confirmation']['id']),
+            revision=int(assessment['revision']),
+            declarations={
+                'slot_values': dict(slots),
+                'context_available': context is not None,
+                'context_id': str(context['context_id']) if context is not None else None,
+                'context_packet_hash': context['packet_hash'] if context is not None else None,
+            },
+            admitted_objective_count=records.get('admitted_objective_count') or 0,
+        )
+        # ``compose`` returns the fixed core followed by the additional items, in
+        # that order, which is what ``build_manifest`` requires: every governed
+        # dependency index has to point backwards.
+        composed = {'items': list(document['items']),
+                    'declarations': {'slot_values': dict(slots)}}
+
         assignment = {
             'contract_version': adapter.ASSIGNMENT_CONTRACT,
             'assessment_id': str(assessment['id']),

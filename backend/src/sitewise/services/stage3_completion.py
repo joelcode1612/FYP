@@ -37,9 +37,27 @@ accounted for.
 Registration is read from the instrument, not asserted here. ``M2V2-09``'s own
 registered option codes name exactly the six fixed objectives, and
 ``issue_resolution.TOPIC_TO_OBJECTIVE`` maps them one-to-one. A topic is either
-SELECTED (and then must carry a verified research objective) or NOT_SELECTED
-(a recorded, deliberate abstention). ``NONE`` is an explicit decline of all six
-and is reported as mode ``DECLINED``.
+SELECTED or NOT_SELECTED (a recorded, deliberate abstention). ``NONE`` is an
+explicit decline of all six and is reported as mode ``DECLINED``.
+
+The six objectives are system-defined: ``objective_registry`` declares them
+mandatory for every assessment, so their *existence* never depends on an
+entrepreneur record. T3-06 therefore separates four things that a single
+boolean would conflate:
+
+* **mandatory registration** — all six have a recorded disposition. Blocked
+  only when the research-intention answer cannot be read.
+* **business declaration completeness** — which topics were selected, and the
+  declared priority and decision status.
+* **measurement readiness** — which selected objectives a verified research
+  objective already carries. Reported on T3-06's evidence and on
+  ``registration.measurement_pending``; it does not gate this stage, because
+  the QG eligibility gate (G-05) and publication enforce it downstream.
+* **optional BDJ objective admission** — T3-05, unchanged. A BDJ proposal may
+  link to a fixed objective; it never creates, retires or re-ranks one.
+
+Missing business information therefore lowers readiness. It never removes an
+objective from the registry.
 
 Registration is a **disposition, not coverage**. It never raises
 ``objective_registry.coverage()``: that number stays 0 of 6 until an approved
@@ -161,11 +179,32 @@ def _registration(records: dict) -> dict:
 
     Pure. A topic is SELECTED when its own option code appears in the answer;
     NOT_SELECTED otherwise, which is a recorded abstention rather than a gap.
-    Every SELECTED topic must carry a verified research objective -- writing one
-    objective for the top priority is not a finished research design.
-
     ``NONE`` is exclusive in the instrument and is reported as mode DECLINED:
     all six are registered out of scope, so nothing is required to resolve.
+
+    O1..O6 are **system-defined**. ``objective_registry`` declares them mandatory
+    for every assessment, so no entrepreneur action creates or retires one, and
+    no ``m2_confirmed_uncertainties`` row is required for an objective to exist.
+    Requiring one objective row per selected topic made the six-objective stage
+    unreachable: the only writer of such a row (``confirm_objective``,
+    origin=ENTREPRENEUR) stamps ``priority`` from the single ``M2V2-10`` answer,
+    so at most one selected topic could ever resolve and the rest blocked
+    forever. Registration is therefore reported from the declaration, and three
+    things that were previously collapsed into one boolean stay separate:
+
+    ``ok`` / ``blocking``
+        Whether all six have a recorded disposition. False only when the
+        research-intention answer itself cannot be read -- a real gap in the
+        declaration, not a missing objective row.
+
+    ``measurement_ready`` / ``measurement_pending``
+        Which selected objectives a verified research objective already carries.
+        A missing business fact lowers readiness; it never unregisters the
+        objective. Measurement is enforced downstream by the QG eligibility gate
+        (G-05 needs a resolved stimulus for a registry objective) and again at
+        publication, so reporting readiness here without gating on it drops no
+        safeguard. ``objective_registry.coverage()`` remains the only thing that
+        raises the measured count, and this function never calls it.
     """
     from sitewise.project1.issue_resolution import TOPIC_TO_OBJECTIVE
 
@@ -178,6 +217,10 @@ def _registration(records: dict) -> dict:
             "mode": None,
             "blocking": list(TOPIC_TO_OBJECTIVE.values()),
             "rows": [],
+            # Nothing can be measured while the declaration is unreadable, so
+            # every objective is reported as pending rather than as absent.
+            "measurement_ready": [],
+            "measurement_pending": list(TOPIC_TO_OBJECTIVE.values()),
         }
 
     value = answer.get("value") or []
@@ -195,27 +238,34 @@ def _registration(records: dict) -> dict:
         if priority:
             resolved.setdefault(str(priority), []).append(objective["id"])
 
-    rows, blocking = [], []
+    rows, ready, pending = [], [], []
     for code, objective_id in TOPIC_TO_OBJECTIVE.items():
         selected = (code in codes) and not declined
         carried_by = resolved.get(code, [])
-        ok = (not selected) or bool(carried_by)
-        if not ok:
-            blocking.append(objective_id)
+        measured = bool(carried_by)
+        if selected:
+            (ready if measured else pending).append(objective_id)
         rows.append({
             "topic_code": code,
             "objective_id": objective_id,
+            "mandatory": True,
+            "registered": True,
             "disposition": "SELECTED" if selected else "NOT_SELECTED",
             "verified_objectives": carried_by,
-            "satisfied": ok,
+            "measurement_ready": measured,
         })
 
     return {
-        "ok": not blocking,
-        "reason": "SIX_OBJECTIVES_REGISTERED" if not blocking else "OBJECTIVES_NOT_REGISTERED",
+        "ok": True,
+        "reason": "SIX_OBJECTIVES_REGISTERED",
         "mode": "DECLINED" if declined else "SELECTED",
-        "blocking": blocking,
+        # Registration is never blocked by a missing objective row: the six
+        # objectives exist by registry, not by record. Only an unreadable
+        # research-intention answer blocks, and that returns above.
+        "blocking": [],
         "rows": rows,
+        "measurement_ready": ready,
+        "measurement_pending": pending,
         "priority": answers.get(PRIORITY_ITEM, {}).get("value"),
         "disposition": answers.get(DISPOSITION_ITEM, {}).get("value"),
     }
@@ -264,9 +314,19 @@ def collect(cur, *, marketplace_assessment_id: UUID, m2_assessment_id: UUID,
         "ledger_readable": True,
         # The currently adopted ruleset/prompt, and the current projection
         # fingerprint. The fingerprint cannot be computed from these tables: it
-        # is digest(project1-m2-projection/1-candidate), which only the
-        # projection builder can produce. Left absent, T3-04 fails closed with
-        # SOURCE_FINGERPRINT_UNAVAILABLE rather than guessing.
+        # is ``digest(packet + confirmation receipt)``, exactly as
+        # ``project1_workflow.source`` writes it into ``bdj_results`` and
+        # ``m2_qg_candidates``. It is **not** the projection builder's own
+        # ``digest(packet)`` -- measured on ``c3082df0`` revision 20 the builder
+        # produced ``49cefb93…`` while the ledger recorded ``b404a3c8…``, so a
+        # caller that supplied the builder's digest would fail every valid
+        # evaluation with ``EVALUATION_PROVENANCE_MISMATCH``.
+        #
+        # Left absent, T3-04 fails closed with
+        # SOURCE_FINGERPRINT_UNAVAILABLE rather than guessing. The application
+        # supplies it (DD-122) through
+        # ``assessment_progress._current_source_fingerprint``, which reproduces
+        # this exact recipe and is checked against a recorded ledger value.
         "expected": dict(expected or {}),
     }
 
@@ -623,6 +683,10 @@ def decide(records: dict) -> dict:
         blocking=blockers,
         registration_blocking=registration["blocking"],
         registration_mode=registration["mode"],
+        # Reported, never gating. A selected objective with no approved measure
+        # lowers readiness; it does not unregister a system-defined objective.
+        measurement_ready=registration.get("measurement_ready", []),
+        measurement_pending=registration.get("measurement_pending", []),
     )
 
     result["complete"] = all(p["satisfied"] for p in preds.values())

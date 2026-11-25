@@ -1,0 +1,106 @@
+{
+  "taken_at": "20261125_211854",
+  "database": "project1_pg18_migrated_tests",
+  "tables": {
+    "cq_collection_state": [
+      {
+        "campaign_id": "de3121ff-8e96-46dc-9330-1cc438b143a5",
+        "respondent_target": "130",
+        "lifecycle_state": "ENDED",
+        "ended_at": "2026-11-25T20:03:43.248410+08:00",
+        "end_reason": "cohort finished; below target acknowledged",
+        "ended_by_user_id": "32ef694a-69b0-4863-a77f-b9cf6c056b56",
+        "state_revision": "7",
+        "completion_policy": "OWNER_DISCRETION",
+        "in_progress_disposition": "LEAVE_OPEN",
+        "target_at_closure": "130",
+        "reached_at_closure": "129",
+        "evidence_cutoff": "2026-11-25T20:03:43.306741+08:00"
+      },
+      {
+        "campaign_id": "f4902d2c-1588-4fb7-a082-ec9529f5d138",
+        "respondent_target": "137",
+        "lifecycle_state": "OPEN",
+        "ended_at": null,
+        "end_reason": null,
+        "ended_by_user_id": null,
+        "state_revision": "4",
+        "completion_policy": null,
+        "in_progress_disposition": null,
+        "target_at_closure": null,
+        "reached_at_closure": null,
+        "evidence_cutoff": null
+      }
+    ],
+    "cq_schema_migrations": [
+      {
+        "version": "20261116_02",
+        "migration_sha256": "e0a4827573f39c25736b8465f447541f79e7033e44b412e4c4ea6fbc4487cb54",
+        "receipt": "OWNER-AUTHORIZED-20261125-EE01-INSERT-GRANT",
+        "created_at": "2026-11-25T13:04:12.267102+08:00"
+      },
+      {
+        "version": "20261116_04",
+        "migration_sha256": "39956e5e33572225ac7ad1800acef1b11bd1a109c12e6bd0beddb8c542617716",
+        "receipt": "DD086-16_04-1795579994",
+        "created_at": "2026-11-25T12:13:15.205310+08:00"
+      },
+      {
+        "version": "20261124_01",
+        "migration_sha256": "4facdf3a9e85ea01de0cf8238fcc3b4d24a9a91a446bfbe052285f6347ee83d0",
+        "receipt": "OWNER-AUTHORIZED-20261125-CONTROLLED-PUBLICATION",
+        "created_at": "2026-11-25T04:45:39.454749+08:00"
+      },
+      {
+        "version": "20261124_02",
+        "migration_sha256": "d782e198630f647629a7e59b49e091e25ab133a980b615cc1578a085192319ca",
+        "receipt": "DD086-24_02-1795580000",
+        "created_at": "2026-11-25T12:13:20.772879+08:00"
+      },
+      {
+        "version": "20261124_03",
+        "migration_sha256": "b70d073c96ca45e9009010069a09b2d0fa7bd970107c053ea75e3a648ab751a2",
+        "receipt": "DD086-24_03-1795580039",
+        "created_at": "2026-11-25T12:13:59.575275+08:00"
+      },
+      {
+        "version": "20261125_01",
+        "migration_sha256": "96fe55bd80c3902615df5490f04ff74fbbb4ad570a1923a43d7b2cf9d050165c",
+        "receipt": "OWNER-AUTHORIZED-20261125-B7-RESPONDENT-ISOLATION",
+        "created_at": "2026-11-25T16:10:18.732081+08:00"
+      },
+      {
+        "version": "20261125_02",
+        "migration_sha256": "14fe6c26bf0d4a2ba971de7c080e89434c1cc0e12c90c8f34c3c046e9d7c1694",
+        "receipt": "OWNER-AUTHORIZED-20261125-CQ-PUBLICATION-PRINCIPAL",
+        "created_at": "2026-11-25T13:19:00.955643+08:00"
+      },
+      {
+        "version": "20261125_03",
+        "migration_sha256": "6146277b7f183c38b516ec40464681883e3849cad559804b9bbc0009d631c3ae",
+        "receipt": "OWNER-AUTHORIZED-20261125-CQ-PUBLICATION-PRINCIPAL",
+        "created_at": "2026-11-25T13:20:28.659714+08:00"
+      },
+      {
+        "version": "20261125_04",
+        "migration_sha256": "4c9a5d92cfd2f0b88b88e6695d9449672c068731f62b1444e9fc660735901100",
+        "receipt": "OWNER-AUTHORIZED-20261125-CQ-COLLECTION-STATE",
+        "created_at": "2026-11-25T18:30:53.880860+08:00"
+      },
+      {
+        "version": "20261125_05",
+        "migration_sha256": "b1245282a538a87ec50d94e32dbd12b45c3eeb8d7bffb238b72febec735e0aaf",
+        "receipt": "OWNER-AUTHORIZED-20261125-CQ-COLLECTION-CLOSURE",
+        "created_at": "2026-11-25T19:50:50.589771+08:00"
+      }
+    ],
+    "_counts": {
+      "cq_sessions": 146,
+      "cq_submission_receipts": 129,
+      "cq_effective_answers": 1846,
+      "cq_campaigns": 2,
+      "cq_manifest_releases": 2,
+      "cq_question_assignments": 26
+    }
+  }
+}

@@ -27,6 +27,7 @@ from sitewise.repositories.catalog_repository import CatalogRepository
 from sitewise.services.assessment_service import AssessmentService
 from sitewise.services.explanation_service import ExplanationService
 from sitewise.services.report_service import ReportService
+from sitewise.services.report_measurement import resolve_report_measurement
 
 router = APIRouter()
 
@@ -318,9 +319,35 @@ def assessment_report(
         session, analytics
     ).latest_for_assessment(assessment)
 
+    # The questionnaire association: marketplace assessment -> M2 (already
+    # resolved and owner-checked inside ``payload``) -> campaign -> frozen
+    # snapshot. It carries identity and admission only, never a count, so this
+    # read cannot publish a withheld finding. A questionnaire store that cannot
+    # be reached degrades the section with a named reason; it never fails the
+    # report, and it never renders as a measured zero.
+    measurement = resolve_report_measurement(
+        record=record,
+        actor_user_id=user.user_id,
+        ee01_factory=_ee01_service_for_report,
+    )
+
     return ReportService(session).generate_assessment_report(
         assessment=record,
         property_report=property_report,
         explanation=explanation,
         evidence=evidence,
+        measurement=measurement,
     )
+
+
+def _ee01_service_for_report():
+    """The restricted-principal EE-01 service, resolved lazily.
+
+    Imported inside the call because the dependency lives on the questionnaire
+    router, which imports this package's models. Resolving it lazily also keeps
+    an unconfigured questionnaire store from breaking the import graph — the
+    resolver catches the resulting 503 and reports ``UNAVAILABLE``.
+    """
+    from sitewise.api.v1.customer_questionnaire import get_ee01_service
+
+    return get_ee01_service()

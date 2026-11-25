@@ -1,0 +1,325 @@
+{
+  "checkpoint": "CP-04-DETERMINISTIC-GATE",
+  "generated_at": "2026-11-25",
+  "network_calls": 0,
+  "model_calls": 0,
+  "evidence_class": "SYNTHETIC_FIXTURE",
+  "note": "A golden output is a specification, not a model result. Nothing here is evidence of prompt quality.",
+  "summary": {
+    "cases": 11,
+    "negatives": 20,
+    "golden_failures": 0,
+    "fixture_defects": 0,
+    "dev": 5,
+    "heldout": 6
+  },
+  "records": [
+    {
+      "id": "bdj_undecided_scalar",
+      "family": "bdj",
+      "split": "dev",
+      "intent": "One UNDECIDED answer. A correct response names it as a source-confirmed gap and cites it.",
+      "expected": {
+        "recommendations": "exactly one",
+        "status": "MOST_SUGGESTED",
+        "must_cite": [
+          "M2V2-01"
+        ],
+        "must_not_claim": true
+      },
+      "golden": {
+        "outcome": "ACCEPT"
+      },
+      "negatives": [
+        {
+          "label": "cites a definite item as the gap",
+          "expect_code": "BDJ_OBJECTIVE_SOURCE_NOT_SUPPORTING",
+          "actual_code": "BDJ_OBJECTIVE_SOURCE_NOT_SUPPORTING",
+          "verdict": "PASS"
+        },
+        {
+          "label": "most-suggested with no source",
+          "expect_code": "BDJ_OBJECTIVE_SOURCE_REQUIRED",
+          "actual_code": "BDJ_OBJECTIVE_SOURCE_REQUIRED",
+          "verdict": "PASS"
+        },
+        {
+          "label": "objective phrased as a question",
+          "expect_code": "BDJ_OBJECTIVE_PHRASING_INVALID",
+          "actual_code": "BDJ_OBJECTIVE_PHRASING_INVALID",
+          "verdict": "PASS"
+        },
+        {
+          "label": "claims demand",
+          "expect_code": "BDJ_OBJECTIVE_CLAIM_NOT_ALLOWED",
+          "actual_code": "BDJ_OBJECTIVE_CLAIM_NOT_ALLOWED",
+          "verdict": "PASS"
+        }
+      ]
+    },
+    {
+      "id": "bdj_priced_hypothesis",
+      "family": "bdj",
+      "split": "dev",
+      "intent": "A priced offer plus an identified but untested hypothesis. The definite offer may be cited as the subject of the uncertainty.",
+      "expected": {
+        "recommendations": "exactly one",
+        "status": "MOST_SUGGESTED",
+        "must_cite": [
+          "M2V2-18"
+        ],
+        "may_also_cite": [
+          "M2V2-14",
+          "M2V2-11"
+        ],
+        "construct_family": "STATED_PRICE_ACCEPTABILITY"
+      },
+      "golden": {
+        "outcome": "ACCEPT"
+      },
+      "negatives": [
+        {
+          "label": "definite offer alone, no establishing ref",
+          "expect_code": "BDJ_OBJECTIVE_SOURCE_NOT_SUPPORTING",
+          "actual_code": "BDJ_OBJECTIVE_SOURCE_NOT_SUPPORTING",
+          "verdict": "PASS"
+        },
+        {
+          "label": "construct collides with a fixed objective",
+          "expect_code": "BDJ_V2_CONSTRUCT_COLLIDES_WITH_FIXED_OBJECTIVE",
+          "actual_code": "BDJ_V2_CONSTRUCT_COLLIDES_WITH_FIXED_OBJECTIVE",
+          "verdict": "PASS"
+        }
+      ]
+    },
+    {
+      "id": "bdj_all_definite",
+      "family": "bdj",
+      "split": "dev",
+      "intent": "Every declaration is a decision. A compliant response proposes nothing and does not dress a decision up as a gap.",
+      "expected": {
+        "recommendations": "empty array (preferred) or a single SUGGESTED with no source_refs",
+        "status": null
+      },
+      "golden": {
+        "outcome": "ACCEPT"
+      },
+      "negatives": [
+        {
+          "label": "invents a gap from a definite decision",
+          "expect_code": "BDJ_OBJECTIVE_SOURCE_NOT_SUPPORTING",
+          "actual_code": "BDJ_OBJECTIVE_SOURCE_NOT_SUPPORTING",
+          "verdict": "PASS"
+        }
+      ]
+    },
+    {
+      "id": "bdj_unsuitable_for_customers",
+      "family": "bdj",
+      "split": "heldout",
+      "intent": "The undecided item is a cost/funding decision. A customer cannot report it, so proposing it as a customer-research gap is wrong.",
+      "expected": {
+        "suitability": "NOT_SUITABLE",
+        "status": "must not be MOST_SUGGESTED with a customer construct"
+      },
+      "golden": {
+        "outcome": "ACCEPT"
+      },
+      "negatives": [
+        {
+          "label": "unsuitable construct proposed as a customer gap",
+          "expect_code": "BDJ_V2_UNSUITABLE_PROPOSED_AS_GAP",
+          "actual_code": "BDJ_V2_UNSUITABLE_PROPOSED_AS_GAP",
+          "verdict": "PASS"
+        }
+      ]
+    },
+    {
+      "id": "bdj_duplicate_construct",
+      "family": "bdj",
+      "split": "heldout",
+      "intent": "Two proposals measure the same construct on the same source. Only one may survive.",
+      "expected": {
+        "recommendations": "exactly one",
+        "dedupe_on": "construct + source"
+      },
+      "golden": {
+        "outcome": "ACCEPT"
+      },
+      "negatives": [
+        {
+          "label": "same construct, same source, twice",
+          "expect_code": "BDJ_V2_DUPLICATE_CONSTRUCT",
+          "actual_code": "BDJ_V2_DUPLICATE_CONSTRUCT",
+          "verdict": "PASS"
+        }
+      ]
+    },
+    {
+      "id": "bdj_conflicting_declarations",
+      "family": "bdj",
+      "split": "heldout",
+      "intent": "An exploration priority sits beside a hypothesis explicitly not established. Citing the hypothesis as an established gap is wrong.",
+      "expected": {
+        "must_not_cite": [
+          "M2V2-18"
+        ],
+        "may_cite": [
+          "M2V2-11"
+        ]
+      },
+      "golden": {
+        "outcome": "ACCEPT"
+      },
+      "negatives": [
+        {
+          "label": "cites NOT_ESTABLISHED as an established gap",
+          "expect_code": "BDJ_OBJECTIVE_SOURCE_NOT_SUPPORTING",
+          "actual_code": "BDJ_OBJECTIVE_SOURCE_NOT_SUPPORTING",
+          "verdict": "PASS"
+        }
+      ]
+    },
+    {
+      "id": "qg_complete_offer",
+      "family": "qg",
+      "split": "dev",
+      "intent": "Every mandatory fact is present. A DRAFT single-select question is expected, with four complete options and an explicit opt-out.",
+      "expected": {
+        "decision": "DRAFT",
+        "response_format": "SINGLE_CHOICE",
+        "options": "2-12, codes and labels unique, order 0..n-1",
+        "routing": "keyed by exact codes, every value END",
+        "denominator": "names the declared codes"
+      },
+      "golden": {
+        "outcome": "ACCEPT"
+      },
+      "negatives": [
+        {
+          "label": "routing keyed by labels instead of codes",
+          "expect_code": "QG_ROUTING_DRIFT",
+          "actual_code": "QG_ROUTING_DRIFT",
+          "verdict": "PASS"
+        },
+        {
+          "label": "denominator names no code",
+          "expect_code": "QG_DENOMINATOR_DRIFT",
+          "actual_code": "QG_DENOMINATOR_DRIFT",
+          "verdict": "PASS"
+        },
+        {
+          "label": "invents a price not in confirmed facts",
+          "expect_code": "QG_UNSOURCED_NUMBER",
+          "actual_code": "QG_UNSOURCED_NUMBER",
+          "verdict": "PASS"
+        },
+        {
+          "label": "abstention that still contains a question",
+          "expect_code": "QG_ABSTENTION_CONTAINS_QUESTION",
+          "actual_code": "QG_ABSTENTION_CONTAINS_QUESTION",
+          "verdict": "PASS"
+        },
+        {
+          "label": "measurement options disagree with response_codes",
+          "expect_code": "QG_FIXED_OPTION_MISMATCH",
+          "actual_code": "QG_FIXED_OPTION_MISMATCH",
+          "verdict": "PASS"
+        }
+      ]
+    },
+    {
+      "id": "qg_missing_price",
+      "family": "qg",
+      "split": "dev",
+      "intent": "The objective needs a price that was never confirmed. The correct answer is a justified abstention naming PRICE, with no draft.",
+      "expected": {
+        "decision": "ABSTAIN_NEEDS_REVIEW",
+        "question": "empty",
+        "missing_business_facts": "includes PRICE",
+        "fixed_measurement": "null"
+      },
+      "golden": {
+        "outcome": "ACCEPT"
+      },
+      "negatives": [
+        {
+          "label": "drafts a question anyway",
+          "expect_code": "QG_ABSTENTION_CONTAINS_QUESTION",
+          "actual_code": "QG_ABSTENTION_CONTAINS_QUESTION",
+          "verdict": "PASS"
+        },
+        {
+          "label": "abstains with nothing missing",
+          "expect_code": "QG_ABSTENTION_WITHOUT_MISSING_FACTS",
+          "actual_code": "QG_ABSTENTION_WITHOUT_MISSING_FACTS",
+          "verdict": "PASS"
+        }
+      ]
+    },
+    {
+      "id": "qg_ambiguous_measurement",
+      "family": "qg",
+      "split": "heldout",
+      "intent": "The objective asks why customers behave a certain way. A fixed-option question cannot measure it; the correct answer is abstention on OBJECTIVE, not a fabricated closed question.",
+      "expected": {
+        "decision": "ABSTAIN_NEEDS_REVIEW",
+        "missing_business_facts": "includes OBJECTIVE"
+      },
+      "golden": {
+        "outcome": "ACCEPT"
+      },
+      "negatives": [
+        {
+          "label": "forces a closed question onto an open causal objective",
+          "expect_code": "QG_UNSOURCED_NUMBER",
+          "actual_code": "QG_UNSOURCED_NUMBER",
+          "verdict": "PASS"
+        }
+      ]
+    },
+    {
+      "id": "qg_binary_format",
+      "family": "qg",
+      "split": "heldout",
+      "intent": "A binary choice must carry exactly two options and both codes in the routing and the denominator.",
+      "expected": {
+        "decision": "DRAFT",
+        "response_format": "BINARY_CHOICE",
+        "options": "exactly 2"
+      },
+      "golden": {
+        "outcome": "ACCEPT"
+      },
+      "negatives": [
+        {
+          "label": "binary choice with four options",
+          "expect_code": "QG_BINARY_OPTION_COUNT_INVALID",
+          "actual_code": "QG_BINARY_OPTION_COUNT_INVALID",
+          "verdict": "PASS"
+        }
+      ]
+    },
+    {
+      "id": "qg_unsourced_offer_component",
+      "family": "qg",
+      "split": "heldout",
+      "intent": "A size that was never confirmed must not appear in the question, even when it is plausible.",
+      "expected": {
+        "decision": "DRAFT or ABSTAIN",
+        "must_not_contain": "16 oz"
+      },
+      "golden": {
+        "outcome": "ACCEPT"
+      },
+      "negatives": [
+        {
+          "label": "invents a package size",
+          "expect_code": "QG_UNSOURCED_NUMBER",
+          "actual_code": "QG_UNSOURCED_NUMBER",
+          "verdict": "PASS"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "BDJ_OBJECTIVE_M2V2": {
+    "prompt_version": "BDJ-OBJECTIVE-4-M2V2-CAND",
+    "fingerprint_sha256": "3c564e5420a3ae5283a315ddbcc22c129bf2974b8fb4178ba92809357c0d4776",
+    "instruction_chars": 3276,
+    "system_message_chars": 3719,
+    "examples": 3,
+    "files": [
+      "prompts/bdj_objective_v4.json",
+      "prompts/bdj_objective_v4.md"
+    ]
+  },
+  "QG_FIXED_OPTION": {
+    "prompt_version": "QG-FIXED-OPTION-4-CAND",
+    "fingerprint_sha256": "7323e8e135fca989335f072d107ce5374c734358ca6d08223a1f32b7bbccc5c1",
+    "instruction_chars": 3751,
+    "system_message_chars": 4192,
+    "examples": 0,
+    "files": [
+      "prompts/qg_fixed_option_v4.json",
+      "prompts/qg_fixed_option_v4.md"
+    ]
+  }
+}

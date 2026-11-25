@@ -2,6 +2,7 @@ import 'package:jaspr_test/jaspr_test.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'package:sitewise_jaspr_web/core/di/app_locator.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/assessment_api.dart';
+import 'package:sitewise_jaspr_web/features/assessment/data/stage5_collection_api.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/stage5_composed_api.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/stage5_composed_questionnaire.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/stage5_publication_api.dart';
@@ -117,6 +118,50 @@ class _FakePublicationPort implements Stage5PublicationPort {
       _report(state: 'ALREADY_PUBLISHED', alreadyPublished: true),
     );
   }
+}
+
+/// Serves the collection read and the target write.
+///
+/// The candidate target is persisted on the server (DD-097), so "Set" is a
+/// write, not a local flag: without a port the control reports the transport's
+/// refusal and never relabels to "Update". The fake echoes the target it was
+/// given, which is what the real route does.
+class _FakeCollectionPort implements Stage5CollectionPort {
+  Map<String, dynamic> _snapshot = const {'lifecycle_state': 'OPEN'};
+
+  int reads = 0;
+  int writes = 0;
+
+  @override
+  Future<ApiResult<CollectionSnapshot>> read({
+    required String assessmentId,
+  }) async {
+    reads++;
+    return ApiResult<CollectionSnapshot>.success(CollectionSnapshot(_snapshot));
+  }
+
+  @override
+  Future<ApiResult<CollectionSnapshot>> setTarget({
+    required String assessmentId,
+    required int target,
+    required String requestId,
+  }) async {
+    writes++;
+    _snapshot = {
+      'lifecycle_state': 'OPEN',
+      'progress': {'respondent_target': target},
+    };
+    return ApiResult<CollectionSnapshot>.success(CollectionSnapshot(_snapshot));
+  }
+
+  @override
+  Future<ApiResult<CollectionSnapshot>> endCollection({
+    required String assessmentId,
+    required String requestId,
+    required String completionPolicy,
+    required String inProgressDisposition,
+    String? reason,
+  }) async => throw StateError('This fixture never ends collection.');
 }
 
 PublicationReport _report({
@@ -346,12 +391,14 @@ void main() {
     final publication = _FakePublicationPort(
       previewResult: ApiResult<PublicationReport>.success(_report()),
     );
+    final collection = _FakeCollectionPort();
 
     tester.pumpComponent(
       CustomerQuestionnaireStep5(
         assessmentId: stage5MarketplaceAssessmentId,
         api: port,
         publication: publication,
+        collection: collection,
       ),
     );
     for (var i = 0; i < 8; i++) {

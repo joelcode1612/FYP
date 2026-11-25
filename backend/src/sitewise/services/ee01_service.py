@@ -206,10 +206,15 @@ class Ee01Service:
         cells = list(c.execute(text('SELECT code,x,v,percentage,diagnostic_percentage,status FROM ee01_category_cells WHERE snapshot_id=:id ORDER BY code'), {'id': snapshot_id}).mappings())
         return plain({'contract_version': 'ee01-diagnostic/1', **dict(row), 'cells': [dict(x) for x in cells]})
 
-    def read(self, actor, assessment_id, campaign_id, snapshot_id):
+    def read(self, actor, assessment_id, campaign_id, snapshot_id, synthetic_preview=None):
         with self.connection(actor) as c:
             from sitewise.services.synthetic_preview_boundary import boundary_run
-            boundary_run(c,'ee01_measurement_snapshots',{'id':str(snapshot_id)},self.synthetic_preview)
+            # ``synthetic_preview`` is a per-call override because the capability
+            # is bound to the caller, not to the service instance: a service
+            # built once per request by a dependency cannot know the run until
+            # the record naming it is read. DD-126.
+            boundary_run(c,'ee01_measurement_snapshots',{'id':str(snapshot_id)},
+                         synthetic_preview if synthetic_preview is not None else self.synthetic_preview)
             return self._read(c, snapshot_id, assessment_id, campaign_id)
 
     def explanation_binding(self, actor, assessment_id):
@@ -228,7 +233,7 @@ class Ee01Service:
             if not campaign:
                 raise CqRefused('EXPLANATION_BINDING_NOT_FOUND', 404)
             rows = c.execute(text(
-                'SELECT id,slot_id,question_version,fingerprint,created_at '
+                'SELECT id,slot_id,question_version,fingerprint,cutoff,created_at '
                 'FROM ee01_measurement_snapshots '
                 'WHERE assessment_id=:aid AND campaign_id=:cid AND owner_user_id=:actor '
                 'ORDER BY created_at DESC,id DESC'),
@@ -242,6 +247,12 @@ class Ee01Service:
                     'slot_id': row['slot_id'],
                     'question_version': row['question_version'],
                     'fingerprint': row['fingerprint'],
+                    # ``cutoff`` is identity, not a measurement: a report that
+                    # names a snapshot without its cutoff cannot say which frozen
+                    # cohort it describes, and two cutoffs of one slot are two
+                    # cohorts rather than two revisions of one finding. Additive
+                    # to ``ee01-explanation-binding/1`` — no existing key moved.
+                    'cutoff': row['cutoff'],
                     'context_hash': context['context_hash'],
                     'admission_state': context['status'],
                 })
@@ -268,10 +279,11 @@ class Ee01Service:
                   {'id': uuid4(), 'sid': row['id'], 'hash': ch, 'ctx': json.dumps(context),
                    'status': 'REPORT_FINDINGS_WITHHELD_NO_AUTHORIZED_SOURCE'})
 
-    def report_readback(self, actor, assessment_id, campaign_id, snapshot_id):
+    def report_readback(self, actor, assessment_id, campaign_id, snapshot_id, synthetic_preview=None):
         with self.connection(actor) as c:
             from sitewise.services.synthetic_preview_boundary import boundary_run
-            boundary_run(c,'ee01_measurement_snapshots',{'id':str(snapshot_id)},self.synthetic_preview)
+            boundary_run(c,'ee01_measurement_snapshots',{'id':str(snapshot_id)},
+                         synthetic_preview if synthetic_preview is not None else self.synthetic_preview)
             self._read(c, snapshot_id, assessment_id, campaign_id)
             return self._report_context(c,snapshot_id)
 

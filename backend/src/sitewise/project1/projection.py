@@ -16,9 +16,26 @@ class M2SourceProjection:
     def __init__(self, repository):
         self.repo = repository
 
-    def read(self, assessment_id: UUID, actor_id: UUID, expected_revision: int, *, include_inventory: bool = False) -> dict:
+    def read(self, assessment_id: UUID, actor_id: UUID, expected_revision: int, *, include_inventory: bool = False, read_only: bool = False) -> dict:
+        """Build the projection packet for one confirmed assessment revision.
+
+        ``read_only`` exists for callers that only need the *fingerprint* and must
+        not take a row lock. The default takes ``SELECT … FOR UPDATE`` on the
+        assessment, which is correct for every write path that builds a packet
+        before mutating something. A page read that merely wants to compare a
+        stored ``source_fingerprint`` against the current one must not lock the
+        row: doing so serialised the whole assessment list behind one assessment
+        being edited (DD-122).
+
+        The packet is built by exactly the same code either way, so the
+        fingerprint a read-only caller computes is the fingerprint a writer
+        would have stored. Only the locking differs.
+        """
         try:
-            assessment = self.repo.get_assessment_for_update(assessment_id, actor_id)
+            if read_only:
+                assessment = self.repo.get_assessment(assessment_id, actor_id)
+            else:
+                assessment = self.repo.get_assessment_for_update(assessment_id, actor_id)
             if assessment is None:
                 raise NotFoundError('Assessment not found.')
             if assessment['revision'] != expected_revision:

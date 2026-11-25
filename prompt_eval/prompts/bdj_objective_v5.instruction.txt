@@ -1,0 +1,29 @@
+Read the confirmed M2 V2 declarations in source_data.declarations and propose ADDITIONAL research objectives. The six fixed objectives O1-O6 (Concept Interest, Product Preference, Price Acceptability, Service Preference, Experience Preference, Segment Interest) already exist for every assessment. They are NOT yours to produce: never restate, regenerate, renumber, retire or re-rank them. You may only name the one each proposal sits beside in linked_fixed_objective, or NONE.
+
+An information gap is established in one of two ways, and both are valid.
+The first is an answer whose value is exactly UNDECIDED, UNSURE or UNKNOWN: the entrepreneur has not decided.
+The second is a confirmed declaration stating an unresolved CUSTOMER uncertainty: an identified but untested hypothesis (M2V2-18 hypothesis_status HYPOTHESIS_IDENTIFIED), a declared validation requirement or exploration priority (M2V2-11 VALIDATE_CHOICE or EXPLORE), or a declared research topic (M2V2-09).
+For the second shape you MAY cite a definite or structured declaration, because it is the SUBJECT of the uncertainty rather than the uncertainty itself: a priced offer (M2V2-14 decision PRICED), a chosen product, or a multi-select topic list (M2V2-09). Cite structured and multi-select values exactly as stored, including when the uncertainty lives in one field of the object.
+A definite declaration on its own is NOT a gap. DINE_IN, TAKEAWAY, COFFEE, STUDENTS or a decided price is a decision. Citing one without another declaration that establishes the uncertainty is invalid. Never turn every confirmed declaration into an uncertainty.
+
+Return 0 to 3 proposals. Return an empty recommendations array when no additional objective is justified. An empty array is a correct answer, not a failure; do not invent an objective to fill it.
+
+Every proposal MUST carry all ten fields, each one plain sentence unless stated otherwise:
+business_uncertainty - the specific unresolved thing, named from the declarations. Null when recommendation_status is SUGGESTED.
+source_refs - 1 to 8 pointers copied from the declarations that establish the uncertainty. Empty when SUGGESTED.
+research_objective - begins "To investigate" or "To explore"; a statement, never a question, never ending in a question mark.
+research_justification - one or two sentences on why this uncertainty matters to the business. Never labelled "Justification:" or "Counterargument:".
+business_decision - the concrete decision this evidence would inform, named as a decision (for example whether to commit to one priced offer). Never a claim that the decision is correct.
+customer_research_suitability - SUITABLE, PARTIALLY_SUITABLE or NOT_SUITABLE, followed by a short clause naming why. Use NOT_SUITABLE when the question is a fact the entrepreneur must decide rather than a customer perception; a customer cannot report the entrepreneur's costs or intentions.
+measurement_construct - the named construct to be measured, in the form STATED_<X>, for example STATED_PRICE_ACCEPTABILITY_FIXED_HYPOTHETICAL_OFFER. One construct per proposal.
+measurement_approach - the preliminary instrument in at most two sentences: response format, who answers, and what is shown to them. Never write the question wording, the options, the sample size or the routing; QG does that later.
+expected_evidence - what a usable result would consist of, and what it would not establish. One sentence.
+interpretation_limitations - the specific limits on what the result may be read to mean. One sentence.
+
+Copy answer_revision_id and item_version_id character for character from the chosen declaration. Never synthesise, shorten, reformat or reuse an identifier from a different item. If you cannot copy them exactly, return no proposal for that gap.
+
+Avoid duplicate objectives. Two proposals are duplicates when they measure the same measurement_construct on the same source declaration, even if the wording differs. Return the stronger one only.
+
+Never invent a price, product, package size, service format, location, customer characteristic, competitor or business uncertainty that the declarations do not state. Never claim demand, willingness to pay, profitability, market size, guaranteed success or viability. Never approve, authorise fielding or assert that a proposal is scientifically accepted: every proposal is candidate-only and requires entrepreneur review.
+
+Return only bdj-objective-proposal/2 JSON. Write densely and omit nothing. Do not explain your reasoning, do not summarise the declarations, and do not add fields.

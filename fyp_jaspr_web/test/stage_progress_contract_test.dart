@@ -87,6 +87,39 @@ const _serverReasonVocabulary = <String>[
   'QUESTION_GENERATION_AUTHORIZATION_REQUIRED',
   'STAGE_4_INCOMPLETE',
   'QUESTIONNAIRE_PREVIEW_CONTRACT_UNADOPTED',
+
+  // Stage 3 has a second, larger vocabulary. `_stage3_reason()` forwards the
+  // first failing T3 predicate's reason verbatim, so these reach the wire as a
+  // stage reason even though the progress contract never names them.
+  ..._stage3PredicateVocabulary,
+];
+
+/// Every reason a `sitewise-stage3-completion/2` predicate can report when it
+/// fails. T3-06's `NO_UNRESOLVED_BLOCKERS` and the satisfaction reasons
+/// (`CONFIRMATION_CURRENT`, `CONTEXT_BOUND`, `EVALUATION_AUTHORIZED`,
+/// `ALL_OBJECTIVES_RESOLVED`, `OWNER_VERIFIED`, `ZERO_PROPOSALS_VALID_OUTCOME`)
+/// are deliberately absent: a satisfied predicate is never a blocker, so it can
+/// never become a stage's `reason`.
+const _stage3PredicateVocabulary = <String>[
+  'SUBJECT_NOT_FOUND', // T3-01
+  'OWNERSHIP_MISMATCH', // T3-01
+  'NO_CURRENT_CONFIRMATION', // T3-02
+  'CONFIRMATION_STALE', // T3-02
+  'NO_CONTEXT_FOR_CONFIRMATION', // T3-03
+  'CONTEXT_NOT_CURRENT', // T3-03
+  'NO_EVALUATION', // T3-04
+  'EVALUATION_NOT_VALID', // T3-04
+  'EVALUATION_NOT_AUTHORIZED', // T3-04
+  'EVALUATION_PROVENANCE_MISMATCH', // T3-04
+  'EVALUATION_CONTEXT_MISMATCH', // T3-04
+  'EVALUATION_RULESET_SUPERSEDED', // T3-04
+  'SOURCE_FINGERPRINT_UNAVAILABLE', // T3-04
+  'ZERO_PROPOSALS_WITHOUT_EVALUATION', // T3-05
+  'UNDECIDED_PROPOSAL', // T3-05
+  'APPROVED_NOT_ADMITTED', // T3-05
+  'OBJECTIVES_NOT_REGISTERED', // T3-06
+  'RESEARCH_TOPIC_ANSWER_UNAVAILABLE', // T3-06
+  'BLOCKERS_PRESENT', // T3-06
 ];
 
 /// Tokens the contract says the entrepreneur's own action can clear.
@@ -102,6 +135,11 @@ const _yourAction = <String>{
   'CANDIDATE_REVIEW_PENDING',
   'CANDIDATE_REJECTED',
   'STAGE_4_INCOMPLETE',
+  'NO_CURRENT_CONFIRMATION',
+  'CONFIRMATION_STALE',
+  'UNDECIDED_PROPOSAL',
+  'OBJECTIVES_NOT_REGISTERED',
+  'RESEARCH_TOPIC_ANSWER_UNAVAILABLE',
 };
 
 void main() {
@@ -228,6 +266,29 @@ void main() {
             reason: '$token fell through to the generic fallback');
         expect(copy.message, isNot(contains('_')));
       }
+    });
+
+    test('the stage-3 predicate vocabulary gets a sentence, not a code', () {
+      // Live copy was "Held: No evaluation" — the lock icon and the system
+      // prefix were right, the body was `NO_EVALUATION` de-tokenised. The
+      // fallback did its job (the blocker stayed visible), but a reader learns
+      // nothing from it. This pins the whole T3 vocabulary so a predicate added
+      // on the server shows up here instead of on the page.
+      for (final token in _stage3PredicateVocabulary) {
+        final message = stageReasonMessage(token)!;
+        expect(message.endsWith('.'), isTrue,
+            reason: '$token is still falling through to the fallback');
+        expect(message.length, greaterThan(40),
+            reason: '$token has a stub, not an explanation');
+        // The fallback would have produced exactly the de-tokenised token.
+        expect(message.toLowerCase(),
+            isNot('${token.toLowerCase().replaceAll('_', ' ')}.'));
+      }
+      // The exact state the operator saw, spelled out.
+      expect(stageReasonMessage('NO_EVALUATION'),
+          contains('business evaluation'));
+      expect(stageReasonIsYourAction('NO_EVALUATION'), isFalse,
+          reason: 'the BDJ evaluation is a governed dispatch, not a page action');
     });
 
     test('the owner of each reason matches the contract', () {
