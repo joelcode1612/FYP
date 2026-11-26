@@ -61,30 +61,30 @@ class _ProviderListingsMobilePageState
     ServiceLocator.listingsRevision.addListener(_reloadOnMutation);
   }
 
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     ServiceLocator.listingsRevision.removeListener(_reloadOnMutation);
-    WidgetsBinding.instance.removeObserver(this);
     _search.dispose();
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // An administrator may approve while this screen is backgrounded.
-    if (state == AppLifecycleState.resumed && mounted) _load();
+    // Refresh listings when returning to the application.
+    // An administrator may have approved a property.
+    if (state == AppLifecycleState.resumed && mounted) {
+      _load();
+    }
   }
 
   void _reloadOnMutation() {
-    if (mounted) _load();
+    if (mounted) {
+      _load();
+    }
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    // An administrator may approve while this screen is backgrounded.
-    if (state == AppLifecycleState.resumed && mounted) _load();
-  }
 
   Future<void> _load() async {
     final role = ref.read(authNotifierProvider).user?.role ?? AppRole.owner;
