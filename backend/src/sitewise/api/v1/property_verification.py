@@ -215,7 +215,21 @@ async def upload_document(
     document_type: str = Form(...),
 ) -> dict:
     """Upload listing or ownership evidence. The storage key is generated
-    server-side; the file never touches a public URL."""
+    server-side; the file never touches a public URL.
+
+    Two boundaries apply, deliberately different in kind:
+
+    * the **general edit lock** (``require_mutable_listing``) still applies —
+      a published or awaiting-review listing accepts no new evidence;
+    * ownership evidence is the owner's own act, so its authority is the
+      ownership row, not the role name. An account provisioned before the
+      owner/entrepreneur role split still owns its properties and must be able
+      to prove title, while an assigned agent or an administrator never can.
+
+    Uploading evidence is NOT gated on the agent-assignment edit lock that
+    freezes listing fields once inspection starts (``properties.py``): the
+    owner has to be able to supply ownership proof while the agent inspects.
+    """
     provider_scope.require_mutable_listing(
         session, listing_id=property_id, role=current.role
     )
@@ -223,14 +237,24 @@ async def upload_document(
         raise HTTPException(
             status_code=422, detail="verification_type must be listing or ownership."
         )
-    if verification_type == "ownership" and rbac.canonical_role(current.role) != rbac.ROLE_OWNER:
-        raise HTTPException(status_code=403, detail="Only the Property Owner uploads ownership proof.")
+    if verification_type == "ownership":
+        found, owner = provider_scope.listing_owner(session, property_id)
+        if not found:
+            raise HTTPException(status_code=404, detail="Property not found.")
+        if owner is None or str(owner) != str(current.user_id):
+            raise HTTPException(status_code=403, detail="Only the Property Owner uploads ownership proof.")
     if verification_type == "listing" and rbac.canonical_role(current.role) != rbac.ROLE_AGENT:
         raise HTTPException(status_code=403, detail="Only the Agent uploads inspection evidence.")
     limit = storage.max_bytes()
     data = await file.read(limit + 1)
     if len(data) > limit:
-        raise HTTPException(status_code=413, detail="Ownership evidence exceeds the upload size limit.")
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"{'Ownership' if verification_type == 'ownership' else 'Inspection'} "
+                f"evidence exceeds the {limit // (1024 * 1024)} MB upload limit."
+            ),
+        )
     try:
         document = PropertyVerificationService(session).add_document(
             property_id,

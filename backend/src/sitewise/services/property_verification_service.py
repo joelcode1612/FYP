@@ -600,7 +600,7 @@ class PropertyVerificationService:
                 document_type=document_type.strip()[:60],
                 original_filename=(original_filename or "").strip() or f"document{ext}",
                 storage_key=key,
-                mime_type=(content_type or "").split(";")[0].strip().lower(),
+                mime_type=storage.canonical_mime(ext),
                 file_size=len(data),
                 uploaded_by=uploader_id,
             )

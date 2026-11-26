@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -182,7 +183,17 @@ class MobileApiClient implements ApiClient {
     final request = http.MultipartRequest('POST', _uri(path))
       ..fields.addAll(fields)
       ..files.add(
-        http.MultipartFile.fromBytes(fileField, bytes, filename: filename),
+        http.MultipartFile.fromBytes(
+          fileField,
+          bytes,
+          filename: filename,
+          // The part MUST carry the caller's content type. `fromBytes`
+          // defaults to `application/octet-stream`, and the document endpoint
+          // accepts a file only when the declared MIME type matches the
+          // extension, so omitting this made every PDF/PNG/JPEG upload fail
+          // with 422 "The file content does not match its extension."
+          contentType: _mediaType(contentType),
+        ),
       )
       ..headers[HttpHeaders.authorizationHeader] = 'Bearer $token';
     final streamed = await request.send().timeout(const Duration(seconds: 30));
@@ -214,6 +225,20 @@ class MobileApiClient implements ApiClient {
       <int>[],
       (acc, chunk) => acc..addAll(chunk),
     );
+  }
+
+  /// Parses a declared content type, falling back to the generic binary type.
+  ///
+  /// A malformed or absent declaration must not abort the upload with a
+  /// `FormatException` the UI can only report as "something went wrong": the
+  /// backend verifies the file by its magic bytes, so an honest-but-vague part
+  /// still succeeds while a mismatched one is refused there.
+  MediaType _mediaType(String value) {
+    try {
+      return MediaType.parse(value);
+    } on FormatException {
+      return MediaType('application', 'octet-stream');
+    }
   }
 
   /// FastAPI error shape: `{detail: string}` or `{detail: {code, message}}`.

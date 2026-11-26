@@ -292,6 +292,16 @@ class SphereCaptureController extends ChangeNotifier {
 
   int? get activeTargetId => _activeTargetId;
 
+  /// Human-facing step number in the guided capture sequence. This is
+  /// intentionally separate from targetId, which remains a stable geometry ID.
+  int? get activeCaptureStep {
+    final targetId = _activeTargetId;
+    if (targetId == null) return null;
+    final index = sphereCaptureSequence(planVersion: planVersion)
+        .indexOf(targetId);
+    return index < 0 ? null : index + 1;
+  }
+
   SphereTargetState? get activeTarget {
     final id = _activeTargetId;
     if (id == null) return null;
@@ -791,6 +801,13 @@ class SphereCaptureController extends ChangeNotifier {
     _lastQualityReport = null;
     _notify();
     try {
+      // Let AE/AF settle on the room while the live preview is aligned, then
+      // lock before the first still so that the baseline photograph and the
+      // rest of the sweep share the same settings where the camera supports it.
+      // Locking after target 1 was saved left the first image outside the lock.
+      if (capturedCount == 0) {
+        await _camera.lockCaptureSettings();
+      }
       // Let the pipeline flush before the shutter.
       //
       // CameraX keeps a small pool of in-flight buffers; on a device driven
@@ -893,12 +910,6 @@ class SphereCaptureController extends ChangeNotifier {
         await _haptic();
       } catch (_) {
         // Ignored on purpose.
-      }
-      // The first photograph establishes the exposure and focus for the whole
-      // sweep: AE/AF have now converged on the room rather than on whatever the
-      // preview saw while it was starting.
-      if (capturedCount == 1) {
-        await _camera.lockCaptureSettings();
       }
       _banner = 'Captured!';
       _bannerTimer?.cancel();
@@ -1087,7 +1098,10 @@ class SphereCaptureController extends ChangeNotifier {
       }
     }
     if (next == null) {
-      for (final target in _targets) {
+      for (final targetId in sphereCaptureSequence(planVersion: planVersion)) {
+        final target = _targets.firstWhere(
+          (candidate) => candidate.spec.targetId == targetId,
+        );
         if (!target.captured) {
           next = target;
           break;
@@ -1221,12 +1235,12 @@ class SphereCaptureController extends ChangeNotifier {
 
     // The stitch path continues from the last saved frame, so the guide arrow
     // points at the next target in sequence rather than back at target 1.
-    final capturedIds = <int>[
-      for (final target in _targets)
-        if (target.captured) target.spec.targetId,
-    ]..sort();
-    if (capturedIds.isNotEmpty) {
-      final lastId = capturedIds.last;
+    final capturedFrames = frames
+        .where((frame) => File(frame.imagePath).existsSync())
+        .toList()
+      ..sort((a, b) => a.capturedAt.compareTo(b.capturedAt));
+    if (capturedFrames.isNotEmpty) {
+      final lastId = capturedFrames.last.targetId;
       for (final spec in buildSphereTargets(planVersion: planVersion)) {
         if (spec.targetId == lastId) {
           _lastCapturedDirection = spec.direction;

@@ -1015,7 +1015,7 @@ class _BottomPanel extends StatelessWidget {
           Text(
             active == null
                 ? '${controller.capturedCount} of $total photos saved'
-                : 'Target ${active.spec.targetId} of $total · ${active.spec.ringName}',
+                : 'Capture ${controller.activeCaptureStep ?? controller.capturedCount + 1} of $total · ${active.spec.ringName}',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(

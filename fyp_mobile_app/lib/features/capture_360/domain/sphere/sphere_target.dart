@@ -53,12 +53,13 @@ import 'package:fyp/features/capture_360/domain/virtual_tour/math/vectors.dart';
 // lens — the zenith frame reaches down to ≈57.5° and the upper ring up to
 // ≈72.5° — so the blend seams stay inside overlapping content; re-run
 // tool/sphere_coverage_report.py whenever the lens assumption changes. The ring
-// order is a continuous path (middle → zenith → upper → lower → nadir) so every
-// guided step is at most 90°.
+// target IDs describe geometry; the guided capture order is separate and is
+// middle → upper → lower → zenith → nadir, establishing ring overlaps before
+// the pole caps.
 //
 // The upper ring sweeps backwards so it starts at the yaw where the middle ring
-// ended; that is what keeps the zenith → upper step at 50° instead of the
-// larger jump a return to yaw 0° would cost.
+// ended, preserving continuity when the flow moves from the middle to upper
+// ring.
 
 /// How many directions a complete sphere has.
 const int kSphereTargetCount = 38;
@@ -341,6 +342,26 @@ List<SphereTargetSpec> buildSphereTargets({int planVersion = kSphereCapturePlanV
     ),
   );
   return List<SphereTargetSpec>.unmodifiable(targets);
+}
+
+/// Capture order for new standard-plan sessions. Target IDs remain the
+/// geometry keys persisted to storage and consumed by the backend; this list
+/// only controls the guided order shown to the photographer.
+///
+/// Establish the horizon first, then capture both connecting rings, and leave
+/// the pole caps until ring-to-ring overlap has been recorded. Historical
+/// 56-target sessions retain their original sequence.
+List<int> sphereCaptureSequence({int planVersion = kSphereCapturePlanVersion}) {
+  if (planVersion == kSphereEnhancedPlanVersion) {
+    return List<int>.generate(sphereTargetCountForPlan(planVersion), (i) => i + 1);
+  }
+  return <int>[
+    ...List<int>.generate(12, (i) => i + 1),
+    ...List<int>.generate(12, (i) => i + 14),
+    ...List<int>.generate(12, (i) => i + 26),
+    13,
+    38,
+  ];
 }
 
 /// The sphere's reference frame for a start pose, with the phone's pitch and
