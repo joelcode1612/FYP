@@ -111,6 +111,7 @@ class SphereCaptureController extends ChangeNotifier {
     CaptureSessionStore? sessions,
     String? userId,
     int? propertyId,
+    this.planVersion = kSphereCapturePlanVersion,
     this.backendProcessing = false,
     this.toleranceDeg = kSphereAlignmentToleranceDeg,
     this.exitToleranceDeg = kSphereAlignmentExitDeg,
@@ -132,7 +133,12 @@ class SphereCaptureController extends ChangeNotifier {
        _sessions = sessions,
        _userId = userId,
        _propertyId = propertyId,
-       _qualityAnalyzer = qualityAnalyzer;
+       _qualityAnalyzer = qualityAnalyzer {
+    _targets = <SphereTargetState>[
+      for (final spec in buildSphereTargets(planVersion: planVersion))
+        SphereTargetState(spec: spec),
+    ];
+  }
 
   final RotationSource _rotation;
   final SphereCamera _camera;
@@ -142,6 +148,8 @@ class SphereCaptureController extends ChangeNotifier {
 
   /// Live SiteWise capture sends frames to FastAPI rather than stitching here.
   final bool backendProcessing;
+  final int planVersion;
+  int get targetCount => sphereTargetCountForPlan(planVersion);
   final Stream<Vec3>? _motionStream;
 
   /// Raw gyroscope, rad/s. Null in tests and on a device without one, in which
@@ -195,10 +203,7 @@ class SphereCaptureController extends ChangeNotifier {
 
   StreamSubscription<Vec3>? _gyroSubscription;
 
-  List<SphereTargetState> _targets = <SphereTargetState>[
-    for (final SphereTargetSpec spec in buildSphereTargets())
-      SphereTargetState(spec: spec),
-  ];
+  late List<SphereTargetState> _targets;
 
   SphereCapturePhase _phase = SphereCapturePhase.idle;
   String? _message;
@@ -286,6 +291,16 @@ class SphereCaptureController extends ChangeNotifier {
       _targets.where((SphereTargetState t) => t.captured).length;
 
   int? get activeTargetId => _activeTargetId;
+
+  /// Human-facing step number in the guided capture sequence. This is
+  /// intentionally separate from targetId, which remains a stable geometry ID.
+  int? get activeCaptureStep {
+    final targetId = _activeTargetId;
+    if (targetId == null) return null;
+    final index = sphereCaptureSequence(planVersion: planVersion)
+        .indexOf(targetId);
+    return index < 0 ? null : index + 1;
+  }
 
   SphereTargetState? get activeTarget {
     final id = _activeTargetId;
@@ -439,9 +454,9 @@ class SphereCaptureController extends ChangeNotifier {
   String get progressLabel {
     final target = guideTarget ?? activeTarget;
     if (target == null) {
-      return 'All $kSphereTargetCount targets captured';
+      return 'All $targetCount targets captured';
     }
-    return target.spec.progressLabel;
+    return 'Target ${target.spec.targetId} / ${_targets.length} — ${target.spec.ringLabel}';
   }
 
   /// The sentence above the progress pill.
@@ -460,7 +475,7 @@ class SphereCaptureController extends ChangeNotifier {
       return 'Starting the camera and rotation sensor…';
     }
     if (_phase == SphereCapturePhase.complete) {
-      return 'All $kSphereTargetCount targets captured.';
+      return 'All $targetCount targets captured.';
     }
     if (_phase == SphereCapturePhase.capturing) {
       return 'Saving the photograph…';
@@ -530,7 +545,7 @@ class SphereCaptureController extends ChangeNotifier {
       await _ensureSession();
       // A restored 38-frame session should immediately resume its backend
       // handoff; no camera or local panorama stitch is needed.
-      if (capturedCount >= kSphereTargetCount) {
+      if (capturedCount >= targetCount) {
         _phase = SphereCapturePhase.complete;
         _notify();
         return;
@@ -786,6 +801,13 @@ class SphereCaptureController extends ChangeNotifier {
     _lastQualityReport = null;
     _notify();
     try {
+      // Let AE/AF settle on the room while the live preview is aligned, then
+      // lock before the first still so that the baseline photograph and the
+      // rest of the sweep share the same settings where the camera supports it.
+      // Locking after target 1 was saved left the first image outside the lock.
+      if (capturedCount == 0) {
+        await _camera.lockCaptureSettings();
+      }
       // Let the pipeline flush before the shutter.
       //
       // CameraX keeps a small pool of in-flight buffers; on a device driven
@@ -889,19 +911,13 @@ class SphereCaptureController extends ChangeNotifier {
       } catch (_) {
         // Ignored on purpose.
       }
-      // The first photograph establishes the exposure and focus for the whole
-      // sweep: AE/AF have now converged on the room rather than on whatever the
-      // preview saw while it was starting.
-      if (capturedCount == 1) {
-        await _camera.lockCaptureSettings();
-      }
       _banner = 'Captured!';
       _bannerTimer?.cancel();
       _bannerTimer = Timer(const Duration(milliseconds: 1400), () {
         _banner = null;
         _notify();
       });
-      if (capturedCount >= kSphereTargetCount) {
+      if (capturedCount >= targetCount) {
         _phase = SphereCapturePhase.complete;
         _notify();
         if (!backendProcessing) {
@@ -981,13 +997,13 @@ class SphereCaptureController extends ChangeNotifier {
 
   Future<void> _runStitch() async {
     _stitching = true;
-    _stitchStage = 'Preparing the $kSphereTargetCount photographs…';
+    _stitchStage = 'Preparing the $targetCount photographs…';
     _notify();
     try {
       final records = await _repository.loadRecords(_stationId);
       final result = await PanoramaGenerationService(_stitcher).generate(
         records: records,
-        total: kSphereTargetCount,
+        total: targetCount,
         onStage: (String stage) {
           // Diagnostic only: the stitcher's stage wording is image-processing
           // jargon, so it is logged rather than shown. The UI keeps a plain
@@ -1082,7 +1098,10 @@ class SphereCaptureController extends ChangeNotifier {
       }
     }
     if (next == null) {
-      for (final target in _targets) {
+      for (final targetId in sphereCaptureSequence(planVersion: planVersion)) {
+        final target = _targets.firstWhere(
+          (candidate) => candidate.spec.targetId == targetId,
+        );
         if (!target.captured) {
           next = target;
           break;
@@ -1132,6 +1151,10 @@ class SphereCaptureController extends ChangeNotifier {
   /// session that cannot be recorded is worth knowing about before the user
   /// spends two minutes capturing, and a restored session lets them see their
   /// progress immediately.
+  List<SphereTargetState> _sitewiseTargets(int count) => <SphereTargetState>[
+    for (final spec in buildSitewiseSessionTargets(count)) SphereTargetState(spec: spec),
+  ];
+
   Future<void> _ensureSession() async {
     final store = _sessions;
     if (store == null) return;
@@ -1140,6 +1163,7 @@ class SphereCaptureController extends ChangeNotifier {
         sessionId: _stationId,
         userId: _userId,
         propertyId: _propertyId,
+        requiredTargetCount: _targets.length,
       );
       // A session created on a previous launch already knows its property; the
       // in-memory value must follow it, or the upload would be queued without
@@ -1152,6 +1176,7 @@ class SphereCaptureController extends ChangeNotifier {
       // Local metadata is not worth failing a capture over. The JSON records the
       // stitcher reads are written by `_repository` regardless.
       debugPrint('SPHERE_SESSION: could not open session $_stationId: $error');
+      rethrow; // Never capture against an unreadable saved plan.
     }
   }
 
@@ -1163,8 +1188,27 @@ class SphereCaptureController extends ChangeNotifier {
   Future<void> restoreFromStore() async {
     final store = _sessions;
     if (store == null) return;
+    final persisted = await store.getSession(_stationId);
+    if (persisted != null) {
+      final expected = _sitewiseTargets(persisted.requiredTargetCount);
+      _targets = expected;
+    }
     final frames = await store.loadFrames(_stationId);
     if (frames.isEmpty) return;
+    final ids = <int>{};
+    for (final frame in frames) {
+      if (frame.targetId < 1 || frame.targetId > _targets.length ||
+          !ids.add(frame.targetId)) {
+        throw StateError('Saved capture targets do not match the session plan.');
+      }
+      if (_targets.length == 56) {
+        final spec = _targets[frame.targetId - 1].spec;
+        final yawError = ((frame.targetYawDegrees - spec.yawDeg + 180) % 360 - 180).abs();
+        if (yawError > 0.001 || (frame.targetPitchDegrees - spec.pitchDeg).abs() > 0.001) {
+          throw StateError('Saved target geometry differs from the enhanced plan.');
+        }
+      }
+    }
 
     final byTarget = <int, CapturedFrame>{
       for (final frame in frames) frame.targetId: frame,
@@ -1191,13 +1235,13 @@ class SphereCaptureController extends ChangeNotifier {
 
     // The stitch path continues from the last saved frame, so the guide arrow
     // points at the next target in sequence rather than back at target 1.
-    final capturedIds = <int>[
-      for (final target in _targets)
-        if (target.captured) target.spec.targetId,
-    ]..sort();
-    if (capturedIds.isNotEmpty) {
-      final lastId = capturedIds.last;
-      for (final spec in buildSphereTargets()) {
+    final capturedFrames = frames
+        .where((frame) => File(frame.imagePath).existsSync())
+        .toList()
+      ..sort((a, b) => a.capturedAt.compareTo(b.capturedAt));
+    if (capturedFrames.isNotEmpty) {
+      final lastId = capturedFrames.last.targetId;
+      for (final spec in buildSphereTargets(planVersion: planVersion)) {
         if (spec.targetId == lastId) {
           _lastCapturedDirection = spec.direction;
           break;
@@ -1220,12 +1264,12 @@ class SphereCaptureController extends ChangeNotifier {
       }
     }
 
-    if (capturedCount >= kSphereTargetCount) {
+    if (capturedCount >= targetCount) {
       _phase = SphereCapturePhase.complete;
     }
     _recomputeGuide();
     debugPrint(
-      'SPHERE_SESSION: restored $capturedCount/$kSphereTargetCount targets for '
+      'SPHERE_SESSION: restored $capturedCount/$targetCount targets for '
       '$_stationId',
     );
   }
@@ -1240,7 +1284,7 @@ class SphereCaptureController extends ChangeNotifier {
     try {
       final stored = CapturedFrame.fromCaptureRecord(record);
       await store.saveFrame(stored);
-      if (capturedCount >= kSphereTargetCount) {
+      if (capturedCount >= targetCount) {
         await store.markSessionStatus(
           sessionId: _stationId,
           status: CaptureSessionStatus.complete,
@@ -1297,6 +1341,7 @@ class SphereCaptureController extends ChangeNotifier {
       final report = await analyzer.analyze(
         FrameQualityInput(
           targetId: record.targetId,
+          targetCount: _targets.length,
           jpegBytes: jpegBytes,
           recordedWidth: record.imageWidth,
           recordedHeight: record.imageHeight,
@@ -1374,7 +1419,7 @@ class SphereCaptureController extends ChangeNotifier {
     // user is already standing where the photograph was taken.
     _lastCapturedDirection = spec?.direction;
     if (_phase == SphereCapturePhase.complete &&
-        capturedCount < kSphereTargetCount) {
+        capturedCount < targetCount) {
       _phase = SphereCapturePhase.ready;
     }
     _stitchError = null;

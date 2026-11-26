@@ -11,9 +11,14 @@ import 'package:fyp/features/capture_360/presentation/widgets/capture_theme.dart
 /// The viewer is only ever handed a path the stitching service verified; a
 /// missing file shows the reason instead of an empty sphere.
 class SpherePanoramaScreen extends StatelessWidget {
-  const SpherePanoramaScreen({super.key, required this.panoramaPath});
+  const SpherePanoramaScreen({
+    super.key,
+    required this.panoramaPath,
+    this.photoCount = kSphereTargetCount,
+  });
 
   final String panoramaPath;
+  final int photoCount;
 
   @override
   Widget build(BuildContext context) {
@@ -26,15 +31,15 @@ class SpherePanoramaScreen extends StatelessWidget {
         title: const Text('360° Panorama'),
       ),
       body: !file.existsSync()
-          ? const Center(
+          ? Center(
               child: Padding(
-                padding: EdgeInsets.all(24),
+                padding: const EdgeInsets.all(24),
                 child: Text(
                   'The panorama file is not on disk. Return to the capture and '
-                  'regenerate it — the $kSphereTargetCount photographs are '
+                  'regenerate it — the $photoCount photographs are '
                   'still saved.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: CaptureColors.mutedOnDark),
+                  style: const TextStyle(color: CaptureColors.mutedOnDark),
                 ),
               ),
             )

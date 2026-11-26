@@ -81,6 +81,15 @@ try {
 } finally { Pop-Location }
 
 if (-not $WebOnly) {
+    Step 'Provision mobile configuration'
+    # See Start-SiteWise-All.ps1: the asset is git-ignored and absent in a fresh
+    # clone or worktree. The provisioner fills it from the authorised public
+    # defaults and never overwrites an existing valid file.
+    $ensureConfig = Join-Path $mobileDir 'tool\ensure_sitewise_dev_config.js'
+    Need $ensureConfig 'The mobile configuration provisioner is missing.'
+    & node $ensureConfig
+    MustSucceed 'Provision mobile configuration'
+
     Need $mobileJson 'Place your public SiteWise JSON in fyp_mobile_app/assets/config/sitewise_dev.json.'
     $mobileSettings = Get-Content -LiteralPath $mobileJson -Raw | ConvertFrom-Json
     if ([string]$mobileSettings.SITEWISE_DEV_AUTH_BYPASS -eq 'true') {

@@ -88,7 +88,22 @@ def _report_progress(job_id: uuid.UUID, message: str) -> None:
 
 def _plan_target(target_id: int, plan_version: str) -> tuple[float, float] | None:
     """Return the documented yaw/pitch prior for a known 38-target plan."""
-    if not 1 <= target_id <= 38 or str(plan_version or "1") not in {"1", "2"}:
+    version = str(plan_version or "1")
+    if version == "3":
+        if not 1 <= target_id <= 56:
+            return None
+        middle = tuple(float(((i * 20 + 180) % 360) - 180) for i in range(18))
+        upper = tuple(float(((340 - i * 20 + 180) % 360) - 180) for i in range(18))
+        if target_id <= 18:
+            return middle[target_id - 1], 0.0
+        if target_id == 19:
+            return 0.0, 90.0
+        if target_id <= 37:
+            return upper[target_id - 20], 40.0
+        if target_id <= 55:
+            return middle[target_id - 38], -40.0
+        return 0.0, -90.0
+    if not 1 <= target_id <= 38 or version not in {"1", "2"}:
         return None
     middle = (0, 30, 60, 90, 120, 150, 180, -150, -120, -90, -60, -30)
     upper = (-30, -60, -90, -120, -150, 180, 150, 120, 90, 60, 30, 0)
@@ -277,6 +292,8 @@ def process_job(job_id: uuid.UUID, worker_id: str) -> None:
         has_measured_poses = any(
             r["poseSource"] == "measured_camera_orientation" for r in records
         )
+        selected_out_dir = out_dir
+        stored_attempt = "measured_pose" if has_measured_poses else "capture_plan_legacy"
         try:
             outcome = stitch_equirectangular(
                 records=records,
@@ -287,15 +304,13 @@ def process_job(job_id: uuid.UUID, worker_id: str) -> None:
                 progress=lambda message: _report_progress(job_id, message),
             )
         except Exception:
-            if not has_measured_poses:
-                raise
             logger.exception(
-                "Measured-pose stitch raised for job %s; trying plan fallback",
+                "Initial stitch raised for job %s; trying compatible fallbacks",
                 job_id,
             )
             outcome = StitchOutcome(
                 ok=False,
-                message="Measured-pose stitch failed; capture-plan fallback will be attempted.",
+                message="Initial stitch failed; capture-plan fallback will be attempted.",
             )
         if not outcome.ok and has_measured_poses:
             # A camera-pose run can fail on noisy or inconsistent metadata.
@@ -322,6 +337,7 @@ def process_job(job_id: uuid.UUID, worker_id: str) -> None:
             )
             if fallback.ok:
                 records, problems, outcome = fallback_records, fallback_problems, fallback
+                selected_out_dir = fallback_dir
                 stored_attempt = "capture_plan_fallback"
             else:
                 logger.error(
@@ -329,13 +345,42 @@ def process_job(job_id: uuid.UUID, worker_id: str) -> None:
                     job_id,
                     fallback.message,
                 )
-        else:
-            stored_attempt = "measured_pose" if has_measured_poses else "capture_plan_legacy"
+        if not outcome.ok:
+            # The established plan geometry is also the safe fallback for
+            # metadata-free sessions. Registration refinement can introduce
+            # tiny raster coverage gaps even when every target is present;
+            # this final pass keeps the same source frames and plan geometry,
+            # while the stitcher's normal 99.5% coverage and viewport gates
+            # still reject materially incomplete spheres. The report records
+            # any interpolated pixels for audit.
+            fallback_records, fallback_problems = _build_records(
+                session_row, confirmed, frame_dir, use_measured=False
+            )
+            fallback_dir = work_dir / "fallback_plan_only_out"
+            fallback_dir.mkdir(parents=True, exist_ok=True)
+            fallback = stitch_equirectangular(
+                records=fallback_records,
+                out_dir=fallback_dir,
+                width=STITCH_WIDTH,
+                refine_registration=False,
+                strict_photo_coverage=False,
+                progress=lambda message: _report_progress(job_id, message),
+            )
+            if fallback.ok and not fallback_problems:
+                records, problems, outcome = fallback_records, fallback_problems, fallback
+                selected_out_dir = fallback_dir
+                stored_attempt = "capture_plan_unrefined_fallback"
+            else:
+                logger.error(
+                    "Unrefined capture-plan fallback failed for job %s: %s",
+                    job_id,
+                    fallback.message,
+                )
         if not outcome.ok:
             _fail(job_id, outcome.message)
             return
 
-        panorama_bytes = (out_dir / "panorama.jpg").read_bytes()
+        panorama_bytes = (selected_out_dir / "panorama.jpg").read_bytes()
 
         # Capture-quality verification (registration + geometric
         # consistency over the downloaded originals; coverage + seam checks

@@ -60,12 +60,14 @@
     nearbyLabel.textContent = 'Map unavailable';
     return;
   }
-  const cartoKey = window.SITEWISE_MAP_CONFIG?.cartoBasemapsKey;
-  if (!cartoKey) {
-    showAlert('The map is unavailable right now. Please try again later.');
-    nearbyLabel.textContent = 'Map unavailable';
-    return;
-  }
+  // The CARTO key is OPTIONAL. `basemaps.cartocdn.com` serves the Voyager
+  // raster tiles without one (rate-limited, no SLA), so a deployment that never
+  // generated map-config.js still gets a usable basemap instead of a dead
+  // panel. Refusing to draw when the key was absent is what produced
+  // "The map is unavailable right now." on every property page whose
+  // CARTO_BASEMAPS_KEY was blank. A configured key is appended as before, and
+  // a genuine tile failure is still reported by the tileerror handler below.
+  const cartoKey = (window.SITEWISE_MAP_CONFIG?.cartoBasemapsKey || '').trim();
   document.getElementById('location-id').textContent = ` · ${propertyId}`;
 
   // -- layers ---------------------------------------------------------------
@@ -188,7 +190,11 @@
   const zoomFor = { '500': 15, '1000': 14, '2000': 13, '3000': 12, 'both': 14.5 };
 
   const map = L.map('map', { zoomControl: true, preferCanvas: true, minZoom: 5, maxZoom: 19 });
-  const tile = L.tileLayer('https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=' + encodeURIComponent(cartoKey), {
+  // `?key=` with an empty value is rejected by the tile endpoint, so the
+  // parameter is omitted entirely when no key is configured.
+  const tileUrl = 'https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png' +
+    (cartoKey ? '?key=' + encodeURIComponent(cartoKey) : '');
+  const tile = L.tileLayer(tileUrl, {
     maxZoom: 20,
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/" target="_blank" rel="noopener">CARTO</a>'
   }).addTo(map);

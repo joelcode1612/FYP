@@ -35,6 +35,7 @@ class SphereCaptureScreen extends StatefulWidget {
   const SphereCaptureScreen({
     super.key,
     this.autoStart = false,
+    this.requiredTargetCount = kSphereTargetCount,
     this.camera,
     this.rotation,
     this.repository,
@@ -55,6 +56,7 @@ class SphereCaptureScreen extends StatefulWidget {
   /// True only when entered after completing the SiteWise guide.
   /// The camera starts after the first frame, using the same _start() flow.
   final bool autoStart;
+  final int requiredTargetCount;
 
   /// Injection points for tests and for callers that already hold a station.
   final SphereCamera? camera;
@@ -196,7 +198,7 @@ class _SphereCaptureScreenState extends State<SphereCaptureScreen>
     if (controller == null) return;
     if (widget.backendProcessing) {
       if (controller.phase != SphereCapturePhase.complete ||
-          controller.capturedCount < kSphereTargetCount) {
+          controller.capturedCount < controller.targets.length) {
         return;
       }
       if (_captureCompleteNotified) return;
@@ -264,6 +266,7 @@ class _SphereCaptureScreenState extends State<SphereCaptureScreen>
         repository: repository,
         stitcher: widget.stitcher ?? defaults.stitcher,
         backendProcessing: widget.backendProcessing,
+        planVersion: sitewisePlanVersionForCount(widget.requiredTargetCount),
         stationId: stationId,
         // The 4:3 normaliser links OpenCV, so it is supplied here rather than
         // defaulted inside the controller: that keeps the controller — and its
@@ -327,6 +330,7 @@ class _SphereCaptureScreenState extends State<SphereCaptureScreen>
         onStart: _starting ? null : _start,
         starting: _starting,
         error: _startError,
+        requiredTargetCount: widget.requiredTargetCount,
       );
     }
     return _LiveCapture(
@@ -343,11 +347,13 @@ class _StartScreen extends StatelessWidget {
   const _StartScreen({
     required this.onStart,
     required this.starting,
+    required this.requiredTargetCount,
     this.error,
   });
 
   final VoidCallback? onStart;
   final bool starting;
+  final int requiredTargetCount;
   final String? error;
 
   @override
@@ -389,8 +395,8 @@ class _StartScreen extends StatelessWidget {
             const Spacer(flex: 2),
             const Center(child: _SphereDiagram(size: 220)),
             const SizedBox(height: 30),
-            const Text(
-              'AR 360° Capture ($kSphereTargetCount Targets)',
+            Text(
+              'AR 360° Capture ($requiredTargetCount Targets)',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Colors.white,
@@ -400,9 +406,9 @@ class _StartScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 10),
-            const Text(
+            Text(
               'Hold the phone level and face the first wall, then tap Start. '
-              'The $kSphereTargetCount targets are levelled to gravity — turn '
+              'The $requiredTargetCount targets are levelled to gravity — turn '
               'to bring the next one into the centre ring and the photograph '
               'is taken automatically. Try to turn around one spot and keep '
               'the phone at a similar height as you move between targets.',
@@ -977,7 +983,12 @@ class _BottomPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final aligned = controller.activeErrorDeg <= controller.toleranceDeg;
+    // SITEWISE_CAPTURE_PLAN_UI_V1
+    final total = controller.targets.length;
+    final active = controller.activeTarget;
+    final aligned = active != null &&
+        !controller.moving &&
+        controller.activeErrorDeg <= controller.toleranceDeg;
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
       decoration: BoxDecoration(
@@ -1002,7 +1013,9 @@ class _BottomPanel extends StatelessWidget {
           ),
           const SizedBox(height: 9),
           Text(
-            controller.progressLabel,
+            active == null
+                ? '${controller.capturedCount} of $total photos saved'
+                : 'Capture ${controller.activeCaptureStep ?? controller.capturedCount + 1} of $total · ${active.spec.ringName}',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
@@ -1011,11 +1024,16 @@ class _BottomPanel extends StatelessWidget {
               fontWeight: FontWeight.w700,
             ),
           ),
+          const SizedBox(height: 6),
+          Text(
+            '${controller.capturedCount} of $total photos saved',
+            style: const TextStyle(color: Colors.white70, fontSize: 13),
+          ),
           const SizedBox(height: 10),
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
-              value: controller.capturedCount / kSphereTargetCount,
+              value: total == 0 ? 0.0 : (controller.capturedCount / total).clamp(0.0, 1.0).toDouble(),
               minHeight: 4,
               backgroundColor: Colors.white.withValues(alpha: 0.14),
               valueColor: const AlwaysStoppedAnimation<Color>(CaptureColors.ok),
@@ -1062,6 +1080,39 @@ class _MotionChip extends StatelessWidget {
   );
 }
 
+class _CaptureSavedRing extends StatelessWidget {
+  const _CaptureSavedRing({required this.controller});
+  final SphereCaptureController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final total = controller.targets.length;
+    final saved = controller.capturedCount;
+    final fraction = total == 0 ? 0.0 : (saved / total).clamp(0.0, 1.0).toDouble();
+    return Semantics(
+      label: '$saved of $total photos saved',
+      child: SizedBox.square(
+        dimension: 116,
+        child: Stack(alignment: Alignment.center, children: [
+          SizedBox.expand(child: CircularProgressIndicator(
+            value: fraction,
+            strokeWidth: 8,
+            color: CaptureColors.ok,
+            backgroundColor: Colors.white24,
+          )),
+          Column(mainAxisSize: MainAxisSize.min, children: [
+            Text('$saved / $total', style: const TextStyle(
+              color: Colors.white, fontSize: 19, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 4),
+            Icon(saved == total && total > 0 ? Icons.check : Icons.camera_alt_outlined,
+              color: CaptureColors.ok, size: 23),
+          ]),
+        ]),
+      ),
+    );
+  }
+}
+
 class _BackendCompletionOverlay extends StatelessWidget {
   const _BackendCompletionOverlay({required this.controller});
 
@@ -1083,11 +1134,7 @@ class _BackendCompletionOverlay extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
-                Icons.cloud_upload_outlined,
-                color: CaptureColors.ok,
-                size: 48,
-              ),
+              _CaptureSavedRing(controller: controller),
               const SizedBox(height: 12),
               const Text(
                 'Capture complete',
@@ -1099,7 +1146,7 @@ class _BackendCompletionOverlay extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                '${controller.capturedCount} / $kSphereTargetCount photos saved',
+                '${controller.capturedCount} / ${controller.targets.length} photos saved',
                 style: const TextStyle(
                   color: CaptureColors.mutedOnDark,
                   fontSize: 14,
@@ -1145,7 +1192,7 @@ class _CompletionOverlay extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.check_circle, color: CaptureColors.ok, size: 54),
+              _CaptureSavedRing(controller: controller),
               const SizedBox(height: 12),
               const Text(
                 'Capture Complete!',
@@ -1157,7 +1204,7 @@ class _CompletionOverlay extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                '${controller.capturedCount} / $kSphereTargetCount Targets',
+                '${controller.capturedCount} / ${controller.targets.length} Targets',
                 style: const TextStyle(
                   color: CaptureColors.mutedOnDark,
                   fontSize: 13,
@@ -1173,6 +1220,7 @@ class _CompletionOverlay extends StatelessWidget {
                         MaterialPageRoute<void>(
                           builder: (_) => SpherePanoramaScreen(
                             panoramaPath: controller.panoramaPath!,
+                            photoCount: controller.targetCount,
                           ),
                         ),
                       ),
@@ -1281,8 +1329,8 @@ class _PanoramaStatus extends StatelessWidget {
         ],
       );
     }
-    return const Text(
-      'The panorama will be generated from the $kSphereTargetCount saved '
+    return Text(
+      'The panorama will be generated from the ${controller.targetCount} saved '
       'photographs.',
       textAlign: TextAlign.center,
       style: TextStyle(color: CaptureColors.mutedOnDark, fontSize: 11.5),

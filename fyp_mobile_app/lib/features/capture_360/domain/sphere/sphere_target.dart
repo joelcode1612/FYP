@@ -53,15 +53,21 @@ import 'package:fyp/features/capture_360/domain/virtual_tour/math/vectors.dart';
 // lens — the zenith frame reaches down to ≈57.5° and the upper ring up to
 // ≈72.5° — so the blend seams stay inside overlapping content; re-run
 // tool/sphere_coverage_report.py whenever the lens assumption changes. The ring
-// order is a continuous path (middle → zenith → upper → lower → nadir) so every
-// guided step is at most 90°.
+// target IDs describe geometry; the guided capture order is separate and is
+// middle → upper → lower → zenith → nadir, establishing ring overlaps before
+// the pole caps.
 //
 // The upper ring sweeps backwards so it starts at the yaw where the middle ring
-// ended; that is what keeps the zenith → upper step at 50° instead of the
-// larger jump a return to yaw 0° would cost.
+// ended, preserving continuity when the flow moves from the middle to upper
+// ring.
 
 /// How many directions a complete sphere has.
 const int kSphereTargetCount = 38;
+const int kSphereEnhancedTargetCount = 56;
+const int kSphereEnhancedPlanVersion = 3;
+
+int sphereTargetCountForPlan(int version) =>
+    version == kSphereEnhancedPlanVersion ? kSphereEnhancedTargetCount : kSphereTargetCount;
 
 /// The vertical field of view **assumed** for the rear camera, in degrees.
 ///
@@ -219,7 +225,27 @@ Vec3 sphereDirection(double yawDeg, double pitchDeg) {
 /// facing when the sphere was calibrated. The controller refuses to capture
 /// anything else until it is saved, which is what makes the first photograph a
 /// known, horizon-level frame rather than whatever happened to be nearest.
-List<SphereTargetSpec> buildSphereTargets() {
+List<SphereTargetSpec> buildSphereTargets({int planVersion = kSphereCapturePlanVersion}) {
+  if (planVersion == kSphereEnhancedPlanVersion) {
+    final targets = <SphereTargetSpec>[];
+    double wrap(double yaw) => ((yaw + 180) % 360 + 360) % 360 - 180;
+    void ring(List<double> yaws, double pitch, String name) {
+      for (var i = 0; i < yaws.length; i++) {
+        final yaw = wrap(yaws[i]);
+        final id = targets.length + 1;
+        targets.add(SphereTargetSpec(targetId: id, yawDeg: yaw, pitchDeg: pitch,
+          ringName: name, indexInRing: i + 1, direction: sphereDirection(yaw, pitch)));
+      }
+    }
+    ring(List<double>.generate(18, (i) => i * 20.0), 0, 'Middle Ring');
+    targets.add(SphereTargetSpec(targetId: targets.length + 1, yawDeg: 0, pitchDeg: 90,
+      ringName: 'Zenith', direction: sphereDirection(0, 90)));
+    ring(List<double>.generate(18, (i) => -20.0 - i * 20.0), kSphereRingPitchDeg, 'Upper Ring');
+    ring(List<double>.generate(18, (i) => i * 20.0), -kSphereRingPitchDeg, 'Lower Ring');
+    targets.add(SphereTargetSpec(targetId: targets.length + 1, yawDeg: 0, pitchDeg: -90,
+      ringName: 'Nadir', direction: sphereDirection(0, -90)));
+    return List<SphereTargetSpec>.unmodifiable(targets);
+  }
   const List<double> middleYaws = <double>[
     0,
     30,
@@ -316,6 +342,26 @@ List<SphereTargetSpec> buildSphereTargets() {
     ),
   );
   return List<SphereTargetSpec>.unmodifiable(targets);
+}
+
+/// Capture order for new standard-plan sessions. Target IDs remain the
+/// geometry keys persisted to storage and consumed by the backend; this list
+/// only controls the guided order shown to the photographer.
+///
+/// Establish the horizon first, then capture both connecting rings, and leave
+/// the pole caps until ring-to-ring overlap has been recorded. Historical
+/// 56-target sessions retain their original sequence.
+List<int> sphereCaptureSequence({int planVersion = kSphereCapturePlanVersion}) {
+  if (planVersion == kSphereEnhancedPlanVersion) {
+    return List<int>.generate(sphereTargetCountForPlan(planVersion), (i) => i + 1);
+  }
+  return <int>[
+    ...List<int>.generate(12, (i) => i + 1),
+    ...List<int>.generate(12, (i) => i + 14),
+    ...List<int>.generate(12, (i) => i + 26),
+    13,
+    38,
+  ];
 }
 
 /// The sphere's reference frame for a start pose, with the phone's pitch and
@@ -417,4 +463,95 @@ double cameraElevationDeg(Quat deviceToWorld, {Vec3 worldUp = Vec3.unitY}) {
   if (up.length < 0.5) return 0;
   final forward = deviceToWorld.rotate(const Vec3(0, 0, -1));
   return math.asin(clampDouble(forward.dot(up), -1, 1)) * radToDeg;
+}
+
+
+// SITEWISE_CAPTURE_PLAN_WIRING_V2: backend-verified v3 geometry, existing standard generator retained.
+const int kSitewiseEnhancedTargetCount = 56;
+
+int sitewisePlanVersionForCount(int count) {
+  if (count == 38) return 2;
+  if (count == kSitewiseEnhancedTargetCount) return 3;
+  throw StateError('Unsupported sphere capture plan: $count');
+}
+
+List<SphereTargetSpec> buildSitewiseSessionTargets(int count) {
+  sitewisePlanVersionForCount(count);
+  if (count == 38) {
+    final standard = buildSphereTargets(planVersion: 2);
+    if (standard.length != 38) throw StateError('Standard sphere plan must have 38 targets.');
+    return standard;
+  }
+  const directions = <(double, double)>[
+    (0.000000, 0.000000),
+    (20.000000, 0.000000),
+    (40.000000, 0.000000),
+    (60.000000, 0.000000),
+    (80.000000, 0.000000),
+    (100.000000, 0.000000),
+    (120.000000, 0.000000),
+    (140.000000, 0.000000),
+    (160.000000, 0.000000),
+    (-180.000000, 0.000000),
+    (-160.000000, 0.000000),
+    (-140.000000, 0.000000),
+    (-120.000000, 0.000000),
+    (-100.000000, 0.000000),
+    (-80.000000, 0.000000),
+    (-60.000000, 0.000000),
+    (-40.000000, 0.000000),
+    (-20.000000, 0.000000),
+    (0.000000, 90.000000),
+    (-20.000000, 40.000000),
+    (-40.000000, 40.000000),
+    (-60.000000, 40.000000),
+    (-80.000000, 40.000000),
+    (-100.000000, 40.000000),
+    (-120.000000, 40.000000),
+    (-140.000000, 40.000000),
+    (-160.000000, 40.000000),
+    (-180.000000, 40.000000),
+    (160.000000, 40.000000),
+    (140.000000, 40.000000),
+    (120.000000, 40.000000),
+    (100.000000, 40.000000),
+    (80.000000, 40.000000),
+    (60.000000, 40.000000),
+    (40.000000, 40.000000),
+    (20.000000, 40.000000),
+    (0.000000, 40.000000),
+    (0.000000, -40.000000),
+    (20.000000, -40.000000),
+    (40.000000, -40.000000),
+    (60.000000, -40.000000),
+    (80.000000, -40.000000),
+    (100.000000, -40.000000),
+    (120.000000, -40.000000),
+    (140.000000, -40.000000),
+    (160.000000, -40.000000),
+    (-180.000000, -40.000000),
+    (-160.000000, -40.000000),
+    (-140.000000, -40.000000),
+    (-120.000000, -40.000000),
+    (-100.000000, -40.000000),
+    (-80.000000, -40.000000),
+    (-60.000000, -40.000000),
+    (-40.000000, -40.000000),
+    (-20.000000, -40.000000),
+    (0.000000, -90.000000),
+  ];
+  final enhanced = buildSphereTargets(planVersion: 3);
+  if (enhanced.length != directions.length) {
+    throw StateError('Mobile enhanced plan count does not match backend v3.');
+  }
+  for (var i = 0; i < directions.length; i++) {
+    final (yaw, pitch) = directions[i];
+    final t = enhanced[i];
+    final yawError = ((t.yawDeg - yaw + 180) % 360 - 180).abs();
+    if (t.targetId != i + 1 || yawError > 0.0001 ||
+        (t.pitchDeg - pitch).abs() > 0.0001) {
+      throw StateError('Mobile enhanced plan differs from backend v3 at target ${i + 1}.');
+    }
+  }
+  return List<SphereTargetSpec>.unmodifiable(enhanced);
 }

@@ -155,6 +155,24 @@ Write-Host "FVM Dart version accepted: $dartVersion" `
 
 if (-not $WebOnly) {
 
+    Step 'Provision mobile configuration'
+
+    # The asset is git-ignored, so a fresh clone, a new worktree or a branch
+    # switch arrives without it and the Flutter build fails on the pubspec
+    # asset entry before any Dart code runs. The provisioner writes it from the
+    # authorised public defaults (or from backend/.env when that is present)
+    # and leaves an existing valid file byte-for-byte untouched.
+    $ensureConfig = Join-Path `
+        $mobileDir `
+        'tool\ensure_sitewise_dev_config.js'
+
+    Need $ensureConfig `
+        'The mobile configuration provisioner is missing.'
+
+    & node $ensureConfig
+
+    MustSucceed 'Provision mobile configuration'
+
     Step 'Validate mobile configuration'
 
     Need $mobileJson `

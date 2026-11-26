@@ -87,6 +87,8 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
   BackendHandoffStage? _handoffStage;
   int _processed = 0;
   int _total = kSphereTargetCount;
+  int _requiredTargetCount = kSphereTargetCount;
+  bool _selectingPlan = false;
   int? _processingPercent;
   String? _failure;
   String? _setupError;
@@ -206,9 +208,19 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
       final restoredSession = isSphereEngine
           ? await sessions.getSession(tour.id)
           : null;
-      final shouldResume =
-          MobileConfig.usesLiveApi &&
-          restoredFrames.length >= kSphereTargetCount;
+      final count = restoredSession?.requiredTargetCount ?? kSphereTargetCount;
+      sitewisePlanVersionForCount(count);
+      if (isSphereEngine && restoredSession == null && restoredFrames.isNotEmpty) {
+        throw StateError('Saved photos have no capture plan.');
+      }
+      final savedIds = <int>{};
+      for (final frame in restoredFrames) {
+        if (frame.targetId < 1 || frame.targetId > count || !savedIds.add(frame.targetId)) {
+          throw StateError('Saved photos do not match the capture plan.');
+        }
+      }
+      final present = restoredFrames.where((f) => File(f.imagePath).existsSync()).length;
+      final shouldResume = MobileConfig.usesLiveApi && present == count;
 
       if (!mounted) return;
       setState(() {
@@ -217,14 +229,18 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
         _sessions = sessions;
         _uploadQueue = uploadQueue;
         _qualityAnalyzer = qualityAnalyzer;
-        _guideCompleted = shouldResume;
+        _requiredTargetCount = count;
+        _total = count;
+        _guideCompleted = restoredSession != null;
         _resumedComplete = shouldResume;
         _preparing = false;
       });
 
       if (shouldResume) {
         if (restoredSession?.syncStatus == FrameSyncStatus.ready &&
-            restoredSession?.panoramaSyncStatus == FrameSyncStatus.ready) {
+            restoredSession?.panoramaSyncStatus == FrameSyncStatus.ready &&
+            (count != 56 || (restoredSession?.localPanoramaPath != null &&
+                File(restoredSession!.localPanoramaPath!).existsSync()))) {
           _returnAfterCapture();
         } else {
           unawaited(_resumeDraftFlow(restoredFrames, restoredSession));
@@ -251,6 +267,41 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
         );
         _preparing = false;
       });
+    }
+  }
+
+  Future<void> _selectPlan(int count) async {
+    if (_selectingPlan || _guideCompleted) return;
+    final sessions = _sessions;
+    final id = _tourId;
+    if (sessions == null || id == null) return;
+    setState(() => _selectingPlan = true);
+    try {
+      sitewisePlanVersionForCount(count);
+      if (count == 56 && (!MobileConfig.usesLiveApi || _uploadQueue == null)) {
+        throw StateError('Enhanced capture requires the SiteWise service.');
+      }
+      // The saved session is authoritative, even if it has zero frames.
+      final saved = await sessions.createSession(
+        sessionId: id,
+        propertyId: int.tryParse(widget.request.propertyId),
+        requiredTargetCount: count,
+      );
+      if (!mounted) return;
+      setState(() {
+        _requiredTargetCount = saved.requiredTargetCount;
+        _total = saved.requiredTargetCount;
+        _guideCompleted = true;
+      });
+    } on Object catch (error) {
+      CaptureLog.log('Capture plan could not be saved: $error');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Could not save the capture plan. Please try again.'),
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _selectingPlan = false);
     }
   }
 
@@ -314,6 +365,11 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
     final repository = _repository;
     if (tourId == null || sessions == null || repository == null) return;
     final propertyId = int.tryParse(widget.request.propertyId);
+    final saved = await sessions.getSession(tourId);
+    if (saved?.requiredTargetCount == 56) {
+      await _completeEnhanced();
+      return;
+    }
 
     // Recovery never re-uploads what the backend already confirmed.
     var frames = restoredFrames;
@@ -333,8 +389,8 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
     if (mounted) {
       setState(() {
         _handoffStage = BackendHandoffStage.processing;
-        _processed = kSphereTargetCount;
-        _total = kSphereTargetCount;
+        _processed = _requiredTargetCount;
+        _total = _requiredTargetCount;
         _processingPercent = null;
         _failure = null;
         _failureKind = null;
@@ -401,6 +457,53 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
   ///   Layer B — the panorama joins the upload queue, which syncs it to
   ///   Supabase and confirms it through FastAPI in the background;
   /// The completed capture returns to the inspection while the queue runs.
+  Future<void> _completeEnhanced() async {
+    if (_draftRunning) return;
+    final queue = _uploadQueue;
+    final sessions = _sessions;
+    final id = _tourId;
+    if (queue == null || sessions == null || id == null) return;
+    final future = () async {
+      try {
+        if (mounted) {
+          setState(() {
+            _resumedComplete = true;
+            _handoffStage = BackendHandoffStage.processing;
+            _failure = null;
+            _failureKind = null;
+            _processed = _requiredTargetCount;
+            _total = _requiredTargetCount;
+          });
+        }
+        await queue.reconcileFrames(await sessions.loadFrames(id),
+          propertyId: int.tryParse(widget.request.propertyId));
+        await queue.resume();
+        final saved = await sessions.getSession(id);
+        if (saved?.panoramaSyncStatus != FrameSyncStatus.ready ||
+            saved?.hasPanorama != true ||
+            !await File(saved!.localPanoramaPath!).exists()) {
+          throw StateError('Panorama is not ready.');
+        }
+        if (mounted) setState(() => _handoffStage = BackendHandoffStage.ready);
+        _returnAfterCapture();
+      } on Object catch (error) {
+        CaptureLog.log('Enhanced capture could not finish: $error');
+        if (mounted) {
+          setState(() {
+            _failure = 'Your photos are saved. Retry to finish the panorama.';
+            _failureKind = 'upload';
+            _handoffStage = null;
+          });
+        }
+      }
+    }();
+    _draftFuture = future;
+    try { await future; } finally {
+      if (identical(_draftFuture, future)) _draftFuture = null;
+      if (mounted) setState(() {});
+    }
+  }
+
   Future<void> _onPanoramaReady(String panoramaPath) async {
     _panoramaPath = panoramaPath;
     if (_draftFuture != null || !MobileConfig.usesLiveApi) return;
@@ -435,8 +538,8 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
         _failureKind = null;
         _processingPercent = null;
         _handoffStage = BackendHandoffStage.captured;
-        _processed = kSphereTargetCount;
-        _total = kSphereTargetCount;
+        _processed = _requiredTargetCount;
+        _total = _requiredTargetCount;
       });
     }
 
@@ -561,20 +664,20 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
     // remains mounted so property, tour and frame-session state stay intact.
     if (!_guideCompleted) {
       return CaptureGuideScreen(
-        onStartCapture: () {
-          if (!mounted) return;
-          setState(() => _guideCompleted = true);
-        },
+        allowEnhanced: MobileConfig.usesLiveApi && _uploadQueue != null,
+        onStartCapturePlan: (count) => unawaited(_selectPlan(count)),
       );
     }
     return SphereCaptureScreen(
       autoStart: true,
+      requiredTargetCount: _requiredTargetCount,
       sessionId: _tourId,
       repository: repository,
       sessions: _sessions,
       // The device stitches the canonical panorama; the draft is saved and
       // the cloud sync starts the moment the stitch completes.
-      backendProcessing: false,
+      backendProcessing: _requiredTargetCount == 56,
+      onCaptureComplete: () => unawaited(_completeEnhanced()),
       onPanoramaReady: _onPanoramaReady,
       // Every photograph is queued for Supabase upload the moment it lands.
       onFrameSaved: _onFrameSaved,
@@ -627,7 +730,7 @@ class _HandoffStatusScreen extends StatelessWidget {
     if (ready) {
       title = 'Your 360° panorama is ready';
       message =
-          'The panorama created on this device is in Sitewise, and your '
+          'Your panorama is saved in SiteWise, and your '
           'original photographs are backed up.';
     } else if (failed) {
       title = stitchFailed
@@ -638,7 +741,7 @@ class _HandoffStatusScreen extends StatelessWidget {
       title = 'Creating your 360° panorama';
       message =
           'Your $total photographs are being stitched into one panorama '
-          'right here on this device.';
+          'for your property.';
     } else if (stage == BackendHandoffStage.panoramaUploading) {
       title = 'Uploading your 360° panorama';
       message =
@@ -721,7 +824,7 @@ class _HandoffStatusScreen extends StatelessWidget {
                       stage == BackendHandoffStage.framesBackingUp
                           ? '$processed of $total photos backed up'
                           : stage == BackendHandoffStage.processing
-                          ? 'Creating the 360° panorama on this device'
+                          ? 'Creating the 360° panorama'
                           : 'Sending to Sitewise',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodyMedium,

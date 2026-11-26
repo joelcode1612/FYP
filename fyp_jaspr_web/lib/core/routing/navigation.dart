@@ -51,14 +51,6 @@ List<WebDestination> webDestinationsFor(AppRole role) => switch (role) {
       icon: 'business',
       label: 'Listings',
     ),
-    // System activity is a primary Admin destination (the security & activity
-    // timeline). Its route was always registered and authorized — this entry
-    // only makes it reachable from the pill and the mobile drawer.
-    WebDestination(
-      route: '/admin/activity',
-      icon: 'history',
-      label: 'System Activity',
-    ),
   ],
   // The Agent web workspace is retired: property management is the Flutter
   // Owner / Agent app. No destinations means the shell renders no sidebar for

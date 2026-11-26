@@ -52,6 +52,7 @@ abstract class NeighborOverlapProbe {
 class FrameQualityInput {
   const FrameQualityInput({
     required this.targetId,
+    this.targetCount = kSphereTargetCount,
     required this.jpegBytes,
     required this.recordedWidth,
     required this.recordedHeight,
@@ -65,6 +66,7 @@ class FrameQualityInput {
   });
 
   final int targetId;
+  final int targetCount;
   final Uint8List jpegBytes;
 
   /// The dimensions the capture record claims, cross-checked against the
@@ -424,7 +426,7 @@ class FrameQualityAnalyzer {
     // 38-target layout for this id — a stale or hand-edited record cannot
     // silently point at the wrong direction.
     SphereTargetSpec? spec;
-    for (final candidate in buildSphereTargets()) {
+    for (final candidate in buildSitewiseSessionTargets(input.targetCount)) {
       if (candidate.targetId == input.targetId) {
         spec = candidate;
         break;

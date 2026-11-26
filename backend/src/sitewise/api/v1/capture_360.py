@@ -358,7 +358,7 @@ def confirm_frame(
     if body.target_index > record.expected_frames:
         raise ValidationError(f"target_index must be between 1 and {record.expected_frames}.")
     path = _validated_frame_path(record, session_id, body.storage_path)
-    require_original = append_only or record.capture_mode == svc.BACKEND_38_MODE
+    require_original = append_only or record.capture_mode in {svc.BACKEND_38_MODE, "device_56_backend"}
     if require_original and (
         body.checksum_sha256 is None
         or path != capture_storage.frame_object_path(record.property_id, str(session_id), body.target_index)
@@ -733,7 +733,7 @@ def confirm_panorama(
     record = svc.require_mutable_capture_session(
         db, session_id=session_id, user_id=current.user_id, role=current.role
     )
-    if record.capture_mode == svc.BACKEND_38_MODE:
+    if record.capture_mode in {svc.BACKEND_38_MODE, "device_56_backend"}:
         raise ValidationError("A backend-first session must use its worker-generated panorama.")
     agent_assignment(db, int(record.property_id), current, writable=True)
     if str(record.owner_id) != str(current.user_id):

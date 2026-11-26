@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'capture_plan_guide.dart';
 
 import 'package:fyp/features/capture_360/guide/domain/capture_guide_content.dart';
 import 'package:fyp/features/capture_360/guide/presentation/widgets/sphere_plan_painter.dart';
@@ -18,12 +19,16 @@ class CaptureGuideScreen extends StatefulWidget {
     super.key,
     this.showStartAction = true,
     this.onStartCapture,
+    this.onStartCapturePlan,
+    this.allowEnhanced = false,
   });
 
   final bool showStartAction;
 
   /// Called after the guide; the SiteWise host retains the tour/session context.
   final VoidCallback? onStartCapture;
+  final ValueChanged<int>? onStartCapturePlan;
+  final bool allowEnhanced;
 
   @override
   State<CaptureGuideScreen> createState() => _CaptureGuideScreenState();
@@ -67,6 +72,18 @@ class _CaptureGuideScreenState extends State<CaptureGuideScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // SITEWISE_CAPTURE_PLAN_UI_V1
+    // Keep the existing standalone/help guide, and retain the host callback.
+    if (widget.showStartAction &&
+        (widget.onStartCapture != null || widget.onStartCapturePlan != null)) {
+      return CapturePlanGuide(
+        allowEnhanced: widget.allowEnhanced && widget.onStartCapturePlan != null,
+        onStart: (count) {
+          final select = widget.onStartCapturePlan;
+          if (select != null) { select(count); } else { _begin(); }
+        },
+      );
+    }
     final dark = _step == 2;
     return Scaffold(
       backgroundColor: dark ? Colors.black : SiteWiseColors.surface,

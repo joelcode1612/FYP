@@ -113,11 +113,10 @@
       mapUnavailable(el, 'The map library could not load. Property search and listings remain available.');
       return false;
     }
-    const cartoKey = window.SITEWISE_MAP_CONFIG?.cartoBasemapsKey;
-    if (!cartoKey) {
-      mapUnavailable(el, 'CARTO basemap key missing. Generate map-config.js and rebuild SiteWise.');
-      return false;
-    }
+    // Optional key: CARTO serves these raster tiles without one, so a blank
+    // CARTO_BASEMAPS_KEY must not disable the map. Only a real tile failure
+    // (handled below) is reported as unavailable.
+    const cartoKey = (window.SITEWISE_MAP_CONFIG?.cartoBasemapsKey || '').trim();
     try {
       map = L.map(mountFor(el), {
         zoomControl: true,
@@ -129,11 +128,12 @@
         wheelDebounceTime: 40,
         wheelPxPerZoomLevel: 100,
       }).setView(DEFAULT, 11);
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?key=' + encodeURIComponent(cartoKey), {
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png' +
+        (cartoKey ? '?key=' + encodeURIComponent(cartoKey) : ''), {
         subdomains: 'abcd', maxZoom: 19,
         attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
       }).on('tileerror', () => {
-        mapUnavailable(el, 'CARTO tiles could not load. Check key restrictions and network requests.');
+        mapUnavailable(el, 'The map background could not load. Check the network connection and retry.');
       }).addTo(map);
       markerLayer = (typeof L.markerClusterGroup === 'function')
         ? L.markerClusterGroup({ maxClusterRadius: 42, showCoverageOnHover: false })

@@ -594,11 +594,6 @@ class _RecentActivityCardState extends State<_RecentActivityCard> {
             'Showing ${_events.length} recent events.',
           ),
         ]),
-        AppLink(
-          to: '/admin/activity',
-          classes: 'bento-cta',
-          children: [Component.text('Open full activity')],
-        ),
       ],
     ]);
   }

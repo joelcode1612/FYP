@@ -71,6 +71,7 @@ class _ActivityState extends State<AdminActivityPage> {
   Timer? _debounce;
   int _currentPage = 1;
   SecurityAuditEvent? _selected;
+  web.HTMLElement? _detailsTrigger;
   bool _exporting = false;
   String? _exportMessage;
   bool _exportFailed = false;
@@ -255,66 +256,6 @@ class _ActivityState extends State<AdminActivityPage> {
     _ => 'admin_panel_settings',
   };
 
-  // SITEWISE_ADMIN_ACTIVITY_REDESIGN_V2: verified audit-source states, with optional expanded diagnostics.
-  // Keep the reason from the API available without letting verbose backend
-  // messages overwhelm the source-coverage cards.
-  Component _coverageCard(
-    String title,
-    String subtitle,
-    String icon,
-    AuditSourceStatus? source,
-  ) {
-    final ready = source?.available == true;
-    final known = source != null;
-    final tone = !known ? 'loading' : ready ? 'ready' : 'off';
-    return div(classes: 'sa-coverage-card sa-coverage-card--$tone', [
-      div(classes: 'sa-coverage-top', [
-        span(classes: 'sa-coverage-icon', [Icon(icon)]),
-        span(classes: 'sa-source-status sa-source-status--$tone', [
-          Component.text(!known ? 'Checking' : ready ? 'Available' : 'Unavailable'),
-        ]),
-      ]),
-      strong(classes: 'sa-coverage-title', [Component.text(title)]),
-      p(classes: 'sa-coverage-subtitle', [Component.text(subtitle)]),
-      if (!known)
-        p(classes: 'sa-coverage-summary', [
-          const Component.text('Checking whether this audit source is accessible.'),
-        ])
-      else if (!ready)
-        p(classes: 'sa-coverage-summary', [
-          const Component.text('This source cannot be read. Events may still exist.'),
-        ])
-      else
-        p(classes: 'sa-coverage-summary', [
-          const Component.text('This source is accessible to the audit API.'),
-        ]),
-      if (source?.detail.isNotEmpty == true)
-        details(classes: 'sa-coverage-expand', [
-          summary([
-            Component.text(ready ? 'View source information' : 'Why unavailable?'),
-            const Icon('expand_more', size: 'sm'),
-          ]),
-          p(classes: 'sa-coverage-detail', [
-            Component.text(source!.detail),
-          ]),
-        ]),
-    ]);
-  }
-
-  Component _overviewMetric(
-    String icon,
-    String label,
-    String value,
-    String note,
-  ) => div(classes: 'sa-overview-metric', [
-    span(classes: 'sa-overview-icon', [Icon(icon, size: 'sm')]),
-    div(classes: 'sa-overview-copy', [
-      span(classes: 'sa-overview-label', [Component.text(label)]),
-      strong(classes: 'sa-overview-value', [Component.text(value)]),
-      span(classes: 'sa-overview-note', [Component.text(note)]),
-    ]),
-  ]);
-
   Component _filters() => div(classes: 'sa-filter-area', [
     div(classes: 'sa-filter-grid', [
       div(classes: 'sa-search-field', [
@@ -419,7 +360,14 @@ class _ActivityState extends State<AdminActivityPage> {
           ActionButton('Clear filters', variant: 'secondary', onClick: _resetFilters),
       ]);
     }
-    return div(classes: 'sa-table-scroll', [
+    return div(
+      classes: 'sa-table-scroll',
+      attributes: const {
+        'role': 'region',
+        'aria-label': 'Activity history table, scroll horizontally if needed',
+        'tabindex': '0',
+      },
+      [
       table(classes: 'sa-table', [
         thead([
           tr([
@@ -428,7 +376,7 @@ class _ActivityState extends State<AdminActivityPage> {
             th([const Component.text('Performed by')]),
             th([const Component.text('Date & time')]),
             th([const Component.text('Result')]),
-            th([const Component.text('')]),
+            th([const Component.text('Action')]),
           ]),
         ]),
         tbody([
@@ -496,13 +444,26 @@ class _ActivityState extends State<AdminActivityPage> {
   }
 
   void _openDetails(SecurityAuditEvent event) {
+    final active = web.document.activeElement;
+    _detailsTrigger = active != null && active.isA<web.HTMLElement>()
+        ? active as web.HTMLElement
+        : null;
     setState(() => _selected = event);
     Future<void>.delayed(const Duration(milliseconds: 30), () {
       if (!mounted) return;
-      final target = web.document.querySelector('[role="dialog"] button');
+      final target = web.document.querySelector('.dialog--sa-event-details button');
       if (target != null && target.isA<web.HTMLElement>()) {
         (target as web.HTMLElement).focus();
       }
+    });
+  }
+
+  void _closeDetails() {
+    final trigger = _detailsTrigger;
+    _detailsTrigger = null;
+    setState(() => _selected = null);
+    Future<void>.delayed(const Duration(milliseconds: 30), () {
+      if (mounted && _selected == null) trigger?.focus();
     });
   }
 
@@ -531,17 +492,16 @@ class _ActivityState extends State<AdminActivityPage> {
         ]),
         div(classes: 'sa-dv-change-values', [
           valueTile('Previous', before),
-          span(classes: 'sa-dv-arrow', attributes: const {'aria-hidden': 'true'}, [const Icon('arrow_forward', size: 'sm')]),
           valueTile('New', after, current: !unchanged && before != null && after != null),
         ]),
       ]);
     }
     return SitewiseDialog(
-      title: 'System activity — Event details',
+      title: 'Event details',
       ariaLabel: 'System activity event details',
       wide: true,
       panelClass: 'dialog--sa-event-details',
-      onClose: () => setState(() => _selected = null),
+      onClose: _closeDetails,
       body: div(classes: 'sa-dialog-body sa-dv-body', [
         div(classes: 'sa-dv-summary', [
           div(classes: 'sa-dv-symbol', [const Icon('shield', size: 'lg')]),
@@ -553,45 +513,42 @@ class _ActivityState extends State<AdminActivityPage> {
           StatusBadge(event.resultLabel, tone: _resultTone(event.result), dot: true),
         ]),
         div(classes: 'sa-dv-columns', [
-          div(classes: 'sa-dv-column', [
-            if (hasRole || hasStatus) div(classes: 'sa-dv-section', [
-              h3([const Icon('compare_arrows', size: 'sm'), const Component.text('Account changes')]),
-              if (hasRole) changeRow('Role', details['previous_role'], details['new_role']),
-              if (hasStatus) changeRow('Account status', details['previous_status'], details['new_status']),
-            ]),
-            div(classes: 'sa-dv-section', [
-              h3([const Icon('description', size: 'sm'), const Component.text('Audit information')]),
-              div(classes: 'sa-dv-fields', [
-                InfoRow(icon: 'bolt', label: 'Action', value: readable(event.action)),
-                InfoRow(icon: 'badge', label: 'Account role', value: event.role ?? 'Not recorded'),
-                for (final entry in otherDetails)
-                  InfoRow(icon: 'description', label: readable(entry.key), value: entry.value),
-              ]),
+          div(classes: 'sa-dv-section', [
+            h3([const Component.text('Event information')]),
+            div(classes: 'sa-dv-fields', [
+              valueTile('Action', readable(event.action)),
+              valueTile('Recorded at', _when(event.createdAt)),
+              valueTile('Affected account', _account(event)),
+              valueTile('Performed by', _actor(event)),
+              valueTile('Account role', event.role),
+              valueTile('Result', event.resultLabel),
+              valueTile('Source', event.source),
+              valueTile('Event ID', event.id),
             ]),
           ]),
-          div(classes: 'sa-dv-column', [
-            div(classes: 'sa-dv-section', [
-              h3([const Icon('info', size: 'sm'), const Component.text('Event details')]),
-              div(classes: 'sa-dv-fields', [
-                InfoRow(icon: 'schedule', label: 'Recorded at', value: _when(event.createdAt)),
-                InfoRow(icon: 'person', label: 'Affected account', value: _account(event)),
-                InfoRow(icon: 'admin_panel_settings', label: 'Performed by', value: _actor(event)),
-                InfoRow(icon: 'tag', label: 'Event ID', value: event.id),
-                InfoRow(icon: 'source', label: 'Source', value: event.source),
-              ]),
+          if (hasRole || hasStatus) div(classes: 'sa-dv-section', [
+            h3([const Component.text('Account changes')]),
+            if (hasRole) changeRow('Role', details['previous_role'], details['new_role']),
+            if (hasStatus) changeRow('Account status', details['previous_status'], details['new_status']),
+          ]),
+          if (otherDetails.isNotEmpty) div(classes: 'sa-dv-section', [
+            h3([const Component.text('Additional audit information')]),
+            div(classes: 'sa-dv-fields', [
+              for (final entry in otherDetails)
+                valueTile(readable(entry.key), entry.value),
             ]),
-            div(classes: 'sa-dv-note', [
-              const Icon('shield', size: 'sm'),
-              div([
-                strong([const Component.text('Read-only audit record')]),
-                p([const Component.text('Sensitive credentials and authentication tokens are not displayed.')]),
-              ]),
+          ]),
+          div(classes: 'sa-dv-note', [
+            const Icon('shield', size: 'sm'),
+            div([
+              strong([const Component.text('Read-only audit record')]),
+              p([const Component.text('Sensitive credentials and authentication tokens are not displayed.')]),
             ]),
           ]),
         ]),
       ]),
       actions: [
-        ActionButton('Close', variant: 'secondary', onClick: () => setState(() => _selected = null)),
+        ActionButton('Close', variant: 'secondary', onClick: _closeDetails),
       ],
     );
   }
@@ -604,63 +561,26 @@ class _ActivityState extends State<AdminActivityPage> {
       data?.authentication,
       data?.mfa,
     ];
-    final checkedSources = sources.where((entry) => entry != null).length;
-    final availableSources = sources.where((entry) => entry?.available == true).length;
     final unavailableSources = sources.where((entry) => entry?.available == false).length;
     return AppLayout(
       role: AppRole.admin,
       currentRoute: '/admin/activity',
       title: 'System activity',
       eyebrow: 'Security & operations',
-      subtitle: 'Review account access, administrative actions and authentication activity from available audit sources.',
+      subtitle: 'Search and review recorded system activity.',
       actions: [
         ActionButton('Refresh', variant: 'secondary', icon: 'refresh', onClick: _loading ? null : () => unawaited(_load())),
         ActionButton(_exporting ? 'Exporting…' : 'Export CSV', variant: 'secondary', icon: 'download', onClick: _exporting ? null : () => unawaited(_exportCsv())),
       ],
       child: div(classes: 'sa-page stack stack--sections', [
-        div(classes: 'sa-section-heading', [
-          div(classes: 'sa-heading-copy', [
-            span(classes: 'sa-eyebrow', [const Component.text('AUDIT COVERAGE')]),
-            h2([const Component.text('Connected security sources')]),
-            p([const Component.text('Source status comes from the backend. An unavailable source does not mean there were no events.')]),
-          ]),
-        ]),
-        // All figures are derived from the authorized audit response.
-        // This is source coverage and filtered event count, NOT invented KPIs.
-        div(classes: 'sa-overview', [
-          _overviewMetric(
-            'verified_user',
-            'Accessible sources',
-            data == null ? '—' : '$availableSources / $checkedSources',
-            'Sources the backend can currently read',
-          ),
-          _overviewMetric(
-            'list_alt',
-            'Matching events',
-            data == null ? '—' : '${data.total}',
-            'Recorded events for the selected filters',
-          ),
-          _overviewMetric(
-            'shield',
-            'Unavailable sources',
-            data == null ? '—' : '$unavailableSources',
-            'Does not imply that no events occurred',
-          ),
-        ]),
-        div(classes: 'sa-coverage-grid', [
-          _coverageCard('Administrative actions', 'Staff and management changes', 'manage_accounts', data?.administrative),
-          _coverageCard('Authentication', 'Account sign-in and registration', 'passkey', data?.authentication),
-          _coverageCard('Multi-factor authentication', 'Authenticator and MFA records', 'shield_lock', data?.mfa),
-        ]),
         if (unavailableSources > 0)
           div(classes: 'sa-coverage-notice', [
             const Icon('info', size: 'sm'),
             div(classes: 'sa-coverage-notice-copy', [
               strong([const Component.text('Some audit sources are unavailable')]),
               p([const Component.text(
-                'The event history below includes only accessible sources. '
-                'Expand a source card to read its backend diagnostics. '
-                'Do not interpret missing authentication records as zero activity.'
+                'The table contains events from accessible sources only. '
+                'Unavailable sources may still contain events.'
               )]),
             ]),
           ]),
@@ -671,14 +591,13 @@ class _ActivityState extends State<AdminActivityPage> {
         section(classes: 'sa-panel', [
           div(classes: 'sa-panel-head', [
             div(classes: 'sa-heading-copy', [
-              span(classes: 'sa-eyebrow', [const Component.text('EVENT LOG')]),
-              h2([const Component.text('Security & activity history')]),
+              h2([const Component.text('Activity history')]),
               p([const Component.text('Read-only, searchable events from the authorized audit feed')]),
             ]),
             span(classes: 'sa-total', [
-              Component.text(_loading && data == null
-                  ? 'Loading events…'
-                  : '${data?.total ?? 0} matching ${data?.total == 1 ? 'event' : 'events'}'),
+              Component.text(data == null
+                  ? (_loading ? 'Loading events…' : 'Events unavailable')
+                  : '${data.total} matching ${data.total == 1 ? 'event' : 'events'}'),
             ]),
           ]),
           _categoryTabs(),

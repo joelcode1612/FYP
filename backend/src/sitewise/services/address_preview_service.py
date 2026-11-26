@@ -225,6 +225,104 @@ def _classify_osm(place: dict, *, city: str, state: str, postcode: str):
     return "approximate", checks, notes
 
 
+#: Words that carry no locating information on their own. They appear in almost
+#: every Malaysian address and in almost every Nominatim result, so accepting a
+#: match because it contains one of them would accept anything.
+_OSM_GENERIC_TOKENS = frozenset({
+    "jalan", "jln", "lorong", "lrg", "taman", "tm", "persiaran", "psn",
+    "lebuh", "lebuhraya", "off", "no", "nombor", "lot", "blok", "block",
+    "tingkat", "aras", "unit", "bangunan", "menara", "kompleks", "pangsapuri",
+    "apartment", "condominium", "the", "and", "dan",
+})
+
+#: Federal-territory spellings used by GADM/DOSM that Nominatim does not
+#: recognise inside a free-text query. "W.P. Kuala Lumpur" in the query made the
+#: fallback return nothing at all for every address in the capital, Putrajaya
+#: and Labuan — the three areas where most listings are.
+_QUERY_STATE_ALIASES = {
+    "w.p. kuala lumpur": "Kuala Lumpur",
+    "wp kuala lumpur": "Kuala Lumpur",
+    "w.p. labuan": "Labuan",
+    "wp labuan": "Labuan",
+    "w.p. putrajaya": "Putrajaya",
+    "wp putrajaya": "Putrajaya",
+    "wilayah persekutuan kuala lumpur": "Kuala Lumpur",
+    "wilayah persekutuan labuan": "Labuan",
+    "wilayah persekutuan putrajaya": "Putrajaya",
+}
+
+
+def _query_state(state: str) -> str:
+    """The state name as a geocoder should receive it."""
+    cleaned = " ".join((state or "").split())
+    return _QUERY_STATE_ALIASES.get(cleaned.casefold(), cleaned)
+
+
+def _street_tokens(street: str) -> list[str]:
+    """The distinctive words of a street line.
+
+    Generic words and pure house numbers are dropped: they identify nothing.
+    What remains is what the provider's answer must actually contain.
+    """
+    tokens = [
+        token
+        for token in _norm(street).replace(",", " ").split()
+        if len(token) >= 3
+        and token not in _OSM_GENERIC_TOKENS
+        and not token.isdigit()
+    ]
+    return tokens
+
+
+def _osm_result_names_street(street: str, place: dict) -> bool:
+    """Whether the provider's answer actually names the street that was asked for.
+
+    Nominatim fuzzes house and lot numbers: asking for ``Jalan SS2/24`` returned
+    ``Jalan SS2/72`` — a different street several hundred metres away. Accepting
+    that would place a listing, and therefore every one of its measurements, at
+    the wrong address. City and state agree in both cases, so the component
+    checks cannot catch it; only the street name can.
+
+    A result is accepted when it contains every distinctive token of the street
+    line. When the street has no distinctive token (an empty or numeric line)
+    there is nothing to verify and the existing component checks stand.
+    """
+    tokens = _street_tokens(street)
+    if not tokens:
+        return True
+    display = _norm(place.get("display_name"))
+    return all(token in display for token in tokens)
+
+
+def _osm_query_variants(
+    address_line1: str,
+    address_line2: str,
+    city: str,
+    state: str,
+    postcode: str,
+) -> list[str]:
+    """Progressively simpler geocoder queries, most specific first.
+
+    Every variant keeps the street line: dropping it would turn the lookup into
+    a district search and return a centroid, which is exactly the fabricated
+    location this pipeline must never store. Only redundant qualifiers are
+    removed, because an over-specified query is the common reason a real street
+    is not found at all.
+    """
+    street = " ".join(part.strip() for part in (address_line1, address_line2) if part and part.strip())
+    state_q = _query_state(state)
+    variants = [
+        ", ".join(part for part in (street, postcode.strip(), city.strip(), state_q) if part),
+        ", ".join(part for part in (street, city.strip(), state_q) if part),
+        ", ".join(part for part in (street, city.strip()) if part),
+    ]
+    seen: list[str] = []
+    for variant in variants:
+        if variant and variant not in seen:
+            seen.append(variant)
+    return seen
+
+
 def preview_address(
     *,
     address_line1: str,
@@ -292,32 +390,44 @@ def preview_address(
 
     # Google is not configured/enabled: keep the preview working through the
     # existing Malaysian fallback geocoder (rate-limited, MY-restricted).
-    query = ", ".join(
-        part.strip()
-        for part in (address_line1, address_line2, postcode, city, state)
-        if part and part.strip()
-    )
-    try:
-        place = lookup_malaysian_address(f"{query}, Malaysia")
-    except ValueError:
-        result.update(
-            match_class="not_found",
-            provider="openstreetmap_nominatim",
-            notes=[google_error] if google_error else [],
-        )
-        return result
-    except GeocodingUnavailable as exc:
+    #
+    # The query is tried from most to least specific, and every attempt keeps
+    # the street line. An over-specified query is the common reason a real
+    # street is not found, while a query without the street would return a
+    # district centroid — a fabricated location this pipeline must never store.
+    place = None
+    rejected: list[str] = []
+    unavailable: str | None = None
+    for query in _osm_query_variants(address_line1, address_line2, city, state, postcode):
+        try:
+            candidate = lookup_malaysian_address(f"{query}, Malaysia")
+        except ValueError:
+            candidate = None
+        except GeocodingUnavailable as exc:
+            unavailable = str(exc)
+            break
+        if candidate is None:
+            continue
+        if not _osm_result_names_street(address_line1, candidate):
+            rejected.append(
+                "The fallback geocoder returned a place that does not name the "
+                "street that was entered, so it was not used."
+            )
+            continue
+        place = candidate
+        break
+    if place is None and unavailable is not None:
         result.update(
             match_class="service_unavailable",
             provider=None,
-            notes=[google_error, str(exc)] if google_error else [str(exc)],
+            notes=[note for note in (google_error, unavailable) if note],
         )
         return result
     if place is None:
         result.update(
             match_class="not_found",
             provider="openstreetmap_nominatim",
-            notes=[google_error] if google_error else [],
+            notes=[note for note in (google_error, *rejected) if note],
         )
         return result
     match_class, checks, notes = _classify_osm(

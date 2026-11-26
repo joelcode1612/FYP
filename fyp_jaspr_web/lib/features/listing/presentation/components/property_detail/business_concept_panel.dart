@@ -61,20 +61,7 @@ class _BusinessConceptPanelState extends State<BusinessConceptPanel> {
       p([Component.text('The established 64-feature PU index is context only, not a business success probability or a ranking input.')]),
       h3([Component.text(available ? 'Provisional business-concept comparison' : 'Insufficient comparable evidence')]),
       p([Component.text('${data['note'] ?? ''}')]),
-      for (final item in concepts) div(classes: 'sw-pd__detail-row', [
-        h3([Component.text('${item['rank'] == null ? '' : '${item['rank']}. '}${item['name'] ?? ''} — ${_score(item['score'])}')]),
-        if (item['component_scores'] is Map) p([Component.text(
-          'Demand ${_score((item['component_scores'] as Map)['demand'])} · '
-          'Access ${_score((item['component_scores'] as Map)['accessibility'])} · '
-          'Competition ${_score((item['component_scores'] as Map)['competition'])}',
-        )]),
-        for (final reason in (item['strengths'] as List? ?? const []).take(1))
-          p([Component.text('Strength: $reason')]),
-        for (final reason in (item['limitations'] as List? ?? const []).take(1))
-          p([Component.text('Consider: $reason')]),
-        if (!available) p([Component.text('Missing: ${(item['missing_features'] as List? ?? const []).join(', ')}')]),
-        p([Component.text('Premises requirements and F&B approval must be verified before a final decision.')]),
-      ]),
+      for (final item in concepts) _conceptCard(item, available: available),
       h3([Component.text('Four-class category research (not used to calculate ranks)')]),
       if (research['available'] == true)
         for (final item in (research['rankings'] as List? ?? const []).whereType<Map>())
@@ -85,4 +72,58 @@ class _BusinessConceptPanelState extends State<BusinessConceptPanel> {
         p([Component.text('• $flag')]),
     ]);
   }
+
+  /// One concept rendered as its own card.
+  ///
+  /// These five pieces used to be siblings inside a `.sw-pd__detail-row`,
+  /// which is a two-column label/value rule (flex + space-between). Five
+  /// blocks were therefore squeezed into one unlabelled strip, and the long
+  /// "Consider" sentence ran into the premises note. Every value keeps its own
+  /// label and line here, so nothing can overlap at any viewport width.
+  Component _conceptCard(Map item, {required bool available}) {
+    final scores = item['component_scores'];
+    final strengths =
+        (item['strengths'] as List? ?? const []).whereType<Object>().take(1).toList();
+    final limitations =
+        (item['limitations'] as List? ?? const []).whereType<Object>().take(1).toList();
+    final missing = (item['missing_features'] as List? ?? const []).join(', ');
+    final rank = item['rank'];
+    return div(classes: 'sw-fnb-card', [
+      div(classes: 'sw-fnb-card__head', [
+        h3(classes: 'sw-fnb-card__name', [
+          Component.text('${rank == null ? '' : '$rank. '}${item['name'] ?? ''}'),
+        ]),
+        span(classes: 'sw-fnb-card__score', [
+          Component.text(_score(item['score'])),
+        ]),
+      ]),
+      if (scores is Map) div(classes: 'sw-fnb-card__metrics', [
+        _metric('Demand', scores['demand']),
+        _metric('Access', scores['accessibility']),
+        _metric('Competition', scores['competition']),
+      ]),
+      if (strengths.isNotEmpty || limitations.isNotEmpty)
+        div(classes: 'sw-fnb-card__notes', [
+          for (final reason in strengths) _note('Strength', reason),
+          for (final reason in limitations) _note('Consider', reason),
+        ]),
+      if (!available)
+        p(classes: 'sw-fnb-card__foot', [Component.text('Missing: $missing')]),
+      p(classes: 'sw-fnb-card__foot', [
+        Component.text(
+          'Premises requirements and F&B approval must be verified before a final decision.',
+        ),
+      ]),
+    ]);
+  }
+
+  Component _metric(String label, Object? value) => div(classes: 'sw-fnb-metric', [
+    span(classes: 'sw-fnb-metric__label', [Component.text(label)]),
+    span(classes: 'sw-fnb-metric__value', [Component.text(_score(value))]),
+  ]);
+
+  Component _note(String label, Object body) => div(classes: 'sw-fnb-note', [
+    span(classes: 'sw-fnb-note__label', [Component.text(label)]),
+    p(classes: 'sw-fnb-note__body', [Component.text('$body')]),
+  ]);
 }

@@ -48,6 +48,7 @@ from sitewise.ml import shap_explainer as _shap_module
 from sitewise.ml.feature_bridge import merge_bridge_features
 from sitewise.ml.pu_expanded import (
     EXPANDED_MODEL_NAME,
+    active_expanded_model_name,
     expanded_display_scores,
     merge_expanded_bridge_features,
 )
@@ -1451,10 +1452,14 @@ class PropertyInsightsService:
         try:
             return resolve_variant().as_dict()
         except Exception:  # noqa: BLE001 - the page must still render
+            try:
+                fallback_name = active_expanded_model_name()
+            except Exception:  # noqa: BLE001 - a misconfiguration must not 500
+                fallback_name = EXPANDED_MODEL_NAME
             return {
                 "key": "expanded64",
-                "layer1_model": EXPANDED_MODEL_NAME,
-                "name": EXPANDED_MODEL_NAME,
+                "layer1_model": fallback_name,
+                "name": fallback_name,
                 "version": None,
                 "feature_count": None,
                 "research_only": True,

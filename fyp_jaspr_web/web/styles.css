@@ -15978,6 +15978,144 @@ input[type="range"] {
   max-width: 74ch;
 }
 
+/* Business-concept comparison (sw-fnb-v2).
+   `.sw-pd__detail-row` is a TWO-column label/value row (flex + space-between)
+   whose rules target `span:first-child` / `span:last-child`. The F&B panel used
+   it for five sibling blocks (name, metrics, strength, consider, premises), so
+   the five blocks were squeezed into one unlabelled strip and the long
+   "Consider" sentence collided with the premises note. Each concept is its own
+   card here, with a real metrics strip and labelled notes. */
+.sw-fnb-v2 .sw-fnb-card {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #ffffff;
+  min-width: 0;
+}
+.sw-fnb-v2 .sw-fnb-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.sw-fnb-v2 .sw-fnb-card__name {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.35;
+  font-weight: 700;
+  color: var(--ink);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.sw-fnb-v2 .sw-fnb-card__score {
+  flex: none;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.sw-fnb-v2 .sw-fnb-card__metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px 14px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f7f9fc;
+}
+.sw-fnb-v2 .sw-fnb-metric { min-width: 0; }
+.sw-fnb-v2 .sw-fnb-metric__label {
+  display: block;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.sw-fnb-v2 .sw-fnb-metric__value {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.sw-fnb-v2 .sw-fnb-card__notes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 18px;
+  margin-top: 12px;
+}
+.sw-fnb-v2 .sw-fnb-note { min-width: 0; }
+.sw-fnb-v2 .sw-fnb-note__label {
+  display: block;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.sw-fnb-v2 .sw-fnb-note__body {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.sw-fnb-v2 .sw-fnb-card__foot {
+  margin: 12px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.sw-fnb-v2 .sw-fnb-card__foot + .sw-fnb-card__foot {
+  margin-top: 6px;
+  padding-top: 0;
+  border-top: 0;
+}
+@media (max-width: 720px) {
+  .sw-fnb-v2 .sw-fnb-card__metrics { grid-template-columns: minmax(0, 1fr); }
+  .sw-fnb-v2 .sw-fnb-card__notes { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Compatibility for the pre-card markup: an `h3` plus four `<p>` children of a
+   `.sw-pd__detail-row` inside this panel. Without a client rebuild that older
+   DOM would still be laid out by the two-column flex rule and keep the
+   squeezed, colliding strip. Scoped to `.sw-fnb-v2`, so every other
+   label/value detail row on the page is untouched. */
+.sw-fnb-v2 .sw-pd__detail-row {
+  display: block;
+  margin-top: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 12.5px;
+}
+.sw-fnb-v2 .sw-pd__detail-row > h3 {
+  margin: 0 0 6px;
+  font-size: 15px;
+  line-height: 1.35;
+  font-weight: 700;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.sw-fnb-v2 .sw-pd__detail-row > p {
+  margin: 6px 0 0;
+  line-height: 1.5;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.sw-fnb-v2 .sw-pd__detail-row > p:last-child {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
 .sw-pd__h2 {
   margin: 0 0 12px;
   font-family: var(--font-display);

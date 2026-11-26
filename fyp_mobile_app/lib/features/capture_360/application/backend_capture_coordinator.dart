@@ -11,7 +11,7 @@ import 'package:shared_logic/shared_logic.dart' hide CapturedFrame;
 import 'package:fyp/core/utils/capture_log.dart';
 import 'package:fyp/features/capture_360/domain/sphere/sphere_capture_session.dart';
 import 'package:fyp/features/capture_360/domain/sphere/sphere_target.dart'
-    show kSphereCapturePlanVersion;
+    show sitewisePlanVersionForCount;
 
 /// One successful cloud synchronization.
 class BackendHandoffResult {
@@ -383,18 +383,29 @@ class BackendCaptureCoordinator {
   }) async {
     // The attempt key resolves the same session on retry. A replacement
     // panorama has a different key even when it shares the local station.
+    final local = await _store.getSession(stationId);
+    if (local == null) {
+      throw const BackendHandoffFailure('Save the capture plan before uploading.');
+    }
+    final count = local.requiredTargetCount;
+    final version = sitewisePlanVersionForCount(count);
+    final mode = count == 56 ? 'device_56_backend' : 'device_38_panorama';
     final Map<String, dynamic> created;
     try {
       created = await _client.post('$_api/sessions', <String, dynamic>{
         'property_id': propertyId,
         // Identifies the new Flutter-stitched workflow without changing the
         // expected frame count or breaking legacy `device_38` sessions.
-        'capture_mode': 'device_38_panorama',
-        'capture_plan_version': '$kSphereCapturePlanVersion',
+        'capture_mode': mode,
+        'capture_plan_version': '$version',
         'idempotency_key': _idempotencyKey(propertyId, stationId, attemptKey),
       });
     } on Object catch (error) {
       throw _friendlyFailure(error);
+    }
+    if (created['expectedFrames'] != count || created['captureMode'] != mode ||
+        '${created['capturePlanVersion']}' != '$version') {
+      throw const BackendHandoffFailure('Server capture plan does not match the saved session.');
     }
     final id = created['sessionId'] as String?;
     if (id == null || id.isEmpty) {
@@ -425,6 +436,110 @@ class BackendCaptureCoordinator {
   /// backend schema changes and no second record are introduced. A warning
   /// never blocks or alters the upload: the photograph is confirmed exactly
   /// as captured.
+  // Actual worker-generated result for the existing version-3 backend mode.
+  // Never send a local panorama to the device-confirmation endpoint for v3.
+  Future<Map<String, dynamic>> finishEnhanced({
+    required String stationId,
+    required String sessionId,
+    required String directory,
+  }) async {
+    final saved = await _store.getSession(stationId);
+    if (saved == null || saved.requiredTargetCount != 56 ||
+        saved.backendSessionId != sessionId) {
+      throw const BackendHandoffFailure('Saved enhanced session does not match.');
+    }
+    final server = await _client.get('$_api/sessions/$sessionId');
+    if (server['captureMode'] != 'device_56_backend' ||
+        server['expectedFrames'] != 56 || server['confirmedFrames'] != 56 ||
+        '${server['capturePlanVersion']}' != '3') {
+      throw const BackendHandoffFailure('All 56 original photos must be confirmed.');
+    }
+    Map<String, dynamic> job;
+    final savedJob = saved.backendJobId;
+    if (savedJob != null && savedJob.isNotEmpty) {
+      job = await _client.get('$_api/jobs/$savedJob');
+      if (job['sessionId'] != sessionId) {
+        throw const BackendHandoffFailure('Saved panorama job belongs to another session.');
+      }
+      if (job['status'] == 'error') {
+        job = await _client.post('$_api/jobs/$savedJob/retry', <String, dynamic>{});
+      }
+    } else {
+      job = await _client.post('$_api/sessions/$sessionId/process', <String, dynamic>{});
+    }
+    final jobId = job['jobId'] as String?;
+    if (jobId == null || jobId.isEmpty || job['sessionId'] != sessionId) {
+      throw const BackendHandoffFailure('Invalid panorama job response.');
+    }
+    // Save before polling. The same job is resumed after app/backend restart.
+    await _store.saveBackendHandoff(sessionId: stationId,
+      syncStatus: FrameSyncStatus.processing, backendSessionId: sessionId,
+      backendJobId: jobId, backupSyncStatus: FrameSyncStatus.ready,
+      backupUploaded: 56, backupTotal: 56);
+    for (var poll = 0; poll < 180; poll++) {
+      job = await _client.get('$_api/jobs/$jobId');
+      if (job['sessionId'] != sessionId) {
+        throw const BackendHandoffFailure('Panorama job session mismatch.');
+      }
+      if (job['status'] == 'error') {
+        throw const BackendHandoffFailure('Panorama generation failed. Retry with your saved photos.');
+      }
+      if (job['status'] == 'done') {
+        final id = job['panoramaId'] as String?;
+        final path = job['outputStoragePath'] as String?;
+        if (id == null || !RegExp(r'^[a-fA-F0-9-]{36}$').hasMatch(id) ||
+            path == null || path.isEmpty) {
+          throw const BackendHandoffFailure('The completed panorama is not available.');
+        }
+        final view = await _client.get('$_api/panoramas/$id/view');
+        if (view['panoramaId'] != id) {
+          throw const BackendHandoffFailure('Panorama response does not match the job.');
+        }
+        final uri = Uri.tryParse('${view['viewUrl']}');
+        if (uri == null || !uri.hasAuthority || uri.scheme != 'https') {
+          throw const BackendHandoffFailure('The panorama viewing link is invalid.');
+        }
+        final file = File(p.join(directory, 'server_$id.jpg'));
+        final temporary = File('${file.path}.partial');
+        await file.parent.create(recursive: true);
+        try {
+          final req = await _http.getUrl(uri).timeout(_uploadTimeout);
+          final response = await req.close().timeout(_uploadTimeout);
+          if (response.statusCode != 200) {
+            throw const BackendHandoffFailure('Could not download the generated panorama.');
+          }
+          await response.pipe(temporary.openWrite()).timeout(_uploadTimeout);
+          if (await temporary.length() < 4) {
+            throw const BackendHandoffFailure('The generated panorama is empty.');
+          }
+          final handle = await temporary.open();
+          try {
+            final first = await handle.read(2);
+            await handle.setPosition(await handle.length() - 2);
+            final last = await handle.read(2);
+            if (first.length != 2 || last.length != 2 || first[0] != 255 || first[1] != 216 ||
+                last[0] != 255 || last[1] != 217) {
+              throw const BackendHandoffFailure('The generated panorama is not a complete JPEG.');
+            }
+          } finally { await handle.close(); }
+          if (await file.exists()) {
+            // Same server artifact ID only; never replace a different panorama.
+            if (await _checksum(file.path) != await _checksum(temporary.path)) {
+              throw const BackendHandoffFailure('The server panorama differs from its cached copy.');
+            }
+          } else {
+            await temporary.rename(file.path);
+          }
+          return <String, dynamic>{'id': id, 'storagePath': path, 'localPath': file.path};
+        } finally {
+          if (await temporary.exists()) await temporary.delete();
+        }
+      }
+      await Future<void>.delayed(const Duration(seconds: 2));
+    }
+    throw const BackendHandoffFailure('Panorama is still processing. Retry to resume the same job.');
+  }
+
   Future<String> uploadFrame({
     required String sessionId,
     required CapturedFrame frame,

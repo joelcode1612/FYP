@@ -54,8 +54,15 @@ class UnauthorizedFailure extends AppFailure {
     String? backendCode,
   }) : super(message, statusCode: statusCode, backendCode: backendCode);
 
+  /// A 401 is a session problem, so "sign in again" is the only useful thing
+  /// to say. A 403 is a *decision* about this account and this action — the
+  /// backend explains it ("Only the Property Owner uploads ownership proof.")
+  /// and repeating "your session has expired" there sends the user to redo a
+  /// sign-in that was never the problem.
   @override
-  String get userMessage => 'Your session has expired. Please sign in again.';
+  String get userMessage => statusCode == 403 && message.trim().isNotEmpty
+      ? message
+      : 'Your session has expired. Please sign in again.';
 }
 
 /// The request reached the service and the service reported a server-side
@@ -116,9 +123,15 @@ class ValidationFailure extends AppFailure {
     String? backendCode,
   }) : super(message, statusCode: statusCode, backendCode: backendCode);
 
+  /// FastAPI's `detail` for a 422 is deliberately user-facing — it is how the
+  /// backend says *which* detail is wrong ("The file content does not match
+  /// its extension."). Replacing it with one generic sentence hid the only
+  /// actionable part of the response, so the detail is shown as-is and the
+  /// neutral wording is only a fallback for a response that carries none.
   @override
-  String get userMessage =>
-      'Some details need attention. Please check and try again.';
+  String get userMessage => message.trim().isEmpty
+      ? 'Some details need attention. Please check and try again.'
+      : message;
 }
 
 class CacheFailure extends AppFailure {

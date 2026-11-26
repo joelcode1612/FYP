@@ -32,6 +32,7 @@ research sample), NOT a probability of commercial success.
 from __future__ import annotations
 
 import csv
+import hashlib
 import math
 import threading
 from time import monotonic
@@ -215,21 +216,31 @@ def merge_expanded_bridge_features(
     )
 
 
-def expanded_policy_split(missing: list[str]) -> tuple[list[str], list[str]]:
+def expanded_policy_split(
+    missing: list[str], *, model_name: str | None = None
+) -> tuple[list[str], list[str]]:
     """Split unresolved features into (imputable, required-missing).
 
-    The saved imputer supports ONLY the residential measurements (that is the
-    exact contract of the training package's prediction utility). Population,
-    accessibility and competition features can never be imputed.
+    Imputability is model-dependent, and the authority is the artifact itself:
+    its saved imputer declares which columns it can fill (see
+    ``_artifact_imputable``). The original artifact covers only the residential
+    measurements; Expanded64_v2 additionally covers walkway density. A feature
+    outside that set must be genuinely observed — the transit inputs in
+    particular are never imputed, because a location outside the GTFS snapshot
+    has an unknown transit value rather than a zero.
     """
-    imputable = [name for name in missing if name in IMPUTABLE_FEATURES]
-    required = [name for name in missing if name not in IMPUTABLE_FEATURES]
+    if uses_v2_feature_definitions(model_name):
+        imputable_set = _artifact_imputable(model_name) or V2_IMPUTABLE_FEATURES
+    else:
+        imputable_set = _artifact_imputable(model_name) or IMPUTABLE_FEATURES
+    imputable = [name for name in missing if name in imputable_set]
+    required = [name for name in missing if name not in imputable_set]
     return imputable, required
 
 
-def _expanded_policy_check(missing: list[str]) -> None:
-    """Fail closed when anything other than a residential value is missing."""
-    _, required = expanded_policy_split(missing)
+def _expanded_policy_check(missing: list[str], *, model_name: str | None = None) -> None:
+    """Fail closed when a feature the active contract cannot impute is missing."""
+    _, required = expanded_policy_split(missing, model_name=model_name)
     if required:
         raise ModelUnavailableError(
             "Observed non-residential features are required by the expanded "
@@ -279,7 +290,7 @@ def _score_property(
     model_name: str = EXPANDED_MODEL_NAME,
 ) -> dict[str, Any]:
     """Run the active expanded artifact over one resolved vector (shared by 1 and N)."""
-    _expanded_policy_check(missing)
+    _expanded_policy_check(missing, model_name=model_name)
     observed = {name: value for name, value in features.items() if value is not None}
     result = PULearning(model_name=model_name).predict_or_report(
         property_id, observed, allow_model_imputation=True
@@ -313,22 +324,138 @@ VALIDATED_COORDINATE_INPUTS = {
     "residential_density": None,
 }
 
-#: The v2 contract adds the six standardised inputs. ChatGPT must recalculate
-#: the historical training features with the same definitions (see
-#: deliverables/expanded64_v2_runtime_feature_handoff.md) before these become
-#: safe to score against Expanded64_v2.
+#: The Expanded64_v2 input contract.
+#:
+#: The v2 artifact was trained on all 64 manifest columns, and the runtime
+#: pipeline now produces all 64 of them for a coordinate. A scoring vector
+#: therefore has to admit all 64: withholding a column does not make the model
+#: safer, it makes the value *imputed* instead of observed, and the policy
+#: check then refuses to score at all for anything outside the residential
+#: group. The allowlist below is written out explicitly rather than set to
+#: ``None`` so every admitted input is reviewable and a single feature can be
+#: withdrawn without disabling its whole category.
+#:
+#: This is not a blanket removal of the original contract's restrictions. The
+#: original artifact keeps ``VALIDATED_COORDINATE_INPUTS`` unchanged, and the
+#: source-coverage guards in ``_v2_coverage_guard`` still apply to the six
+#: standardised inputs.
+#:
+#: ``V2_TRAINING_PARITY_UNRESOLVED`` records the 18 inputs whose runtime
+#: definition does not reproduce the historical training column exactly. They
+#: are admitted because they are the only representation of those features the
+#: runtime can produce, and because the training data itself contains the same
+#: kind of missingness the imputer handles. Their scores are comparable between
+#: properties; they are not claimed to be calibrated to the historical
+#: distribution of those 18 columns, and every payload carries
+#: ``training_parity_unresolved`` so a reader can see it.
 VALIDATED_COORDINATE_INPUTS_V2 = {
-    **VALIDATED_COORDINATE_INPUTS,
-    "population_rings": {"pop_500m", "pop_1000m", "pop_2000m", "pop_3000m"},
+    "population_rings": {
+        "pop_500m", "pop_1000m", "pop_2000m", "pop_3000m",
+    },
     "road_geometry": {
-        "road_length_density_1km_km_km2",
+        "road_intersection_density_500m_km2",
         "road_length_density_500m_km_km2",
         "osm_walkway_length_density_500m_km_km2",
+        "road_length_density_1km_km_km2",
+        "nearest_major_road_m",
     },
     "isochrone_population": {
         "walk_isochrone_area_10min_km2", "worldpop_walk_reachable_10min",
     },
+    "drive_isochrone": {"drive_isochrone_area_10min_km2"},
+    "transit_accessibility": {
+        "nearest_transit_walk_m", "transit_stops_500m_walk",
+        "transit_stops_1km_walk", "weekday_transit_routes_1km_walk",
+        "weekday_departures_500m_walk_am",
+    },
+    "demand_generator_pois": {
+        "office_pois_500m", "office_pois_1000m",
+        "schools_count_500m", "schools_count_1000m",
+        "universities_colleges_count_500m", "universities_colleges_count_1000m",
+        "retail_pois_500m", "retail_pois_1000m",
+        "malls_count_500m", "malls_count_1000m",
+        "hospitals_count_500m", "hospitals_count_1000m",
+        "supermarkets_count_500m", "supermarkets_count_1000m",
+    },
+    "residential_density": {
+        "residential_building_count_500m", "residential_building_count_1000m",
+        "residential_building_density_500m_km2",
+        "residential_building_density_1000m_km2",
+        "residential_footprint_coverage_500m_pct",
+        "residential_footprint_coverage_1000m_pct",
+        "residential_landuse_coverage_500m_pct",
+        "residential_landuse_coverage_1000m_pct",
+    },
+    "competitor_counts": {
+        "fnb_competitors_500m", "fnb_competitors_1000m",
+        "cafe_count_500m", "cafe_count_1000m",
+        "restaurant_count_500m", "restaurant_count_1000m",
+        "fast_food_count_500m", "fast_food_count_1000m",
+        "bakery_dessert_beverage_count_500m",
+        "bakery_dessert_beverage_count_1000m",
+    },
+    "parking_facilities": {
+        "parking_facilities_500m", "parking_facilities_1km",
+        "nearest_parking_distance_m",
+    },
 }
+
+#: Inputs whose runtime definition is measured but does not reproduce the
+#: historical training column exactly (18 of 58 retained columns). They are
+#: admitted to the v2 vector and reported as informational measurements; the
+#: caveat travels with the payload.
+V2_TRAINING_PARITY_UNRESOLVED = frozenset({
+    # network
+    "nearest_major_road_m",
+    "road_intersection_density_500m_km2",
+    # transit
+    "nearest_transit_walk_m",
+    "weekday_transit_routes_1km_walk",
+    "weekday_departures_500m_walk_am",
+    # parking
+    "parking_facilities_500m",
+    "parking_facilities_1km",
+    "nearest_parking_distance_m",
+    # competition
+    "fnb_competitors_500m",
+    "fnb_competitors_1000m",
+    "cafe_count_500m",
+    "cafe_count_1000m",
+    "restaurant_count_500m",
+    "restaurant_count_1000m",
+    "fast_food_count_500m",
+    "fast_food_count_1000m",
+    "bakery_dessert_beverage_count_500m",
+    "bakery_dessert_beverage_count_1000m",
+})
+
+#: Fallback imputable set for the v2 vector, used only when the artifact's own
+#: imputer cannot be inspected.
+#:
+#: The saved imputer is a median imputer with missingness indicators fitted
+#: inside each bag, so it supports exactly the columns that were ever missing in
+#: training. Verified against ``Expanded64_v2.joblib``: its
+#: ``SimpleImputer(indicator_)`` tracks nine columns — the eight residential
+#: measurements and ``osm_walkway_length_density_500m_km_km2``. The transit
+#: inputs are NOT among them, so they must be genuinely observed; a location
+#: outside the GTFS snapshot reports them as unavailable instead of having a
+#: median invented for it.
+#:
+#: ``_artifact_imputable`` prefers the artifact's own set at runtime, so this
+#: constant is a conservative fallback rather than the authority.
+V2_IMPUTABLE_FEATURES = frozenset(
+    IMPUTABLE_FEATURES | {"osm_walkway_length_density_500m_km_km2"}
+)
+
+
+def _artifact_imputable(model_name: str | None) -> frozenset[str] | None:
+    """The active artifact's own imputable set, or ``None`` if unavailable."""
+    try:
+        loaded = ModelLoader().load_cached(model_name or active_expanded_model_name())
+    except Exception:  # noqa: BLE001 - fall back to the documented set
+        return None
+    declared = getattr(loaded.model, "imputable_features", None)
+    return frozenset(declared) if declared else None
 
 
 def active_expanded_model_name() -> str:
@@ -364,6 +491,18 @@ def active_expanded_model_name() -> str:
 def uses_v2_feature_definitions(model_name: str | None = None) -> bool:
     """Whether the named artifact was trained on the standardised definitions."""
     return (model_name or active_expanded_model_name()) == EXPANDED64_V2_MODEL_NAME
+
+
+def is_expanded_model_name(model_name: str | None) -> bool:
+    """Whether a ranked/persisted model name belongs to the Expanded64 family.
+
+    Both the original and the v2 artifact are the same 64-feature engine. Code
+    that branches on "is this the expanded model" must accept either name;
+    comparing against the original name alone silently took the 47-feature
+    branch once v2 was configured, dropping the expanded bridge and the
+    expanded SHAP background.
+    """
+    return (model_name or "") in {EXPANDED_MODEL_NAME, EXPANDED64_V2_MODEL_NAME}
 
 
 def _v2_coverage_guard(group: str, name: str, notes: dict) -> bool:
@@ -506,7 +645,7 @@ def collect_expanded_coordinates(
             age_service.close()
 
     missing = [name for name, value in values.items() if value is None]
-    imputable, required = expanded_policy_split(missing)
+    imputable, required = expanded_policy_split(missing, model_name=model_name)
     result = {
         "property_id": property_id,
         "available": False,
@@ -681,20 +820,108 @@ def expanded_prediction(analytics_session: Session, property_id: str) -> dict[st
 def expanded_display_scores(
     analytics_session: Session, property_ids: list[str]
 ) -> dict[str, float]:
-    """Return available expanded64 scores on the 0–100 display scale."""
+    """Return available expanded64 scores on the 0–100 display scale.
+
+    Two sources, in this order:
+
+    1. The historical research bridge (``expanded_scores_many``), which is the
+       established catalogue path and the only one that can reproduce a
+       research subject's training vector.
+    2. The association the enrichment worker persisted for this property's
+       CURRENT coordinates, used only for references the bridge cannot resolve
+       — in practice listings added through the app, which have no research
+       snapshot at all. Without it a newly added listing was measured and
+       scored by the worker and still displayed as "not scored".
+    """
     if not property_ids:
         return {}
+    scores: dict[str, dict[str, Any]] = {}
     try:
         with analytics_session.begin_nested():
             scores = expanded_scores_many(analytics_session, property_ids)
     except (ModelUnavailableError, SQLAlchemyError):
         logger.warning("Expanded64 property scores are unavailable", exc_info=True)
-        return {}
-    return {
-        property_id: float(result["score"]) * 100.0
-        for property_id, result in scores.items()
-        if result.get("available")
+    display = {
+        property_id: float(entry["score"]) * 100.0
+        for property_id, entry in scores.items()
+        if entry.get("available")
     }
+    missing = [str(property_id) for property_id in property_ids
+               if str(property_id) not in display]
+    if missing:
+        try:
+            with analytics_session.begin_nested():
+                display.update(_persisted_display_scores(analytics_session, missing))
+        except SQLAlchemyError:
+            logger.warning("Persisted Expanded64 scores are unavailable", exc_info=True)
+    return display
+
+
+@lru_cache(maxsize=4)
+def _file_sha256(path: str, mtime_ns: int, size: int) -> str:
+    with open(path, "rb") as handle:
+        return hashlib.file_digest(handle, "sha256").hexdigest()
+
+
+def active_artifact_sha256() -> str | None:
+    """SHA-256 of the artifact the active model name resolves to.
+
+    ``None`` when no artifact is on disk, in which case no persisted score can
+    be attributed to it.
+    """
+    try:
+        path = ModelLoader()._find_artifact(active_expanded_model_name())
+        stat = path.stat()
+    except (ModelUnavailableError, OSError):
+        return None
+    return _file_sha256(str(path), stat.st_mtime_ns, stat.st_size)
+
+
+def _persisted_display_scores(
+    analytics_session: Session, property_ids: list[str]
+) -> dict[str, float]:
+    """Association already persisted for these properties' current coordinates.
+
+    Read-only. A row qualifies only when it is available AND was produced by the
+    ACTIVE artifact, so a prediction written by a previous model (or against
+    coordinates that have since moved) can never be displayed under the current
+    model's name.
+    """
+    model_name = active_expanded_model_name()
+    digest = active_artifact_sha256()
+    if digest is None:
+        return {}
+    try:
+        rows = analytics_session.execute(
+            sql_text("""
+                SELECT COALESCE(p.catalogue_id, p.id::text) AS catalogue_ref,
+                       p.id::text AS numeric_ref,
+                       g.pu_inference_snapshot -> 'expanded64' AS payload
+                FROM fyp.rental_properties p
+                JOIN fyp.property_geospatial_features g ON g.property_id = p.id
+                WHERE p.catalogue_id = ANY(:ids) OR p.id::text = ANY(:ids)
+                """),
+            {"ids": [str(property_id) for property_id in property_ids]},
+        ).mappings().all()
+    except SQLAlchemyError:
+        return {}
+    wanted = {str(property_id) for property_id in property_ids}
+    found: dict[str, float] = {}
+    for row in rows:
+        payload = row["payload"] or {}
+        if payload.get("available") is not True:
+            continue
+        if payload.get("model_name") != model_name:
+            continue
+        if payload.get("model_sha256") != digest:
+            continue
+        score = payload.get("score")
+        if score is None:
+            continue
+        for ref in (row["catalogue_ref"], row["numeric_ref"]):
+            if ref is not None and str(ref) in wanted:
+                found[str(ref)] = float(score) * 100.0
+    return found
 
 
 def expanded_scores_many(
@@ -943,7 +1170,7 @@ def expanded_scores_many(
             }
         missing = [name for name in expected if values.get(name) is None]
         try:
-            _expanded_policy_check(missing)
+            _expanded_policy_check(missing, model_name=model_name)
         except ModelUnavailableError as exc:
             results[catalogue_id] = {
                 "property_id": catalogue_id,

@@ -19,11 +19,19 @@ Failure semantics:
 
 from __future__ import annotations
 
+import time
+
 import httpx
 
 from sitewise.core.config import settings
 
 ADDRESS_VALIDATION_URL = "https://addressvalidation.googleapis.com/v1:validateAddress"
+
+#: Transport errors, 429 and 5xx are retried: they are momentary and a valid
+#: address should not be reported as unverifiable because of one blip. A 4xx
+#: payload rejection is never retried — the same payload will be rejected again.
+_MAX_ATTEMPTS = 3
+_RETRY_BACKOFF_SECONDS = (0.5, 1.5)
 
 #: Granularities precise enough to be treated as a confirmed location.
 PREMISE_GRANULARITIES = {"PREMISE", "SUB_PREMISE"}
@@ -87,17 +95,33 @@ def validate_address(
     if administrative_area:
         payload["address"]["administrativeArea"] = administrative_area
 
-    try:
-        response = httpx.post(
-            ADDRESS_VALIDATION_URL,
-            params={"key": settings.google_maps_api_key},
-            json=payload,
-            timeout=settings.google_maps_timeout_seconds,
-        )
-    except httpx.HTTPError as exc:  # transport, DNS, timeout
+    response = None
+    transport_error: httpx.HTTPError | None = None
+    for attempt in range(_MAX_ATTEMPTS):
+        try:
+            response = httpx.post(
+                ADDRESS_VALIDATION_URL,
+                params={"key": settings.google_maps_api_key},
+                json=payload,
+                timeout=settings.google_maps_timeout_seconds,
+            )
+        except httpx.HTTPError as exc:  # transport, DNS, timeout
+            transport_error = exc
+            response = None
+        else:
+            transport_error = None
+            # Retry only the transient statuses; everything else is final.
+            if not (response.status_code == 429 or response.status_code >= 500):
+                break
+        if attempt + 1 < _MAX_ATTEMPTS:
+            time.sleep(_RETRY_BACKOFF_SECONDS[
+                min(attempt, len(_RETRY_BACKOFF_SECONDS) - 1)
+            ])
+
+    if response is None:
         raise AddressValidationUnavailable(
             "The address validation service is temporarily unavailable."
-        ) from exc
+        ) from transport_error
 
     if response.status_code in (401, 403):
         # Confirmed on this project: the key is valid for other Maps APIs, but

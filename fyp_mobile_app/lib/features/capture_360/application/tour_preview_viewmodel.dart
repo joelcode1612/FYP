@@ -128,7 +128,13 @@ class TourPreviewViewModel extends ChangeNotifier {
         frameStore: ServiceLocator.frameStore,
         tourId: tourId,
       );
-      specs = _sphereEngine ? _sphereSpecs() : buildCaptureSphere();
+      if (_sphereEngine) {
+        final store = SitewiseSphereSessionStore(frameStore: ServiceLocator.frameStore, tourId: tourId);
+        final plan = await store.getSession(tourId);
+        specs = _sphereSpecs(plan?.requiredTargetCount ?? kSphereTargetCount);
+      } else {
+        specs = buildCaptureSphere();
+      }
       final manifest = await ServiceLocator.frameStore.loadManifest(tourId);
       final entries = manifest.entries.toList()
         ..sort((a, b) => a.key.compareTo(b.key));
@@ -172,8 +178,8 @@ class TourPreviewViewModel extends ChangeNotifier {
   /// The 38-direction layout mapped onto the preview's chip model. Ids,
   /// angles and ring names come straight from the capture flow's own target
   /// list, so the grid the user reviews is the grid they were guided through.
-  static List<CaptureTargetSpec> _sphereSpecs() => <CaptureTargetSpec>[
-    for (final SphereTargetSpec target in buildSphereTargets())
+  static List<CaptureTargetSpec> _sphereSpecs(int count) => <CaptureTargetSpec>[
+    for (final SphereTargetSpec target in buildSitewiseSessionTargets(count))
       CaptureTargetSpec(
         targetId: target.targetId,
         yawDegrees: target.yawDeg,
@@ -307,6 +313,7 @@ class TourPreviewViewModel extends ChangeNotifier {
 
   Future<bool> regenerate() async {
     if (generating) return false;
+    if (_sphereEngine && specs.length == 56) return retryHandoff();
     generating = true;
     stage = 'Validating frames...';
     error = null;
@@ -732,7 +739,7 @@ class TourPreviewViewModel extends ChangeNotifier {
       assignmentReady &&
       checksComplete &&
       (hasPanorama || inspectionStatus?['panorama_uploaded'] == true) &&
-      specs.length == kSphereTargetCount &&
+      (specs.length == 38 || specs.length == 56) &&
       frames.length == specs.length;
 
   /// Re-arms the durable upload queue and drains it — the ONLY retry path a
@@ -761,6 +768,7 @@ class TourPreviewViewModel extends ChangeNotifier {
         }
       }
       await queue.resume();
+      if (specs.length == 56) tour = await ServiceLocator.tourService.tourById(tourId);
       await refreshServerState();
       return queueState?.panoramaConfirmed ?? false;
     } on Object catch (e) {

@@ -65,7 +65,7 @@ class SphereProgressMap extends StatelessWidget {
             left: 0,
             right: 0,
             child: Text(
-              '${controller.capturedCount} / $kSphereTargetCount',
+              '${controller.capturedCount} / ${controller.targets.length}',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.78),

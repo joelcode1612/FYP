@@ -125,21 +125,41 @@ deliverables/
 artifacts/
 backend/tests/
 
-# Owner decision 2026-11-25: local-only test fixtures, evidence bundles,
-# backups, analysis dumps and agent/workspace state. These paths are untracked
-# (git rm -r --cached) and ignored so `git add -A` cannot re-add them.
-# Files remain on disk; this affects the index only.
-.sitewise_patch_backups/
-.sitewise_provider_ui_backup_20261121_025715/
-.workbuddy-ai/
-analysis_output/
-BDJ_V1_4_EVIDENCE/
-docs/
-N01_EVIDENCE/
-N01_EXPORTS/
-out/
+# Local credentials, signing material and runtime snapshots
+*.env
+*.env.*
+!*.env.example
+*.pem
+*.key
+*.p8
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.kdbx
+*.tfstate*
+credentials.json
+credentials.local.json
+service-account*.json
+local.properties
+key.properties
+.netrc
+.npmrc.local
+.pypirc
+/backend/var/key-custody/
+/var/checkpoints/
+/out/
+/fyp_mobile_app/assets/config/dev.json
+/fyp_mobile_app/assets/config/sitewise_dev.json
+# Repair backups written by tool/ensure_sitewise_dev_config.js when the local
+# config is unparseable. Per-machine by definition, never committed.
+/fyp_mobile_app/assets/config/sitewise_dev.json.invalid-*.bak
+/fyp_jaspr_web/web/auth-config.json
+/fyp_jaspr_web/web/map-config.js
 
-# Local browser-probe scratch output: screenshots and network captures
-# produced by the one-off CDP probe scripts. Regenerated on every run.
-fyp_jaspr_web/tool/backend/
-fyp_jaspr_web/tool/*_capture.json
+/backend/var/db_sync_audit_ref/
+
+# Local migration backups
+/backend/var/static_pu_migration/
+
+/backend/var/static_pu_migration/

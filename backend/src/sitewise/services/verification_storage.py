@@ -25,6 +25,16 @@ _ALLOWED: dict[str, set[str]] = {
 }
 DEFAULT_MAX_BYTES = 10 * 1024 * 1024
 
+# Types a client sends when it does not know (or does not bother to declare)
+# the real family. They carry no information, so the magic-byte check alone
+# decides. Treating them as a mismatch rejected honest uploads: the Flutter
+# client omitted the part's content type, `http` defaulted the part to
+# `application/octet-stream`, and every PDF/PNG/JPEG upload failed with
+# "The file content does not match its extension."
+_GENERIC_MIME = frozenset(
+    {"", "application/octet-stream", "binary/octet-stream", "application/unknown"}
+)
+
 
 class DocumentRejected(Exception):
     """Raised with a user-facing message; mapped to 422/413 by the API layer."""
@@ -79,9 +89,24 @@ def validate_upload(original_filename: str, content_type: str, data: bytes) -> s
         ".webp": data.startswith(b"RIFF") and data[8:12] == b"WEBP"
                  and data[12:16] in (b"VP8 ", b"VP8L", b"VP8X"),
     }
-    if mime not in _ALLOWED[ext] or not signature_matches[ext]:
+    if mime not in _GENERIC_MIME and mime not in _ALLOWED[ext]:
+        raise DocumentRejected("The file content does not match its extension.")
+    # The declared type is client-controlled, so the signature is the control
+    # that actually proves the family. A missing or generic declaration is not
+    # evidence of a bad file and is accepted once the bytes agree.
+    if not signature_matches[ext]:
         raise DocumentRejected("The file content does not match its extension.")
     return ext
+
+
+def canonical_mime(ext: str) -> str:
+    """The MIME type implied by a validated extension.
+
+    Stored instead of whatever the client declared, so a document saved from a
+    generic ``application/octet-stream`` part still records (and later streams
+    with) its real type.
+    """
+    return sorted(_ALLOWED[ext])[0]
 
 
 def save_document(data: bytes, ext: str) -> str:

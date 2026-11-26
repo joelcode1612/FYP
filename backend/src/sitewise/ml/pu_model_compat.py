@@ -129,16 +129,22 @@ class PUExpandedEnsemble:
             raise ValueError(f"Expected {len(names)} ordered features")
         # Distances/counts/densities in this contract are nonnegative; inf and
         # negative values are data errors, never silently clamped. NaN reaches
-        # the saved median imputer ONLY for the residential measurements — the
-        # training package's own prediction utility refuses a missing value in
-        # any other feature, and that contract is enforced here structurally.
+        # the saved median imputer ONLY for the columns that imputer was fitted
+        # to track, and that set comes from the artifact itself (see
+        # ``imputable_features``) rather than from a prefix guess: a feature the
+        # artifact has no missingness indicator for cannot be imputed without
+        # silently feeding it a median it was never trained to accept.
         arr = np.where(np.isinf(arr), np.nan, arr)
         if np.any(np.nan_to_num(arr, nan=0.0) < 0.0):
             raise ValueError("Negative value(s) in nonnegative research features")
+        imputable = getattr(self, "imputable_features", None)
+        if imputable is None:
+            # Original artifact contract: only the residential measurements.
+            imputable = frozenset(n for n in names if n.startswith("residential_"))
         nan_columns = np.isnan(arr).any(axis=0)
         required_missing = [
             name for name, has_nan in zip(names, nan_columns) if has_nan
-            and not name.startswith("residential_")
+            and name not in imputable
         ]
         if required_missing:
             raise ValueError(

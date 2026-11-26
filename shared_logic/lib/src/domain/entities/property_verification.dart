@@ -44,6 +44,14 @@ num? _wireNum(Object? value) {
 double? _wireDouble(Object? value) => _wireNum(value)?.toDouble();
 int? _wireInt(Object? value) => _wireNum(value)?.toInt();
 
+/// A wire object, or an empty map when the field is absent or of another type.
+Map _wireMap(Object? value) => value is Map ? value : const {};
+
+/// A wire list of strings, ignoring anything that is not a list.
+List<String> _wireStringList(Object? value) => [
+  for (final item in value is List ? value : const []) item.toString(),
+];
+
 /// Which review dimension an action, document or audit row belongs to.
 enum VerificationDimension { listing, ownership }
 
@@ -1263,6 +1271,16 @@ class LocationResearchAssociation {
   /// anything else means the location was never confirmed.
   final String? addressValidationStatus;
 
+  /// True when the listing has enough saved address detail (street, city and
+  /// state) for the geocoding provider to place it. A listing with an address
+  /// but no coordinates is therefore still analysable: the analysis action
+  /// resolves the location first. False means the address itself must be
+  /// completed before any measurement can run.
+  final bool addressGeocodable;
+
+  /// Address components still missing when [addressGeocodable] is false.
+  final List<String> addressMissingFields;
+
   const LocationResearchAssociation({
     required this.available,
     this.predictionPending = false,
@@ -1290,6 +1308,8 @@ class LocationResearchAssociation {
     this.featureStates = const {},
     this.measurementCategories = const {},
     this.addressValidationStatus,
+    this.addressGeocodable = false,
+    this.addressMissingFields = const [],
   });
 
   static const LocationResearchAssociation unavailable =
@@ -1362,6 +1382,11 @@ class LocationResearchAssociation {
           entry.key.toString(): Map<String, dynamic>.from(entry.value as Map),
     },
     addressValidationStatus: row['address_validation_status']?.toString(),
+    addressGeocodable:
+        _wireMap(row['address_resolution'])['geocodable'] == true,
+    addressMissingFields: _wireStringList(
+      _wireMap(row['address_resolution'])['missing_fields'],
+    ),
   );
 }
 

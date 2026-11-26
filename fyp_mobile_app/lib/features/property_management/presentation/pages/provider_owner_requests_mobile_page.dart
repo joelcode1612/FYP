@@ -19,7 +19,8 @@ class ProviderOwnerRequestsMobilePage extends ConsumerStatefulWidget {
 }
 
 class _OwnerRequestsState
-    extends ConsumerState<ProviderOwnerRequestsMobilePage> {
+    extends ConsumerState<ProviderOwnerRequestsMobilePage>
+    with WidgetsBindingObserver {
   bool busy = false;
   String? error;
   String? uploadError;
@@ -34,14 +35,25 @@ class _OwnerRequestsState
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     ServiceLocator.listingsRevision.addListener(_reloadListings);
     refresh();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     ServiceLocator.listingsRevision.removeListener(_reloadListings);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // An administrator may approve, reject or ask for more information while
+    // this screen is backgrounded. `listingsRevision` only covers this
+    // account's own mutations, so without this the owner kept reading a stale
+    // "awaiting review" state until they navigated away and back.
+    if (state == AppLifecycleState.resumed && mounted) _reloadListings();
   }
 
   void _reloadListings() {

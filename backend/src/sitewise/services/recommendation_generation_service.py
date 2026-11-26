@@ -47,7 +47,12 @@ from sitewise.ml import shap_explainer as shap_explainer_module
 from sitewise.ml.model_loader import ModelLoader
 from sitewise.ml.property_features import PropertyFeatureRepository
 from sitewise.ml.pu_variant import EXPERIMENTAL_MODEL_NAME, resolve_variant
-from sitewise.ml.pu_expanded import EXPANDED_MODEL_NAME, expanded_scores_many, merge_expanded_bridge_features
+from sitewise.ml.pu_expanded import (
+    EXPANDED_MODEL_NAME,
+    expanded_scores_many,
+    is_expanded_model_name,
+    merge_expanded_bridge_features,
+)
 from sitewise.ml.selected_pu_integration import (
 
     SELECTED_MODEL_NAME,
@@ -554,11 +559,18 @@ class RecommendationGenerationService:
         hardcoded 64, so Operational25 batches remain reusable.
         """
         from sitewise.ml.operational25 import MODEL_NAME as OPERATIONAL25_MODEL_NAME
+        from sitewise.ml.pu_expanded import active_expanded_model_name
 
         model = row.get("model") or {}
         count = model.get("feature_count")
+        # The configured expanded artifact is whatever is active now. Batches
+        # stored under the previous name stay readable, and a batch stored under
+        # the newly activated one is accepted instead of being treated as an
+        # unranked row.
+        accepted = {EXPANDED_MODEL_NAME, OPERATIONAL25_MODEL_NAME,
+                    active_expanded_model_name()}
         return (
-            model.get("name") in {EXPANDED_MODEL_NAME, OPERATIONAL25_MODEL_NAME}
+            model.get("name") in accepted
             and isinstance(count, int) and count > 0
             and model.get("score_source_mode") == "live_inference"
         )
@@ -778,7 +790,10 @@ class RecommendationGenerationService:
                     "background and its LandScan licence provenance are not verified."
                 ),
             }
-        if model_name not in {"pu_model", SELECTED_MODEL_NAME, EXPANDED_MODEL_NAME}:
+        from sitewise.ml.pu_expanded import active_expanded_model_name
+
+        if model_name not in {"pu_model", SELECTED_MODEL_NAME, EXPANDED_MODEL_NAME,
+                              active_expanded_model_name()}:
             return None, {
                 "available": False,
                 "reason": f"No approved SHAP route for the ranked PU model {model_name!r}.",
@@ -841,7 +856,7 @@ class RecommendationGenerationService:
             coverage = merge_bridge_features(
                 resolved, expected_features=loaded.feature_names
             )
-            if model_name == EXPANDED_MODEL_NAME:
+            if is_expanded_model_name(model_name):
                 # The 64-feature contract resolves only with the committed
                 # expanded training-data bridge (population-age + residential).
                 coverage = merge_expanded_bridge_features(
@@ -893,7 +908,7 @@ class RecommendationGenerationService:
         # background: the supplied 47-feature CSV for the baseline artifacts,
         # the training-observation background for the expanded model (the same
         # verified file the property-insights path uses).
-        if model_name == EXPANDED_MODEL_NAME:
+        if is_expanded_model_name(model_name):
             from sitewise.services.property_insights_service import (
                 _background_path,
                 _reference_background_rows,
