@@ -1,0 +1,332 @@
+{
+  "contract_version": "methodology-catalogue/1",
+  "adopted": "2026-11-26",
+  "purpose": "The operative rules a BDJ objective or a Direct-QG item must satisfy, extracted once from the ten methodology documents in deliverables/research_methodology_20261126 so that a prompt can apply them instead of re-deriving them, and so that a reviewer can check a claim against a named rule rather than against a tone.",
+  "not_a_policy_engine": "This file is a catalogue, not a decision. It records what the standard says and what each criterion is derived from. Admission, review and publication remain the existing policies; no criterion here reads review_state, and nothing here approves, publishes or fields anything.",
+  "verdict_vocabulary": {
+    "PASS": "The criterion is met, on evidence that is named.",
+    "FAIL": "The criterion is not met, and the failure is a property of the objective or the item.",
+    "NOT ESTABLISHED": "The record does not contain what would be needed to decide. This is not a pass. It is the honest default for anything nobody has tested.",
+    "NOT APPLICABLE": "The criterion does not govern this case."
+  },
+  "sources": [
+    {
+      "id": "AAPOR",
+      "name": "AAPOR — Best Practices for Survey Research",
+      "inspected": true,
+      "contributes": ["R1", "R4", "R5", "R8", "R10", "Q1", "Q2", "Q3", "Q4", "Q7", "Q8", "Q9"]
+    },
+    {
+      "id": "STATCAN",
+      "name": "Statistics Canada — Questionnaire Design",
+      "inspected": false,
+      "contributes": [],
+      "note": "NOT INSPECTED. No criterion in this catalogue rests on it. It is listed so that the gap is visible rather than implied."
+    },
+    {
+      "id": "MAGENTA",
+      "name": "HM Treasury — Magenta Book",
+      "inspected": true,
+      "contributes": ["R1", "R2", "R3", "R5", "R7", "Q1"]
+    },
+    {
+      "id": "PEW",
+      "name": "Pew Research Center — Writing Survey Questions",
+      "inspected": true,
+      "contributes": ["R4", "R9", "Q2", "Q3", "Q5", "Q6", "Q7", "Q8", "Q9"]
+    },
+    {
+      "id": "CENSUS_A2",
+      "name": "US Census Bureau — Statistical Quality Standard A2",
+      "inspected": true,
+      "contributes": ["Q8", "Q10"]
+    },
+    {
+      "id": "UKAF",
+      "name": "UK Government — Questionnaire design guidance (Analysis Function)",
+      "inspected": true,
+      "contributes": ["R4", "R8", "Q1", "Q2", "Q3", "Q4", "Q5", "Q6", "Q7", "Q8"]
+    },
+    {
+      "id": "GESIS",
+      "name": "GESIS — measurement instruments and questionnaire development",
+      "inspected": true,
+      "contributes": ["R6", "Q5"]
+    },
+    {
+      "id": "UKDS",
+      "name": "UK Data Service — question banks",
+      "inspected": true,
+      "contributes": ["Q10"]
+    },
+    {
+      "id": "NIST_AI600",
+      "name": "NIST — AI 600-1, Generative AI Profile",
+      "inspected": true,
+      "contributes": ["R10", "Q11"]
+    }
+  ],
+  "objective_criteria": [
+    {
+      "id": "R1",
+      "group": "Is this a research question?",
+      "title": "The objective asks a question, and is not a decision the owner must make.",
+      "rule": "An answer must come from respondents, not from the owner. 'Which trading area should I choose?' is a decision; 'Would you buy at RM9.50?' is a question.",
+      "test": "Would an answer to this come from a respondent or from the owner?",
+      "blocking": true,
+      "provenance": ["MAGENTA 2.2.2", "AAPOR"]
+    },
+    {
+      "id": "R2",
+      "group": "Is this a research question?",
+      "title": "The objective is grounded in something the owner recorded, or is explicitly marked exploratory.",
+      "rule": "Grounded means source_refs cites at least one confirmed declaration that bears on the objective. Exploratory means no citation and the proposal says so. The two are not equivalent and must not be presented as one.",
+      "test": "Is there a citation, and does the cited declaration actually bear on this objective?",
+      "blocking": true,
+      "provenance": ["MAGENTA 2.2.2"]
+    },
+    {
+      "id": "R3",
+      "group": "Is this a research question?",
+      "title": "There is a gap, and the answer would close it.",
+      "rule": "The gap must be stated in the record as a problem, not inferred from the objective's existence. Where no problem is stated the objective is exploratory and R3 is NOT APPLICABLE, not PASS.",
+      "test": "Is a problem stated, and would the answer close it?",
+      "blocking": true,
+      "provenance": ["MAGENTA 2.2.1", "MAGENTA 2.2.2"]
+    },
+    {
+      "id": "R4",
+      "group": "Is this a research question?",
+      "title": "The objective names one construct.",
+      "rule": "One thing measured, with a nameable unit of analysis. Two constructs joined by 'and' is two constructs even when the sentence is grammatical.",
+      "test": "Can the objective be answered by one measurement of one quantity?",
+      "blocking": true,
+      "provenance": ["AAPOR", "PEW", "UKAF"]
+    },
+    {
+      "id": "R5",
+      "group": "Can customer research answer it?",
+      "title": "Customer research is the right instrument.",
+      "rule": "An objective needing footfall counts, site inspection, supplier quotes or the owner's own planning decision is not rejected as a research objective; it is an objective whose evidence source is not a customer questionnaire. R5 answers 'which instrument', not 'is this worth doing'.",
+      "test": "Would a customer questionnaire produce this answer, or would a different instrument be needed?",
+      "blocking": true,
+      "provenance": ["AAPOR", "MAGENTA 2.2.3", "MAGENTA 2.2.4"]
+    },
+    {
+      "id": "R6",
+      "group": "Can customer research answer it?",
+      "title": "A fixed-option instrument could measure it.",
+      "rule": "PROJECT1 generates closed-ended items with predefined options. An answer that is inherently narrative can be researched, but not by this instrument. R6 is NOT ESTABLISHED when no measurement has been proposed.",
+      "test": "Could the answer be captured by selecting among predefined options?",
+      "blocking": true,
+      "provenance": ["GESIS"]
+    },
+    {
+      "id": "R7",
+      "group": "Can customer research answer it?",
+      "title": "The answer supports the decision the objective exists to inform.",
+      "rule": "If no one can say what would change depending on the answer, the objective is curiosity. Curiosity is permitted for an exploratory objective but must be labelled as such.",
+      "test": "What would the owner do differently depending on the answer?",
+      "blocking": true,
+      "provenance": ["MAGENTA 2.2.2", "MAGENTA 2.3"]
+    },
+    {
+      "id": "R8",
+      "group": "Is it worth asking, and asked fairly?",
+      "title": "The objective does not presuppose its answer.",
+      "rule": "A premise is legitimate when it is a confirmed fact in the record, and leading when it is not. The test is whether the premise appears in the record.",
+      "test": "Does the objective assume something the owner has not confirmed?",
+      "blocking": true,
+      "provenance": ["UKAF", "AAPOR"]
+    },
+    {
+      "id": "R9",
+      "group": "Is it worth asking, and asked fairly?",
+      "title": "The objective is not a duplicate of another live objective.",
+      "rule": "Duplication is judged on construct, population and decision, not on wording. Two objectives that differ in phrasing but measure the same construct for the same population are one objective.",
+      "test": "Does another live objective measure this construct for this population to inform this decision?",
+      "blocking": false,
+      "provenance": ["PEW"]
+    },
+    {
+      "id": "R10",
+      "group": "Is it worth asking, and asked fairly?",
+      "title": "The interpretation limits are stated or explicitly absent.",
+      "rule": "A stated-intention item does not measure behaviour; a stated-preference item does not measure demand; a single-occasion item does not support frequency. The record must say which it is, and an empty field must read 'not stated' rather than borrow a justification.",
+      "test": "Does the record say what this measurement cannot support?",
+      "blocking": false,
+      "provenance": ["AAPOR", "NIST_AI600 2.2"]
+    },
+    {
+      "id": "R11",
+      "group": "Is it worth asking, and asked fairly?",
+      "title": "The owner's decision and the suitability verdict are recorded separately.",
+      "rule": "The owner's review state is intent; the admission verdict is the method's answer. Neither may overwrite the other, and a suitability refusal must never be rendered as a reversal of the owner's approval.",
+      "test": "Are the two recorded independently, with no write path from one to the other?",
+      "blocking": true,
+      "provenance": ["owner-defined"]
+    },
+    {
+      "id": "R12",
+      "group": "Is it worth asking, and asked fairly?",
+      "title": "The objective's provenance is intact.",
+      "rule": "Traceable to the proposal row that produced it, at the revision that was reviewed. A fixture row, a stale row, or a row whose text is not an objective fails R12 whatever else is true of it.",
+      "test": "Does the proposal row exist, at the reviewed revision, with text that is an objective?",
+      "blocking": true,
+      "provenance": ["owner-defined"]
+    }
+  ],
+  "question_criteria": [
+    {
+      "id": "Q1",
+      "group": "Does the item measure what it claims?",
+      "title": "The item measures the construct of the objective it is attached to.",
+      "rule": "Read the construct the candidate claims, read the question, and ask whether the answer to the question IS the value of that construct. A recommendation question with a likelihood scale fails; a payment question attached to a first-visit-likelihood construct fails.",
+      "test": "Is the answer to this question the value of the claimed construct?",
+      "blocking": true,
+      "provenance": ["AAPOR", "MAGENTA 2.3", "UKAF"]
+    },
+    {
+      "id": "Q2",
+      "group": "Does the item measure what it claims?",
+      "title": "The item asks one thing.",
+      "rule": "A bundle in the stem is a bundle in the question. If the response cannot distinguish which component drove the answer, the item is double-barrelled even though it is grammatically singular.",
+      "test": "Could two respondents give the same answer for different reasons?",
+      "blocking": true,
+      "provenance": ["AAPOR", "PEW", "UKAF"]
+    },
+    {
+      "id": "Q3",
+      "group": "Does the item measure what it claims?",
+      "title": "Response options are exhaustive and mutually exclusive.",
+      "rule": "Exhaustive means every respondent has an answer. Mutually exclusive means no respondent is forced to pick between overlapping categories. A multi-select with no 'none of these' is not exhaustive for a respondent who would choose nothing.",
+      "test": "Does every in-scope respondent have exactly one applicable option (or a valid set, for multi-select)?",
+      "blocking": true,
+      "provenance": ["AAPOR", "PEW", "UKAF"]
+    },
+    {
+      "id": "Q4",
+      "group": "Does the item measure what it claims?",
+      "title": "A non-directional opt-out exists where the question admits one.",
+      "rule": "A factual question about a past purchase does not need 'don't know'; a stated-preference or stated-acceptance question does, because non-acceptance and uncertainty are different answers and a binary item cannot tell them apart. The opt-out must not collapse into a directional category at analysis time.",
+      "test": "Does this construct admit uncertainty, and is there an option for it that is not a direction?",
+      "blocking": true,
+      "provenance": ["AAPOR", "UKAF"]
+    },
+    {
+      "id": "Q5",
+      "group": "Is the item well built?",
+      "title": "Scale length and neutral point are adequate for the construct.",
+      "rule": "A recommendation, not a rule: a three-point likelihood scale is weak, not invalid. Where the sources disagree (at least 5 versus at most 4-5), 5 is the intersection and anything outside it is reported with both citations rather than resolved silently.",
+      "test": "Is the scale within the recommended range, with a neutral point where the construct needs one?",
+      "blocking": false,
+      "provenance": ["UKAF", "PEW", "GESIS"]
+    },
+    {
+      "id": "Q6",
+      "group": "Is the item well built?",
+      "title": "Ordinal categories are presented in order.",
+      "rule": "Reversing a scale for half the sample is permitted; randomising the order of an ordinal scale is not, because the order carries meaning.",
+      "test": "Are ordinal categories presented in their natural order?",
+      "blocking": true,
+      "provenance": ["PEW", "UKAF"]
+    },
+    {
+      "id": "Q7",
+      "group": "Is the item well built?",
+      "title": "The stem does not lead, and does not name its own options.",
+      "rule": "Two distinct failures: a stem that presumes the answer, and a stem that lists the options before asking which one applies. The second primes the response set and turns a measurement into a recognition task.",
+      "test": "Does the stem presume an answer, or enumerate the options it is about to offer?",
+      "blocking": true,
+      "provenance": ["UKAF", "AAPOR", "PEW"]
+    },
+    {
+      "id": "Q8",
+      "group": "Has the item been tested?",
+      "title": "The item has been pretested with in-scope respondents before fielding.",
+      "rule": "No record anywhere in the database records a cognitive interview, a pilot, a usability session or a respondent debriefing for any generated question. An honest review status is a statement of that, not a substitute for it.",
+      "test": "Is there a recorded pretest with in-scope respondents?",
+      "blocking": true,
+      "provenance": ["CENSUS_A2 3.3", "AAPOR", "UKAF", "PEW"]
+    },
+    {
+      "id": "Q9",
+      "group": "Has the item been tested?",
+      "title": "Wording is stable where trends are intended.",
+      "rule": "Retained although NOT APPLICABLE today: nothing in the corpus is a repeat measurement, and the first repeat wave will need it. A reworded question presented as a trend is the specific harm it prevents.",
+      "test": "If this repeats an earlier measurement, is the wording identical?",
+      "blocking": false,
+      "provenance": ["AAPOR", "PEW"]
+    },
+    {
+      "id": "Q10",
+      "group": "Has the item been tested?",
+      "title": "Reuse of an already-evaluated question is permitted, and must be recorded as reuse.",
+      "rule": "Reuse is the cheapest route to a tested item. A reused question inherits the source survey's testing, and the source must be named in the record.",
+      "test": "If this wording comes from elsewhere, is the source recorded?",
+      "blocking": false,
+      "provenance": ["UKDS", "CENSUS_A2 3.3"]
+    },
+    {
+      "id": "Q11",
+      "group": "Is the item honest about itself?",
+      "title": "Model-authored justification and interpretation are not treated as evidence.",
+      "rule": "A generated justification and construct interpretation are the model explaining its own choices. They are not findings, and a card that renders them without saying who wrote them invites the reader to treat model reasoning as a research result.",
+      "test": "Is the author of every explanatory field recorded and attributed?",
+      "blocking": true,
+      "provenance": ["NIST_AI600 2.2"]
+    },
+    {
+      "id": "Q12",
+      "group": "Is the item honest about itself?",
+      "title": "The item is traceable end to end.",
+      "rule": "Question to objective to measurement basis to model response to validation dispositions to owner review to owner's intended option. A break at any link makes the item unauditable. A null that the interface renders as a positive claim is a break.",
+      "test": "Is every link in the chain present, and does no null render as a claim?",
+      "blocking": true,
+      "provenance": ["owner-defined"]
+    },
+    {
+      "id": "Q13",
+      "group": "Is the item honest about itself?",
+      "title": "Every approved Section B item carries a mandatory Owner's Intended Option.",
+      "rule": "Mandatory, not a preference: an approved item without it is not publishable. It is recorded separately from the respondent's answer, never shown to a respondent, and never used to preselect an option. It does not make the item valid; it records what the owner expects so the eventual answer can be compared with it.",
+      "test": "Does every approved item carry a recorded intended option, held apart from any respondent answer?",
+      "blocking": true,
+      "provenance": ["owner-defined"]
+    }
+  ],
+  "prompt_principles": {
+    "bdj_objective": [
+      "Ask a question a respondent can answer, never a decision the owner must make.",
+      "Name exactly one construct. If two things are joined by 'and', split them or say which one is measured.",
+      "Ground the objective in a declaration the owner confirmed, or mark it exploratory and say so. Never cite a declaration that does not bear on it.",
+      "State the gap the answer would close. If no gap is stated, the objective is exploratory.",
+      "Do not presuppose the answer. Any premise must already be a confirmed fact.",
+      "Say what the measurement cannot support: intention is not behaviour, preference is not demand, one occasion is not frequency.",
+      "Never propose an objective whose answer needs footfall counts, site inspection, supplier quotes or the owner's own decision; name the instrument instead.",
+      "Never propose an objective that duplicates another live one on construct, population and decision."
+    ],
+    "qg_item": [
+      "The answer to the question must BE the value of the claimed construct. Test this by substituting the construct into the stem.",
+      "Ask one thing. A bundled offer in the stem is a bundled question.",
+      "Offer options that are exhaustive and mutually exclusive: every in-scope respondent must have an answer, and no two options may overlap.",
+      "Where the construct admits uncertainty, include a non-directional opt-out that cannot be read as a direction.",
+      "Use an ordered scale with a neutral point; keep ordinal categories in their natural order.",
+      "Do not lead, and do not enumerate the options in the stem.",
+      "Record the source of any reused wording.",
+      "Never present a generated justification as a finding, and never state that an item has been pretested when no pretest is recorded."
+    ]
+  },
+  "blocking_matrix": {
+    "objective": ["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R11", "R12"],
+    "question": ["Q1", "Q2", "Q3", "Q4", "Q6", "Q7", "Q8", "Q11", "Q12", "Q13"],
+    "non_blocking": ["R9", "R10", "Q5", "Q9", "Q10"]
+  },
+  "deliberate_limits": [
+    "This catalogue does not approve, admit, publish or field anything.",
+    "It does not replace the objective admission policy; it is the standard that policy is measured against.",
+    "It does not reverse any owner decision, and no criterion here reads the owner's review state to decide suitability.",
+    "It requires no new database table and no new fingerprint: every input it names already exists.",
+    "Statistics Canada questionnaire design was not inspected; no criterion rests on it."
+  ]
+}

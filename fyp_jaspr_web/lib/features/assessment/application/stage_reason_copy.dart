@@ -81,7 +81,7 @@ String _humanise(String token) {
 ///
 /// * `sitewise-assessment-progress/1` constants, for stages 1, 2 and 5 and for
 ///   stage 3's *fallback* reason;
-/// * `sitewise-stage3-completion/2` predicate reasons, which
+/// * `sitewise-stage3-completion/3` predicate reasons, which
 ///   `assessment_progress._stage3_reason()` forwards verbatim as stage 3's
 ///   reason whenever a T3 predicate fails.
 ///
@@ -150,7 +150,7 @@ const Map<String, StageReasonCopy> _known = {
   // `assessment_progress._stage3_reason()` does not emit a progress-contract
   // constant. It forwards `blockers[0]["reason"]` — the **first failing T3
   // predicate's** reason — verbatim. So stage 3 can surface the whole
-  // `sitewise-stage3-completion/2` vocabulary, which is a different set of
+  // `sitewise-stage3-completion/3` vocabulary, which is a different set of
   // strings from everything above. Until these were mapped, every one of them
   // fell through to the de-tokenising fallback and printed a machine code at
   // the reader ("Held: No evaluation").
@@ -216,6 +216,12 @@ const Map<String, StageReasonCopy> _known = {
   'EVALUATION_CONTEXT_MISMATCH': StageReasonCopy(
     'The business evaluation was computed against a different business context '
         'than the one on this assessment.',
+    StageReasonOwner.system,
+  ),
+  'EVALUATION_RULESET_UNVERIFIED': StageReasonCopy(
+    'The evaluation could not be checked against the rules and prompt that are '
+        'current today, because the adopted identity could not be resolved. That '
+        'is a system hold, not something you can change on this page.',
     StageReasonOwner.system,
   ),
   'EVALUATION_RULESET_SUPERSEDED': StageReasonCopy(

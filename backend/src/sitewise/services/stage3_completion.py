@@ -69,7 +69,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-CONTRACT_VERSION = "sitewise-stage3-completion/2"
+CONTRACT_VERSION = "sitewise-stage3-completion/3"
 
 #: Ordered predicates. The order is the evaluation order and the order in
 #: which blockers are reported.
@@ -93,13 +93,49 @@ RESEARCH_TOPIC_ITEM = "M2V2-09"
 PRIORITY_ITEM = "M2V2-10"
 DISPOSITION_ITEM = "M2V2-11"
 
-#: A BDJ result counts as an evaluation only if the engine itself said so.
-#: ``VALID_ABSTENTION`` is a valid answer (it names the missing confirmed
-#: facts), so it is accepted; anything else is a hold or a failure.
-ACCEPTED_OUTCOMES = ("VALIDATED_OUTPUT", "VALID_ABSTENTION")
+#: T3-04 reads the **authoritative BDJ result contract**, not the QG iteration
+#: vocabulary. ``project1_ai.bdj_results`` carries four independent dimensions
+#: (see ``sitewise.project1.result_contracts``): D1 ``execution_outcome``,
+#: D2 the generated ``validation_status``, D3 ``review_outcome`` and D4
+#: ``finding_authority``.
+#:
+#: DD-180: this predicate used to compare D1 against ``VALIDATED_OUTPUT`` /
+#: ``VALID_ABSTENTION`` — the *QG iteration* outcome vocabulary. ``bdj_results``
+#: admits only ``returned`` / ``rejected`` / ``unknown_outcome``, so the test was
+#: false for every row that can exist and T3-04 was unsatisfiable by any real
+#: evaluation. The fixtures that "passed" used values the column cannot store.
+#:
+#: The ladder below is the same one ``read_current_bdj`` already applies to a
+#: stored result, so the stage gate and the readback cannot disagree about what
+#: "evaluated" means.
+ACCEPTED_EXECUTION_OUTCOME = "returned"   # D1: the provider call completed
+ACCEPTED_REVIEW_OUTCOME = "reviewed"      # D3: the engine actually reviewed it
+ACCEPTED_VALIDATION_STATUS = "valid"      # D2: the object passed validation
 
-#: A simulated result is a fixture, never an authorized evaluation.
-FIXTURE_EXECUTION_MODES = ("SIMULATED",)
+#: Execution provenance that may complete a milestone. ``MOCKED_PROVIDER_TEST``
+#: is excluded deliberately: a test double is evidence about code, never about
+#: an assessment, and the earlier fixture-only constant (``("SIMULATED",)``)
+#: named a value the column does not admit, so it refused nothing.
+#: ``DETERMINISTIC_RULE_EVALUATION`` is admitted by the column but has no writer
+#: today; listing it neither permits nor refuses anything until one exists.
+AUTHORITATIVE_EXECUTION_MODES = ("DETERMINISTIC_RULE_EVALUATION",
+                                 "LIVE_PROVIDER_EXECUTION")
+
+
+def _is_authoritative(row: dict) -> bool:
+    """True only when a stored result may be read as a completed evaluation.
+
+    Deliberately conjunctive, and deliberately **not** "did the call return". A
+    returned object that failed validation, or that the engine judged *stale*,
+    is a recorded failure rather than a completed evaluation: ``stale`` also
+    produces ``validation_status='valid'`` (the generated column only maps
+    ``rejected`` to ``invalid``), so D3 must be checked explicitly or a stale
+    verdict would pass.
+    """
+    return (row.get("execution_outcome") == ACCEPTED_EXECUTION_OUTCOME
+            and row.get("review_outcome") == ACCEPTED_REVIEW_OUTCOME
+            and row.get("validation_status") == ACCEPTED_VALIDATION_STATUS
+            and row.get("execution_mode") in AUTHORITATIVE_EXECUTION_MODES)
 
 
 def _pred(code: str, satisfied: bool, reason: str, **evidence: Any) -> dict:
@@ -393,7 +429,8 @@ def collect(cur, *, marketplace_assessment_id: UUID, m2_assessment_id: UUID,
             records["evaluations"] = _rows(
                 ledger,
                 "select result_id, run_id, attempt_no, assessment_revision, source_fingerprint, "
-                "ruleset_version, prompt_version, execution_outcome, validation_status, "
+                "ruleset_version, prompt_version, execution_outcome, review_outcome, "
+                "validation_status, "
                 "finding_authority, finding_count, execution_mode, provider_dispatched, "
                 "result_payload, created_at "
                 "from project1_ai.bdj_results "
@@ -565,9 +602,7 @@ def decide(records: dict) -> dict:
     evaluations = records["evaluations"]
     accepted = None
     for row in evaluations:
-        if (row["validation_status"] == "VALID"
-                and row["execution_outcome"] in ACCEPTED_OUTCOMES
-                and row["execution_mode"] not in FIXTURE_EXECUTION_MODES):
+        if _is_authoritative(row):
             accepted = row
             break
 
@@ -577,12 +612,21 @@ def decide(records: dict) -> dict:
             note="no bdj_results row for the current revision; a missing receipt or "
                  "a missing authorization produces exactly this state")
     elif accepted is None:
+        # Report the disposition of the most recent row so the refusal names its
+        # cause instead of only saying "not valid". The reason code stays
+        # EVALUATION_NOT_VALID: it is the single refusal this predicate has
+        # always emitted, and widening the vocabulary would force every client
+        # copy map to change for a diagnostic improvement.
         best = evaluations[0]
         preds["T3-04"] = _pred(
             "T3-04", False, "EVALUATION_NOT_VALID",
-            execution_outcome=best["execution_outcome"],
-            validation_status=best["validation_status"],
-            execution_mode=best["execution_mode"])
+            execution_outcome=best.get("execution_outcome"),
+            review_outcome=best.get("review_outcome"),
+            validation_status=best.get("validation_status"),
+            execution_mode=best.get("execution_mode"),
+            provider_dispatched=best.get("provider_dispatched"),
+            note="a stored result exists but is not an authoritative evaluation: "
+                 "it must be returned + reviewed + valid, from a real execution mode")
     else:
         payload = accepted.get("result_payload") or {}
         payload_context = payload.get("context_id") if isinstance(payload, dict) else None
@@ -599,25 +643,39 @@ def decide(records: dict) -> dict:
         context_ok = payload_context is None or str(payload_context) == context_id
         # A ruleset or prompt change supersedes the evaluation that used the
         # previous one: the disposition is no longer about the current rules.
-        ruleset_ok = (expected.get("ruleset_version") is None
-                      or accepted["ruleset_version"] == expected["ruleset_version"])
-        prompt_ok = (expected.get("prompt_version") is None
-                     or accepted["prompt_version"] == expected["prompt_version"])
+        #
+        # An *absent* expected identity is not a pass. It used to be: the test
+        # read ``expected.get(x) is None or ...``, so a caller that supplied
+        # nothing — which the readiness path did, passing only the fingerprint —
+        # got ``ruleset_ok = True`` without comparing anything. "Not checked" and
+        # "checked and equal" are different answers, and only the second may
+        # complete a milestone (CP-PROG-02).
+        expected_ruleset = expected.get("ruleset_version")
+        expected_prompt = expected.get("prompt_version")
+        identity_supplied = (expected_ruleset is not None
+                             and expected_prompt is not None)
+        ruleset_ok = (identity_supplied
+                      and accepted["ruleset_version"] == expected_ruleset)
+        prompt_ok = (identity_supplied
+                     and accepted["prompt_version"] == expected_prompt)
         auth = [a for a in records["authorizations"]
                 if str(a["consumed_run_id"]) == str(accepted["run_id"])
                 and a["consumed_at"] is not None]
         authorized = bool(auth)
-        ok = fingerprint_ok and context_ok and ruleset_ok and prompt_ok and authorized
+        ok = (fingerprint_ok and context_ok and identity_supplied
+              and ruleset_ok and prompt_ok and authorized)
         reason = ("EVALUATION_AUTHORIZED" if ok else
                   "SOURCE_FINGERPRINT_UNAVAILABLE" if current_source is None else
                   "EVALUATION_PROVENANCE_MISMATCH" if not fingerprint_ok else
                   "EVALUATION_CONTEXT_MISMATCH" if not context_ok else
+                  "EVALUATION_RULESET_UNVERIFIED" if not identity_supplied else
                   "EVALUATION_RULESET_SUPERSEDED" if not (ruleset_ok and prompt_ok) else
                   "EVALUATION_NOT_AUTHORIZED")
         preds["T3-04"] = _pred(
             "T3-04", ok, reason,
             result_id=str(accepted["result_id"]), run_id=str(accepted["run_id"]),
             execution_outcome=accepted["execution_outcome"],
+            review_outcome=accepted.get("review_outcome"),
             validation_status=accepted["validation_status"],
             finding_count=accepted["finding_count"],
             source_fingerprint=accepted["source_fingerprint"],

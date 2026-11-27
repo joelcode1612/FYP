@@ -53,9 +53,27 @@ AUTHORIZATION_PATH = BACKEND / 'var' / 'qg_synthetic_authorization.json'
 #: prompt this runner would refuse to dispatch.
 AUTHORIZED_PROMPT_KEYS = QG_POLICY_PROMPT_KEYS
 
-#: The key used when a caller names none. Retained so existing composition that
-#: predates ``supports_prompt_key`` keeps its behaviour.
-DEFAULT_PROMPT_KEY = 'QG_PROPOSAL'
+#: The key used when a caller names none.
+#:
+#: This was ``QG_PROPOSAL`` when the proposal prompt was the only authorised
+#: key, and the default then preserved the behaviour of a composition that named
+#: no key. It is now the fixed-option prompt, because the default must name the
+#: pathway that actually executes:
+#:
+#: * every persisted live candidate carries ``QG-FIXED-OPTION-4-CAND`` and every
+#:   run provisioned for QG is fingerprinted with the fixed-option policy;
+#: * no run has ever been provisioned with the ``QG_PROPOSAL`` policy, so no
+#:   stored identity depends on this default;
+#: * the only consumer of a QG answer on this runner is
+#:   ``validate_fixed_candidate``, and a proposal-shaped answer cannot satisfy
+#:   it — it is refused with ``QG_FIXED_OPTION_SCHEMA_INVALID`` *after* the
+#:   attempt is reserved and the dispatch is billed.
+#:
+#: A default that can only produce a paid refusal is not a conservative default.
+#: ``QG_PROPOSAL`` remains in ``AUTHORIZED_PROMPT_KEYS`` so the held legacy
+#: evaluation service can be re-enabled by a separately authorised act, but a
+#: caller that wants it must now name it.
+DEFAULT_PROMPT_KEY = 'QG_FIXED_OPTION'
 
 
 def load_authorization(path: Path | str | None = None) -> dict:
@@ -182,7 +200,11 @@ class QgLiveRunner:
         assessment = UUID(str(auth['assessment_id']))
         source = auth['source_fingerprint']
         run_id = ensure_qg_run(self.engine, actor, assessment, source,
-                               str(auth.get('evaluation_id', '')), prompt_key=key)
+                               str(auth.get('evaluation_id', '')), prompt_key=key,
+                               # Recorded at reservation time where the schema
+                               # holds it, so two approved objectives never share
+                               # one run (CP-FINAL-04).
+                               objective_id=auth.get('objective_id'))
         self.last_run_id = run_id
 
         # A refused re-dispatch must not consume a global slot. The ledger is

@@ -1,0 +1,227 @@
+{
+  "buttons": [
+    {
+      "text": "menu",
+      "disabled": false
+    },
+    {
+      "text": "search",
+      "disabled": false
+    },
+    {
+      "text": "notifications",
+      "disabled": false
+    },
+    {
+      "text": "T\nkeyboard_arrow_down",
+      "disabled": false
+    },
+    {
+      "text": "✓\nSelect property",
+      "disabled": false
+    },
+    {
+      "text": "✓\nBusiness preferences",
+      "disabled": false
+    },
+    {
+      "text": "3\nBusiness review and research goals",
+      "disabled": false
+    },
+    {
+      "text": "4\nQuestion review",
+      "disabled": false
+    },
+    {
+      "text": "5\nQuestionnaire preview",
+      "disabled": false
+    },
+    {
+      "text": "Re-run",
+      "disabled": false
+    },
+    {
+      "text": "Refresh",
+      "disabled": false
+    },
+    {
+      "text": "Review history\nShow",
+      "disabled": false
+    },
+    {
+      "text": "Back to Stage 2",
+      "disabled": false
+    },
+    {
+      "text": "View Stage 4: Question review",
+      "disabled": false
+    },
+    {
+      "text": "Refresh AI status",
+      "disabled": false
+    }
+  ],
+  "pathA": [
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8093/api/v1/m2/assessments/by-marketplace/9af8000e-7eef-4597-a0c8-d7f88ad1381f",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8093/api/v1/m2/assessments/0f958d15-c629-4df4-90b1-ba444e042612",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8093/api/v1/m2/assessments/0f958d15-c629-4df4-90b1-ba444e042612/confirmation-current",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8093/api/v1/m2/assessments/0f958d15-c629-4df4-90b1-ba444e042612/confirmed-review?confirmation_id=d5a72e84-c653-4b16-b225-3de857009b45&expected_revision=24",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8093/api/v1/m2/confirmations/d5a72e84-c653-4b16-b225-3de857009b45/research-workspace?expected_revision=24",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8093/api/v1/m2/assessments/0f958d15-c629-4df4-90b1-ba444e042612/bdj/current?confirmation_id=d5a72e84-c653-4b16-b225-3de857009b45&expected_revision=24",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8093/api/v1/m2/assessments/0f958d15-c629-4df4-90b1-ba444e042612/confirmation-current",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8093/api/v1/m2/assessments/by-marketplace/9af8000e-7eef-4597-a0c8-d7f88ad1381f",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8093/api/v1/m2/assessments/0f958d15-c629-4df4-90b1-ba444e042612/confirmations/d5a72e84-c653-4b16-b225-3de857009b45/business-context-status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8093/api/v1/m2/assessments/0f958d15-c629-4df4-90b1-ba444e042612/business-contexts/4a2a8906-f110-5e54-931a-a14fc60260b7",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8093/api/v1/m2/assessments/0f958d15-c629-4df4-90b1-ba444e042612/confirmation-current",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8093/api/v1/m2/assessments/by-marketplace/9af8000e-7eef-4597-a0c8-d7f88ad1381f",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8093/api/v1/project1-workflow/assessments/0f958d15-c629-4df4-90b1-ba444e042612/stage4/preview-questionnaire?expected_revision=24&confirmation_id=d5a72e84-c653-4b16-b225-3de857009b45",
+      "status": 200
+    }
+  ],
+  "pathB": [
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8093/api/v1/auth/me",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8093/api/v1/auth/me",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8093/api/v1/saved-properties/me",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8093/api/v1/assessments/by-property/EP-02638",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8093/api/v1/m2/assessments/by-marketplace/9af8000e-7eef-4597-a0c8-d7f88ad1381f",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8093/api/v1/m2/assessments/0f958d15-c629-4df4-90b1-ba444e042612",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8093/api/v1/assessments/9af8000e-7eef-4597-a0c8-d7f88ad1381f/workflow-readiness",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8093/api/v1/m2/assessments/0f958d15-c629-4df4-90b1-ba444e042612/confirmation-current",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8093/api/v1/m2/assessments/0f958d15-c629-4df4-90b1-ba444e042612/confirmed-review?confirmation_id=d5a72e84-c653-4b16-b225-3de857009b45&expected_revision=24",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8093/api/v1/m2/confirmations/d5a72e84-c653-4b16-b225-3de857009b45/research-workspace?expected_revision=24",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8093/api/v1/m2/assessments/0f958d15-c629-4df4-90b1-ba444e042612/bdj/current?confirmation_id=d5a72e84-c653-4b16-b225-3de857009b45&expected_revision=24",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8093/api/v1/m2/assessments/0f958d15-c629-4df4-90b1-ba444e042612/confirmation-current",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8093/api/v1/m2/assessments/by-marketplace/9af8000e-7eef-4597-a0c8-d7f88ad1381f",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8093/api/v1/m2/assessments/0f958d15-c629-4df4-90b1-ba444e042612/confirmations/d5a72e84-c653-4b16-b225-3de857009b45/business-context-status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8093/api/v1/m2/assessments/0f958d15-c629-4df4-90b1-ba444e042612/business-contexts/4a2a8906-f110-5e54-931a-a14fc60260b7",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8093/api/v1/m2/assessments/0f958d15-c629-4df4-90b1-ba444e042612/confirmation-current",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8093/api/v1/m2/assessments/by-marketplace/9af8000e-7eef-4597-a0c8-d7f88ad1381f",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8093/api/v1/project1-workflow/assessments/0f958d15-c629-4df4-90b1-ba444e042612/stage4/preview-questionnaire?expected_revision=24&confirmation_id=d5a72e84-c653-4b16-b225-3de857009b45",
+      "status": 200
+    }
+  ],
+  "stageAfterA": {
+    "url": "http://127.0.0.1:8093/entrepreneur/assessments?id=EP-02638&stage=location_evidence",
+    "title": "Location assessment"
+  }
+}

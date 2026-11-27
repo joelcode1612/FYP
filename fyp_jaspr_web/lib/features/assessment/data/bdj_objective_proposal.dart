@@ -334,6 +334,93 @@ final class BdjObjectiveEvaluation {
   bool get isEmpty => proposals.isEmpty;
 }
 
+/// Why a governed objective pass may or may not still be performed.
+///
+/// The server decides this, and the interface renders the control from the
+/// answer. It is deliberately not derivable from anything the client holds: an
+/// empty proposal list, a remembered run id or an assessment-wide proposal count
+/// can each disagree with what the evaluate route will actually do.
+enum BdjGenerationReason {
+  /// No attempt is recorded for this source revision, context packet and
+  /// policy, so the route would dispatch.
+  notStarted,
+
+  /// An attempt is reserved and its receipt has not arrived. Dispatch would be
+  /// refused, and the honest advice is to wait.
+  inProgress,
+
+  /// The attempt for this exact context exists. The route reuses it and never
+  /// redispatches, whether or not it persisted anything.
+  attemptSpent,
+
+  /// The ledger could not be read. Treated as unavailable, never as available:
+  /// offering the control here risks a second dispatch.
+  unavailable,
+
+  /// A reason this client does not recognise. Rendered as unavailable.
+  unrecognised;
+
+  static BdjGenerationReason parse(Object? value) => switch (value) {
+    'NOT_STARTED' => BdjGenerationReason.notStarted,
+    'IN_PROGRESS' => BdjGenerationReason.inProgress,
+    'ATTEMPT_SPENT' => BdjGenerationReason.attemptSpent,
+    'UNAVAILABLE' => BdjGenerationReason.unavailable,
+    _ => BdjGenerationReason.unrecognised,
+  };
+
+  /// Only this reason draws the generate control.
+  bool get allowsGenerate => this == BdjGenerationReason.notStarted;
+}
+
+/// The server's answer to "can this context still be generated?".
+final class BdjObjectiveGeneration {
+  final String contract;
+  final bool eligible;
+  final BdjGenerationReason reason;
+  final int attempts;
+
+  /// Null when the ledger could not be read, so "no run" is not inferred.
+  final bool? runRecorded;
+
+  /// The ledger state of the spent attempt, when there is one.
+  final String? executionState;
+
+  const BdjObjectiveGeneration({
+    required this.contract,
+    required this.eligible,
+    required this.reason,
+    required this.attempts,
+    this.runRecorded,
+    this.executionState,
+  });
+
+  /// Absent block. A server that does not send this cannot authorise a dispatch,
+  /// so the control is withheld rather than guessed at.
+  static const unknown = BdjObjectiveGeneration(
+    contract: '',
+    eligible: false,
+    reason: BdjGenerationReason.unrecognised,
+    attempts: 0,
+  );
+
+  /// The control is drawn from [reason], not from [eligible] alone: a server
+  /// that reports `eligible: true` with an unrecognised reason is not trusted.
+  bool get canGenerate => eligible && reason.allowsGenerate;
+
+  factory BdjObjectiveGeneration.fromJson(Map<String, dynamic> json) {
+    final attempts = (json['attempts'] as num?)?.toInt() ?? 0;
+    final runRecorded = json['run_recorded'];
+    return BdjObjectiveGeneration(
+      contract: (json['contract'] ?? '') as String,
+      eligible: json['eligible'] == true,
+      reason: BdjGenerationReason.parse(json['reason']),
+      attempts: attempts,
+      runRecorded: runRecorded is bool ? runRecorded : null,
+      executionState: json['execution_state'] as String?,
+    );
+  }
+}
+
 /// The list envelope from `GET …/objective-proposals`. It carries no execution
 /// block because it reads persisted rows rather than performing a run.
 final class BdjObjectiveProposalList {
@@ -342,15 +429,20 @@ final class BdjObjectiveProposalList {
   final int proposalCount;
   final List<BdjObjectiveProposal> proposals;
 
+  /// Whether a governed pass can still be performed for this exact context.
+  final BdjObjectiveGeneration generation;
+
   const BdjObjectiveProposalList({
     required this.assessmentId,
     required this.contextId,
     required this.proposalCount,
     required this.proposals,
+    this.generation = BdjObjectiveGeneration.unknown,
   });
 
   factory BdjObjectiveProposalList.fromJson(Map<String, dynamic> json) {
     final raw = json['proposals'];
+    final generation = json['generation'];
     return BdjObjectiveProposalList(
       assessmentId: (json['assessment_id'] ?? '') as String,
       contextId: (json['context_id'] ?? '') as String,
@@ -365,6 +457,9 @@ final class BdjObjectiveProposalList {
                 )
                 .toList(growable: false)
           : const [],
+      generation: generation is Map
+          ? BdjObjectiveGeneration.fromJson(generation.cast<String, dynamic>())
+          : BdjObjectiveGeneration.unknown,
     );
   }
 }

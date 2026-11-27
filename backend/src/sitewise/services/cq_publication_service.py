@@ -316,7 +316,17 @@ class PublicationService:
         supports additional items, but nothing ever handed it one. Composing
         through one function is what keeps the published instrument and the
         instrument Stage 5 displays from describing different questionnaires.
+
+        Kept as a three-tuple because it is the shape the release path and its
+        tests consume. :meth:`_compose_full` is the same work plus the composed
+        document, which the preview needs so it can explain an empty Section B.
         """
+        composed, assignment, stimuli, _document = self._compose_full(
+            records, contract, policy)
+        return composed, assignment, stimuli
+
+    def _compose_full(self, records: dict, contract, policy) -> tuple[dict, dict, dict, dict]:
+        """Composition, binding block, stimuli and the composed document."""
         from sitewise.cq_successor.preview_catalogue import PreviewQuestionCatalogue
         from sitewise.project1 import cq_entrepreneur_adapter as adapter
         from sitewise.services import questionnaire_composition as composition
@@ -364,7 +374,7 @@ class PublicationService:
             'offer': {'version': f"M2V2-14@r{assessment['revision']}",
                       'text': {'EN': f"{slots['product_spec']} at {slots['exact_rm_price']}"}},
         }
-        return composed, assignment, stimuli
+        return composed, assignment, stimuli, document
 
     def _prepare(self, unit, assessment_id: str, actor_id: str) -> dict:
         """Everything up to (not including) the write."""
@@ -379,7 +389,8 @@ class PublicationService:
         missing = [s for s in REQUIRED_SLOTS if not records['slot_values'].get(s)]
         if missing:
             raise CqRefused('CQ_PUBLICATION_SLOTS_UNRESOLVED', 409)
-        composed, assignment, stimuli = self._compose(records, contract, policy)
+        composed, assignment, stimuli, document = self._compose_full(
+            records, contract, policy)
         revision = int(records['assessment']['revision'])
         manifest = builder.build_manifest(
             composed, contract=contract, policy=policy, assignment=assignment,
@@ -390,7 +401,11 @@ class PublicationService:
         plan = builder.plan(manifest, composed, contract, policy)
         return {'contract': contract, 'policy': policy, 'reference': reference,
                 'records': records, 'composed': composed, 'manifest': manifest,
-                'plan': plan}
+                'plan': plan,
+                # The composed document, not just its items, so the report can
+                # explain *why* Section B is empty instead of only how many
+                # fixed questions were authorised.
+                'document': document}
 
     # -- read -------------------------------------------------------------
 
@@ -495,8 +510,29 @@ class PublicationService:
             'authorized_count': plan['authorized_count'],
             'excluded_count': plan['excluded_count'],
             'authorized_question_ids': manifest['authorized_question_ids'],
-            'exclusions': [{'question_id': q['question_id'], 'reasons': q['reasons']}
-                           for q in plan['questions'] if not q['authorized']],
+            'exclusions': [{
+                'question_id': q['question_id'],
+                'reasons': q['reasons'],
+                # §15: the six fixed-core exclusions are structural (three need
+                # a stimulus this release does not carry, three need an optional
+                # declaration this publication path cannot enable). Reporting
+                # the code alone made them read as failures; the sentence says
+                # what each code means.
+                'explanations': [builder.explain_exclusion(r) for r in q['reasons']],
+                # Derived from the codes, never asserted. A reason this module
+                # does not recognise is reported as *not* structural, so a
+                # future exclusion cannot inherit a false clean bill.
+                'structural': bool(q['reasons']) and all(
+                    builder.exclusion_is_structural(r) for r in q['reasons']
+                ),
+            } for q in plan['questions'] if not q['authorized']],
+            # Section B is additive, so an empty section is a legitimate Path A
+            # questionnaire -- but it must never be *unexplained*. This block
+            # names the section status, how many candidates were eligible, and
+            # every candidate the composition excluded with its code and a
+            # plain-English sentence, so "Section B is empty" always has a
+            # stated cause (e.g. the generated question has not been approved).
+            'additional_questions': self._additional_section_report(prepared),
             'stimuli': plan['stimuli'],
             'source_class': SOURCE_CLASS,
             'bank_version': manifest['bank_version'],
@@ -526,6 +562,50 @@ class PublicationService:
             report['assignments'] = len(published['assignments'])
             report['release_state'] = published['state']
         return report
+
+    @staticmethod
+    def _additional_section_report(prepared: dict) -> dict:
+        """Why Section B is what it is, for the publication preview.
+
+        The manifest carries only the items that were *included*, so the reason a
+        generated candidate did not reach Section B exists only in the composed
+        document. Before this, the preview reported ``excluded_count`` for the
+        fixed core and said nothing at all about Section B, so an empty section
+        looked like an omission rather than a stated decision.
+        """
+        from sitewise.services import questionnaire_composition as composition
+
+        document = prepared.get('document') or {}
+        if not document:
+            # A caller that built ``prepared`` without the document (older
+            # fixtures) still gets an honest, empty explanation rather than a
+            # KeyError or a claim that nothing was excluded.
+            return {
+                'status': 'UNKNOWN',
+                'eligible_count': 0,
+                'excluded_candidates': [],
+                'requirements': [],
+            }
+        requirements = [
+            r for r in (document.get('unresolved_requirements') or [])
+            if str(r.get('scope') or '') == 'B_ADDITIONAL'
+        ]
+        excluded = []
+        for entry in document.get('excluded_candidates') or []:
+            reason = entry.get('reason')
+            excluded.append({
+                'candidate_id': entry.get('candidate_id'),
+                'objective_id': entry.get('objective_id'),
+                'reason': reason,
+                'detail': entry.get('detail') or composition.explain_exclusion(reason),
+                'assessment_revision': entry.get('assessment_revision'),
+            })
+        return {
+            'status': document.get('additional_status'),
+            'eligible_count': (document.get('counts') or {}).get('additional', 0),
+            'excluded_candidates': excluded,
+            'requirements': requirements,
+        }
 
     @staticmethod
     def _require_enabled() -> None:

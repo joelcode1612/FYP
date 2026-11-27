@@ -29,14 +29,25 @@ class StubPrompt:
 class StubLedger:
     def __init__(self):
         self.reservations = []
+        self.reservation_kwargs = []
         self.finishes = []
+        self.finish_kwargs = []
 
-    def reserve(self, *args):
+    def reserve(self, *args, **kwargs):
+        # Positional arguments stay flat because these tests index them; the
+        # keyword arguments are recorded beside them rather than merged in.
         self.reservations.append(args)
+        self.reservation_kwargs.append(kwargs)
         return len(self.reservations)
 
-    def finish(self, *args):
+    def finish(self, *args, **kwargs):
+        # DD-055 records two bounded provider facts with the receipt
+        # (``model_returned``, ``provider_response_status``). The double accepts
+        # them rather than asserting an older signature: these tests are about
+        # transport behaviour, and a double that cannot accept what the real
+        # ledger accepts tests the double instead of the code.
         self.finishes.append(args)
+        self.finish_kwargs.append(kwargs)
 
 
 class StubDisclosure:
@@ -45,13 +56,14 @@ class StubDisclosure:
         assert packet['synthetic'] is True
 
 
-def _runner(handler, *, identity_exception=False):
+def _runner(handler, *, identity_exception=False, model=None):
     ledger = StubLedger()
     provider = TokenHarbor(
         SecretStr('test-secret-not-real'),
         enabled=True,
         identity_exception=identity_exception,
         transport=httpx.MockTransport(handler),
+        **({'model': model} if model else {}),
     )
     runner = ModelRunner(provider, ledger, {'BDJ': StubPrompt()}, disclosure=StubDisclosure())
     return runner, ledger
@@ -124,20 +136,31 @@ def test_exact_model_identity_is_recorded_as_verified():
 
 
 def test_unqualified_model_requires_the_explicit_test_exception():
-    unqualified = MODEL.partition(':')[0]
+    # The exception tolerates exactly one alternative identity: the configured
+    # model with its ``:free`` qualifier removed (``_unqualified``). It is
+    # deliberately single-valued, so the excusal path only exists for a model
+    # that carries that qualifier.
+    #
+    # This test used to derive the alternative as ``MODEL.partition(':')[0]``.
+    # MODEL has no qualifier, so that returned MODEL itself, the handler echoed
+    # an exact match, and the excusal branch was never reached — the test was
+    # asserting a refusal it could no longer produce. The pair below is built so
+    # the qualified and unqualified labels genuinely differ.
+    qualified = f'{MODEL}:free'
+    unqualified = MODEL
 
     def handler(request):
         return httpx.Response(200, json=_ok_body(json.dumps({'issues': []}), model=unqualified))
 
-    strict_runner, strict_ledger = _runner(handler)
+    strict_runner, strict_ledger = _runner(handler, model=qualified)
     with pytest.raises(WorkflowHeld, match='PROVIDER_MODEL_MISMATCH'):
         strict_runner('BDJ', {'synthetic': True}, SmallOutput)
     assert strict_ledger.finishes[0][1] == 'rejected'
 
-    excused_runner, _ = _runner(handler, identity_exception=True)
+    excused_runner, _ = _runner(handler, identity_exception=True, model=qualified)
     assert excused_runner('BDJ', {'synthetic': True}, SmallOutput) == {'issues': []}
     assert excused_runner.last_identity == {
-        'requested_model': MODEL,
+        'requested_model': qualified,
         'returned_model': unqualified,
         'classification': 'MODEL_IDENTITY_UNVERIFIED_TEST_EXCEPTION',
         'identity_verified': False,

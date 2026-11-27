@@ -181,6 +181,130 @@ def validate_response(spec: FixedOptionMeasurement, selected) -> list[str]:
     return chosen
 
 
+#: Wording that asks the respondent to compose an answer instead of choosing one.
+#: The policy admits only closed-ended questions with predefined options, so a
+#: stem that invites prose is a contract violation, not a style problem — the
+#: respondent would have nowhere to type, and the answer could not be counted.
+_FREE_TEXT_REQUEST = re.compile(
+    r'\bin your own words\b'
+    r'|\bplease\s+(?:specify|describe|explain|state|write|type|list|elaborate)\b'
+    r'|\b(?:write|type|enter|provide|give|share)\s+(?:in\s+)?your\s+'
+    r'(?:answer|response|reason|reasons|comments?|details?|thoughts?|views?)\b'
+    r'|\bdescribe\s+(?:why|how|what|in\s+detail)\b'
+    r'|\btell\s+us\s+(?:why|how|more|about)\b'
+    r'|\b(?:any\s+)?(?:other\s+)?(?:comments?|remarks?|thoughts?|feedback)\b'
+    r'|\bfree[\s-]?text\b'
+    r'|\bopen[\s-]?ended\b'
+    r'|\belaborate\b'
+    r'|\bexplain\s+your\b',
+    re.I,
+)
+
+#: An option that only resolves by asking for prose. "Other" alone is a closed
+#: answer ("none of these apply") and stays legal; "Other, please specify" is a
+#: text field wearing an option's clothes.
+_OPTION_REQUIRES_TEXT = re.compile(
+    r'\bspecify\b'
+    r'|\b(?:please\s+)?(?:describe|state|write|type|enter|explain|elaborate)\b'
+    r'|\bwrite[\s-]?in\b'
+    r'|\bself[\s-]?describe\b'
+    r'|\b(?:fill|fill\s+in)\s+(?:the\s+)?(?:blank|details?)\b'
+    r'|\bother\s*[\(:,]\s*(?:please\s+)?(?:specify|describe|state|text)\b',
+    re.I,
+)
+
+#: Two interrogative clauses joined in one stem. The narrow rule is deliberate:
+#: flagging every "and" would reject "Would you buy this and collect it in
+#: store?" — one decision, two clauses. Two *questions* is the defect.
+_TWO_INTERROGATIVES = re.compile(
+    # "... and how often ..." — a second interrogative clause.
+    r'\b(?:and|&|as\s+well\s+as)\s+(?:how|what|which|when|where|who|why)\b'
+    # "... and would you ..." — a second finite question clause.
+    r'|\band\s+(?:would|do|does|did|are|is|can|could|will|should|have|has)\s+you\b'
+    # Two rating acts in one stem: one option set cannot serve both.
+    r'|\b(?:rate|rank|estimate)\b[^?]{0,80}\band\b[^?]{0,80}\b(?:rate|rank|estimate)\b',
+    re.I,
+)
+
+
+def validate_structured_wording(question: str, option_labels) -> None:
+    """Refuse a stem or option that cannot be answered by selecting.
+
+    Three rules, all of them properties of the wording rather than of the
+    measurement, and none of them enforceable from the prompt alone — a model
+    that ignores the instruction must be refused here or the policy is only a
+    suggestion:
+
+    * ``QG_FREE_TEXT_REQUESTED`` — the stem asks for prose.
+    * ``QG_OPTION_REQUIRES_FREE_TEXT`` — an option exists only to collect prose.
+    * ``QG_DOUBLE_BARRELLED_WORDING`` — the stem asks two questions at once, so
+      one option set cannot answer both and the answer would be ambiguous.
+
+    Deliberately conservative: each pattern targets phrasing that has no
+    closed-ended reading at all. A false refusal costs one regeneration; a false
+    acceptance puts an unanswerable question in front of a customer.
+    """
+    text = str(question or '')
+    if _FREE_TEXT_REQUEST.search(text):
+        raise WorkflowHeld('QG_FREE_TEXT_REQUESTED')
+    if text.count('?') > 1:
+        raise WorkflowHeld('QG_DOUBLE_BARRELLED_WORDING')
+    if _TWO_INTERROGATIVES.search(text):
+        raise WorkflowHeld('QG_DOUBLE_BARRELLED_WORDING')
+    for label in option_labels or []:
+        if _OPTION_REQUIRES_TEXT.search(str(label or '')):
+            raise WorkflowHeld('QG_OPTION_REQUIRES_FREE_TEXT')
+
+
+def project_option_set(raw: dict) -> dict:
+    """Fill the contract-2.0 response projection from the authoritative option set.
+
+    A fixed-option candidate carries its option set **twice**:
+
+    * ``fixed_measurement.options`` — code, label, order and any numeric bounds;
+    * ``response_codes`` / ``response_options`` / ``routing`` — the contract-2.0
+      projection that ``validate_candidate`` checks and that the persisted row
+      records alongside the measurement.
+
+    The second is a projection of the first, and ``validate_fixed_candidate``
+    already requires them to agree entry by entry (``QG_FIXED_OPTION_MISMATCH``).
+    But the provider schema does not list the projection as required — only
+    ``decision``, ``question`` and ``justification`` are — so a model can return a
+    structurally complete ``fixed_measurement`` and no top-level arrays at all.
+    That answer then failed ``QG_RESPONSE_CODING_DRIFT`` on ``len(codes) < 2``,
+    which reads as a coding defect in the model's answer when the option set was
+    in fact complete and well-formed. Two live dispatches were lost this way.
+
+    Filling an **absent** projection invents nothing: every value is read from the
+    model's own ``fixed_measurement.options``, which is the representation that is
+    persisted and rendered. A projection that *was* supplied is never overwritten,
+    so a model that contradicts itself still meets ``QG_FIXED_OPTION_MISMATCH``.
+
+    ``routing`` is only filled when it is absent, and only with ``END``, because
+    ``QG_ROUTING_TARGET_UNVERIFIED`` already refuses every other target: the
+    target is not a research claim, so asking the model to restate it adds a
+    failure mode without adding a decision.
+    """
+    if not isinstance(raw, dict):
+        return raw
+    measurement = raw.get('fixed_measurement')
+    if not isinstance(measurement, dict):
+        return raw
+    options = [o for o in (measurement.get('options') or []) if isinstance(o, dict)]
+    if not options:
+        return raw
+    codes = [str(o.get('code') or '') for o in options]
+    labels = [str(o.get('label') or '') for o in options]
+    projected = dict(raw)
+    if not raw.get('response_codes'):
+        projected['response_codes'] = codes
+    if not raw.get('response_options'):
+        projected['response_options'] = labels
+    if not raw.get('routing') and all(codes):
+        projected['routing'] = {code: 'END' for code in codes}
+    return projected
+
+
 def validate_fixed_candidate(raw: dict, facts: ConfirmedFacts, *,
                              supported_formats: frozenset[str],
                              approved_population: str | None,
@@ -200,7 +324,10 @@ def validate_fixed_candidate(raw: dict, facts: ConfirmedFacts, *,
     population is declared, and the row records that it is not approved.
     """
     try:
-        candidate = FixedOptionCandidate.model_validate(raw)
+        # The response projection is normalised before validation: see
+        # ``project_option_set`` for why an absent projection is filled rather
+        # than refused.
+        candidate = FixedOptionCandidate.model_validate(project_option_set(raw))
     except ValueError as exc:
         raise WorkflowHeld('QG_FIXED_OPTION_SCHEMA_INVALID') from exc
     validate_candidate(candidate.model_dump(exclude={'fixed_measurement'}), facts)
@@ -230,6 +357,11 @@ def validate_fixed_candidate(raw: dict, facts: ConfirmedFacts, *,
         raise WorkflowHeld('QG_ROUTING_TARGET_UNVERIFIED')
     if re.search(r'\b(?:amazing|wonderful|everyone loves|you will love)\b', candidate.question, re.I):
         raise WorkflowHeld('QG_KNOWN_LEADING_WORDING')
+    # The closed-ended policy, enforced here rather than trusted to the prompt.
+    # Runs on the validated spec's labels as well as the candidate's own, so an
+    # option cannot slip through by differing between the two representations —
+    # though the equality check above means it could not anyway.
+    validate_structured_wording(candidate.question, candidate.response_options)
     labels = ' '.join(candidate.response_options)
     amounts = {m.group(0).replace(' ', '').upper() for m in re.finditer(r'RM\s?\d+(?:\.\d+)?', labels, re.I)}
     if not amounts <= set(facts.confirmed_currency):

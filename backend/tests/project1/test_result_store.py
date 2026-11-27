@@ -156,7 +156,13 @@ def count(case, table='bdj_results', result_id=None):
 
 def persist_kwargs(**overrides):
     values = dict(ruleset_version=RULESET, prompt_version=PROMPT,
-                  model_requested=MODEL)
+                  model_requested=MODEL,
+                  # DD-175: the writer now requires the execution condition.
+                  # These tests exercise the store against fixture results, so
+                  # the truthful provenance is a mocked provider that was never
+                  # dispatched. A test that needs a live row overrides these.
+                  execution_mode='MOCKED_PROVIDER_TEST',
+                  provider_dispatched=False)
     values.update(overrides)
     return values
 
@@ -917,3 +923,54 @@ def test_history_projection_excludes_the_payload_and_the_quote(case, tmp_path):
     # Without custody the History read fails closed rather than dropping findings.
     with pytest.raises(WorkflowHeld, match='RESULT_PAYLOAD_CIPHER_REQUIRED'):
         results_for_assessment(case.restricted, case.actor, case.assessment)
+
+
+# ---------------------------------------------------------------------------
+# DD-175: execution provenance is required and must be self-consistent
+# ---------------------------------------------------------------------------
+# The writer omitted `execution_mode` (NOT NULL) from its INSERT, so every call
+# raised IntegrityError that `except SQLAlchemyError` reported as
+# WORKFLOW_STORAGE_UNAVAILABLE. These pin the two properties that replaced the
+# silence: the value is mandatory, and it cannot contradict `provider_dispatched`.
+
+def test_an_unknown_execution_mode_is_refused_before_the_insert(case):
+    case.ledger.finish(case.attempt, 'returned', DIGEST)
+    before = count(case)
+    with pytest.raises(WorkflowHeld, match='RESULT_EXECUTION_MODE_INVALID'):
+        store(case).persist(case.attempt, engine_result('reviewed'), 'returned',
+                            output_digest=DIGEST,
+                            **persist_kwargs(execution_mode='PROVIDER_GUESSED'))
+    assert count(case) == before
+
+
+@pytest.mark.parametrize('mode,dispatched', [
+    ('LIVE_PROVIDER_EXECUTION', False),   # live execution that never dispatched
+    ('MOCKED_PROVIDER_TEST', True),       # a mock that somehow dispatched
+    ('DETERMINISTIC_RULE_EVALUATION', True),
+])
+def test_the_provenance_pair_cannot_contradict_itself(case, mode, dispatched):
+    """Mirrors ``ck_bdj_execution_dispatch`` without relying on PostgreSQL."""
+    case.ledger.finish(case.attempt, 'returned', DIGEST)
+    before = count(case)
+    with pytest.raises(WorkflowHeld,
+                       match='RESULT_EXECUTION_PROVENANCE_INCONSISTENT'):
+        store(case).persist(case.attempt, engine_result('reviewed'), 'returned',
+                            output_digest=DIGEST,
+                            **persist_kwargs(execution_mode=mode,
+                                             provider_dispatched=dispatched))
+    assert count(case) == before
+
+
+def test_a_live_dispatch_is_stored_as_live(case):
+    """The positive half: a dispatched execution round-trips its provenance."""
+    case.ledger.finish(case.attempt, 'returned', DIGEST)
+    result_id = store(case).persist(
+        case.attempt, engine_result('reviewed'), 'returned', output_digest=DIGEST,
+        **persist_kwargs(execution_mode='LIVE_PROVIDER_EXECUTION',
+                         provider_dispatched=True))
+    with case.admin.connect() as conn:
+        mode, dispatched = conn.execute(text(
+            'SELECT execution_mode, provider_dispatched FROM project1_ai.bdj_results'
+            ' WHERE result_id=:id'), {'id': result_id}).one()
+    assert mode == 'LIVE_PROVIDER_EXECUTION'
+    assert dispatched is True

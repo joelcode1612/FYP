@@ -29,10 +29,10 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
-from sqlalchemy.pool import NullPool
 
 from sitewise.core.config import settings
 from sitewise.db.models import cq_runtime_schema as db
+from sitewise.db.pooling import pool_kwargs
 from sitewise.domain.cq_runtime import CqRefused
 from sitewise.domain.customer_questionnaire import digest
 
@@ -96,12 +96,13 @@ def _storage_refusal(exc):
 
 @lru_cache(maxsize=4)
 def _cq_engine(url):
-    # NullPool: the principal is switched with SET LOCAL ROLE and the actor is a
-    # transaction-local GUC. Both reset at commit, but a pooled connection would
-    # still carry the previous request's session state, so each request gets a
-    # connection that is discarded on close.
-    return create_engine(url, pool_pre_ping=True, echo=False, hide_parameters=True,
-                         poolclass=NullPool)
+    # The principal is switched with SET LOCAL ROLE and the actor is a
+    # transaction-local GUC, so both are gone when the transaction ends and a
+    # pooled connection cannot carry the previous request's identity. The pool
+    # policy (bounded QueuePool, pre-ping, recycle, rollback-on-return) is
+    # stated once in `sitewise.db.pooling`; `M2_POOL_MODE=null` rolls back to
+    # one connection per request with a single configuration value.
+    return create_engine(url, echo=False, hide_parameters=True, **pool_kwargs())
 
 
 def get_cq_engine():

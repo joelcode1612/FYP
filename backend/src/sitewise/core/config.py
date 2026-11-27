@@ -61,6 +61,18 @@ class Settings(BaseSettings):
     # Key is a separately provisioned secret, never the database password.
     m2_protected_identity_enabled: bool = False
     m2_identity_assertion_key: SecretStr = SecretStr('')
+    # Connection pooling for the restricted-principal engines (M2 and CQ).
+    # `queue` reuses connections; `null` restores the pre-pooling NullPool
+    # behaviour and is the single-value rollback. Both engines bind the actor
+    # with a transaction-local GUC on every `after_begin`, so the setting is
+    # gone before the connection can be reused; `sitewise.db.pooling` states
+    # that mechanism once and `tests/d6_pooling/` proves it. The pool is
+    # bounded, pre-pinged, recycled below the server idle timeout, and reset on
+    # return with a rollback.
+    m2_pool_mode: str = 'queue'
+    m2_pool_size: int = 5
+    m2_pool_max_overflow: int = 5
+    m2_pool_recycle_seconds: int = 1800
     # BCB confirmation validity horizon, in days. There is NO default: when
     # this is absent the resolver fails closed with
     # VALIDITY_BASIS_UNAUTHORIZED instead of assuming a 90-day window. Any
@@ -82,6 +94,15 @@ class Settings(BaseSettings):
     # so the hold is discoverable, but generation returns 503 until an admitted
     # measurement, disclosure adapter and reviewed attempt ledger row exist.
     ee01_explanation_enabled: bool = False
+    # The explanation store's own target, checked the same way as
+    # ``ee01_expected_database``. These three were read but never declared, so
+    # pydantic discarded the env values and ``ee01_explanation.py`` raised
+    # AttributeError on every request — the same defect class as DD-128, found
+    # when the guarded launcher failed while patching them. Declared here so the
+    # launcher can set them and the route can compare against them.
+    explanation_store_database_url: SecretStr = SecretStr('')
+    explanation_store_expected_database: str = ''
+    explanation_store_expected_port: int = 0
     # Separate local operator inspection. Never authorizes participation.
     cq_synthetic_preview_enabled: bool = False
     cq_synthetic_interactive_enabled: bool = False

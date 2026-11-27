@@ -63,11 +63,19 @@ PROMPTS = {
     # passed 6/7; the single failure was BDJ_OBJECTIVE_SOURCE_NOT_SUPPORTING —
     # the model cited a definite answer as an information gap. v3 states which
     # values may support a gap, so the validator does not have to catch it.
-    'BDJ_OBJECTIVE': Prompt('BDJ-OBJECTIVE-3-CAND',
+    # v4 (BDJ-OBJECTIVE-4-CAND, 2026-11-26) states the cardinality policy the
+    # owner approved: the six permanent objectives are not re-proposed, at most
+    # six additional objectives, zero is valid, and 4-6 is preferred only where
+    # the source justifies it. Until v4 the prompt said "at most one information
+    # gap per confirmed answer", which let a single pass propose more additional
+    # objectives than the contract's MAX_RECOMMENDATIONS would accept, and said
+    # nothing at all about the six fixed objectives. Additive only: no existing
+    # instruction is relaxed, and every historical run keeps its own hash.
+    'BDJ_OBJECTIVE': Prompt('BDJ-OBJECTIVE-4-CAND',
         'You are a bounded research-objective proposer for a cafe business plan.',
         'Read the confirmed M2V1 declarations in source_data.declarations. '
-        'Identify at most one information gap per confirmed answer and propose a research '
-        'objective that could close it. Return only bdj-objective-proposal/1 JSON. '
+        'Identify an information gap per confirmed answer where one exists, and propose a '
+        'research objective that could close it. Return only bdj-objective-proposal/2 JSON. '
         'Use exactly two recommendation_status values. '
         'MOST_SUGGESTED means a specific confirmed answer directly establishes an information '
         'gap: set problem_type to SOURCE_CONFIRMED_INFORMATION_GAP, state the problem in one '
@@ -84,6 +92,18 @@ PROMPTS = {
         'Only an answer whose value is UNDECIDED, UNSURE or UNKNOWN can support a MOST_SUGGESTED '
         'recommendation. A definite value such as DINE_IN, TAKEAWAY, COFFEE or STUDENTS is a '
         'decision, not a gap; never cite one as the source of an information gap. '
+        # -- v4: how many objectives, and which ones are not yours to propose ------
+        'The six permanent research objectives are fixed for every assessment and are not '
+        'yours to propose. Never restate, reword, split or duplicate one of them, and never '
+        'propose an objective that a permanent objective already covers. '
+        'Propose only additional objectives that are distinct from each other and from those '
+        'six, and that a confirmed declaration actually justifies. '
+        'Return at most six additional objectives. Four to six is preferred when the source '
+        'genuinely supports that many distinct gaps, but it is neither a target nor a '
+        'minimum: three well-supported objectives are better than six padded ones. '
+        'Returning zero recommendations is a valid and complete answer when no confirmed '
+        'declaration establishes a gap. Do not invent a need in order to fill the list, and '
+        'never propose the same gap twice in different words. '
         'SUGGESTED means the objective is exploratory and no confirmed answer establishes a '
         'problem: set problem_type to EXPLORATORY_RESEARCH_NEED, set problem to null, leave '
         'source_refs empty, and say in reason that no M2 finding establishes the need. '
@@ -102,7 +122,7 @@ PROMPTS = {
                              'answer_revision_id': 'a1b2c3d4-0000-4000-8000-000000000000',
                              'item_version_id': 'b1c2d3e4-0000-4000-8000-000000000000'}],
            'example_only': True},
-          {'contract_version': 'bdj-objective-proposal/1',
+          {'contract_version': 'bdj-objective-proposal/2',
            'recommendations': [{
                'recommendation_status': 'MOST_SUGGESTED',
                'problem_type': 'SOURCE_CONFIRMED_INFORMATION_GAP',
@@ -116,7 +136,7 @@ PROMPTS = {
                          'information is established as available.',
                'authority': 'CANDIDATE_ONLY'}]}),
          ({'declarations': [], 'example_only': True},
-          {'contract_version': 'bdj-objective-proposal/1',
+          {'contract_version': 'bdj-objective-proposal/2',
            'recommendations': [{
                'recommendation_status': 'SUGGESTED',
                'problem_type': 'EXPLORATORY_RESEARCH_NEED',
@@ -158,11 +178,16 @@ PROMPTS = {
         'Do not flag an omitted optional field as a business defect.',
         (({'declarations': [], 'example_only': True},
           {'issues': [], 'overall_note': 'No declarations were available; no business judgment is possible.'}),)),
-    'BDJ_OBJECTIVE_M2V2': Prompt('BDJ-OBJECTIVE-4-M2V2-CAND',
+    # BDJ-OBJECTIVE-5-M2V2-CAND (2026-11-26) carries the same cardinality policy
+    # as BDJ-OBJECTIVE-4-CAND: six permanent objectives that are not re-proposed,
+    # at most six additional, zero valid, 4-6 preferred only where justified, no
+    # duplicated or invented needs, and the /2 contract. The two families stay
+    # separate entries so an M2V1 run and an M2V2 run can never share a hash.
+    'BDJ_OBJECTIVE_M2V2': Prompt('BDJ-OBJECTIVE-5-M2V2-CAND',
         'You are a bounded research-objective proposer for a cafe business plan.',
         'Read the confirmed M2 V2 declarations in source_data.declarations. '
-        'Identify at most one information gap per confirmed answer and propose a research '
-        'objective that could close it. Return only bdj-objective-proposal/1 JSON. '
+        'Identify an information gap per confirmed answer where one exists, and propose a '
+        'research objective that could close it. Return only bdj-objective-proposal/2 JSON. '
         'Use exactly two recommendation_status values. '
         'MOST_SUGGESTED means a specific confirmed answer directly establishes an information '
         'gap: set problem_type to SOURCE_CONFIRMED_INFORMATION_GAP, state the problem in one '
@@ -198,6 +223,18 @@ PROMPTS = {
         'SUGGESTED means the objective is exploratory and no confirmed answer establishes a '
         'problem: set problem_type to EXPLORATORY_RESEARCH_NEED, set problem to null, leave '
         'source_refs empty, and say in reason that no M2 finding establishes the need. '
+        # -- v5: how many objectives, and which ones are not yours to propose ------
+        'The six permanent research objectives are fixed for every assessment and are not '
+        'yours to propose. Never restate, reword, split or duplicate one of them, and never '
+        'propose an objective that a permanent objective already covers. '
+        'Propose only additional objectives that are distinct from each other and from those '
+        'six, and that a confirmed declaration actually justifies. '
+        'Return at most six additional objectives. Four to six is preferred when the source '
+        'genuinely supports that many distinct gaps, but it is neither a target nor a '
+        'minimum: three well-supported objectives are better than six padded ones. '
+        'Returning zero recommendations is a valid and complete answer when no confirmed '
+        'declaration establishes a gap. Do not invent a need in order to fill the list, and '
+        'never propose the same gap twice in different words. '
         'Write reason as one or two plain sentences; never use labels such as '
         '"Counterargument:" or "Justification:". '
         'Never use CLARIFY, CONFIRMED, APPROVED, REJECTED or any other status. '
@@ -213,7 +250,7 @@ PROMPTS = {
                              'answer_revision_id': 'a1b2c3d4-0000-4000-8000-000000000000',
                              'item_version_id': 'b1c2d3e4-0000-4000-8000-000000000000'}],
            'example_only': True},
-          {'contract_version': 'bdj-objective-proposal/1',
+          {'contract_version': 'bdj-objective-proposal/2',
            'recommendations': [{
                'recommendation_status': 'MOST_SUGGESTED',
                'problem_type': 'SOURCE_CONFIRMED_INFORMATION_GAP',
@@ -248,7 +285,7 @@ PROMPTS = {
                              'answer_revision_id': 'a2b3c4d5-0000-4000-8000-000000000000',
                              'item_version_id': 'b2c3d4e5-0000-4000-8000-000000000000'}],
            'example_only': True},
-          {'contract_version': 'bdj-objective-proposal/1',
+          {'contract_version': 'bdj-objective-proposal/2',
            'recommendations': [{
                'recommendation_status': 'MOST_SUGGESTED',
                'problem_type': 'SOURCE_CONFIRMED_INFORMATION_GAP',
@@ -269,7 +306,7 @@ PROMPTS = {
                          'but the hypothesis has not been tested with customers.',
                'authority': 'CANDIDATE_ONLY'}]}),
          ({'declarations': [], 'example_only': True},
-          {'contract_version': 'bdj-objective-proposal/1',
+          {'contract_version': 'bdj-objective-proposal/2',
            'recommendations': [{
                'recommendation_status': 'SUGGESTED',
                'problem_type': 'EXPLORATORY_RESEARCH_NEED',
@@ -547,6 +584,183 @@ PROMPTS = {
 }
 
 
+# -- CP-06: the objective prompt revision, measured before it is adopted -------
+# The eight criteria below are the adopted research standard's
+# `prompt_principles.bdj_objective`, from the methodology catalogue
+# (`sitewise.project1.methodology`). v5 states the *contract* — statuses, reference
+# copying, cardinality, what not to write — and says almost nothing about what makes
+# an objective answerable. Those are different failures: v5 can be satisfied by an
+# objective that asks the owner to choose a neighbourhood, which the downstream
+# disposition then classifies as BUSINESS_DECISION_REQUIRED.
+#
+# This block is appended to the v5 text rather than retyped beside it, so the two
+# arms of the CP-10 comparison differ in exactly one place. A prompt revision that
+# also reworded the shared half would confound the comparison it exists to support.
+_M2V2_V6_PRINCIPLES = (
+    ' The following rules are the adopted research standard for a research objective. '
+    'Apply all of them before emitting a recommendation; an objective that breaks one is '
+    'not a candidate, however well the source supports it. '
+    # 1 — answerable by a respondent, not a decision for the owner
+    'Ask a question a respondent can answer, never an objective whose answer is a decision '
+    'the owner must make. '
+    'If answering it would need footfall counts, a site inspection, supplier or lease quotes, '
+    'price negotiation, or the owner choosing between options, do not propose it: name that '
+    'instrument in reason and propose nothing in its place. '
+    # 2 — one construct
+    'Name exactly one construct. If the objective would join two things with "and", measure '
+    'one of them and say in the objective which one. '
+    # 3 — grounded or explicitly exploratory
+    'Ground the objective in a declaration the owner confirmed, or mark it exploratory and '
+    'say so in reason. Never cite a declaration that does not bear on the objective. '
+    # 4 — state the gap
+    'State the gap the answer would close. If no gap is stated, the objective is exploratory '
+    'and must be marked SUGGESTED. '
+    # 5 — do not presuppose the answer
+    'Do not presuppose the answer. Any premise in the objective must already be a confirmed '
+    'fact, and a hypothesis recorded in the source is never a confirmed fact. '
+    # 6 — state what the measurement cannot support
+    'Say in reason what the measurement cannot support: stated intention is not observed '
+    'behaviour, stated preference is not demand, and one occasion is not frequency. '
+    # 7 — duplicate check
+    'Never propose an objective that duplicates another live objective on construct, '
+    'population and decision, including the six permanent objectives.'
+)
+
+#: The replacement for v5's first worked example.
+#:
+#: v5 demonstrates its own DD-064 shape 1 with M2V2-01 `UNDECIDED` — an undecided
+#: trading area — and proposes an objective about "prospective customers' stated
+#: preferences". Three things are wrong with that example, and the disposition layer
+#: already says so: `issue_resolution.ITEM_RULES['M2V2-01']` classifies an undecided
+#: area as `PLANNING_UNDECIDED` / `BUSINESS_DECISION_REQUIRED`, "a customer survey
+#: cannot choose a neighbourhood". So the example (i) cites an owner decision as a
+#: customer gap, violating principles 1 and 7; (ii) jumps from the area to a
+#: different construct, violating 2 and 3; and (iii) proposes what permanent
+#: objectives O1/O5 already cover, violating 8.
+#:
+#: It is replaced rather than annotated because a worked example outranks an
+#: instruction: leaving it would make the added principles a claim the prompt itself
+#: contradicts on the first thing it shows. Examples 2 and 3 are kept byte-identical.
+_V6_FIRST_EXAMPLE = (
+    {'declarations': [
+        {'item_key': 'M2V2-03', 'answer_state': 'ANSWERED',
+         'value': ['COFFEE', 'BAKED_GOODS'],
+         'answer_revision_id': 'a3b4c5d6-0000-4000-8000-000000000000',
+         'item_version_id': 'b3c4d5e6-0000-4000-8000-000000000000'},
+        {'item_key': 'M2V2-18', 'answer_state': 'ANSWERED',
+         'value': {'hypothesis_status': 'HYPOTHESIS_IDENTIFIED',
+                   'hypothesis_text': 'Nearby office workers will buy coffee before '
+                                      '9am on weekdays.'},
+         'answer_revision_id': 'c3d4e5f6-0000-4000-8000-000000000000',
+         'item_version_id': 'd3e4f5a6-0000-4000-8000-000000000000'}],
+     'example_only': True},
+    {'contract_version': 'bdj-objective-proposal/2',
+     'recommendations': [{
+         'recommendation_status': 'MOST_SUGGESTED',
+         'problem_type': 'SOURCE_CONFIRMED_INFORMATION_GAP',
+         'problem': 'The claim that nearby office workers would buy coffee before 9am '
+                    'on weekdays is a stated hypothesis with no customer evidence.',
+         'research_objective': 'To investigate whether nearby office workers would buy '
+                               'coffee before 9am on weekdays.',
+         'source_refs': [
+             {'item_key': 'M2V2-18',
+              'answer_revision_id': 'c3d4e5f6-0000-4000-8000-000000000000',
+              'item_version_id': 'd3e4f5a6-0000-4000-8000-000000000000'},
+             {'item_key': 'M2V2-03',
+              'answer_revision_id': 'a3b4c5d6-0000-4000-8000-000000000000',
+              'item_version_id': 'b3c4d5e6-0000-4000-8000-000000000000'}],
+         'reason': 'The morning trade is a hypothesis the owner stated, not a finding. '
+                   'The measurement would record stated intention rather than observed '
+                   'purchases, and one morning occasion would not establish frequency.',
+         'authority': 'CANDIDATE_ONLY'}]})
+
+#: CP-06 candidate. **Not wired into production**: ``objective_prompt_key`` still
+#: resolves M2V2 to ``BDJ_OBJECTIVE_M2V2``. Adopting an unmeasured prompt revision
+#: would claim the improvement before the experiment that is supposed to show it
+#: (CP-10 executes, CP-11 evaluates). Adoption is a separate, evidence-led decision.
+#:
+#: The revision is two changes and they are inseparable: the eight principles, and a
+#: corrected first example. Either alone is incoherent — principles with the old
+#: example are contradicted by it, and the new example without the principles drops
+#: the reasoning that justifies it. The experiment therefore compares one baseline
+#: arm against one revised arm, and the revision is the intervention.
+PROMPTS['BDJ_OBJECTIVE_M2V2_V6'] = Prompt(
+    'BDJ-OBJECTIVE-6-M2V2-CAND',
+    PROMPTS['BDJ_OBJECTIVE_M2V2'].role,
+    PROMPTS['BDJ_OBJECTIVE_M2V2'].instruction + _M2V2_V6_PRINCIPLES,
+    (_V6_FIRST_EXAMPLE,) + PROMPTS['BDJ_OBJECTIVE_M2V2'].examples[1:])
+
+#: The arm keys the CP-10 comparison uses, named here so the experiment cannot
+#: invent a third spelling of either arm.
+BDJ_OBJECTIVE_ARMS = {'baseline': 'BDJ_OBJECTIVE_M2V2',
+                      'revised': 'BDJ_OBJECTIVE_M2V2_V6'}
+
+
+# -- CP-07: the Direct-QG prompt revision --------------------------------------
+# v4 is almost entirely about *mechanics*: length ceilings, option-code grammar,
+# format-specific constraints, routing, denominators, what may appear in
+# `used_confirmed_facts`. It was built by fixing server rejections, and it shows.
+#
+# It says nothing about what makes an item measure the construct it claims. The
+# catalogue's `prompt_principles.qg_item` holds eight criteria for that, and seven of
+# them are absent from v4. The result is an item that satisfies every server check and
+# still asks two things at once, or offers options a respondent cannot fit into.
+#
+# Unlike the BDJ revision this one is purely additive: v4 carries no worked examples,
+# so there is no demonstrated shape for an added rule to contradict.
+_QG_V5_PRINCIPLES = (
+    ' ADOPTED ITEM RULES. These are the research standard for a questionnaire item. '
+    'Apply all of them before choosing DRAFT; an item that breaks one is not a candidate. '
+    # 1 — the answer must be the construct
+    'The answer to the question must BE the value of the claimed construct. Test this by '
+    'substituting the construct into the stem: if the stem does not then read as a single '
+    'answerable question, rewrite the stem rather than the construct. '
+    'construct_interpretation states that substitution in one sentence. '
+    # 2 — one thing
+    'Ask one thing. A bundled offer in the stem is a bundled question: "how often, and would '
+    'you pay" is two items. '
+    # 3 — exhaustive and mutually exclusive
+    'Offer options that are exhaustive and mutually exclusive: every in-scope respondent must '
+    'have an option that is true of them, and no two options may be true at once. '
+    'When the format is MULTIPLE_CHOICE, min_selections and max_selections state the permitted '
+    'count and exclusive_codes names any option that cannot be combined with another. '
+    # 4 — non-directional opt-out
+    'Where the construct admits uncertainty, include one non-directional opt-out option whose '
+    'wording states no direction — "No preference either way", "Cannot say", "Not sure" — and '
+    'never "Prefer not to say no" or any phrase that reads as a lean. '
+    'The opt-out is an ordinary option unless the format is MULTIPLE_CHOICE, in which case it '
+    'may be named in exclusive_codes. '
+    # 5 — ordered scale
+    'Where the construct is a degree rather than a choice, use ORDERED_SCALE with a neutral '
+    'point, and keep the ordinal categories in their natural order from lowest to highest. '
+    'Where the construct is genuinely a choice between distinct alternatives, do not force a '
+    'scale onto it. '
+    # 6 — do not lead
+    'Do not lead, and do not enumerate the options in the stem: the stem asks the question, and '
+    'response_options hold the answers. '
+    # 7 — reused wording
+    'Reuse wording only where it appears in confirmed_facts, and cite that identifier in '
+    'used_confirmed_facts so the reuse is traceable; never paraphrase a source into the stem and '
+    'present it as the respondent\'s own framing. '
+    # 8 — no pretest claim
+    'Never present justification or construct_interpretation as a finding, and never state or '
+    'imply that the item has been pretested, piloted, validated or tested with respondents: no '
+    'pretest is recorded for a generated candidate. '
+    'limitations must say what this item cannot establish.'
+)
+
+#: CP-07 candidate. **Not wired into production**: `qg_binding.resolve` and
+#: `direct_qg_service` both default to `QG_FIXED_OPTION`. Adoption waits on CP-11.
+PROMPTS['QG_FIXED_OPTION_V5'] = Prompt(
+    'QG-FIXED-OPTION-5-CAND',
+    PROMPTS['QG_FIXED_OPTION'].role,
+    PROMPTS['QG_FIXED_OPTION'].instruction + _QG_V5_PRINCIPLES,
+    PROMPTS['QG_FIXED_OPTION'].examples)
+
+QG_FIXED_OPTION_ARMS = {'baseline': 'QG_FIXED_OPTION',
+                        'revised': 'QG_FIXED_OPTION_V5'}
+
+
 # -- supersession -----------------------------------------------------------
 # A stage can be registered here and still not be the prompt the system
 # dispatches. `EXPLANATION` is that case: this module holds the V1.0 candidate
@@ -615,3 +829,74 @@ def source_prompt_key(instrument_version: str) -> str:
 def objective_prompt_key(instrument_version: str) -> str:
     """Key of the objective-proposal prompt for this instrument."""
     return OBJECTIVE_PROMPT_KEYS[instrument_family(instrument_version)]
+
+
+# -- governed arm selection ---------------------------------------------------
+# The comparison experiment needs to run two registered objective prompts over
+# the same source. It must not need a second, parallel way of naming a prompt.
+#
+# ``BDJ_OBJECTIVE_ARMS`` already exists so "the experiment cannot invent a third
+# spelling of either arm". These two helpers are the only place a caller-supplied
+# key is turned into a prompt, and they refuse anything that is not in that
+# registry. A free-form ``prompt_key`` would let an HTTP caller dispatch an
+# arbitrary template through the governed BDJ stage, which is precisely the
+# class of change the single-use controls exist to make visible.
+
+_OBJECTIVE_KEY_FAMILY = {key: family for family, key in OBJECTIVE_PROMPT_KEYS.items()}
+_OBJECTIVE_KEY_FAMILY.update({
+    key: _OBJECTIVE_KEY_FAMILY[BDJ_OBJECTIVE_ARMS['baseline']]
+    for key in BDJ_OBJECTIVE_ARMS.values()})
+
+
+def objective_arm_family(prompt_key: str) -> str:
+    """Source family an objective prompt key belongs to, or a hold.
+
+    The registered arms are M2V2 derivatives of ``BDJ_OBJECTIVE_M2V2``, so they
+    inherit its family. Fail-closed: an unrecognised key is a hold rather than a
+    silent default, because defaulting is how a wrong prompt gets dispatched.
+    """
+    try:
+        return _OBJECTIVE_KEY_FAMILY[prompt_key]
+    except KeyError:
+        raise WorkflowHeld('BDJ_OBJECTIVE_ARM_UNKNOWN') from None
+
+
+def resolve_objective_arm(prompt_key: str | None, *, default: str) -> str:
+    """The objective prompt this request may run under, or a refusal.
+
+    ``None`` returns ``default`` — the adopted prompt for the source family,
+    which is what every pre-existing caller gets and keeps getting.
+
+    A named key must satisfy three things, and each has a distinct failure:
+
+    * it is the adopted key itself, or one of the registered arms
+      (``BDJ_OBJECTIVE_ARM_UNKNOWN``), so the HTTP surface cannot select a
+      findings prompt, a QG prompt, or a template that happens to be in
+      ``PROMPTS`` for another stage;
+    * it is actually registered (``BDJ_OBJECTIVE_ARM_UNKNOWN``) — the registry
+      and the prompt table are separate, and only one of them is authoritative
+      about what can be sent;
+    * it belongs to the same source family as the packet
+      (``BDJ_OBJECTIVE_ARM_FAMILY_MISMATCH``), because running the M2V2 revision
+      against an M2V1 packet would validate the output against the wrong
+      contract and produce a candidate that cannot be bound.
+
+    The returned key is the *only* thing the caller may use downstream: the run
+    identity, the disclosure, the prompt object and the persisted
+    ``prompt_version`` must all agree, or the ledger would record a prompt that
+    did not run.
+    """
+    if prompt_key is None:
+        return default
+    # Naming the adopted prompt is allowed and is exactly equivalent to omitting
+    # it. It creates no second dispatch path -- it is the same prompt object --
+    # and refusing it would make "be explicit about what I would get anyway" an
+    # error, which teaches callers to omit the field and lose the audit trail.
+    if prompt_key == default:
+        return default
+    if prompt_key not in BDJ_OBJECTIVE_ARMS.values() or prompt_key not in PROMPTS:
+        raise WorkflowHeld('BDJ_OBJECTIVE_ARM_UNKNOWN')
+    if objective_arm_family(prompt_key) != objective_arm_family(default):
+        raise WorkflowHeld('BDJ_OBJECTIVE_ARM_FAMILY_MISMATCH')
+    return prompt_key
+

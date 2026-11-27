@@ -29,6 +29,7 @@ import 'package:sitewise_jaspr_web/features/listing/data/api_property_repository
 import 'package:sitewise_jaspr_web/features/assessment/data/assessment_report.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/business_description.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/chart_preview.dart';
+import 'package:sitewise_jaspr_web/features/assessment/data/report_composition.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/report_measurement.dart';
 import 'package:sitewise_jaspr_web/features/authentication/data/auth_service.dart';
 
@@ -1013,6 +1014,29 @@ final class AssessmentApi {
   ) => _call(
     '/api/v1/assessments/$assessmentId/business-description',
     parse: BusinessDescription.fromJson,
+  );
+
+  /// The server-composed nine-section document for this assessment.
+  ///
+  /// Separate from [report] because it answers a different question: which
+  /// sections exist for this record, in what state, from which sources. The
+  /// server composes it from the same report body the view renders, so the
+  /// coverage the page shows cannot disagree with the page itself.
+  ///
+  /// A failure here is not fatal — the view falls back to its own section
+  /// list — but it is never treated as "no composition", because a section
+  /// that silently loses its state is exactly the defect this replaced.
+  Future<ApiResult<ReportComposition>> reportComposition(
+    String assessmentId,
+  ) => _call(
+    '/api/v1/assessments/${Uri.encodeComponent(assessmentId)}/report-composition',
+    parse: (json) {
+      final composition = ReportComposition.tryParse(json);
+      if (composition == null) {
+        throw const FormatException('Unrecognized report composition.');
+      }
+      return composition;
+    },
   );
 
   /// Whether the EE-01 explanation module will produce explanations at all.

@@ -16,10 +16,12 @@ import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart';
 ///   `SYNTHETIC_PREVIEW_ONLY` — the development-only demonstration state. Every
 ///   other state renders its own notice, so a withheld finding cannot appear as
 ///   a chart with a shorter bar or a missing label.
-/// * A `SYNTHETIC_PREVIEW_ONLY` chart always carries
-///   [syntheticPreviewBannerText] above the bars. The banner is not optional and
-///   not suppressible: it is the only thing distinguishing a demonstration from
-///   a finding at a glance.
+/// * A `SYNTHETIC_PREVIEW_ONLY` chart always carries a `Demo Mode` chip and
+///   [demoModeDescription] above the bars. The chip is not optional and not
+///   suppressible: it is the only thing distinguishing a demonstration from a
+///   finding at a glance. The full provenance sentence
+///   ([dataOriginDisclosure]) is printed once per report in the methodology
+///   block rather than repeated over every chart.
 /// * Percentages are printed from [ChartOptionModel.percentageText], which is
 ///   the backend's decimal string. Nothing is recomputed from counts, and a
 ///   null percentage prints as "withheld" rather than `0%`.
@@ -33,10 +35,28 @@ class ChartSpecView extends StatelessComponent {
   /// Extra note shown under the chart, e.g. a section-level caveat.
   final String? note;
 
-  /// The banner text a synthetic demonstration must display. Exposed as a
-  /// constant so tests can assert the rendered surface contains it verbatim.
-  static const String syntheticPreviewBannerText =
-      'SYNTHETIC DEMONSTRATION — NOT REPORT EVIDENCE';
+  /// The small, neutral status chip a demonstration chart carries. Presentation
+  /// only: it never changes the render state, which stays
+  /// `SYNTHETIC_PREVIEW_ONLY`.
+  static const String demoModeLabel = 'Demo Mode';
+
+  /// One quiet line under the chip. Says what the numbers are, in business
+  /// language, without repeating the technical warning on every chart.
+  static const String demoModeDescription =
+      'Results calculated from saved demonstration questionnaire records.';
+
+  /// The full data-origin disclosure. Printed once per report, in the
+  /// methodology block, so a reader can always find out where the responses
+  /// came from without reading a banner over every figure.
+  static const String dataOriginDisclosure =
+      'Questionnaire responses used in this demonstration were generated for '
+      'system testing and do not represent independently collected customer '
+      'survey findings.';
+
+  /// Former name of the banner string, kept so existing callers and tests
+  /// compile. It now resolves to [dataOriginDisclosure] — the professional
+  /// wording — rather than the all-caps technical banner it used to hold.
+  static const String syntheticPreviewBannerText = dataOriginDisclosure;
 
   const ChartSpecView({super.key, required this.spec, this.note});
 
@@ -51,13 +71,13 @@ class ChartSpecView extends StatelessComponent {
           div(classes: 'sw-chart__eyebrow', [
             ...spec.reportSections.map((sectionId) => Pill(sectionId)),
             Pill(_responseKindLabel(spec.responseKind)),
-            if (spec.isSyntheticPreview) const Pill('Synthetic preview', tone: 'warning'),
+            if (spec.isSyntheticPreview) const Pill(demoModeLabel, tone: 'neutral'),
             if (spec.admission.isHeld) const Pill('Not report-admissible', tone: 'warning'),
           ]),
           h3(attributes: {'id': headingId}, [Component.text(spec.title)]),
           p(classes: 'sw-chart__question', [Component.text(spec.questionText)]),
         ]),
-        if (spec.isSyntheticPreview) _syntheticBanner(),
+        if (spec.isSyntheticPreview) _demoNote(),
         if (spec.renderState.disclosesCounts) _bars() else _notice(),
         _table(),
         if (spec.derivedLines.isNotEmpty) _derived(),
@@ -84,25 +104,22 @@ class ChartSpecView extends StatelessComponent {
     );
   }
 
-  /// Non-dismissible banner. Rendered above the bars so it is read before the
-  /// geometry, and repeated as the figure's accessible description.
-  Component _syntheticBanner() => div(
-    classes: 'sw-chart__synthetic-banner',
+  /// Compact demonstration note, read before the geometry.
+  ///
+  /// This replaced a full-width warning banner. The report is a business
+  /// document, so the demonstration status is a small neutral line here and the
+  /// complete provenance sentence lives once in the report's methodology
+  /// block. Nothing about the governance changed: the chart is still
+  /// `SYNTHETIC_PREVIEW_ONLY`, still non-reportable, and still carries the
+  /// `Not report-admissible` chip when its admission is held.
+  Component _demoNote() => p(
+    classes: 'sw-chart__demo-note',
     attributes: {'role': 'note'},
     [
-      Icon('science', size: 'lg'),
-      div(classes: 'sw-chart__synthetic-body', [
-        p(classes: 'sw-chart__synthetic-title', [
-          Component.text(syntheticPreviewBannerText),
-        ]),
-        p(classes: 'sw-chart__synthetic-text', [
-          Component.text(
-            'These figures come from a synthetic fixture, not from a fielded '
-            'response. The line is held: it is not admitted into R02 or R08 and '
-            'must not be cited as a finding.',
-          ),
-        ]),
+      strong(classes: 'sw-chart__demo-label', [
+        Component.text('$demoModeLabel — '),
       ]),
+      Component.text(demoModeDescription),
     ],
   );
 
@@ -197,8 +214,8 @@ class ChartSpecView extends StatelessComponent {
       // rather than pretending to be a finding.
       ChartRenderState.syntheticPreviewOnly => (
         'science',
-        'Synthetic demonstration',
-        'Figures come from a synthetic fixture and are not report evidence.',
+        demoModeLabel,
+        demoModeDescription,
       ),
     };
     return div(classes: 'sw-chart__notice', attributes: {'role': 'status'}, [

@@ -56,6 +56,13 @@ EXTERNAL_APPROVAL_REQUIRED = 'EXTERNAL_APPROVAL_REQUIRED'
 NO_CLOSING_DECISION = 'NO_CLOSING_DECISION'
 TARGET_UNREACHABLE = 'TARGET_UNREACHABLE'
 GATE_ID_UNDEFINED = 'GATE_ID_UNDEFINED'
+#: The identifier names a *construct*, not a gate, but appears in a gate field.
+#: ``G01`` is ``G01_AREA_ELIGIBILITY`` in ``construct_registry`` — respondent-
+#: answered, implemented by Q01/Q02, and measured rather than approved. It has
+#: no matrix row because it was never a gate; it is a category error in the
+#: source contract, which is a different defect from an undefined gate and calls
+#: for a different correction.
+CONSTRUCT_ID_IN_GATE_FIELD = 'CONSTRUCT_ID_IN_GATE_FIELD'
 
 _LEGACY = {CLOSING_DECISION_IDENTIFIED: 'CLOSED_BY_DECISION'}
 
@@ -180,19 +187,81 @@ def referenced_gate_ids() -> tuple[str, ...]:
 
 
 @lru_cache(maxsize=1)
+def construct_families() -> frozenset[str]:
+    """The construct identifier families the contract actually defines.
+
+    ``construct_registry`` keys look like ``G01_AREA_AFFILIATION``; the family
+    is the leading token. ``G01`` and ``G02`` are the only G-families defined,
+    and both are constructs — one respondent-answered, one a rule-based
+    administrative control (``taxonomy_crosswalk.QUALITY_OR_CONTEXT``).
+    """
+    registry = _contract().get('construct_registry') or {}
+    return frozenset(str(key).split('_', 1)[0] for key in registry)
+
+
+@lru_cache(maxsize=1)
+def gate_dependencies() -> dict[str, dict]:
+    """Where each referenced identifier is used, resolved to real rows.
+
+    The earlier count of "five undefined gates" was right about the count and
+    silent about the usage: ``G01`` is a dependency of 11 of the 13 items and
+    ``G10`` of none. A reader cannot judge which of the five matters without
+    that difference, so it is computed rather than summarised.
+    """
+    contract = _contract()
+    out: dict[str, dict] = {}
+    for gate_id in referenced_gate_ids():
+        sections = sorted(
+            section_id
+            for section_id, state in contract['report_availability'].items()
+            if isinstance(state, dict)
+            and gate_id in (state.get('blocking_gates') or ()))
+        items = sorted(
+            str(item.get('id'))
+            for item in (contract.get('items') or ())
+            if gate_id in (item.get('gate_dependencies') or ()))
+        out[gate_id] = {
+            'sections': sections,
+            'items': items,
+            'item_count': len(items),
+            'blocks_sections': bool(sections),
+        }
+    return out
+
+
+@lru_cache(maxsize=1)
 def gates() -> tuple[Gate, ...]:
-    """All gate identities: matrix rows first, then the undefined identifiers."""
+    """All gate identities: matrix rows first, then the unresolved identifiers."""
     known = {g.gate_id for g in _matrix_gates()}
-    undefined = tuple(
-        Gate(gate=f'{gid} (undefined in approval_gate_matrix)', gate_id=gid,
-             owner='UNASSIGNED', status='UNDEFINED_IN_CONTRACT',
-             closing_decision=None, disposition=GATE_ID_UNDEFINED,
-             note='Referenced by blocking_gates/gate_dependencies but has no '
-                  'approval_gate_matrix row: no owner, no status, no closing '
-                  'decision. Cannot be closed until the contract defines it.',
-             defined=False)
-        for gid in referenced_gate_ids() if gid not in known)
-    return _matrix_gates() + undefined
+    families = construct_families()
+    undefined: list[Gate] = []
+    for gate_id in referenced_gate_ids():
+        if gate_id in known:
+            continue
+        if gate_id in families:
+            undefined.append(Gate(
+                gate=f'{gate_id} (a construct identifier, not a gate)',
+                gate_id=gate_id, owner='UNASSIGNED',
+                status='CONSTRUCT_NOT_A_GATE',
+                closing_decision=None,
+                disposition=CONSTRUCT_ID_IN_GATE_FIELD,
+                note=(f'{gate_id} is defined in construct_registry as a '
+                      'construct family, not as an approval gate. It appears in '
+                      'blocking_gates/gate_dependencies, where a gate identifier '
+                      'is expected. A construct is measured, not approved, so no '
+                      'decision can close it: the reference has to be corrected '
+                      'to the gate that actually governs it.'),
+                defined=False))
+            continue
+        undefined.append(Gate(
+            gate=f'{gate_id} (undefined in approval_gate_matrix)',
+            gate_id=gate_id, owner='UNASSIGNED', status='UNDEFINED_IN_CONTRACT',
+            closing_decision=None, disposition=GATE_ID_UNDEFINED,
+            note='Referenced by blocking_gates/gate_dependencies but has no '
+                 'approval_gate_matrix row: no owner, no status, no closing '
+                 'decision. Cannot be closed until the contract defines it.',
+            defined=False))
+    return _matrix_gates() + tuple(undefined)
 
 
 @lru_cache(maxsize=1)
@@ -267,17 +336,27 @@ def counts() -> dict[str, object]:
         'gate_identities_total': len(gs),
         'matrix_gates': len(matrix),
         'undefined_gate_ids': len(gs) - len(matrix),
+        # Split the five into what they actually are. Both counts are needed:
+        # one says how many identifiers are unclosable, the other says why.
+        'construct_id_references': sorted(
+            g.gate_id for g in gs
+            if g.disposition == CONSTRUCT_ID_IN_GATE_FIELD),
+        'truly_undefined_gate_ids': sorted(
+            g.gate_id for g in gs if g.disposition == GATE_ID_UNDEFINED),
         'gates_closed': sum(1 for g in gs if g.closed),
         'gates_with_a_closing_decision': sum(1 for g in gs if g.closing_decision),
         'gates_without_a_closing_decision': sum(1 for g in gs if not g.closing_decision),
         'by_disposition': dict(sorted(by_disposition.items())),
+        'dependencies': gate_dependencies(),
         'decisions': a10_decisions.counts(),
     }
 
 
 __all__ = [
-    'CLOSING_DECISION_IDENTIFIED', 'EXTERNAL', 'EXTERNAL_APPROVAL_REQUIRED', 'GATE_ID_UNDEFINED',
+    'CLOSING_DECISION_IDENTIFIED', 'CONSTRUCT_ID_IN_GATE_FIELD', 'EXTERNAL',
+    'EXTERNAL_APPROVAL_REQUIRED', 'GATE_ID_UNDEFINED',
     'Gate', 'NO_CLOSING_DECISION', 'Section', 'TARGET_UNREACHABLE', 'UNREACHABLE',
-    'counts', 'gate_map', 'gates', 'open_gates_for_section', 'referenced_gate_ids',
-    'section_map', 'sections', 'undefined_gate_ids',
+    'construct_families', 'counts', 'gate_dependencies', 'gate_map', 'gates',
+    'open_gates_for_section', 'referenced_gate_ids', 'section_map', 'sections',
+    'undefined_gate_ids',
 ]

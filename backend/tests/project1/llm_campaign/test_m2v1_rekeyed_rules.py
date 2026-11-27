@@ -22,7 +22,20 @@ from sitewise.project1.contracts import WorkflowHeld
 
 from campaign import authorization, build_case, expected_item_keys
 
-LEGACY_SHA256 = '42f7fef3bf2bb48255ab8eac406dfb8232923b76789dd065d693732e8bf2a061'
+#: The sha256 of the **committed** ruleset content.
+#:
+#: It used to be ``42f7fef3…``, which is the hash of this module's bytes *as
+#: checked out on Windows* (185 CRLF pairs). Measured 2026-11-26:
+#:
+#:   committed blob (git cat-file)  LF only   → 725cf7c0…   ← this constant
+#:   working tree on this machine   CRLF      → 42f7fef3…   ← the old value
+#:
+#: ``load_rules`` hashes CRLF-normalised bytes for exactly this reason, so the
+#: old constant described the checkout rather than the artefact and every
+#: fingerprint check failed with ``BDJ_RULE_FINGERPRINT_MISMATCH``. The ruleset
+#: itself did not change: the raw bytes still hash to ``42f7fef3…``, which is
+#: what makes this a pinning defect and not a ruleset change.
+LEGACY_SHA256 = '725cf7c05864b520a257f7e95e725ad0cf98e11a4e66da4ff5ccb3999057a760'
 CONFLICT = 'SERVICE_FORMAT_EXPLICIT_CONFLICT'
 
 
@@ -95,8 +108,14 @@ def test_retired_ruleset_is_not_registered():
     from sitewise.project1.bdj import RULE_MODULES
 
     assert retired.RULE_VERSION not in RULE_MODULES
+    # The registry gained ``BDJ-M2V1-IG-0.1-PROP`` on 2026-11-21 on explicit
+    # owner direction (recorded in ``bdj.py``). This assertion used to name only
+    # the two earlier entries, so it failed when a legitimate third one was
+    # adopted. It now states the registered set as it is, which is what makes a
+    # *future* unrecorded addition fail here.
     assert set(RULE_MODULES) == {'BDJ-EXPLICIT-FORMAT-0.1-CANDIDATE',
-                                 'BDJ-RULESET-0.2-CAND'}
+                                 'BDJ-RULESET-0.2-CAND',
+                                 'BDJ-M2V1-IG-0.1-PROP'}
 
 
 def test_adoption_receipt_cannot_revive_the_retired_ruleset():
@@ -137,7 +156,12 @@ def test_empty_vocabulary_causes_bdj_rule_not_registered():
 
 
 def test_legacy_ruleset_remains_byte_identical_and_loadable():
-    assert hashlib.sha256(Path(legacy.__file__).read_bytes()).hexdigest() == LEGACY_SHA256
+    # "Byte identical" modulo the checkout's line-ending policy — which is the
+    # comparison ``load_rules`` itself makes, and the only one that identifies
+    # the artefact. Hashing raw bytes here made the test assert the Windows
+    # working tree instead of the committed ruleset; see LEGACY_SHA256.
+    source = Path(legacy.__file__).read_bytes().replace(b'\r\n', b'\n')
+    assert hashlib.sha256(source).hexdigest() == LEGACY_SHA256
     loaded = load_rules('BDJ-RULESET-0.2-CAND', LEGACY_SHA256,
                         authorization()['adoption_receipt'])
     assert loaded.RULE_VERSION == 'BDJ-RULESET-0.2-CAND'

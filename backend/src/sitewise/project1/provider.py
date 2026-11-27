@@ -379,8 +379,16 @@ class ModelRunner:
         # replacing it. Slot 1 keeps the original statement, so the ordinary
         # path is byte-for-byte what it was; a slot above 1 is only reachable
         # from a caller that deliberately asks for one (DD-054).
+        #
+        # Slot 1 is therefore not passed at all. Passing the default explicitly
+        # would leave the SQL unchanged but the call shape different, which
+        # breaks the guarantee the spend keywords above are built to keep: that
+        # the ordinary path calls the ledger exactly as it always did, so every
+        # existing ledger double stays valid.
+        attempt_kwargs = ({'attempt_slot': attempt_slot}
+                          if attempt_slot != 1 else {})
         attempt = self.ledger.reserve(stage, prompt.version, prompt.fingerprint,
-                                      request_hash, attempt_slot=attempt_slot,
+                                      request_hash, **attempt_kwargs,
                                       **spend_kwargs)
         self._execution_receipt = {'stage':stage, 'attempt_no':attempt,
             'prompt_version':prompt.version, 'prompt_sha256':prompt.fingerprint,

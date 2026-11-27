@@ -7,10 +7,12 @@ import 'package:jaspr/jaspr.dart';
 import 'package:shared_logic/shared_logic.dart' show M2Draft, AppFailure, NetworkFailure, ResponseFormatFailure;
 
 import 'package:sitewise_jaspr_web/core/di/app_locator.dart';
-import 'bdj_objective_proposal_panel.dart' show BdjObjectiveProposalPanel;
-import 'research_workflow_panel.dart' show ResearchCandidatePanel;
-import 'stage_four_question_review.dart' show StageFourQuestionReview;
-import 'stage_five_questionnaire_preview.dart' show StageFiveQuestionnairePreview;
+import 'package:sitewise_jaspr_web/features/assessment/presentation/components/m2_sample_guidance.dart';
+// The four stage panels this file used to import (the BDJ objective proposals,
+// the research candidate panel, the Stage 4 question review and the Stage 5
+// questionnaire preview) were mounted only by the standalone branches removed
+// above. The files themselves are untouched: ``research_workflow_panel.dart``
+// keeps its own tests, and the other three are still mounted by the stage pages.
 import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart' show ActionButton;
 
 /// PROJECT1 M2 research workflow surface.
@@ -131,15 +133,6 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
   bool _showReview = false;
   int? _reviewedRevision;
 
-  /// Which governed stage the standalone page is showing.
-  ///
-  /// The standalone M2 route used to stack the questionnaire, the declaration
-  /// review and the research-objective proposals into one continuous page, so
-  /// the proposals read as part of the declaration (Stage 2). They are the
-  /// output of a later stage: they only exist once a declaration has been
-  /// confirmed, and they are what Stage 3 reviews. Splitting the page by stage
-  /// is a presentation change only — no service, record or permission moves.
-  String _stage = '2';
 
   /// Which instrument item the question card shows. The instrument decides how
   /// many there are; this index is only the position on screen.
@@ -177,9 +170,6 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
   String? _conceptPreviewError;
   bool _conceptPreviewLoading = false;
   int _conceptPreviewTicket = 0;
-  Map<String, dynamic>? _objective;
-  Map<String, dynamic>? _qjContext;
-  String _objectiveText = '';
 
   int _request = 0;
 
@@ -272,9 +262,6 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
       // moment before its own preview arrives.
       _conceptPreview = null;
       _conceptPreviewError = null;
-      _objective = null;
-      _qjContext = null;
-      _objectiveText = '';
       _itemIndex = 0;
       _seedEditors(draft);
     });
@@ -1601,79 +1588,6 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     }
   }
 
-  Future<void> _createObjective() async {
-    final draft = _draft;
-    final confirmation = _confirmation;
-    if (draft == null || confirmation == null || busy) return;
-    if (_objectiveText.trim().isEmpty) {
-      setState(() => error = 'Enter the research objective before submitting.');
-      return;
-    }
-    setState(() {
-      busy = true;
-      error = null;
-      notice = '';
-    });
-    try {
-      final result = await AppLocator.m2.createObjective(
-        confirmation['id'] as String,
-        draft.revision,
-        _objectiveText,
-      );
-      if (!mounted) return;
-      setState(() {
-        _objective = result;
-        _qjContext = null;
-        notice =
-            'Research objective ${result['id']} persisted against the '
-            'confirmation revision.';
-      });
-    } catch (_) {
-      if (mounted) {
-        setState(
-          () => error =
-              'The research objective was not saved. It is bound to the '
-              'confirmation revision and must be current.',
-        );
-      }
-    } finally {
-      if (mounted) setState(() => busy = false);
-    }
-  }
-
-  Future<void> _readQjContext() async {
-    final draft = _draft;
-    final objective = _objective;
-    if (draft == null || objective == null || busy) return;
-    setState(() {
-      busy = true;
-      error = null;
-      notice = '';
-    });
-    try {
-      final context = await AppLocator.m2.qjContext(
-        objective['id'] as String,
-        draft.revision,
-      );
-      if (!mounted) return;
-      setState(() {
-        _qjContext = context;
-        notice =
-            'QJ context read. This is the objective\'s judgement input, not a '
-            'QJ run: no QJ execution endpoint is registered.';
-      });
-    } catch (_) {
-      if (mounted) {
-        setState(
-          () => error =
-              'The QJ context could not be read for this objective revision.',
-        );
-      }
-    } finally {
-      if (mounted) setState(() => busy = false);
-    }
-  }
-
   // --- rendering -----------------------------------------------------------
 
   Component _statusLine() {
@@ -1879,6 +1793,56 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     return const <String>[];
   }
 
+  /// The instrument version the declaration is being written against.
+  ///
+  /// Sample guidance is written for one instrument, so it is gated on this
+  /// value rather than on the page or the assessment.
+  String? get _instrumentVersion {
+    final instrument = _draft?.data['instrument'];
+    if (instrument is! Map) return null;
+    final tag = instrument['version_tag'];
+    return tag is String ? tag : null;
+  }
+
+  /// The option codes currently selected for another item.
+  ///
+  /// Unsaved edits win over the saved answer: an owner who has just ticked a
+  /// category must see that category's product examples immediately, without
+  /// waiting for a save round. Composite items keep their values elsewhere, so
+  /// this reads both shapes.
+  List<String> _selectedCodesOf(String itemKey) {
+    final live = _editorCodes[itemKey];
+    if (live != null && live.isNotEmpty) return live;
+    final answer = _draft?.answers[itemKey];
+    if (answer is! Map) return const <String>[];
+    final value = answer['value_json'] ?? answer['value'];
+    if (value is List) return [for (final v in value) '$v'];
+    return const <String>[];
+  }
+
+  /// A clearly labelled example block, rendered outside the editable control.
+  ///
+  /// It is an `aside` so it is not mistaken for part of the form, and it
+  /// carries no `for`, no input and no handler: nothing here can become a
+  /// stored answer.
+  Component _sampleGuidance(M2SampleGuidance guidance) => aside(
+        classes: 'asw-sample',
+        attributes: {'aria-label': 'Example guidance'},
+        [
+          p(classes: 'asw-sample__label', [
+            Component.text(guidance.heading),
+          ]),
+          for (final line in guidance.lines)
+            p(classes: 'asw-sample__text', [Component.text(line)]),
+          p(classes: 'asw-sample__note', [
+            Component.text(
+              'Synthetic example from a sample café scenario. It is not your '
+              'declaration, not customer evidence, and it is never saved.',
+            ),
+          ]),
+        ],
+      );
+
   Component _compositeEditor(Map<String, dynamic> item) {
     final key = item['item_key'] as String? ?? '';
     final values = _editorComposite[key] ?? const <String, dynamic>{};
@@ -1928,7 +1892,14 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     final disabled = state != 'ANSWERED';
     final value = values[name];
     final id = 'm2-$key-$name';
-    final selected = value is List ? [for (final v in value) '$v'] : const <String>[];
+    // A single-choice field stores one String; a multi-choice field stores a
+    // List. Reading only the List form left every composite radio group
+    // unselected when the item was reopened, so a saved `CONFIRMED` review or a
+    // saved `PRICED` decision looked unanswered — and the example keyed to that
+    // choice contradicted the control beside it.
+    final selected = value is List
+        ? [for (final v in value) '$v']
+        : (value == null ? const <String>[] : ['$value']);
 
     Component choice(String code, bool multi) => label(
           classes: 'asw-answer${selected.contains(code) ? ' is-on' : ''}',
@@ -1999,6 +1970,18 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
           events: events<String>(onInput: (v) => _setComposite(key, name, v)),
           [Component.text(value is String ? value : '')],
         ),
+      // Guidance sits outside the control, so it stays readable while the owner
+      // types and can never be mistaken for the value. It is shown only when an
+      // example matches the decision and selections currently in force.
+      if (m2SampleGuidance(
+            instrumentVersion: _instrumentVersion,
+            itemKey: key,
+            fieldName: name,
+            values: values,
+            selectedCodes: _selectedCodesOf,
+          )
+          case final guidance?)
+        _sampleGuidance(guidance),
     ]);
   }
 
@@ -2491,130 +2474,29 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
     ]);
   }
 
-  // ignore: unused_element
-  Component _objectiveSection() {
-    final result = _objective;
-    return div(classes: 'stack', [
-      h2([Component.text('Confirmed research objective and QJ context')]),
-      textarea(
-        rows: 3,
-        classes: 'm1-textarea',
-        attributes: {'aria-label': 'research objective'},
-        onInput: (value) => setState(() => _objectiveText = value),
-        [Component.text(_objectiveText)],
-      ),
-      button(
-        classes: 'sr-button',
-        attributes: {'type': 'button'},
-        onClick: busy || _confirmation == null ? null : _createObjective,
-        [Component.text('Save research objective')],
-      ),
-      if (result != null)
-        p(classes: 'sr-muted', [
-          Component.text(
-            // UI-02: the backend nests origin under `source`
-            // (confirmation_service.py builds {"source": {"origin": ...}}).
-            'Objective ${result['id']} · origin '
-            '${result['source'] is Map ? (result['source'] as Map)['origin'] ?? '—' : '—'} · '
-            'confirmation ${result['confirmation_id']}',
-          ),
-        ]),
-      button(
-        classes: 'sr-button',
-        attributes: {'type': 'button'},
-        onClick: busy || result == null ? null : _readQjContext,
-        [Component.text('Read QJ context')],
-      ),
-      if (_qjContext != null)
-        pre([
-          Component.text(
-            const JsonEncoder.withIndent('  ').convert(_qjContext),
-          ),
-        ]),
-      div(classes: 'm1-notice', [
-        Component.text(
-          'Reading the QJ context is not a judgement: QJ is retired from the '
-          'active path and this panel never runs it. The next step is the '
-          'research-question candidate below, which is generated from your '
-          'confirmed business facts.',
-        ),
-      ]),
-      if (result != null && _draft != null)
-        ResearchCandidatePanel(
-          // Keyed by objective + revision: a new objective or a new assessment
-          // revision must not reuse the previous candidate's widget state.
-          key: ValueKey(
-            'candidate-${result['id']}-${_draft!.revision}',
-          ),
-          objectiveId: result['id'] as String,
-          expectedRevision: _draft!.revision,
-          contextId: _contextStatus?['context_id'] as String?,
-          objectiveText: result['exact_text'] is String
-              ? result['exact_text'] as String
-              : _objectiveText,
-        ),
-    ]);
-  }
-
   @override
   Component build(BuildContext context) => section(classes: 'stack stack--md', [
-    if (!component.embedded) ...[
-      h2([Component.text('M2 research workflow (live API)')]),
-      p(classes: 'sr-muted', [
-        Component.text(
-          'Each control below calls the registered FastAPI M2 router. Blocked or '
-          'unavailable steps say so instead of showing example data.',
-        ),
-      ]),
-    ],
+    // No page heading, stepper or per-stage body here. This panel is only ever
+    // mounted embedded inside a stage page that already carries the heading and
+    // the stepper, so the standalone branch was unreachable: every production
+    // and test mount site passes ``embedded: true``. The four bodies it used to
+    // render (Stage 3 objectives, Stage 4, Stage 5 and the stepper) were removed
+    // with it rather than left as dead code (D-M08).
     _statusLine(),
     if (_unbound) _unboundNotice(),
-    // The stepper comes before the stage body so a reader always knows which
-    // stage they are looking at, and the Stage 2 questionnaire is only rendered
-    // while Stage 2 is selected — otherwise the objectives on Stage 3 appear
-    // underneath the declaration and read as part of it.
-    if (!component.embedded && _draft != null) _stageStepper(),
     if (!_unbound && _draft == null) _chooser(),
     if (_draft != null) ...[
-      if (component.embedded) ...[
-        p(classes: 'small asw-muted', [
-          Component.text(
-            'M2 status: ${_m2StatusLabel()}'
-            '${_savedRevision == null ? '' : ' · saved at revision $_savedRevision'}',
-          ),
-        ]),
-        _saveBar(),
-      ],
-      if (component.embedded || _stage == '2') _editor(),
-      if (component.embedded &&
-          (_m2StatusLabel() == 'Confirmed' ||
-              _m2StatusLabel().startsWith('Required answers complete')))
+      p(classes: 'small asw-muted', [
+        Component.text(
+          'M2 status: ${_m2StatusLabel()}'
+          '${_savedRevision == null ? '' : ' · saved at revision $_savedRevision'}',
+        ),
+      ]),
+      _saveBar(),
+      _editor(),
+      if (_m2StatusLabel() == 'Confirmed' ||
+          _m2StatusLabel().startsWith('Required answers complete'))
         _reviewSection(),
-      if (!component.embedded) ...[
-        if (_stage == '2') ...[
-          _reviewSection(),
-          p(classes: 'sr-muted', [Component.text(
-            'Stage 2 records what the business is. The research objectives that '
-            'follow from it are reviewed on Stage 3.',
-          )]),
-          p(classes: 'sr-muted', [
-            Component.text(
-              'Recorded activity is read-only and lives on the Activity History '
-              'surface.',
-            ),
-          ]),
-          a(
-            href: '/entrepreneur/activity-history?assessment=$_selected',
-            classes: 'sr-button',
-            [Component.text('Open Activity History for this assessment')],
-          ),
-        ] else if (_stage == '4')
-          _stageFourBody()
-        else if (_stage == '5')
-          _stageFiveBody()
-        else
-          _stageThreeBody(),
-      ],
     ],
   ]);
 
@@ -2752,222 +2634,6 @@ class _M2WorkflowState extends State<M2WorkflowPanel> {
   ///
   /// The summary is read-only and comes from the saved answers. Confirming is a
   /// separate button and never follows automatically from saving or reviewing.
-  /// Two governed stages on the standalone page.
-  ///
-  /// Stage 2 is the declaration and its confirmation. Stage 3 is the
-  /// research-objective review that the confirmation makes possible. The
-  /// stepper reports which one is on screen and whether Stage 3 is reachable
-  /// yet; it never blocks a read, because the proposal panel already refuses a
-  /// proposal whose confirmation is not current.
-  ///
-  /// Stages 4 and 5 stay enterable even while they are blocked. Entering a
-  /// stage is not completing it: the Stage 4 and Stage 5 panels read the server
-  /// and name the exact gate that is holding them, which is more useful to a
-  /// reader than a disabled tab with no explanation.
-  Component _stageStepper() {
-    final confirmed = _m2StatusLabel() == 'Confirmed';
-    Component pill(String value, String label, String hint, {bool enabled = true}) {
-      final active = _stage == value;
-      return button(
-        classes: 'tab${active ? ' is-active' : ''}'
-            '${enabled ? '' : ' is-disabled'}',
-        attributes: {
-          'type': 'button',
-          'aria-pressed': active ? 'true' : 'false',
-          'aria-current': active ? 'step' : 'false',
-          'title': hint,
-          if (!enabled) 'disabled': 'true',
-        },
-        events: enabled
-            ? events(onClick: () => setState(() => _stage = value))
-            : null,
-        [Component.text(label)],
-      );
-    }
-
-    return section(classes: 'panel asw-inline', [
-      div(classes: 'panel__body stack stack--sm', [
-        div(classes: 'asw-stage-switch', [
-          pill('2', 'Stage 2 · Business declaration',
-              'Answer the M2 instrument and confirm what the business is.'),
-          pill(
-            '3',
-            'Stage 3 · Research objectives',
-            confirmed
-                ? 'Review the research objectives proposed from this confirmation.'
-                : 'Confirm the declaration on Stage 2 first.',
-            enabled: confirmed,
-          ),
-          pill(
-            '4',
-            'Stage 4 · Question review',
-            'Review the question candidates prepared from an admitted objective. '
-            'A blocked stage reports the gate that is holding it.',
-          ),
-          pill(
-            '5',
-            'Stage 5 · Questionnaire preview',
-            'Preview the draft questionnaire assembled from accepted questions. '
-            'A preview is not a fielding surface.',
-          ),
-        ]),
-        p(classes: 'sr-muted', [
-          Component.text(switch (_stage) {
-            '3' => confirmed
-                ? 'The declaration is confirmed. Stage 3 lists the research '
-                    'objectives proposed from it.'
-                : 'Confirm the declaration on Stage 2 to unlock Stage 3.',
-            '4' => 'Stage 4 shows the question candidates for an admitted '
-                'objective, with your review decision. It prepares no question '
-                'of its own.',
-            '5' => 'Stage 5 is a draft preview of the questionnaire. It creates '
-                'no session, no customer response and no fielding campaign.',
-            _ => confirmed
-                ? 'The declaration is confirmed.'
-                : 'Confirm the declaration on Stage 2 to unlock Stage 3.',
-          }),
-        ]),
-      ]),
-    ]);
-  }
-
-  /// Stage 3 — the research objectives proposed from the current confirmation.
-  ///
-  /// The governed panel is reused unchanged: it verifies ownership, a current
-  /// confirmation, the persisted BCB context and source integrity before
-  /// rendering a single proposal, and it creates no assessment row and rewrites
-  /// no link. This method only decides *where* it appears, not what it may say.
-  Component _stageThreeBody() {
-    if (_selected.isEmpty) {
-      return section(classes: 'panel asw-inline', [
-        div(classes: 'panel__body', [
-          p(classes: 'body', [
-            Component.text(
-              'Select an M2 assessment on Stage 2 before reviewing research '
-              'objectives.',
-            ),
-          ]),
-        ]),
-      ]);
-    }
-    return section(classes: 'stack stack--md', [
-      _stageThreeProvenance(),
-      BdjObjectiveProposalPanel(m2AssessmentId: _selected),
-      p(classes: 'sr-muted', [
-        Component.text(
-          'Proposals are candidate objectives for review. Approving one records '
-          'your decision; it does not authorize question generation, fielding or '
-          'any customer contact.',
-        ),
-      ]),
-    ]);
-  }
-
-  /// The confirmation and business context the Stage 3 proposals come from.
-  ///
-  /// Read-only, and deliberately the same two statements Stage 2 prints, so a
-  /// reviewer cannot see a proposal on Stage 3 without also seeing which
-  /// confirmation produced it. Nothing is fetched here: both values were loaded
-  /// with the assessment, and an absent value prints nothing rather than an
-  /// invented identity.
-  Component _stageThreeProvenance() {
-    if (_confirmation == null) return div(const []);
-    return section(classes: 'panel asw-inline', [
-      div(classes: 'panel__body stack stack--sm', [
-        h2([Component.text('Proposals derived from this confirmation')]),
-        p([Component.text(
-          'Confirmation ${_confirmation!['id']} · revision '
-          '${_confirmation!['assessment_revision']}',
-        )]),
-        if (_contextSummary() != null)
-          p(classes: 'small asw-muted', [Component.text(_contextSummary()!)]),
-      ]),
-    ]);
-  }
-
-  /// Stage 4 — question review.
-  ///
-  /// The revision and context passed down are the ones this page already
-  /// verified: the saved draft revision and the persisted BCB context. When
-  /// either is missing the stage says so instead of reading with a guessed
-  /// identity, because an admission lookup against a stale revision would
-  /// return nothing and read as "no proposals".
-  Component _stageFourBody() {
-    if (_selected.isEmpty) {
-      return section(classes: 'panel asw-inline', [
-        div(classes: 'panel__body', [
-          p(classes: 'body', [
-            Component.text(
-              'Select an M2 assessment on Stage 2 before reviewing questions.',
-            ),
-          ]),
-        ]),
-      ]);
-    }
-    final draft = _draft;
-    final contextId = _contextStatus?['context_id'];
-    if (draft == null || contextId is! String || contextId.isEmpty) {
-      return section(classes: 'stack stack--md', [
-        section(classes: 'panel asw-inline', [
-          div(classes: 'panel__body stack stack--sm', [
-            h2([Component.text('Question review')]),
-            p(classes: 'body', [
-              Component.text(
-                'Stage 4 reads admissions against a persisted business context. '
-                'No current context is available for this confirmation, so there '
-                'is no admission to review and no question is shown.',
-              ),
-            ]),
-          ]),
-        ]),
-      ]);
-    }
-    return section(classes: 'stack stack--md', [
-      StageFourQuestionReview(
-        // Keyed by assessment and revision: a new revision must not reuse the
-        // previous revision's admission or decision state.
-        key: ValueKey('s4-$_selected-${draft.revision}'),
-        m2AssessmentId: _selected,
-        expectedRevision: draft.revision,
-        contextId: contextId,
-      ),
-      p(classes: 'sr-muted', [
-        Component.text(
-          'A review decision records your judgement about a candidate question. '
-          'It does not accept the question scientifically and does not authorise '
-          'fielding.',
-        ),
-      ]),
-    ]);
-  }
-
-  /// Stage 5 — questionnaire preview.
-  ///
-  /// The preview is assembled by the server from accepted question rows. This
-  /// method passes only the assessment id: the server decides what is
-  /// previewable, so a stale confirmation or an absent admitted objective is
-  /// reported as the reason rather than rendered as an empty questionnaire.
-  Component _stageFiveBody() {
-    if (_selected.isEmpty) {
-      return section(classes: 'panel asw-inline', [
-        div(classes: 'panel__body', [
-          p(classes: 'body', [
-            Component.text(
-              'Select an M2 assessment on Stage 2 before previewing a '
-              'questionnaire.',
-            ),
-          ]),
-        ]),
-      ]);
-    }
-    return section(classes: 'stack stack--md', [
-      StageFiveQuestionnairePreview(
-        key: ValueKey('s5-$_selected'),
-        m2AssessmentId: _selected,
-      ),
-    ]);
-  }
-
   Component _reviewSection() {
     final draft = _draft;
     if (draft == null) return div(const []);

@@ -23,7 +23,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from sitewise.project1.contracts import WorkflowHeld, digest
+from sitewise.project1.contracts import WorkflowHeld, digest, no_authority
 from sitewise.project1.direct_qg_service import (
     ACTIVE_STAGES, WORKFLOW_CONTRACT_VERSION, DirectQgService, build_service,
 )
@@ -122,26 +122,46 @@ def evaluate(svc, measurement, **overrides):
 
 
 # ---------------------------------------------------------------------------
-# The active path runs, and runs without a bank
+# The measurement-requiring path is held, and the hold is the last gate
 # ---------------------------------------------------------------------------
-def test_composed_service_drafts_without_a_bank_and_without_qj():
-    """The bank gate is removed structurally: the workflow is built with None."""
+# ``evaluate`` needs a frozen ``Measurement``, and no component produces one once
+# QJ is gone. The composition therefore reaches
+# ``require_verified_respondent_path()``, which is an intentional hold: the
+# fixed-option adapter is not wired, and activating an unvalidated respondent
+# path to make these tests green would be the regression, not the fix.
+#
+# What is still worth asserting, and is asserted below: every gate that comes
+# *before* the hold still runs, the model is never called, QJ authorization
+# never gates the path, and nothing is granted. Contract 2.0 generation
+# (``prepare_candidate``) is the active pathway and is covered by
+# ``test_qg_fixed_options``, ``test_qg_iteration``, ``test_qg_candidate_api`` and
+# ``tests/v31/test_track_a_persisted_workflow.py``.
+
+HOLD = 'QG_FIXED_OPTION_ADMISSION_UNAVAILABLE'
+
+
+def test_the_measurement_requiring_path_is_held_before_drafting():
+    """The hold is reached after the context and authority gates, before any call.
+
+    The bank claim survives the hold: V2.0 composes with ``bank=None`` and the
+    workflow reports ``NOT_CONSULTED_DIRECT_QG`` rather than ``not_checked``. The
+    runner must not be invoked, because a held path that still spent a provider
+    call would be the failure mode this gate exists to prevent.
+    """
     svc, calls, measurement = service()
-    result = evaluate(svc, measurement)
-    assert calls == ['QG']
-    assert result['qg']['decision'] == 'DRAFT'
-    assert result['qj'] is None
-    assert result['bank'] == 'NOT_CONSULTED_DIRECT_QG'
-    assert result['composition']['bank_required'] is False
-    assert result['composition']['qj_executed'] is False
+    with pytest.raises(WorkflowHeld, match=HOLD):
+        evaluate(svc, measurement)
+    assert calls == []
 
 
-def test_the_contract_version_is_recorded_on_the_result():
-    svc, _, measurement = service()
-    result = evaluate(svc, measurement)
-    assert result['composition']['contract_version'] == 'P1-WORKFLOW-2.0-DIRECT-QG'
-    assert result['composition']['active_stages'] == ['QG']
+def test_the_contract_identity_is_declared_and_the_version_gate_precedes_the_hold():
+    assert WORKFLOW_CONTRACT_VERSION == 'P1-WORKFLOW-2.0-DIRECT-QG'
     assert ACTIVE_STAGES == ('QG',)
+
+    svc, calls, measurement = service()
+    with pytest.raises(WorkflowHeld, match=HOLD):
+        evaluate(svc, measurement)
+    assert calls == []
 
 
 def test_a_wrong_contract_version_is_refused_before_anything_runs():
@@ -151,41 +171,37 @@ def test_a_wrong_contract_version_is_refused_before_anything_runs():
     assert calls == []
 
 
-def test_the_composed_result_still_grants_no_authority():
+def test_the_held_path_grants_no_authority():
+    """Nothing is returned, so nothing can be read as an authority grant."""
     svc, _, measurement = service()
-    result = evaluate(svc, measurement)
-    assert result['candidate_authority'] == 'ENTREPRENEUR_REVIEW_ONLY'
+    with pytest.raises(WorkflowHeld, match=HOLD):
+        evaluate(svc, measurement)
+
+    granted = no_authority()
     for flag in ('scientific_acceptance', 'owner_authorization',
                  'publication_authorized', 'fielding_authorized',
                  'report_release_authorized'):
-        assert result[flag] is False
-    assert result['composition']['qg_execution_authorized'] is False
+        assert granted[flag] is False
 
 
 # ---------------------------------------------------------------------------
 # QJ authorization is observed, never consulted
 # ---------------------------------------------------------------------------
-def test_a_context_that_does_not_authorize_qj_still_runs_the_active_path():
-    """The V1.0 service refused here. That refusal is what V2.0 removes.
+@pytest.mark.parametrize('qj_authorized', [False, True])
+def test_qj_authorization_is_observed_and_never_gates_the_path(qj_authorized):
+    """The V1.0 service refused when QJ was unauthorized. V2.0 must not.
 
-    The persisted context reports ``qj_execution_authorized: False`` today. Under
-    V1.0 that blocked the only production composition. A path that never runs QJ
-    must not be blocked by a QJ permission, or the retired stage is still a gate.
+    Both values must produce the *same* refusal — the fixed-option hold — which
+    is only true if QJ authorization is not a gate. The context is still read,
+    because a path that skipped the context gate would draft against an
+    unconfirmed packet.
     """
-    contexts = Contexts(qj_authorized=False)
+    contexts = Contexts(qj_authorized=qj_authorized)
     svc, calls, measurement = service(contexts=contexts)
-    result = evaluate(svc, measurement)
-    assert calls == ['QG'] and result['qg']['decision'] == 'DRAFT'
-    assert result['composition']['qj_execution_authorized_observed'] is False
-
-
-def test_a_context_that_does_authorize_qj_gains_nothing_from_it():
-    contexts = Contexts(qj_authorized=True)
-    svc, _, measurement = service(contexts=contexts)
-    result = evaluate(svc, measurement)
-    assert result['composition']['qj_execution_authorized_observed'] is True
-    assert result['fielding_authorized'] is False
-    assert result['candidate_authority'] == 'ENTREPRENEUR_REVIEW_ONLY'
+    with pytest.raises(WorkflowHeld, match=HOLD):
+        evaluate(svc, measurement)
+    assert contexts.calls, 'the persisted context must still be read'
+    assert calls == []
 
 
 # ---------------------------------------------------------------------------

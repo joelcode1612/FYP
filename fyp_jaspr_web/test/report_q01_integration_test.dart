@@ -76,19 +76,21 @@ void main() {
 
       // The Q01 card and its chart.
       expect(find.textContaining('Q01 · Area connection'), findsOneComponent);
-      // Two "Synthetic preview" pills, in two different slots by design: the
-      // report card's provenance slot (where every other card carries
-      // "Decision support" / "From Step 2") and the chart figure's own eyebrow
-      // row, which [ChartSpecView] adds for every synthetic chart.
-      expect(find.text('Synthetic preview'), findsNComponents(2));
+      // Two "Demo Mode" pills, in two different slots by design: the report
+      // card's provenance slot (where every other card carries "Decision
+      // support" / "From Step 2") and the chart figure's own eyebrow row, which
+      // [ChartSpecView] adds for every demonstration chart.
+      expect(find.text(ChartSpecView.demoModeLabel), findsNComponents(2));
       expect(find.text('I live in this area'), findsComponents);
       expect(find.text('37.5%'), findsComponents);
       expect(find.text('15'), findsComponents);
 
-      // The demonstration notice, twice: the report badge and the chart banner.
+      // The compact demonstration note, once — on the chart. The full
+      // data-origin sentence is printed once in the report's methodology block,
+      // not over every figure.
       expect(
-        find.text(ChartSpecView.syntheticPreviewBannerText),
-        findsNComponents(2),
+        find.textContaining(ChartSpecView.demoModeDescription),
+        findsOneComponent,
       );
 
       // Deterministic interpretation and the exclusive alternatives.
@@ -109,7 +111,7 @@ void main() {
       tester.pumpComponent(_report());
 
       expect(find.textContaining('Q01 · Area connection'), findsNothing);
-      expect(find.text('Synthetic preview'), findsNothing);
+      expect(find.text(ChartSpecView.demoModeLabel), findsNothing);
       expect(find.text(ChartSpecView.syntheticPreviewBannerText), findsNothing);
       expect(find.text('I live in this area'), findsNothing);
       // The section is still there, in its held state.

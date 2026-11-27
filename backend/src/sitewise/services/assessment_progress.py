@@ -115,16 +115,20 @@ STAGE_5_PROPOSED_RULE = (
 #: exclusive ``NONE``. So "registration of the six fixed objectives" is expressed
 #: in the instrument and needs no new data model.
 STAGE_3_RULE = (
-    "Stage 3 completes when sitewise-stage3-completion/2 holds: T3-01 ownership; "
+    "Stage 3 completes when sitewise-stage3-completion/3 holds: T3-01 ownership; "
     "T3-02 a current confirmation; T3-03 a PERSISTED business context bound to the "
     "confirmation digest; T3-04 an authorized BDJ disposition -- VALIDATED_OUTPUT "
-    "or VALID_ABSTENTION, fixture modes excluded, authorization consumed; T3-05 "
+    "or VALID_ABSTENTION, fixture modes excluded, authorization consumed, and "
+    "evaluated under the source fingerprint, adopted ruleset and adopted prompt "
+    "that are current today (a missing or superseded identity is a hold, never a "
+    "pass); T3-05 "
     "every BDJ proposal decided and every approved one admitted; T3-06 no "
     "unresolved blocker AND all six fixed objectives O1..O6 registered from the "
     "M2V2-09 topic answer, with every SELECTED topic carrying a verified research "
     "objective. Registration is a disposition, never coverage: it does not raise "
     "objective_registry.coverage(), which stays 0 of 6 until an approved "
-    "measurement exists. ADOPTED and APPLIED 2026-11-24."
+    "measurement exists. ADOPTED and APPLIED 2026-11-24; /3 AMENDED 2026-11-26 "
+    "(fail closed on a missing or superseded ruleset/prompt identity)."
 )
 
 #: Stage 4's completion rule. Until 2026-11-24 stage 4 had an implementation but
@@ -606,6 +610,51 @@ def _current_source_fingerprint(session, m2_id, actor_id, revision):
         return None
 
 
+def _current_expected_identity(session, m2_id):
+    """The adopted ruleset and prompt this assessment would run under today.
+
+    Returns ``{}`` when either cannot be resolved. An empty result is a *stated
+    hold*, not a pass: ``stage3_completion`` then reports
+    ``EVALUATION_RULESET_UNVERIFIED`` instead of skipping the comparison, which
+    is what it used to do when the caller supplied only the fingerprint
+    (CP-PROG-02).
+
+    Resolution goes through ``ruleset_resolver.resolve_ruleset`` — the same
+    function the dispatch path uses — so the comparison cannot be made against a
+    ruleset that no run is permitted to use. That resolver recomputes the module
+    hash and refuses an unadopted family; both refusals become "unverified" here
+    rather than being softened into a pass.
+    """
+    try:
+        from sitewise.project1.prompts import PROMPTS, source_prompt_key
+        from sitewise.project1.ruleset_resolver import resolve_ruleset
+
+        instrument = session.execute(
+            _sql("SELECT i.version_tag FROM public.m2_assessments a "
+                 "JOIN public.m2_instrument_versions i ON i.id = a.instrument_id "
+                 "WHERE a.id = :id"), {"id": str(m2_id)}).scalar()
+        if not instrument:
+            return {}
+        binding = resolve_ruleset(str(instrument))
+        prompt = PROMPTS[source_prompt_key(str(instrument))]
+        return {"ruleset_version": binding.version,
+                "prompt_version": prompt.version}
+    except Exception:  # noqa: BLE001 - unresolvable identity is a stated hold
+        return {}
+
+
+#: The first-pass T3-04 reasons that mean "an input is missing, not that the
+#: evidence is wrong". Named rather than inlined so a new ``stage3_completion``
+#: reason cannot be added without this caller noticing: an unhandled reason leaves
+#: Stage 3 BLOCKED for a cause nobody retries.
+#:
+#: ``SOURCE_FINGERPRINT_UNAVAILABLE`` -- the caller supplied no ``expected``
+#: fingerprint. ``EVALUATION_RULESET_UNVERIFIED`` -- the fingerprint arrived but the
+#: adopted ruleset/prompt identity did not. Both are resolved on a second pass.
+STAGE3_RETRY_REASONS = frozenset({'SOURCE_FINGERPRINT_UNAVAILABLE',
+                                  'EVALUATION_RULESET_UNVERIFIED'})
+
+
 def _attach_stage3(result: dict, session, actor_id, linked: list) -> None:
     """Attach the Stage 3 contract's own verdict to each confirmed assessment.
 
@@ -660,18 +709,29 @@ def _attach_stage3(result: dict, session, actor_id, linked: list) -> None:
 
             verdict = _evaluate({})
             t3_04 = (verdict.get("predicates") or {}).get("T3-04") or {}
-            # The fingerprint comparison is the only missing input; retry once
-            # with it. This runs only when an *accepted* evaluation exists and
-            # its provenance could not be checked, so the projection is built
-            # for at most the assessments that have one.
-            if t3_04.get("reason") == "SOURCE_FINGERPRINT_UNAVAILABLE":
+            # Two inputs can be absent from the first pass: the projection
+            # fingerprint and the adopted ruleset/prompt identity. Both are
+            # resolved only when an *accepted* evaluation exists and the
+            # comparison is the only thing missing, so an assessment with no
+            # evaluation still costs nothing extra — no projection is built for
+            # it (the DD-122 two-pass optimisation, preserved).
+            if t3_04.get("reason") in STAGE3_RETRY_REASONS:
                 revision = session.execute(
                     _sql("SELECT revision FROM public.m2_assessments WHERE id = :id"),
                     {"id": str(m2_id)}).scalar()
-                fingerprint = (None if revision is None else
-                               _current_source_fingerprint(session, m2_id, actor_id, revision))
-                if fingerprint:
-                    verdict = _evaluate({"source_fingerprint": fingerprint})
+                expected = {}
+                if revision is not None:
+                    fingerprint = _current_source_fingerprint(
+                        session, m2_id, actor_id, revision)
+                    if fingerprint:
+                        expected["source_fingerprint"] = fingerprint
+                # Ruleset/prompt identity is cheap (one row + one hash), so it is
+                # resolved whenever an evaluation exists. It is deliberately not
+                # defaulted: an unresolvable identity leaves the predicate at
+                # EVALUATION_RULESET_UNVERIFIED, which is a hold, not a pass.
+                expected.update(_current_expected_identity(session, m2_id))
+                if expected:
+                    verdict = _evaluate(expected)
             savepoint.commit()
         except Exception:  # noqa: BLE001 - an unevaluated contract is a hold
             savepoint.rollback()

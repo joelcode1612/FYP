@@ -162,4 +162,85 @@ key.properties
 # Local migration backups
 /backend/var/static_pu_migration/
 
-/backend/var/static_pu_migration/
+# ---------------------------------------------------------------------------
+# Owner-local development artefacts (end of development, 2026-11-26).
+#
+# These were committed by accident while iterating. They are per-machine
+# scratch, not source:
+#   .sitewise_patch_backups/  pre-edit source snapshots written by the patch tool
+#   var/evidence/             pytest JUnit dumps from `--out ../var/evidence/`
+#                             (see backend/scripts/p3_regression_junit.py:15)
+#   backups/                  one-off frontend / pre-migration snapshots
+#   analysis_output/          ad-hoc residential-density analysis
+# The tracked copies were removed from the index with `git rm --cached`, so the
+# files still exist on disk. This rule only stops them being re-added.
+# ---------------------------------------------------------------------------
+/backups/
+/.sitewise_patch_backups/
+/var/evidence/
+/analysis_output/
+/.kombai/
+/jaspr_provider_compat/
+/synthetic_report.json
+/synthetic_report.md
+/ee01_registry_results.txt
+*.pid
+
+# ---------------------------------------------------------------------------
+# Runtime scratch inside backend/var that was never tracked (2026-11-27).
+# `backend/var` itself IS tracked (707 files), so it cannot be ignored as a
+# whole -- only these two generated subtrees:
+#   backend/var/perf/   CDP browser profiles + ad-hoc probe/measure scripts
+#                       (464 files = chrome-profile, 138 MB)
+#   backend/var/_chk/   pip --target install used to probe an isolated env
+#   .workbuddy-ai/tmp/  agent scratch; .workbuddy-ai/memory is kept separate
+# These are untracked, so an ignore rule is enough -- no `git rm --cached`
+# needed. The files stay on disk.
+# ---------------------------------------------------------------------------
+/backend/var/perf/
+/backend/var/_chk/
+/.workbuddy-ai/tmp/
+
+# ---------------------------------------------------------------------------
+# Personal architecture diagrams (owner's own understanding, 2026-11-27).
+# 13 files / 5.0 MB, all dated 2026-11-05, never tracked. Generated from
+# docs/visuals/build_master_architecture.py -> .svg/.png/.html renders.
+# If the generator itself should ship with the project, re-add it explicitly:
+#   !/docs/visuals/build_master_architecture.py
+# ---------------------------------------------------------------------------
+/docs/visuals/
+
+# ---------------------------------------------------------------------------
+# Evidence / capture output under docs/ (owner's call, 2026-11-27). The
+# Markdown specs in docs/ stay tracked -- these are the raw artifacts behind
+# them. All untracked, so an ignore rule is enough; the files stay on disk.
+#   cp00_integration/cp07_e2e2a_bcb_isolated.json/  run output (14 files, 1.1 MB).
+#                                                   A directory misnamed .json.
+#   cp00_integration/snapshots/                     TREE_BEFORE/AFTER dumps,
+#                                                   structure_data.json, 3 PNGs
+#   activity_history/snapshots/                     9 UI captures + 2 JSON
+#   docs/screenshots/                               agent_manage_* PNGs
+# ---------------------------------------------------------------------------
+/docs/cp00_integration/cp07_e2e2a_bcb_isolated.json/
+/docs/cp00_integration/snapshots/
+/docs/architecture/activity_history/snapshots/
+/docs/screenshots/
+
+# ---------------------------------------------------------------------------
+# Agent working notes (owner's call, 2026-11-27). MEMORY.md + DETAIL-*.md +
+# daily logs: how the work was done, not a project deliverable.
+# NOTE: 2026-11-24/25/26.md were already tracked, so the rule alone would not
+# hide them -- they were removed from the index with `git rm --cached`. The
+# files still exist on disk; this only stops them being published/updated.
+# ---------------------------------------------------------------------------
+/.workbuddy-ai/memory/
+
+# ---------------------------------------------------------------------------
+# Root /tool/ -- browser probe scripts (34 files), already deleted from the
+# repo with `git rm -r tool/` and archived to ../FYP_archive_20261126/tool/.
+# The rule is a GUARD: an old branch or PR that still contains tool/ would
+# otherwise resurrect it on merge. Leading `/` is essential -- it anchors to
+# the repo root only, so fyp_jaspr_web/tool/, fyp_mobile_app/tool/ and
+# backend/tools/ stay tracked.
+# ---------------------------------------------------------------------------
+/tool/

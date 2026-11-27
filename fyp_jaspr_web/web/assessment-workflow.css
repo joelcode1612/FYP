@@ -925,25 +925,6 @@ a.sw-assessment-journey__control:hover
 }
 
 
-/* The progress contract's own blocker, under the step it belongs to.
-
-   Only the selected step renders it, so the five-column tracker keeps its
-   shape; the sentence is clamped here because the full text is also printed in
-   the workspace notice and carried in the control's title/aria-label. Colour
-   matches the blocked circle so the reason and the badge read as one state. */
-.sw-assessment-journey__step-reason {
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  max-width: 20ch;
-  margin-top: 2px;
-  color: #8a641f;
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 1.35;
-}
-
 /* --- Stage 4: the generated question card --------------------------------
    The order on the card is the order the judgement is made in: what the
    question is for (subdued), the question itself (the loudest text), the

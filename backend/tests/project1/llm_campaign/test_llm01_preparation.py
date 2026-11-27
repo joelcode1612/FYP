@@ -271,10 +271,28 @@ def test_campaign_artifacts_are_confined_and_labelled():
 
 
 class _IdentitySession:
-    """Minimal session double for the gate's one catalog query."""
+    """Minimal session double for the gate's two probes.
 
-    def __init__(self, identity):
+    ``verify_workflow_database`` reads two things: the **connected** URL from
+    ``session.get_bind().url`` (to prove the session is bound to the database the
+    settings name) and the **principal** from the catalog query. This double
+    reports the URL it was constructed with, defaulting to the configured one,
+    and varies only the principal — which is what these tests are about.
+    """
+
+    def __init__(self, identity, connected_url=None):
         self.identity, self.rollbacks = identity, 0
+        self._connected_url = connected_url
+
+    def get_bind(self):
+        from types import SimpleNamespace
+
+        from sqlalchemy.engine import make_url
+
+        from sitewise.core.config import settings
+
+        return SimpleNamespace(
+            url=make_url(self._connected_url or settings.database_url))
 
     def execute(self, statement):
         from types import SimpleNamespace
@@ -285,33 +303,81 @@ class _IdentitySession:
 
 
 def test_configuration_gate_is_intact_and_accepts_only_a_non_superuser_dss_principal(monkeypatch):
-    """The gate is exercised, never edited. Evidence for the runnable-configuration answer."""
+    """The gate is exercised, never edited. Evidence for the runnable-configuration answer.
+
+    Three cases, each of which the gate can actually produce. The first case used
+    to be "a ``postgres`` URL is refused with ``WORKFLOW_CONFIGURATION_REQUIRED``",
+    which the gate never implemented: it decides the principal from the *catalog*
+    (``current_user``/``session_user``), not from the username in the URL, and the
+    only source of ``WORKFLOW_CONFIGURATION_REQUIRED`` is the workflow flag. That
+    case could not pass once the double could answer ``get_bind()``, because it
+    described a state no real session can be in — a ``postgres`` connection whose
+    catalog row says it is not a superuser.
+
+    The refusal itself is unchanged and still asserted: a superuser principal is
+    refused, now by the code the gate really raises for it.
+    """
     from fastapi import HTTPException
     from sitewise.api.v1 import project1_workflow as api
     from pydantic import SecretStr
 
-    monkeypatch.setattr(settings, 'project1_workflow_enabled', True)
     monkeypatch.setattr(settings, 'm2_database_url', SecretStr(''))
 
+    # 1. The workflow is not enabled.
+    monkeypatch.setattr(settings, 'project1_workflow_enabled', False)
+    with pytest.raises(HTTPException) as caught:
+        api.configuration_gate(_IdentitySession(('Dss', None, False)))
+    assert caught.value.detail['code'] == 'WORKFLOW_CONFIGURATION_REQUIRED'
+
+    # 2. A superuser principal, as a `postgres` connection would actually report.
+    #    ``configuration_gate`` re-raises ``WorkflowHeld`` unchanged (it only
+    #    translates ``ValueError``/``SQLAlchemyError``), so the refusal arrives as
+    #    the hold itself rather than as an ``HTTPException``.
+    from sitewise.project1.contracts import WorkflowHeld
+
+    monkeypatch.setattr(settings, 'project1_workflow_enabled', True)
     monkeypatch.setattr(
         settings, 'database_url',
         'postgresql+psycopg2://postgres:placeholder@localhost:5432/Dss')
-    with pytest.raises(HTTPException) as caught:
-        api.configuration_gate(_IdentitySession(('Dss', False, False)))
-    assert caught.value.detail['code'] == 'WORKFLOW_CONFIGURATION_REQUIRED'
+    with pytest.raises(WorkflowHeld) as caught:
+        api.configuration_gate(_IdentitySession(('Dss', None, True)))
+    assert str(caught.value) == 'SOURCE_PRINCIPAL_REVIEW_REQUIRED'
 
+    # 3. p1ai_engine on Dss. Nothing else was relaxed to reach this point; the
+    #    downstream grants are a separate fact.
     monkeypatch.setattr(
         settings, 'database_url',
         'postgresql+psycopg2://p1ai_engine:placeholder@localhost:5432/Dss')
-    with pytest.raises(HTTPException) as caught:
-        api.configuration_gate(_IdentitySession(('Final_Location_Analysis', False, False)))
-    assert caught.value.detail['code'] == 'SOURCE_PRINCIPAL_REVIEW_REQUIRED'
-
-    # The gate's own conditions are satisfied by p1ai_engine on Dss. Nothing else
-    # was relaxed to reach this point; the downstream grants are a separate fact.
-    session = _IdentitySession(('Dss', False, False))
+    session = _IdentitySession(('Dss', None, False))
     api.configuration_gate(session)
     assert session.rollbacks == 1
+
+
+def test_the_gate_refuses_a_session_bound_to_another_database(monkeypatch):
+    """The identity check reads the *connected* database, not just the settings.
+
+    Added with the ``get_bind`` repair: once the double reports a URL, the branch
+    that compares it with the configured target has to be exercised, or the
+    double would be proving only that the gate accepts whatever it is told.
+    """
+    from sitewise.api.v1 import project1_workflow as api
+    from sitewise.core.config import settings
+    from sitewise.project1.contracts import WorkflowHeld
+    from pydantic import SecretStr
+
+    monkeypatch.setattr(settings, 'project1_workflow_enabled', True)
+    monkeypatch.setattr(settings, 'm2_database_url', SecretStr(''))
+    monkeypatch.setattr(
+        settings, 'database_url',
+        'postgresql+psycopg2://p1ai_engine:placeholder@localhost:5432/Dss')
+
+    session = _IdentitySession(
+        ('Dss', False, False),
+        connected_url='postgresql+psycopg2://p1ai_engine:placeholder@localhost:5432/other_db')
+    with pytest.raises(WorkflowHeld) as caught:
+        api.configuration_gate(session)
+    assert str(caught.value) == 'WORKFLOW_DATABASE_IDENTITY_MISMATCH'
+    assert session.rollbacks == 1, 'the gate must roll back even when it refuses'
 
 
 def test_model_assisted_gate_requires_all_four_settings(monkeypatch):

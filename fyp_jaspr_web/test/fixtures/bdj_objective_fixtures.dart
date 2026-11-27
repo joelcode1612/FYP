@@ -22,6 +22,25 @@ const String sourcedProposalId = '356df73c-a360-5fa4-98c8-65a1df109bbf';
 const String approvedProposalId = '7490f03c-c1cf-51d0-9b49-f230703f4bea';
 const String exploratoryProposalId = 'd4ae970c-e711-5439-a0c9-5367905b67f2';
 
+/// The `generation` block of the list envelope.
+///
+/// The server decides whether a governed pass can still run, and the panel draws
+/// its generate control from this block alone. The default fixture is "nothing
+/// attempted yet", so a test that exercises generation is exercising an eligible
+/// context; a test that wants a spent or in-flight one passes the reason
+/// explicitly rather than relying on the proposal count.
+Map<String, dynamic> generationPayload({
+  String reason = 'NOT_STARTED',
+  bool eligible = true,
+  int attempts = 0,
+}) => {
+  'contract': 'bdj-objective-generation/1',
+  'eligible': eligible,
+  'reason': reason,
+  'attempts': attempts,
+  'run_recorded': attempts > 0,
+};
+
 Map<String, dynamic> evaluationPayload() => {
   'contract_version': 'bdj-objective-proposal/1',
   'assessment_id': m2AssessmentId,

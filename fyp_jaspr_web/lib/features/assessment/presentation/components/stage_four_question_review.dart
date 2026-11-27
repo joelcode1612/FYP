@@ -773,18 +773,23 @@ class _StageFourState extends State<StageFourQuestionReview> {
   /// Absent is stated as absent. A blank space next to a label would leave the
   /// reader unable to tell "not recorded" from "recorded as none".
   String _intendedAnswerLine(QgCandidate candidate) {
-    final code = candidate.review.expectedOptionCode;
-    if (code == null || code.isEmpty) {
+    final codes = candidate.review.selection;
+    if (codes.isEmpty) {
       return 'None recorded. Clicking an option above records what you expect; '
           'clicking it again clears it.';
     }
-    final label = candidate.options
-        .where((opt) => opt.code == code)
-        .map((opt) => opt.label)
-        .join();
-    return label.isEmpty
-        ? 'You expect respondents to choose $code.'
-        : 'You expect respondents to choose $code — $label.';
+    final labels = [
+      for (final code in codes)
+        candidate.options
+            .where((opt) => opt.code == code)
+            .map((opt) => '${opt.label} ($code)')
+            .join(),
+    ].where((entry) => entry.isNotEmpty).toList();
+    if (labels.isEmpty) {
+      return 'You expect respondents to choose ${codes.join(', ')}.';
+    }
+    final noun = codes.length == 1 ? 'option' : 'options';
+    return 'You expect respondents to choose $noun ${labels.join('; ')}.';
   }
 
   /// Gaps that are computable from the candidate record itself.
@@ -967,7 +972,7 @@ class _StageFourState extends State<StageFourQuestionReview> {
     component.onStageProgressChanged?.call();
   }
 
-  Future<void> _expectQg(QgCandidate candidate, String? code) async {
+  Future<void> _expectQg(QgCandidate candidate, List<String>? codes) async {
     setState(() {
       _qgBusy = true;
       _qgError.remove(candidate.candidateId);
@@ -975,7 +980,9 @@ class _StageFourState extends State<StageFourQuestionReview> {
     final result = await component.api.setExpectedAnswer(
       assessmentId: component.m2AssessmentId,
       candidateId: candidate.candidateId,
-      optionCode: code,
+      // The set, not its first code: the server stores a selection, and
+      // truncating it would silently record an intention the owner did not make.
+      optionCodes: codes,
       expectedRevision: component.expectedRevision,
     );
     if (!mounted) return;
@@ -1050,14 +1057,15 @@ class _StageFourState extends State<StageFourQuestionReview> {
   /// it. Nothing about the answer itself is implied — the row is still just an
   /// option.
   Component _qgOption(QgCandidate candidate, CandidateOption option) {
-    final chosen = candidate.review.expectedOptionCode == option.code;
+    final selected = candidate.review.selection;
+    final chosen = selected.contains(option.code);
     return button(
       classes: 's4-opt${chosen ? ' is-chosen' : ''}',
       attributes: {'type': 'button', 'aria-pressed': chosen.toString()},
       events: events(
         onClick: _qgBusy
             ? null
-            : () => _expectQg(candidate, chosen ? null : option.code),
+            : () => _expectQg(candidate, _nextSelection(candidate, option)),
       ),
       [
         span(classes: 's4-opt__radio', []),
@@ -1067,6 +1075,28 @@ class _StageFourState extends State<StageFourQuestionReview> {
           span(classes: 's4-opt__mark', [Component.text('intended answer')]),
       ],
     );
+  }
+
+  /// The selection an option click produces, matched to the response format.
+  ///
+  /// A multiple-choice question keeps every option the owner has chosen; every
+  /// other format replaces the selection, because a single-choice question
+  /// cannot represent two intentions and writing a second one would store an
+  /// answer the question cannot ask for. Clicking the only chosen option in a
+  /// single-choice question clears it.
+  List<String>? _nextSelection(QgCandidate candidate, CandidateOption option) {
+    final selected = candidate.review.selection;
+    if (candidate.responseFormat.toUpperCase() == 'MULTIPLE_CHOICE') {
+      final next = [
+        for (final code in selected)
+          if (code != option.code) code,
+      ];
+      if (!selected.contains(option.code)) next.add(option.code);
+      return next.isEmpty ? null : next;
+    }
+    return selected.length == 1 && selected.first == option.code
+        ? null
+        : [option.code];
   }
 
   /// One persisted Direct-QG candidate, with everything a reviewer must see
@@ -1114,7 +1144,16 @@ class _StageFourState extends State<StageFourQuestionReview> {
             span(classes: 's4-badge s4-badge--objective', [
               Component.text(candidate.objectiveId),
             ]),
-            if (proposal != null)
+            // The badge states the owner's decision, so it may only appear when
+            // the decision is actually `approved`. It used to fire on
+            // `proposal != null` alone, which asserted an approval for any
+            // objective that merely had a proposal — including the six
+            // `CANDIDATE` and two `REJECTED` objectives already in the database.
+            // No candidate links to one of those today, so nothing false was on
+            // screen; the check exists so that the first one that does cannot
+            // render a decision the owner never made. DD-163.
+            if (proposal != null &&
+                proposal.reviewState == BdjReviewState.approved)
               span(classes: 's4-badge', [Component.text('approved by you')]),
           ]),
           if (objectiveText == null || objectiveText.isEmpty)
@@ -1201,7 +1240,7 @@ class _StageFourState extends State<StageFourQuestionReview> {
               span(classes: 's4-answer__k', [
                 Component.text('Your intended answer'),
               ]),
-              if (candidate.review.expectedOptionCode != null)
+              if (candidate.review.hasIntention)
                 button(
                   classes: 's4-answer__clear',
                   attributes: {'type': 'button'},

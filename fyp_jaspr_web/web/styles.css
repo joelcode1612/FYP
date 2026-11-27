@@ -18294,6 +18294,40 @@ input[type="range"] {
   color: #183c85;
   font-weight: 670;
 }
+/* Sample-answer guidance for the M2 declaration.
+   Editorial help, not a value: it is rendered outside the editable control, is
+   styled as a quiet aside rather than as a form field, and carries no input of
+   its own. `pre-line` keeps the paragraph breaks the example text declares. */
+.asw-sample {
+  margin: 8px 0 2px;
+  padding: 12px 14px;
+  border: 1px solid #dfe5ed;
+  border-left: 3px solid var(--action);
+  border-radius: 8px;
+  background: #f7f9fd;
+}
+.asw-sample__label {
+  margin: 0 0 6px;
+  color: #3b4f6d;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.asw-sample__text {
+  margin: 0 0 6px;
+  color: #263853;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-line;
+}
+.asw-sample__text:last-of-type { margin-bottom: 0; }
+.asw-sample__note {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
 .asw-qcard__footer {
   display: flex;
   align-items: center;
@@ -19872,31 +19906,26 @@ input[type="range"] {
 .sw-chart__notice-title { margin: 0 0 3px; font-size: 12.5px; font-weight: 800; color: var(--ink); }
 .sw-chart__notice-text { margin: 0; font-size: 11.5px; line-height: 1.6; color: var(--muted); }
 
-/* Development-only synthetic demonstration. Deliberately loud: a solid warning
-   edge, a tinted wash and heavy weight, so it reads before the bars do. Never
-   dismissible, never collapsible. */
-.sw-chart--synthetic { border-color: var(--warning); }
-.sw-chart__synthetic-banner {
-  display: flex;
-  gap: 12px;
-  margin: 16px 18px 0;
-  padding: 13px 16px;
-  border: 1px solid var(--warning);
-  border-left: 4px solid var(--warning);
-  border-radius: var(--radius-sm);
-  background: var(--warning-wash);
-}
-.sw-chart__synthetic-banner .ms { flex: none; color: var(--warning); }
-.sw-chart__synthetic-body { min-width: 0; }
-.sw-chart__synthetic-title {
-  margin: 0 0 4px;
+/* Demonstration data. A business report, so the status is a quiet line rather
+   than a warning banner: a neutral tint, normal weight, and the chip in the
+   eyebrow row carries the signal. The full provenance sentence is printed once
+   in the report's methodology block. */
+.sw-chart--synthetic { border-color: var(--line-2, var(--line)); }
+.sw-chart__demo-note {
+  margin: 12px 18px 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--line-2, var(--line));
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--surface-2, transparent);
   font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--warning);
+  line-height: 1.6;
+  color: var(--ink-2, var(--ink));
 }
-.sw-chart__synthetic-text { margin: 0; font-size: 11.5px; line-height: 1.6; color: var(--ink); }
+.sw-chart__demo-label {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
 
 /* ---------------------------------------------------------------------------
    Development-only synthetic preview page (/dev/q01-synthetic-preview).

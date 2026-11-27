@@ -572,42 +572,63 @@ class AutomaticGenerationRequest(BaseModel):
     recovery_of: UUID | None = None
 
 
-@router.post('/assessments/{assessment_id}/qg-candidates/generate')
-def generate_for_approved_objective(assessment_id: UUID,
-                                    payload: AutomaticGenerationRequest,
-                                    user: Owner, response: Response,
-                                    m2_engine: AuthorizedProposalStorageEngine,
-                                    ledger_engine: AuthorizedLedgerEngine,
-                                    context_service: ContextService):
-    """Eligibility, issuance and generation as one governed step.
+#: How many objectives one batch may carry. Six is the product's own ceiling on
+#: additional objectives; the extra headroom exists so a future objective class
+#: does not need a contract bump, not so a caller can fan out arbitrarily.
+MAX_BATCH_OBJECTIVES = 12
 
-    The intended lifecycle is *approved objective → automatic eligibility
-    validation → Direct-QG execution*. This route is that sentence. It performs,
-    in order, and refuses at the first unmet prerequisite:
+#: Identifies the batch envelope. A consumer expecting a single-objective
+#: response reads a different contract rather than a shape that changed meaning.
+BATCH_CONTRACT = 'sitewise-qg-batch-generation/1'
 
-    1. derive the objective authority from the owner's approval (contract 2.1);
-    2. evaluate generation eligibility and refuse on any failed check G-01..G-05;
-    3. confirm the deployment has adopted the objective-authority schema;
-    4. read the persisted QG consent block (consent is never assumed);
-    5. issue exactly one single-use authorization for this attempt;
-    6. run the existing governed adapter.
+#: Refusal codes that mean "this objective's one attempt has been taken".
+#:
+#: Repeated in Python on purpose: the Dart transport has its own copy for the
+#: single-objective route, and a shared constant across the wire does not exist.
+#: Kept as an explicit set so a new refusal code cannot silently start reading as
+#: a retryable failure.
+_SPENT_CODES = frozenset({
+    'QG_AUTHORIZATION_ALREADY_SPENT',
+    'QG_AUTHORIZATION_CONSUMED',
+    'QG_CONSENT_ALREADY_CONSUMED',
+})
 
-    It does not create an admission, does not require the owner to approve again,
-    and does not fall back to a simulated candidate.
+
+class BatchGenerationRequest(BaseModel):
+    """Generate for several approved objectives from one owner action.
+
+    The caller sends identities it already owns — the objectives it selected and
+    the confirmation it is looking at. It never sends an admission id, an
+    authorization id, a measurement id or an owner answer: those are the server's
+    conclusions, and accepting them from the client would let a caller supply
+    "confirmed" facts that were never confirmed.
     """
-    response.headers['Cache-Control'] = 'no-store'
-    if not settings.tokenharbor_enabled:
-        raise HTTPException(503, detail={
-            'code': 'PROVIDER_NOT_CONFIGURED',
-            'message': 'TokenHarbour is not enabled for this deployment.'})
 
-    ceiling = provider_cost_ceiling_usd()
-    if ceiling is None:
-        raise HTTPException(503, detail={
-            'code': 'PROVIDER_COST_CEILING_NOT_ADOPTED',
-            'message': 'The per-attempt cost ceiling is unset or above the '
-                       f'adopted maximum of USD {MAX_TOKENHARBOR_COST_CEILING_USD:.2f}.'})
+    model_config = ConfigDict(extra='forbid')
 
+    confirmation_id: UUID
+    context_id: UUID
+    proposal_ids: list[UUID] = Field(min_length=1, max_length=MAX_BATCH_OBJECTIVES)
+    prompt_key: str = 'QG_FIXED_OPTION'
+    response_format: str = 'MULTIPLE_CHOICE'
+
+
+def _attempt_one_objective(*, assessment_id: UUID,
+                           payload: AutomaticGenerationRequest, user,
+                           m2_engine, ledger_engine, context_service,
+                           ceiling: float) -> dict:
+    """One governed objective attempt, shared by the single and batch routes.
+
+    This is the body the single-objective route has always run: derive the
+    authority, evaluate eligibility, issue exactly one single-use
+    authorization, then hand the work to the existing adapter. Extracting it
+    is what lets a batch reuse the *same* governance per objective instead of
+    growing a second path that could drift from this one.
+
+    It raises ``HTTPException`` on refusal exactly as the route used to, so the
+    single route's behaviour is unchanged; the batch route is the caller that
+    catches it and continues.
+    """
     actor = user.user_id
     runner = None
     # Bound before the try so the refusal path can tell "no approval was ever
@@ -790,3 +811,156 @@ def generate_for_approved_objective(assessment_id: UUID,
     envelope['provider_execution'] = _provider_provenance(
         runner, ceiling=ceiling)
     return envelope
+
+
+@router.post('/assessments/{assessment_id}/qg-candidates/generate')
+def generate_for_approved_objective(assessment_id: UUID,
+                                    payload: AutomaticGenerationRequest,
+                                    user: Owner, response: Response,
+                                    m2_engine: AuthorizedProposalStorageEngine,
+                                    ledger_engine: AuthorizedLedgerEngine,
+                                    context_service: ContextService):
+    """Eligibility, issuance and generation as one governed step.
+
+    The intended lifecycle is *approved objective → automatic eligibility
+    validation → Direct-QG execution*. This route is that sentence. It performs,
+    in order, and refuses at the first unmet prerequisite:
+
+    1. derive the objective authority from the owner's approval (contract 2.1);
+    2. evaluate generation eligibility and refuse on any failed check G-01..G-05;
+    3. confirm the deployment has adopted the objective-authority schema;
+    4. read the persisted QG consent block (consent is never assumed);
+    5. issue exactly one single-use authorization for this attempt;
+    6. run the existing governed adapter.
+
+    It does not create an admission, does not require the owner to approve again,
+    and does not fall back to a simulated candidate.
+    """
+    response.headers['Cache-Control'] = 'no-store'
+    if not settings.tokenharbor_enabled:
+        raise HTTPException(503, detail={
+            'code': 'PROVIDER_NOT_CONFIGURED',
+            'message': 'TokenHarbour is not enabled for this deployment.'})
+
+    ceiling = provider_cost_ceiling_usd()
+    if ceiling is None:
+        raise HTTPException(503, detail={
+            'code': 'PROVIDER_COST_CEILING_NOT_ADOPTED',
+            'message': 'The per-attempt cost ceiling is unset or above the '
+                       f'adopted maximum of USD {MAX_TOKENHARBOR_COST_CEILING_USD:.2f}.'})
+
+    return _attempt_one_objective(
+        assessment_id=assessment_id, payload=payload, user=user,
+        m2_engine=m2_engine, ledger_engine=ledger_engine,
+        context_service=context_service, ceiling=ceiling)
+
+
+@router.post('/assessments/{assessment_id}/qg-candidates/generate-batch')
+def generate_for_selected_objectives(assessment_id: UUID,
+                                     payload: BatchGenerationRequest,
+                                     user: Owner, response: Response,
+                                     m2_engine: AuthorizedProposalStorageEngine,
+                                     ledger_engine: AuthorizedLedgerEngine,
+                                     context_service: ContextService):
+    """One owner action, one governed attempt per selected objective.
+
+    Why a batch route rather than a client-side loop
+    -----------------------------------------------
+    A loop in the browser would put the governance on the wrong side of the wire:
+    a page closed halfway through would leave objectives half-generated with no
+    record of what was attempted, and two open tabs could interleave the same
+    objective. Here the server walks the selection once, in order, and reports
+    what happened to each objective.
+
+    It does **not** merge objectives into one prompt. Each objective keeps its own
+    authority, its own context binding, its own single-use authorization and its
+    own validation — the same path the single-objective route runs. The batch is
+    a loop over that path, nothing more.
+
+    Duplicate prevention is inherited, not re-implemented: the authorization and
+    the consent grant are spent before dispatch by ``qg_attempt.reserve``, so a
+    repeated click, a refresh or a second tab is refused with
+    ``QG_AUTHORIZATION_ALREADY_SPENT`` instead of producing a second candidate.
+
+    A refusal on one objective does not stop the others. That is the point: an
+    owner who selected six objectives must not lose five because the third was
+    unmeasurable.
+    """
+    response.headers['Cache-Control'] = 'no-store'
+    if not settings.tokenharbor_enabled:
+        raise HTTPException(503, detail={
+            'code': 'PROVIDER_NOT_CONFIGURED',
+            'message': 'TokenHarbour is not enabled for this deployment.'})
+
+    ceiling = provider_cost_ceiling_usd()
+    if ceiling is None:
+        raise HTTPException(503, detail={
+            'code': 'PROVIDER_COST_CEILING_NOT_ADOPTED',
+            'message': 'The per-attempt cost ceiling is unset or above the '
+                       f'adopted maximum of USD {MAX_TOKENHARBOR_COST_CEILING_USD:.2f}.'})
+
+    # Order-preserving de-duplication. A caller that names the same objective
+    # twice asked for it once; dispatching twice would spend two authorizations
+    # on one objective and produce a second candidate nobody asked for.
+    selected: list[UUID] = []
+    for proposal_id in payload.proposal_ids:
+        if proposal_id not in selected:
+            selected.append(proposal_id)
+
+    results: list[dict] = []
+    for proposal_id in selected:
+        single = AutomaticGenerationRequest(
+            confirmation_id=payload.confirmation_id,
+            context_id=payload.context_id,
+            proposal_id=proposal_id,
+            prompt_key=payload.prompt_key,
+            response_format=payload.response_format)
+        try:
+            envelope = _attempt_one_objective(
+                assessment_id=assessment_id, payload=single, user=user,
+                m2_engine=m2_engine, ledger_engine=ledger_engine,
+                context_service=context_service, ceiling=ceiling)
+        except HTTPException as exc:
+            detail = exc.detail if isinstance(exc.detail, dict) else {}
+            code = detail.get('code')
+            results.append({
+                'proposal_id': str(proposal_id),
+                'status': 'REFUSED',
+                'code': code,
+                'message': detail.get('message'),
+                'check_id': detail.get('check_id'),
+                # True when the refusal means this objective has used the one
+                # attempt it was allowed. The caller must not offer a plain
+                # retry for these; recovery is a separate, named act.
+                'attempt_spent': code in _SPENT_CODES,
+                'candidate_id': None,
+                'dispatched': bool((detail.get('provider') or {}).get('dispatched')),
+            })
+            continue
+        results.append({
+            'proposal_id': str(proposal_id),
+            'status': 'COMPLETED',
+            'code': None,
+            'message': None,
+            'check_id': None,
+            'attempt_spent': True,
+            'candidate_id': envelope.get('candidate_id'),
+            'outcome': envelope.get('outcome'),
+            'dispatched': bool(envelope.get('dispatched')),
+            'authorization_id': envelope.get('authorization_id'),
+        })
+
+    completed = [r for r in results if r['status'] == 'COMPLETED']
+    return {
+        'contract_version': BATCH_CONTRACT,
+        'assessment_id': str(assessment_id),
+        'results': results,
+        'summary': {
+            'requested': len(selected),
+            'completed': len(completed),
+            'refused': len(results) - len(completed),
+            'persisted': len([r for r in completed if r.get('candidate_id')]),
+        },
+        'dispatches_model': any(r.get('dispatched') for r in results),
+        'combined_prompt': False,
+    }

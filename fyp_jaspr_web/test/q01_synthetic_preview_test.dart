@@ -282,18 +282,30 @@ void main() {
   });
 
   group('ChartSpecView renders the preview', () {
-    test('the banner text is exactly the required string', () {
+    test('the data-origin disclosure is exactly the required sentence', () {
+      expect(
+        ChartSpecView.dataOriginDisclosure,
+        'Questionnaire responses used in this demonstration were generated for '
+        'system testing and do not represent independently collected customer '
+        'survey findings.',
+      );
+      // The old technical banner wording must not come back through the
+      // compatibility alias.
       expect(
         ChartSpecView.syntheticPreviewBannerText,
-        'SYNTHETIC DEMONSTRATION — NOT REPORT EVIDENCE',
+        ChartSpecView.dataOriginDisclosure,
       );
     });
 
     testComponents('draws bars, counts and shares for the preview', (tester) {
       tester.pumpComponent(ChartSpecView(spec: _preview()));
 
-      // Banner, before anything else.
-      expect(find.text(ChartSpecView.syntheticPreviewBannerText), findsOneComponent);
+      // The compact demonstration note, before anything else. A report renders
+      // this instead of the former full-width banner.
+      expect(
+        find.textContaining(ChartSpecView.demoModeDescription),
+        findsOneComponent,
+      );
       // Bars exist: the bar track is only emitted by _bars().
       expect(find.text('I live in this area'), findsComponents);
       // The printed share is the backend's decimal string, trimmed.
@@ -303,7 +315,7 @@ void main() {
       expect(find.text('withheld'), findsNothing);
       // A held line is still advertised as held.
       expect(find.text('Not report-admissible'), findsOneComponent);
-      expect(find.text('Synthetic preview'), findsOneComponent);
+      expect(find.text(ChartSpecView.demoModeLabel), findsOneComponent);
       // Mandatory furniture.
       expect(find.text('Limitations'), findsOneComponent);
     });

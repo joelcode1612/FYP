@@ -128,14 +128,50 @@ def _check_recommendation(rec) -> None:
             raise WorkflowHeld("PROPOSAL_PROBLEM_NOT_ALLOWED")
 
 
+#: Whether the proposals table carries the attempt identity yet. The proposed
+#: migration adds it. Until it is applied, an identity is simply not recorded —
+#: which the status projection already reports as PERSISTENCE_UNATTRIBUTABLE.
+_ATTEMPT_IDENTITY_COLUMNS: bool | None = None
+
+
+def _has_attempt_identity(conn) -> bool:
+    """Feature-detect the identity columns once per process.
+
+    A backend that cannot answer (no ``information_schema``, or a stand-in
+    engine in a unit test) yields False rather than raising: not recording the
+    identity is the safe answer, and it leaves the row exactly as it was before
+    the migration. The negative result is deliberately not cached, so a transient
+    probe failure cannot disable attribution for the life of the process.
+    """
+    global _ATTEMPT_IDENTITY_COLUMNS
+    if _ATTEMPT_IDENTITY_COLUMNS is None:
+        try:
+            present = conn.execute(text(
+                "SELECT 1 FROM information_schema.columns"
+                " WHERE table_schema='public'"
+                "   AND table_name='m2_bdj_objective_proposals'"
+                "   AND column_name='run_id'")).first() is not None
+        except Exception:  # noqa: BLE001 - unknown schema is "cannot record"
+            return False
+        _ATTEMPT_IDENTITY_COLUMNS = present
+    return _ATTEMPT_IDENTITY_COLUMNS
+
+
 def persist(engine, bound: BoundObjectiveProposal, *, owner_user_id, evaluation_id,
             assessment_id, confirmation_revision, confirmation_id, source_fingerprint,
             prompt_version, execution_mode="SIMULATED", model_provider=None,
-            model_requested=None, model_returned=None) -> list[dict]:
+            model_requested=None, model_returned=None,
+            run_id=None, attempt_no=None) -> list[dict]:
     """Insert every recommendation; return [{proposal_id, created}] per row.
 
     ``execution_mode`` must distinguish a real dispatch from a simulated or
     deterministic run — a fixture must never be stored as if a model produced it.
+
+    ``run_id`` / ``attempt_no`` are the ledger identity of the execution that
+    produced these rows. They are written only when the schema can hold them
+    (see ``20261126_01_bdj_proposal_attempt_identity.sql``); ``created`` rows
+    report ``attempt_identity_recorded`` so a caller can tell a row that carries
+    its provenance from one that cannot, instead of assuming either.
     """
     if not isinstance(bound, BoundObjectiveProposal) or bound.contract_version != BOUND_CONTRACT_VERSION:
         raise WorkflowHeld("PROPOSAL_NOT_BOUND_TO_CONTEXT")
@@ -143,6 +179,10 @@ def persist(engine, bound: BoundObjectiveProposal, *, owner_user_id, evaluation_
         raise WorkflowHeld("PROPOSAL_EXECUTION_MODE_INVALID")
     if len(str(source_fingerprint)) != 64:
         raise WorkflowHeld("PROPOSAL_SOURCE_FINGERPRINT_INVALID")
+    # Half an identity is not an identity: writing only one of the two would
+    # produce a row that looks attributable and is not.
+    if (run_id is None) != (attempt_no is None):
+        raise WorkflowHeld("PROPOSAL_ATTEMPT_IDENTITY_INCOMPLETE")
 
     rows, out = [], []
     for rec in bound.proposals:
@@ -175,15 +215,26 @@ def persist(engine, bound: BoundObjectiveProposal, *, owner_user_id, evaluation_
     with engine.begin() as conn:
         assert_target(conn)
         _bind_actor(conn, owner_user_id)
+        # Written only where the schema can hold it. Before the migration this is
+        # False and the row is stored exactly as it was before: unattributed, and
+        # reported as such, rather than silently claiming an identity.
+        record_identity = run_id is not None and _has_attempt_identity(conn)
+        extra_cols = ', run_id, attempt_no' if record_identity else ''
+        extra_vals = ', :run_id, :attempt_no' if record_identity else ''
+        if record_identity:
+            for row in rows:
+                row['run_id'] = str(run_id)
+                row['attempt_no'] = int(attempt_no)
         for row, result in zip(rows, out):
-            inserted = conn.execute(text("""
+            inserted = conn.execute(text(f"""
                 INSERT INTO public.m2_bdj_objective_proposals (
                     proposal_id, evaluation_id, assessment_id, confirmation_id,
                     confirmation_revision, source_fingerprint, context_id,
                     context_packet_hash, recommendation_status, problem_type, problem,
                     research_objective, reason, evidence_limitation, source_refs,
                     contract_version, prompt_version, execution_mode, model_provider,
-                    model_requested, model_returned, validation_status, owner_user_id)
+                    model_requested, model_returned, validation_status, owner_user_id
+                    {extra_cols})
                 VALUES (
                     :proposal_id, :evaluation_id, :assessment_id, :confirmation_id,
                     :confirmation_revision, :source_fingerprint, :context_id,
@@ -191,10 +242,12 @@ def persist(engine, bound: BoundObjectiveProposal, *, owner_user_id, evaluation_
                     :research_objective, :reason, :evidence_limitation,
                     CAST(:source_refs AS jsonb), :contract_version, :prompt_version,
                     :execution_mode, :model_provider, :model_requested, :model_returned,
-                    :validation_status, :owner_user_id)
+                    :validation_status, :owner_user_id
+                    {extra_vals})
                 ON CONFLICT (proposal_id) DO NOTHING
             """), row).rowcount
             result["created"] = inserted == 1
+            result["attempt_identity_recorded"] = bool(record_identity)
     return out
 
 

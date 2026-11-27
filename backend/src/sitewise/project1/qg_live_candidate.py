@@ -34,6 +34,7 @@ from sitewise.project1.qg_fixed_options import (
     FIXED_OPTION_CONTRACT, FixedOptionCandidate,
 )
 from sitewise.project1.prompts import PROMPTS
+from sitewise.project1 import research_coverage
 
 #: The registered prompt for fixed-option customer-question generation. Its
 #: contract is the one ``validate_fixed_candidate`` accepts.
@@ -54,6 +55,12 @@ def build_qg_input(facts, *, policy_version: str) -> dict:
     ``source_fingerprint`` is the facts digest, not the BCB packet hash. The
     runner compares it against the authorized fingerprint before provisioning, so
     the authorization must bind this value — see ``N04C_QG_PROMPT_AND_AUTHORIZATION.md``.
+
+    ``research_coverage`` is the Section A coverage the assessment already has.
+    It sits beside ``source_fingerprint`` rather than inside
+    ``confirmed_facts``: the facts digest is what the authorization binds, and
+    coverage is material for the model's duplication judgement, not a confirmed
+    business fact.
     """
     return {
         'contract_version': FIXED_OPTION_CONTRACT,
@@ -61,6 +68,7 @@ def build_qg_input(facts, *, policy_version: str) -> dict:
         'source_fingerprint': facts.fingerprint,
         'confirmed_facts': facts.model_dump(mode='json'),
         'policy_version': policy_version,
+        research_coverage.COVERAGE_FIELD: research_coverage.for_question_arm(),
     }
 
 

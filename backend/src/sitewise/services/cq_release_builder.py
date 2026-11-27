@@ -253,13 +253,28 @@ def _additional_item(composed_item: Mapping[str, Any],
         raise CqRefused('CQ_ADDITIONAL_LABEL_MISSING')
 
     probe = {'id': qid, 'section': SECTION_ADDITIONAL}
+    # The composition record is carried as ``validation`` so the release can be
+    # traced to the exact approved candidate. The owner's intended option is
+    # entrepreneur-only metadata and is removed here rather than at read time:
+    # the respondent session view returns the manifest verbatim, so a key left in
+    # this block would be disclosed to the customer and would tell them which
+    # answer the business hopes for — biasing the measurement the intention is
+    # later compared against.
+    #
+    # Nothing is lost by removing it: the item still records ``candidate_id``,
+    # which is the question version, and the intention lives on
+    # ``m2_qg_candidate_reviews`` keyed by that same candidate. The report
+    # generator joins on it. Copying the codes into a customer-readable document
+    # would be the only way to make them leak.
+    validation = {key: value for key, value in dict(composed_item).items()
+                  if not str(key).startswith('owner_intended')}
     return {
         'id': qid,
         'section': SECTION_ADDITIONAL,
         'source': 'QG_CANDIDATE',
         'type': response_format,
         'codes': codes,
-        'validation': deepcopy(dict(composed_item)),
+        'validation': deepcopy(validation),
         'required_for_presentation': True,
         'required_for_answer': True,
         'wording': {'EN': stem},
@@ -426,6 +441,82 @@ def authorization_exclusions(item: Mapping[str, Any],
     if row.get('unresolved_slots'):
         reasons.append('SLOT_UNRESOLVED')
     return reasons
+
+
+#: Plain-English sentence for each Section A authorisation exclusion code.
+#:
+#: §15 asked why only seven of thirteen fixed questions are authorised. The
+#: answer is that six are excluded by *design*: three need a stimulus this
+#: release does not carry, and three need an optional declaration that this
+#: publication path does not carry. Reporting only the code made all six look
+#: like defects. The sentence says what the code means and that the exclusion is
+#: expected, so a reader can tell a structural exclusion from a failure.
+#:
+#: The optional declaration is *not* an owner preference: ``publish`` refuses
+#: any non-default option with ``CQ_PUBLICATION_OPTIONS_UNAUTHORISED``, so no
+#: caller can switch ``optional_context`` on for this release. The sentence must
+#: not tell the owner they chose this.
+#:
+#: ``{detail}`` is the part after the colon in the reason string (the stimulus
+#: kind or declaration field).
+EXCLUSION_EXPLANATIONS = {
+    'STIMULUS_NOT_IN_RELEASE': (
+        "This question depends on the '{detail}' stimulus, which this release "
+        'does not include. It is excluded by design, not because the question '
+        'or the questionnaire is defective.'
+    ),
+    'DECLARATION_OFF': (
+        "This question depends on the optional '{detail}' declaration, which "
+        'this release does not carry. Optional declarations cannot be enabled '
+        'on this publication path, so the question is excluded by design, not '
+        'by a validation failure.'
+    ),
+    'NO_GOVERNED_FEATURE_BANK': (
+        'This question asks the respondent to rate a governed feature list, and '
+        'no feature bank is attached to this release, so there is nothing to '
+        'rate. It is excluded by design.'
+    ),
+    'SLOT_UNRESOLVED': (
+        'A required wording slot for this question is unresolved, so the '
+        'question cannot be rendered until the declaration is supplied.'
+    ),
+}
+
+
+def explain_exclusion(reason: str) -> str:
+    """The plain-English sentence for one Section A exclusion reason.
+
+    ``reason`` is the raw token the plan records, e.g.
+    ``STIMULUS_NOT_IN_RELEASE:menu``. An unknown code still produces a sentence
+    naming it, so a future exclusion is never silently unexplained.
+    """
+    token = str(reason or '').strip()
+    code, _, detail = token.partition(':')
+    template = EXCLUSION_EXPLANATIONS.get(code)
+    if template is None:
+        return f'This question was excluded for {token or "an unstated reason"}.'
+    return template.format(detail=detail)
+
+
+#: Codes that describe the *configuration of this release* rather than a defect
+#: in the question itself. Listed explicitly so that a code added later is never
+#: silently reported as expected: an unrecognised code is not structural until
+#: someone decides that it is.
+STRUCTURAL_EXCLUSION_CODES = frozenset({
+    'STIMULUS_NOT_IN_RELEASE',
+    'DECLARATION_OFF',
+    'NO_GOVERNED_FEATURE_BANK',
+})
+
+
+def exclusion_is_structural(reason: str) -> bool:
+    """Whether one raw exclusion token is a structural exclusion.
+
+    Derived from the code, never assumed. ``SLOT_UNRESOLVED`` is deliberately
+    absent: a required wording slot that could not be filled is a gap to close,
+    not a property of the release.
+    """
+    return str(reason or '').split(':', 1)[0].strip() in STRUCTURAL_EXCLUSION_CODES
 
 
 def plan(manifest: Mapping[str, Any], composed: Mapping[str, Any],

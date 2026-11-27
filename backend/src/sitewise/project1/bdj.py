@@ -6,6 +6,7 @@ import hashlib
 from pydantic import ValidationError
 
 from sitewise.project1.contracts import BDJOutput, WorkflowHeld, digest, no_authority
+from sitewise.project1 import research_coverage
 from sitewise.project1.projection import verify_projection
 from sitewise.core.exceptions import ConflictError, NotFoundError
 
@@ -252,7 +253,9 @@ class BDJEngine:
                             [issue.model_dump() for issue in verified.issues], 'reviewed')
 
     def propose_objectives(self, packet: dict, *, recheck_current, context_packet: dict,
-                           context_id: str, model_runner=None) -> dict:
+                           context_id: str, model_runner=None,
+                           prompt_key: str | None = None,
+                           optional_coverage=()) -> dict:
         """Objective-proposal path: model-authored, candidate-only, no findings.
 
         The deterministic detector does not invent proposals. It supplies the
@@ -261,6 +264,15 @@ class BDJEngine:
 
         Every proposal is bound to the business context before it can leave this
         method, so a caller cannot persist an unbound one.
+
+        ``optional_coverage`` is the optional-objective coverage that already
+        exists for this assessment, as ``{'id', 'construct'}`` entries. It is
+        added to the model-facing packet together with the six permanent
+        objectives (read from ``objective_registry``) under one shared field, so
+        the model can judge duplication against what the assessment already
+        covers. Neither is part of the source fingerprint: they are policy, like
+        ``rule_catalogue``, and are added after ``verify_source`` has checked the
+        packet.
         """
         from sitewise.project1.objective_proposal import (
             ObjectiveProposal, bind_to_business_context, validate_objective_proposal)
@@ -283,14 +295,32 @@ class BDJEngine:
                        'outcome': 'checked', 'rule_catalogue': allowed})
 
         model_packet = {**packet, 'rule_catalogue': allowed}
+        # Research coverage travels with the packet but outside its fingerprint.
+        # ``source_fingerprint`` is a value computed from the source projection
+        # and carried in ``packet``; this copy is what the model sees, and
+        # ``verify_source`` has already run against the unmodified packet. The
+        # field name and shape are shared with the QG arm by construction.
+        model_packet[research_coverage.COVERAGE_FIELD] = \
+            research_coverage.for_objective_arm(optional_coverage)
         # The persisted attempt ledger registers governed *stages* (BDJ/QJ/QG),
         # not prompt names. A governed runner therefore keeps the BDJ stage and
         # selects the objective prompt through `prompt_key` — the same mechanism
         # already used for QG_PROPOSE. Simple test runners that only accept the
         # original three-argument call keep working unchanged.
+        #
+        # ``prompt_key`` is an override, resolved and validated by
+        # ``prompts.resolve_objective_arm`` before it reaches this method. It is
+        # NOT re-resolved here: the route has already decided which arm runs, and
+        # a second resolution from ``packet['schema_version']`` would silently
+        # discard the caller's choice. ``None`` preserves the adopted prompt.
+        selected_prompt_key = prompt_key or contract.objective_prompt_key
         if getattr(runner, 'supports_prompt_key', False):
             raw = runner('BDJ', model_packet, ObjectiveProposal,
-                         prompt_key=contract.objective_prompt_key)
+                         prompt_key=selected_prompt_key)
+        elif prompt_key is not None:
+            # A runner that cannot select a prompt must not silently run the
+            # adopted one while the receipt claims the requested arm.
+            raise WorkflowHeld('BDJ_OBJECTIVE_ARM_UNSUPPORTED')
         else:
             raw = runner('BDJ_OBJECTIVE', model_packet, ObjectiveProposal)
         events.append({'checkpoint': 3, 'name': 'Uncertainty interpretation',
@@ -330,7 +360,7 @@ class BDJEngine:
     @staticmethod
     def _objective_result(packet, events, proposals, outcome, *,
                           context_packet_hash=None, context_id=None):
-        return {'contract_version': 'bdj-objective-proposal/1',
+        return {'contract_version': 'bdj-objective-proposal/2',
                 'assessment_id': packet['assessment_id'],
                 'assessment_revision': packet['assessment_revision'],
                 'source_fingerprint': packet['source_fingerprint'],

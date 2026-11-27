@@ -111,6 +111,106 @@ final class QgGenerationResult {
       );
 }
 
+/// One objective's row inside a batch response.
+final class QgBatchOutcome {
+  final String proposalId;
+
+  /// `COMPLETED` or `REFUSED`. There is no third state: an objective either
+  /// produced its governed outcome or it was refused with a code.
+  final String status;
+  final String? code;
+  final String? message;
+  final String? checkId;
+
+  /// True when the refusal means the one attempt was taken. A plain retry would
+  /// be refused again, so the interface must not offer one.
+  final bool attemptSpent;
+  final String? candidateId;
+  final String? outcome;
+  final bool dispatched;
+
+  const QgBatchOutcome({
+    required this.proposalId,
+    required this.status,
+    required this.attemptSpent,
+    required this.dispatched,
+    this.code,
+    this.message,
+    this.checkId,
+    this.candidateId,
+    this.outcome,
+  });
+
+  bool get completed => status == 'COMPLETED';
+
+  factory QgBatchOutcome.fromJson(Map<String, dynamic> json) => QgBatchOutcome(
+    proposalId: (json['proposal_id'] ?? '') as String,
+    status: (json['status'] ?? 'REFUSED') as String,
+    attemptSpent: json['attempt_spent'] == true,
+    dispatched: json['dispatched'] == true,
+    code: json['code'] as String?,
+    message: json['message'] as String?,
+    checkId: json['check_id'] as String?,
+    candidateId: json['candidate_id'] as String?,
+    outcome: json['outcome'] as String?,
+  );
+}
+
+/// What one owner action produced across every selected objective.
+final class QgBatchResult {
+  final String contractVersion;
+  final List<QgBatchOutcome> results;
+  final int requested;
+  final int completed;
+  final int refused;
+  final int persisted;
+
+  /// False by contract: the batch is a loop over per-objective attempts, never
+  /// one merged prompt. Carried in the payload so the interface can state it
+  /// rather than assume it.
+  final bool combinedPrompt;
+
+  const QgBatchResult({
+    required this.contractVersion,
+    required this.results,
+    required this.requested,
+    required this.completed,
+    required this.refused,
+    required this.persisted,
+    required this.combinedPrompt,
+  });
+
+  QgBatchOutcome? forProposal(String proposalId) {
+    for (final row in results) {
+      if (row.proposalId == proposalId) return row;
+    }
+    return null;
+  }
+
+  factory QgBatchResult.fromJson(Map<String, dynamic> json) {
+    final summary = json['summary'] is Map
+        ? Map<String, dynamic>.from(json['summary'] as Map)
+        : const <String, dynamic>{};
+    final raw = json['results'];
+    return QgBatchResult(
+      contractVersion: (json['contract_version'] ?? '') as String,
+      results: raw is List
+          ? [
+              for (final row in raw)
+                if (row is Map) QgBatchOutcome.fromJson(
+                  Map<String, dynamic>.from(row),
+                ),
+            ]
+          : const <QgBatchOutcome>[],
+      requested: (summary['requested'] as num?)?.toInt() ?? 0,
+      completed: (summary['completed'] as num?)?.toInt() ?? 0,
+      refused: (summary['refused'] as num?)?.toInt() ?? 0,
+      persisted: (summary['persisted'] as num?)?.toInt() ?? 0,
+      combinedPrompt: json['combined_prompt'] == true,
+    );
+  }
+}
+
 /// Transport port so the Stage 4 panel can be rendered against a recorded
 /// response in a component test without reaching the network.
 abstract interface class QgGenerationPort {
@@ -123,6 +223,19 @@ abstract interface class QgGenerationPort {
     String? recoveryOf,
   });
 
+  /// One action, one governed attempt per selected objective.
+  ///
+  /// The list is the owner's selection. The server walks it in order and
+  /// reports each objective separately, so a refusal on one does not remove
+  /// another's result.
+  Future<ApiResult<QgBatchResult>> generateForObjectives({
+    required String assessmentId,
+    required String confirmationId,
+    required String contextId,
+    required List<String> proposalIds,
+    String responseFormat,
+  });
+
   Future<ApiResult<QgRecoveryState>> readRecovery({
     required String assessmentId,
     required String contextId,
@@ -132,6 +245,47 @@ abstract interface class QgGenerationPort {
 
 final class QgGenerationApi implements QgGenerationPort {
   const QgGenerationApi();
+
+  @override
+  Future<ApiResult<QgBatchResult>> generateForObjectives({
+    required String assessmentId,
+    required String confirmationId,
+    required String contextId,
+    required List<String> proposalIds,
+    String responseFormat = 'MULTIPLE_CHOICE',
+  }) async {
+    final response = await WebAuth.requestDetailed(
+      '$_base/${Uri.encodeComponent(assessmentId)}/qg-candidates/generate-batch',
+      method: 'POST',
+      body: {
+        'confirmation_id': confirmationId,
+        'context_id': contextId,
+        'proposal_ids': proposalIds,
+        'response_format': responseFormat,
+      },
+    );
+    if (response['ok'] != true) {
+      return ApiResult<QgBatchResult>.error(
+        AssessmentFailure(
+          status: response['status'] as int?,
+          code: response['code'] as String?,
+          message:
+              response['message'] as String? ??
+              'The generation request could not be completed.',
+        ),
+      );
+    }
+    final payload = response['body'];
+    if (payload is! Map<String, dynamic>) {
+      return ApiResult<QgBatchResult>.error(
+        const AssessmentFailure(
+          code: 'unexpected_response',
+          message: 'The server returned a response this page cannot read.',
+        ),
+      );
+    }
+    return ApiResult<QgBatchResult>.success(QgBatchResult.fromJson(payload));
+  }
 
   @override
   Future<ApiResult<QgRecoveryState>> readRecovery({

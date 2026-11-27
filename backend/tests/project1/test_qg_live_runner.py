@@ -164,11 +164,36 @@ def test_an_absent_prompt_binding_leaves_the_key_free(tmp_path, monkeypatch):
         'MODEL_ATTEMPT_BUDGET_EXHAUSTED'
 
 
-def test_an_unnamed_key_still_defaults_to_the_proposal_prompt(tmp_path, monkeypatch):
-    monkeypatch.setattr(qg_live, 'ensure_qg_run', lambda *a, **k: uuid4())
+def test_an_unnamed_key_dispatches_the_adopted_pathway(tmp_path, monkeypatch):
+    """An unnamed dispatch uses the fixed-option prompt, not the held one.
+
+    The default was ``QG_PROPOSAL`` while the proposal prompt was the only
+    authorised key. It is now the fixed-option prompt, because the only consumer
+    of a QG answer on this runner is ``validate_fixed_candidate`` and a
+    proposal-shaped answer cannot satisfy it: the attempt is reserved and the
+    dispatch billed before the refusal. The key is asserted where it is actually
+    chosen — the run provisioning call — rather than inferred from a refusal
+    code, so a future default cannot drift unnoticed.
+    """
+    seen: list[str] = []
+
+    def capture(*_a, **kwargs):
+        seen.append(kwargs.get('prompt_key'))
+        return uuid4()
+
+    monkeypatch.setattr(qg_live, 'ensure_qg_run', capture)
     monkeypatch.setattr(qg_live, 'attempt_count', lambda *a, **k: 99)
     runner, _ = _runner(tmp_path)
+
+    assert qg_live.DEFAULT_PROMPT_KEY == 'QG_FIXED_OPTION'
     assert refusal(runner, prompt_key=None) == 'MODEL_ATTEMPT_BUDGET_EXHAUSTED'
+    assert seen == ['QG_FIXED_OPTION'], seen
+
+    # The held key is still dispatchable when it is named, so the legacy
+    # evaluation service can be re-enabled by a separately authorised act.
+    assert refusal(runner, prompt_key='QG_PROPOSAL') == \
+        'MODEL_ATTEMPT_BUDGET_EXHAUSTED'
+    assert seen == ['QG_FIXED_OPTION', 'QG_PROPOSAL'], seen
 
 
 def test_a_consumed_unknown_outcome_is_not_retried(tmp_path, monkeypatch):

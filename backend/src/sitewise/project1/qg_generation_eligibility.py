@@ -180,6 +180,10 @@ APPROVED = 'APPROVED'
 #: carry; ``CONFIRMED`` is reserved for values read from a persisted record.
 CONFIRMED = 'CONFIRMED'
 PROPOSED = 'PROPOSED_NOT_CONFIRMED'
+#: A third label, because a field can be neither proposed nor confirmed: the
+#: measurement level and its analysis methods are *not determined yet*, and
+#: labelling them ``PROPOSED`` would assert a value that does not exist.
+NOT_ESTABLISHED = 'NOT_ESTABLISHED'
 
 
 def _bind(conn, actor_id) -> None:
@@ -354,6 +358,18 @@ def proposed_measurement(authority: dict, *, packet: dict | None = None) -> dict
         # option selection without inventing a scale or a numeric range.
         'response_format': 'MULTIPLE_CHOICE',
         'allowed_options': [],
+        # Deliberately not derived from ``response_format``. The format is a
+        # presentation choice made here; the level is a property of the construct
+        # and the codes, and the codes do not exist yet. Section A shows why the
+        # shortcut is wrong: ``ordinal_single`` there carries both a genuine
+        # ordinal scale (Q07) and binned counts and prices (Q02, Q04, Q13).
+        # Naming a level now would fix the analysis before the measurement exists.
+        'measurement_level': NOT_ESTABLISHED,
+        'measurement_level_basis': ('Not established at generation: the response codes '
+                                    'do not exist yet, and the level must not be read '
+                                    'off the response format.'),
+        # Empty rather than guessed: an analysis method follows from the level.
+        'analysis_methods': [],
         'denominator_basis': ('Respondents who answer this question; codes are '
                               'the proposal\'s own response codes.'),
         'limitations': ('Proposed at generation from the approved objective and '
@@ -362,6 +378,8 @@ def proposed_measurement(authority: dict, *, packet: dict | None = None) -> dict
         'field_authority': {
             'construct': PROPOSED, 'population': PROPOSED,
             'response_format': PROPOSED, 'allowed_options': PROPOSED,
+            'measurement_level': NOT_ESTABLISHED,
+            'analysis_methods': NOT_ESTABLISHED,
             'denominator_basis': PROPOSED, 'limitations': PROPOSED,
         },
         'scientifically_approved': False,

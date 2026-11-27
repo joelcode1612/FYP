@@ -793,6 +793,11 @@ def runner_authority(engine, *, actor_id, authorization_id, consent_lookup,
                             is not None else AUTHORITY_ADMISSION),
         'objective_decision_id': _norm(row['objective_decision_id']),
         'measurement_basis': _norm(row['measurement_basis']),
+        # The approved additional objective this grant funds. Carried so the run
+        # it provisions can record its objective at reservation time instead of
+        # leaving the link to be guessed from a candidate row later
+        # (CP-FINAL-04).
+        'objective_id': _norm(row['objective_id']),
     }
 
 

@@ -1,4 +1,5 @@
 import 'package:jaspr/dom.dart';
+import 'package:jaspr/jaspr.dart' show DomElement;
 import 'package:jaspr_test/jaspr_test.dart';
 import 'package:sitewise_jaspr_web/features/assessment/application/stage_labels.dart';
 import 'package:sitewise_jaspr_web/features/assessment/application/stage_reason_copy.dart';
@@ -94,12 +95,18 @@ const _serverReasonVocabulary = <String>[
   ..._stage3PredicateVocabulary,
 ];
 
-/// Every reason a `sitewise-stage3-completion/2` predicate can report when it
+/// Every reason a `sitewise-stage3-completion/3` predicate can report when it
 /// fails. T3-06's `NO_UNRESOLVED_BLOCKERS` and the satisfaction reasons
 /// (`CONFIRMATION_CURRENT`, `CONTEXT_BOUND`, `EVALUATION_AUTHORIZED`,
 /// `ALL_OBJECTIVES_RESOLVED`, `OWNER_VERIFIED`, `ZERO_PROPOSALS_VALID_OUTCOME`)
 /// are deliberately absent: a satisfied predicate is never a blocker, so it can
 /// never become a stage's `reason`.
+///
+/// `/3` added `EVALUATION_RULESET_UNVERIFIED` — the state where the adopted
+/// ruleset/prompt identity could not be resolved at all. It is *not* the same
+/// code as `EVALUATION_RULESET_SUPERSEDED`: one means "an input is missing",
+/// the other "the evidence is out of date", and they need different sentences
+/// because only the second is ever cleared by re-running the evaluation.
 const _stage3PredicateVocabulary = <String>[
   'SUBJECT_NOT_FOUND', // T3-01
   'OWNERSHIP_MISMATCH', // T3-01
@@ -112,6 +119,7 @@ const _stage3PredicateVocabulary = <String>[
   'EVALUATION_NOT_AUTHORIZED', // T3-04
   'EVALUATION_PROVENANCE_MISMATCH', // T3-04
   'EVALUATION_CONTEXT_MISMATCH', // T3-04
+  'EVALUATION_RULESET_UNVERIFIED', // T3-04 — /3
   'EVALUATION_RULESET_SUPERSEDED', // T3-04
   'SOURCE_FINGERPRINT_UNAVAILABLE', // T3-04
   'ZERO_PROPOSALS_WITHOUT_EVALUATION', // T3-05
@@ -362,8 +370,8 @@ void main() {
     });
   });
 
-  group('the stepper shows the blocker beside the count', () {
-    testComponents('a blocked current stage prints its reason, count unchanged',
+  group('the stepper shows the count and no blocker sentence', () {
+    testComponents('a blocked current stage moves no count and prints no reason',
         (tester) async {
       final record = recordWith(
         completed: 2,
@@ -383,14 +391,30 @@ void main() {
       ));
       await tester.pump();
 
-      // Requirement 6: the count is the record's, and the reason explains the
-      // stage without moving it.
+      // Requirement 6: the count is the record's, and a blocked stage does not
+      // move it.
       expect(find.text('2 / 5'), findsOneComponent);
       expect(find.text('3 / 5'), findsNothing);
+
+      // The sentence is not printed beside the step any more. It was the same
+      // words the page banner and the panel on screen both carried, and on this
+      // assessment it named the stage the reader was already looking at.
       expect(
         find.text(stageReasonMessage(
             'OBJECTIVE_CONTRACT_UNAVAILABLE_FOR_INSTRUMENT')!),
-        findsOneComponent,
+        findsNothing,
+      );
+      // Nor smuggled into the control's tooltip: an indicator the reader has to
+      // hover to see is still an indicator on the page.
+      expect(
+        find.byElementPredicate(
+          (element) =>
+              element is DomElement &&
+              (element.component.attributes?['title'] ?? '')
+                  .contains('contract'),
+          description: 'a control whose tooltip carries the blocker',
+        ),
+        findsNothing,
       );
     });
 

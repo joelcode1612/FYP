@@ -96,6 +96,73 @@ EX_VALIDATION_NOT_PASS = 'CANDIDATE_VALIDATION_NOT_PASS'
 EX_STALE_REVISION = 'CANDIDATE_STALE_REVISION'
 EX_WORDING_MISSING = 'CANDIDATE_WORDING_MISSING'
 EX_OPTIONS_UNUSABLE = 'CANDIDATE_OPTIONS_UNUSABLE'
+#: An approved question must record which option the owner expects. The
+#: intention is what the report generator compares customer answers against; an
+#: approved question without one can never be compared, and the gap is invisible
+#: afterwards because the record looks complete.
+EX_INTENTION_MISSING = 'CANDIDATE_INTENTION_MISSING'
+#: The recorded codes are not a valid selection for this question: not in its
+#: option set, wrong count, or contradicting an exclusive option.
+EX_INTENTION_INVALID = 'CANDIDATE_INTENTION_INVALID'
+
+#: Plain-English sentence for every Section B exclusion code.
+#:
+#: A code alone tells an operator *that* a candidate was left out but not *why*
+#: in terms they can act on, which is how an empty Section B became unreadable:
+#: the preview reported ``excluded_count`` and nothing else. The sentence is
+#: reported next to the code, never instead of it, so both a machine and a human
+#: reader are served.
+EXCLUSION_EXPLANATIONS = {
+    EX_NOT_APPROVED: (
+        'This question was generated but has not been approved for review, so '
+        'it cannot enter Section B.'
+    ),
+    EX_NOT_VALIDATED: (
+        'This question has not reached the VALIDATED candidate state, so it is '
+        'not eligible for Section B.'
+    ),
+    EX_VALIDATION_NOT_PASS: (
+        'This question did not pass all of its structural, semantic and '
+        'provenance checks, so it is not eligible for Section B.'
+    ),
+    EX_STALE_REVISION: (
+        'This question was reviewed against a superseded assessment revision, '
+        'so the review does not apply to the revision being published.'
+    ),
+    EX_WORDING_MISSING: (
+        'This question carries no wording, so it cannot be shown to a '
+        'respondent.'
+    ),
+    EX_OPTIONS_UNUSABLE: (
+        'This question has fewer than two usable options, so it cannot be asked '
+        'as a closed-ended question.'
+    ),
+    EX_INTENTION_MISSING: (
+        'The owner approved this question without selecting the option they '
+        'expect. Without that intention the answer cannot be compared with '
+        'customer responses, so the question is not publishable.'
+    ),
+    EX_INTENTION_INVALID: (
+        'The option the owner selected is not a valid choice for this question: '
+        'it is outside the option set, the count is wrong, or it contradicts an '
+        'exclusive option.'
+    ),
+}
+
+
+def explain_exclusion(reason_code: str | None) -> str:
+    """The plain-English sentence for one exclusion code.
+
+    Unknown codes fall back to a sentence that still names the code, so a new
+    predicate added without an explanation degrades to "unexplained" rather
+    than to silence.
+    """
+    code = str(reason_code or '').strip()
+    if not code:
+        return 'No exclusion reason was recorded for this candidate.'
+    return EXCLUSION_EXPLANATIONS.get(
+        code, f'This candidate was excluded for an unstated reason ({code}).'
+    )
 
 _APPROVE = 'APPROVE_FOR_REVIEW'
 
@@ -322,8 +389,25 @@ def classify_candidate(candidate: Mapping, *, revision: int) -> tuple[bool, str 
         return False, EX_STALE_REVISION
     if not str(candidate.get('question') or '').strip():
         return False, EX_WORDING_MISSING
-    if len(_options(candidate)) < 2:
+    options = _options(candidate)
+    if len(options) < 2:
         return False, EX_OPTIONS_UNUSABLE
+
+    # The owner's intention is part of what makes an approval complete, so it is
+    # a publication predicate and not a display detail. Re-validated here rather
+    # than trusted: a row written before the requirement existed, or by a path
+    # that bypassed the validator, must not reach a release.
+    recorded = review.get('expected_option_codes') or []
+    if not recorded and review.get('expected_option_code'):
+        # Compatibility for a row written when only the singular column existed.
+        recorded = [review['expected_option_code']]
+    if not recorded:
+        return False, EX_INTENTION_MISSING
+    available = {str(option['code']) for option in options}
+    if any(str(code) not in available for code in recorded):
+        return False, EX_INTENTION_INVALID
+    if len(set(recorded)) != len(recorded):
+        return False, EX_INTENTION_INVALID
     return True, None
 
 
@@ -354,7 +438,16 @@ def build_additional_item(candidate: Mapping, *, order: int) -> dict:
         # respondent answer, is never written to a customer-response table, and
         # must never be preselected in a respondent-facing questionnaire or read
         # by an EE-01 measurement.
+        #
+        # Bound to the exact question version being released: this item is built
+        # from the candidate row, so the codes travel with the candidate the
+        # release names. The set is authoritative; the singular value is the
+        # compatibility projection and is NULL for a multi-select intention.
         'owner_intended_option': review.get('expected_option_code'),
+        'owner_intended_options': list(
+            review.get('expected_option_codes')
+            or ([review['expected_option_code']]
+                if review.get('expected_option_code') else [])),
         'owner_intended_option_scope': 'ENTREPRENEUR_ONLY_METADATA',
         'candidate_state': candidate.get('candidate_state'),
         'structural_status': candidate.get('structural_status'),
@@ -446,6 +539,10 @@ def compose(*, populated: PopulatedCatalogue,
                 'candidate_id': str(candidate.get('candidate_id')),
                 'objective_id': candidate.get('objective_id'),
                 'reason': reason,
+                # The code is the machine-readable verdict; the sentence is what
+                # makes an empty Section B legible to the owner. Both are always
+                # present, so an exclusion can never be reported as a bare count.
+                'detail': explain_exclusion(reason),
                 'assessment_revision': candidate.get('assessment_revision'),
             })
 
@@ -486,7 +583,11 @@ def compose(*, populated: PopulatedCatalogue,
             'detail': (
                 'No additional question is eligible. Section B is empty, so the '
                 'composed questionnaire is the fixed core only (Path A).'
+                + (f' {len(excluded)} generated candidate(s) were excluded; '
+                   'excluded_candidates names the reason for each.'
+                   if excluded else ' No additional question has been generated.')
             ),
+            'excluded_candidate_count': len(excluded),
         })
         if not admitted_objective_count:
             unresolved.append({
@@ -579,6 +680,9 @@ __all__ = [
     'ADDITIONAL_AVAILABLE',
     'ADDITIONAL_NONE_ELIGIBLE',
     'CONTRACT_VERSION',
+    'EXCLUSION_EXPLANATIONS',
+    'EX_INTENTION_INVALID',
+    'EX_INTENTION_MISSING',
     'EX_NOT_APPROVED',
     'EX_NOT_VALIDATED',
     'EX_OPTIONS_UNUSABLE',
@@ -601,6 +705,7 @@ __all__ = [
     'build_additional_item',
     'classify_candidate',
     'compose',
+    'explain_exclusion',
     'status_verdicts',
     'load_declarations',
 ]

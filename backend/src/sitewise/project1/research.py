@@ -8,6 +8,7 @@ import re
 from sitewise.project1.contracts import (
     Measurement, QGOutput, QJOutput, WorkflowHeld, digest, no_authority,
 )
+from sitewise.project1 import research_coverage
 from sitewise.project1.disclosure import QG_SCHEMA_VERSION
 from sitewise.project1.measurement_policy import verify_validation_receipt
 from sitewise.project1.qg_contract import (
@@ -146,6 +147,10 @@ class ResearchWorkflow:
             'source_fingerprint': facts.fingerprint,
             'confirmed_facts': facts.model_dump(),
             'policy_version': policy['policy_version'],
+            # The same field, built by the same function, as the live candidate
+            # generator's ``build_qg_input``: the two fixed-option dispatch
+            # sites must hand the model one shape, not two.
+            research_coverage.COVERAGE_FIELD: research_coverage.for_question_arm(),
         }
         if revision_feedback:
             qg_input['previous_attempt'] = revision_feedback

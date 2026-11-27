@@ -182,17 +182,30 @@ def source_hash() -> str:
 
 
 class RecordingLedger:
-    """Ledger port double: records the reservation order, writes nothing."""
+    """Ledger port double: records the reservation order, writes nothing.
+
+    Both methods accept and record ``**kwargs``. The real ledger gained two
+    optional keyword groups that the runner passes only when they apply —
+    ``attempt_slot`` (DD-054, a retry in a new slot) and the DD-055 receipt
+    metadata ``model_returned`` / ``provider_response_status``. A double with a
+    fixed signature turns "the runner recorded which model answered" into a
+    ``TypeError``, which reads as a broken test rather than as the stale double
+    it is. Keyword arguments are recorded separately so a positional assertion
+    (``calls[0] == ('finish', 1, 'returned', digest)``) keeps working.
+    """
 
     def __init__(self):
         self.calls: list[tuple] = []
+        self.kwargs: list[dict] = []
 
-    def reserve(self, stage, prompt_version, prompt_hash, request_hash):
+    def reserve(self, stage, prompt_version, prompt_hash, request_hash, **kwargs):
         self.calls.append(('reserve', stage, prompt_version, prompt_hash, request_hash))
+        self.kwargs.append(dict(kwargs))
         return len(self.calls)
 
-    def finish(self, attempt, outcome, output_digest):
+    def finish(self, attempt, outcome, output_digest, **kwargs):
         self.calls.append(('finish', attempt, outcome, output_digest))
+        self.kwargs.append(dict(kwargs))
 
 
 def fake_transport(recorder: dict, *, content: str):

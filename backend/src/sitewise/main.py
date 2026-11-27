@@ -255,6 +255,19 @@ def health() -> dict:
 
 @app.get("/api/v1/health")
 def health_v1() -> dict:
+    """Application readiness, distinct from the liveness probe at /health.
+
+    ``/health`` answers "the process is up". This endpoint answers "the process
+    can actually do its work": it touches the database and asks the two
+    background workers whether their threads are alive.
+
+    A worker module that cannot even be *imported* (for example a venv missing
+    an optional dependency the panorama worker declares) must report as
+    unavailable rather than raise. Importing them outside a guard turned this
+    readiness probe into a 500, which is worse than a degraded answer: it hid
+    the database state that the probe exists to report, and it made a launcher
+    that trusts readiness unable to tell "broken" from "not ready yet".
+    """
     from sqlalchemy import text
     from sqlmodel import Session
     from sitewise.db.session import engine
@@ -265,15 +278,60 @@ def health_v1() -> dict:
             session.execute(text("SELECT 1"))
     except Exception:
         db_ok = False
-    from sitewise.services import explanation_worker, panorama_worker
 
-    panorama_ok = panorama_worker.is_running()
-    explanation_ok = explanation_worker.is_running()
+    worker_error: str | None = None
+    panorama_ok = False
+    explanation_ok = False
+    try:
+        from sitewise.services import explanation_worker, panorama_worker
+
+        panorama_ok = panorama_worker.is_running()
+        explanation_ok = explanation_worker.is_running()
+    except Exception as exc:  # noqa: BLE001 - readiness must never 500
+        worker_error = type(exc).__name__
+
+    # A live thread is not a working worker. ``is_running()`` only proves the
+    # thread was started; a worker whose queue table is absent spins forever
+    # logging a ProgrammingError per tick and never does any work. Reporting
+    # that as "running" made readiness claim health the deployment does not
+    # have, so the queue table is checked explicitly.
+    queue_missing: dict[str, str] = {}
+    if db_ok:
+        queues = {
+            'panorama_worker': 'fyp.panorama_jobs',
+            'explanation_worker': 'public.ml_explanation_cache',
+        }
+        try:
+            with Session(engine) as session:
+                for worker_name, qualified in queues.items():
+                    present = session.execute(
+                        text('select to_regclass(:n)'), {'n': qualified}
+                    ).scalar()
+                    if present is None:
+                        queue_missing[worker_name] = qualified
+        except Exception:  # noqa: BLE001 - a probe failure must not 500
+            pass
+
+    def _state(alive: bool, worker_name: str) -> str:
+        if worker_name in queue_missing:
+            return 'unavailable'
+        return 'running' if alive else 'unavailable'
+
+    panorama_state = _state(panorama_ok, 'panorama_worker')
+    explanation_state = _state(explanation_ok, 'explanation_worker')
+    healthy = db_ok and panorama_state == 'running' and explanation_state == 'running'
+
     return {
-        "status": "ok" if db_ok and panorama_ok and explanation_ok else "degraded",
+        "status": "ok" if healthy else "degraded",
         "database": "ok" if db_ok else "error",
-        "panorama_worker": "running" if panorama_ok else "unavailable",
-        "explanation_worker": "running" if explanation_ok else "unavailable",
+        "panorama_worker": panorama_state,
+        "explanation_worker": explanation_state,
+        # Null when the workers were importable. A name, never a traceback or a
+        # module path from the filesystem.
+        "worker_error": worker_error,
+        # Names the table whose absence stops a worker doing any work, so a
+        # "degraded" answer is actionable instead of mysterious.
+        "queue_missing": queue_missing,
     }
 
 

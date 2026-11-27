@@ -3,6 +3,7 @@ import 'package:sitewise_jaspr_web/features/assessment/data/assessment_api.dart'
 import 'package:sitewise_jaspr_web/features/assessment/data/assessment_report.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/chart_preview.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/report_measurement.dart';
+import 'package:sitewise_jaspr_web/features/assessment/presentation/components/chart_spec_view.dart';
 import 'package:sitewise_jaspr_web/features/assessment/presentation/pages/assessment_report_view.dart';
 
 import 'fixtures/chart_spec_fixtures.dart';
@@ -230,9 +231,10 @@ void main() {
             spec: missingStimulusChartPayload()),
       ])));
 
-      expect(find.text('Synthetic chart preview'), findsOneComponent);
-      expect(find.text('Not reportable'), findsOneComponent);
-      expect(find.textContaining('1 of 3 measured slots drawn'),
+      expect(find.text('Response distribution by question'), findsOneComponent);
+      // The professional status chip, not a wire code and not a warning banner.
+      expect(find.text(ChartSpecView.demoModeLabel), findsComponents);
+      expect(find.textContaining('1 of 3 measured questions charted'),
           findsOneComponent);
       // One chart, and it is the synthetic one.
       expect(find.text('Share of V'), findsOneComponent);

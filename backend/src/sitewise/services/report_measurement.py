@@ -57,6 +57,9 @@ FOCUS_SLOT = 'Q05'
 #: Evidence exists, the assessment is linked, and admission is withheld. This is
 #: the only reachable state while no A10 adapter is adopted.
 HELD = 'HELD'
+#: At least one slot carries a store-recorded ``ADMITTED`` verdict. Reachable
+#: only when the store itself says so; this module never decides it.
+ADMITTED = 'ADMITTED'
 #: The assessment has no current M2 confirmation, so it cannot own a campaign.
 NO_M2_LINK = 'NO_M2_LINK'
 #: The M2 record is confirmed but owns no questionnaire campaign.
@@ -72,6 +75,11 @@ _HELD_REASON = (
     'authorized report-admission adapter is adopted, so its counts and shares '
     'are withheld rather than estimated. This section reports the association, '
     'not a finding.'
+)
+_ADMITTED_REASON = (
+    'An A10 admission decision authorizes this measurement, so the report may '
+    'disclose it. The decision, not the report, is the authority: it names the '
+    'chart specification and the snapshot it applies to.'
 )
 _NO_LINK_REASON = (
     'This assessment has no current M2 confirmation, so no questionnaire '
@@ -234,14 +242,22 @@ def resolve_report_measurement(
     focus = next((s for s in slots if str(s.get('slot_id')) == FOCUS_SLOT), None)
     admission_state = (focus or slots[0]).get('admission_state')
 
+    # An admission verdict is read from the store, never assumed here. Every
+    # readback in this database is ``REPORT_FINDINGS_WITHHELD_...``, so this
+    # stays ``HELD``; but hard-coding ``HELD`` made the positive state
+    # *inexpressible*, which is a different thing from it being unauthorized.
+    admitted_slots = [s for s in slots
+                      if str(s.get('admission_state') or '').upper() == ADMITTED]
+    status = ADMITTED if admitted_slots else HELD
+
     return {
         'contract_version': CONTRACT_VERSION,
         'available': True,
-        'status': HELD,
+        'status': status,
         'reason_code': str(admission_state or 'REPORT_FINDINGS_WITHHELD_NO_AUTHORIZED_SOURCE'),
-        'reason': _HELD_REASON,
-        'counts_disclosed': False,
-        'detail_readable': False,
+        'reason': (_ADMITTED_REASON if admitted_slots else _HELD_REASON),
+        'counts_disclosed': bool(admitted_slots),
+        'detail_readable': bool(admitted_slots),
         'identity': _identity(
             str(m2_id),
             str(binding.get('campaign_id') or ''),
@@ -258,8 +274,20 @@ def resolve_report_measurement(
             }
             for s in slots
         ],
+        # Keyed by slot so the composition can name the decision that authorised
+        # one slot without reading the others' admission state as its own.
+        'admission_decisions': {
+            str(s.get('slot_id')): {
+                'decision_id': s.get('admission_decision_id'),
+                'chart_spec_id': s.get('chart_spec_id'),
+                'chart_schema_version': s.get('chart_schema_version'),
+                'authority': s.get('admission_authority'),
+            }
+            for s in slots if str(s.get('admission_state') or '').upper() == ADMITTED
+        },
         'admission': {
             'state': admission_state,
             'report_release_authorized': False,
+            'admitted_slots': len(admitted_slots),
         },
     }

@@ -75,6 +75,12 @@
   gap: 17px;
   align-items: start;
 }
+/* Stage 4 side cards moved into the page rail, so its own wrapper is one
+   column. Without this the 292px track stays reserved and empty. */
+.p1-cols--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 
 .p1-col {
   display: flex;
@@ -172,31 +178,6 @@
 .p1-chip--red {
   background: var(--p1-red-soft);
   color: var(--p1-red);
-}
-
-/* ---------- finding ---------- */
-.p1-finding {
-  padding: 15px 17px;
-  background: #f7f9fe;
-  border: 1px solid #e7eaf6;
-  border-left: 4px solid #f4ad42;
-  border-radius: 10px;
-}
-
-.p1-finding strong {
-  font-size: 0.95rem;
-}
-
-.p1-finding p {
-  margin: 8px 0 0;
-  font-size: 0.88rem;
-  line-height: 1.55;
-}
-
-.p1-finding__source {
-  margin-top: 11px;
-  color: var(--p1-muted);
-  font-size: 0.76rem;
 }
 
 /* ---------- objective ---------- */
@@ -377,29 +358,6 @@
   color: var(--p1-muted);
   font-size: 0.8rem;
   margin: 0;
-}
-
-/* ---------- history ---------- */
-.p1-history__toggle {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  background: none;
-  border: 0;
-  padding: 0;
-  cursor: pointer;
-  font: inherit;
-  color: var(--p1-ink);
-  text-align: left;
-}
-
-.p1-history__body {
-  margin-top: 13px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
 }
 
 /* ---------- stage 4 banner ---------- */
@@ -663,18 +621,8 @@
 }
 
 /* ---------- ai status ---------- */
-.p1-ai {
-  margin-top: 15px;
-}
 
-.p1-ai__block {
-  margin-top: 10px;
-}
 
-.p1-ai__label {
-  font-size: 0.82rem;
-  font-weight: 750;
-}
 
 /* ---------- responsive ---------- */
 @media (max-width: 1100px) {
@@ -718,12 +666,15 @@
   }
 }
 
-/* ---------- stage 4: Basic / Extra review ---------------------------------
+/* ---------- stage 4: one page, read top to bottom -------------------------
    Two different kinds of question: a fixed set every assessment receives, and
-   a generated set whose count follows the approved objectives. As one list the
-   reader could not tell which questions were governed and which were proposed,
-   so the panel keeps both columns in the DOM and shows one at a time. */
-.p1-s4two {
+   a generated set whose count follows the approved objectives. They were once
+   two tabs, one visible at a time, which hid half the questionnaire behind a
+   control that read as a mode. Both are stacked now — a reader comparing the
+   governed core with what was generated should not have to hold one in
+   memory. The columns keep their own headers because they are still two
+   different kinds of question. */
+.p1-s4stack {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 18px;
@@ -796,19 +747,15 @@
 /* The Basic card is welded to its header: the list is the header's content, so
    the two share one border with no gap between them. The Extra column holds
    separate cards, so its header stands alone. */
+/* The section owns its heading now, so the card is a whole card: there is no
+   welded header to share a border with, and no square top corners to explain. */
 .p1-s4col--fixed {
-  gap: 0;
-}
-
-.p1-s4col--fixed .p1-s4head {
-  border-bottom: 0;
-  border-radius: 13px 13px 0 0;
+  gap: 12px;
 }
 
 .p1-s4card {
-  padding: 13px 16px 14px;
-  border-radius: 0 0 13px 13px;
-  border-top: 0;
+  padding: 16px 18px 14px;
+  border-radius: 13px;
 }
 
 .p1-s4meta {
@@ -827,6 +774,168 @@
   line-height: 1.5;
   color: #8492a6;
 }
+/* ---------- the fixed core, as cards -------------------------------------- */
+/* The section's own reading instruction. It sits where the reference puts its
+   info bar, but it says the opposite of the reference's sentence: nothing here
+   can be answered. */
+.p1-howto {
+  display: flex;
+  gap: 9px;
+  margin: 0 0 12px;
+  padding: 9px 11px;
+  border: 1px solid #dbe6f8;
+  border-radius: 9px;
+  background: #f5f8fe;
+}
+
+.p1-howto__badge {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin-top: 1px;
+  border-radius: 50%;
+  background: #1d4ed8;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  font-style: italic;
+  line-height: 15px;
+  text-align: center;
+}
+
+.p1-howto__body {
+  min-width: 0;
+}
+
+.p1-howto__title {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 11.5px;
+  font-weight: 800;
+  color: #1e3a8a;
+}
+
+.p1-howto__text {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #3f5069;
+}
+
+.p1-corelist {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.p1-corecard {
+  padding: 11px 13px 12px;
+  border: 1px solid var(--p1-line, #e6ecf5);
+  border-radius: 11px;
+  background: #fff;
+}
+
+.p1-corecard__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+
+.p1-corecard__id {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 5px;
+  background: #eef2f7;
+  color: #55647d;
+  font-size: 10.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The format qualifies the option set, so it stays on the head line and never
+   wraps under the id. */
+.p1-corecard__format {
+  min-width: 0;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #6b7c96;
+}
+
+button.p1-corecard__more {
+  flex: none;
+  margin-left: auto;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 800;
+  color: #1d4ed8;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+button.p1-corecard__more:hover {
+  text-decoration: underline;
+}
+
+.p1-corecard__stem {
+  margin: 0 0 9px;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--p1-ink, #15233b);
+  overflow-wrap: anywhere;
+}
+
+/* Three columns, as the reference has them: nine options read as three short
+   columns instead of one long run. `minmax(0, 1fr)` lets a long label wrap
+   inside its own column instead of widening it. */
+.p1-corecard__opts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.p1-corecard__opt {
+  position: relative;
+  padding-left: 13px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: #46536b;
+  overflow-wrap: anywhere;
+}
+
+/* A list marker, not a control. A checkbox glyph here would promise a click
+   that CP-S4-02 does not allow. */
+.p1-corecard__opt::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: .45em;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #c3ccda;
+}
+
+.p1-corecard__noopts {
+  margin: 0;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #94a3b8;
+}
+
+.p1-corecard__detail {
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px dashed #eef2f7;
+}
+
 
 /* ---------- one fixed core question --------------------------------------- */
 .p1-corerow {
@@ -914,6 +1023,215 @@
   color: #7a5a12;
 }
 
+/* ---------- section headings ---------------------------------------------- */
+/* Two levels, as the reference has them: a small blue eyebrow that says which
+   section this is and whether it is required, then the section's own name. */
+.p1-s4sechead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.p1-s4sechead__text {
+  min-width: 0;
+}
+
+.p1-s4eyebrow {
+  margin: 0 0 3px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: #2563eb;
+}
+
+.p1-s4title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -.2px;
+  color: var(--p1-ink, #15233b);
+}
+
+.p1-s4sub {
+  margin: 5px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--p1-muted);
+}
+
+.p1-s4note {
+  margin: 5px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #8492a6;
+}
+
+.p1-s4count {
+  flex: none;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #eef2fe;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+/* The "N more questions" strip. The count is in it, so hiding rows never
+   silently shortens the instrument the owner is being asked to accept. */
+.p1-s4more {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 9px 12px;
+  border: 1px solid #eef2f7;
+  border-radius: 10px;
+  background: #fafcff;
+}
+
+.p1-s4more__t {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--p1-muted);
+}
+
+/* ---------- Section A catalogue table ------------------------------------- */
+.p1-tablewrap {
+  margin-top: 4px;
+  overflow-x: auto;
+}
+
+.p1-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.p1-th {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--p1-line);
+  text-align: left;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: #8492a6;
+  white-space: nowrap;
+}
+
+.p1-th--id {
+  width: 58px;
+}
+
+.p1-td {
+  padding: 9px 10px;
+  border-bottom: 1px solid #f1f5fa;
+  vertical-align: top;
+  color: var(--p1-ink, #15233b);
+}
+
+.p1-td--id {
+  width: 58px;
+}
+
+.p1-td--q {
+  line-height: 1.45;
+}
+
+.p1-td--opts {
+  width: 46%;
+}
+
+.p1-td--more {
+  padding-top: 3px;
+  background: #fafcff;
+}
+
+.p1-tr--more .p1-td {
+  border-bottom: 1px solid #f1f5fa;
+}
+
+.p1-tr--q .p1-qid {
+  padding: 1px 7px;
+  border-radius: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  background: #eef2f7;
+  color: #55647d;
+  white-space: nowrap;
+}
+
+/* Response options, as plain text. Deliberately not radio buttons or
+   checkboxes: a control here would tell the entrepreneur they can answer a
+   governed question, which CP-S4-02 forbids. The column header says
+   "(view only)" so the absence of controls is stated, not merely implied. */
+.p1-opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 12px;
+  margin-bottom: 5px;
+}
+
+.p1-opt {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: #46536b;
+}
+
+/* A separator, because a flex gap alone reads as one run-on sentence:
+   "Live Work Study" is three options, not three words. */
+.p1-opt + .p1-opt::before {
+  content: '·';
+  margin-right: 7px;
+  color: #c3ccda;
+}
+
+.p1-opt--none {
+  display: inline-block;
+  margin-bottom: 5px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+/* A placeholder the owner can fill is a defect, not a detail: it stays on the
+   visible row rather than waiting behind the disclosure. */
+.p1-qrow__flag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border: 1px solid #f0e4c8;
+  border-radius: 999px;
+  background: #fff8e8;
+  color: #7a5a12;
+  font-size: 9.5px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+button.p1-qrow__more {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 800;
+  color: #1d4ed8;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+button.p1-qrow__more:hover {
+  text-decoration: underline;
+}
+
 /* The generated-from-objectives banner sits inside a column, so it is compact
    and not full-bleed. */
 .p1-banner--inline {
@@ -932,7 +1250,7 @@
 }
 
 @media (max-width: 1100px) {
-  .p1-s4two {
+  .p1-s4stack {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -975,101 +1293,18 @@
 }
 
 /* ===========================================================================
-   Stage 4 · view switcher, one-line readiness and single-set views
+   Stage 4 · one-line readiness and the stacked question sets
    ---------------------------------------------------------------------------
-   The page holds two different sets of questions. `Combined` reads them side
-   by side; `Basic` and `Extra` read one at full width. The three views are the
-   same DOM with a different grid modifier, so a tab switch never re-mounts the
-   generated-question surface and never drops a recorded decision.
+   The page holds two different sets of questions and shows both, one above the
+   other, with no view switcher and no filter row: the fixed core is one
+   instrument in one order, and narrowing a read-only list invited the reader to
+   treat it as something they could configure.
    =========================================================================== */
 
-/* ---- the switcher -------------------------------------------------------- */
+/* ---- the main column ---------------------------------------------------- */
 
 .p1-col--main {
   gap: 14px;
-}
-
-.p1-s4tabs {
-  /* Full width of the main column: the strip has to end where the two columns
-     below it end, otherwise it reads as a chip floating in the row rather than
-     the header of the row. Stretching is the default of the parent flex column,
-     so no align-self here. */
-  display: flex;
-  gap: 2px;
-  padding: 3px;
-  /* A white track, not a tinted one: the page background is already #e8eef6,
-     so a pale track and the page read as the same surface. */
-  background: #fff;
-  border: 1px solid var(--p1-line);
-  border-radius: 12px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, .05);
-  max-width: 100%;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.p1-s4tabs::-webkit-scrollbar {
-  display: none;
-}
-
-.p1-s4tab {
-  /* Equal thirds, so the three views divide the strip evenly and the labels
-     sit on the same optical line instead of bunching at the left. */
-  flex: 1 1 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  padding: 7px 12px;
-  border: 0;
-  border-radius: 9px;
-  background: none;
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 700;
-  color: #5b6b83;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.p1-s4tab:hover {
-  color: #24405f;
-}
-
-.p1-s4tab.is-active {
-  background: #eef2fe;
-  color: #1d4ed8;
-  box-shadow: inset 0 0 0 1px #c9d8fb;
-}
-
-.p1-s4tab__ico {
-  display: inline-flex;
-  align-items: center;
-  opacity: .72;
-}
-
-.p1-s4tab__ico .ms {
-  font-size: 16px;
-}
-
-.p1-s4tab.is-active .p1-s4tab__ico {
-  opacity: 1;
-}
-
-.p1-s4tab__n {
-  padding: 0 6px;
-  line-height: 16px;
-  border-radius: 999px;
-  background: #eef2f8;
-  color: #4a5a74;
-  font-size: 10.5px;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-}
-
-.p1-s4tab.is-active .p1-s4tab__n {
-  background: #dbe6ff;
-  color: #1d4ed8;
 }
 
 /* ---- readiness, as one line ---------------------------------------------- */
@@ -1109,11 +1344,434 @@
   margin: 0;
 }
 
-/* ---- one set at a time --------------------------------------------------- */
+/* ---- both sets, stacked -------------------------------------------------- */
 
-/* Both columns stay mounted; only the unselected one is hidden. The `display`
-   swap is why a recorded review decision survives a tab switch. */
-.p1-s4two--basic > .p1-s4col--gen,
-.p1-s4two--extra > .p1-s4col--fixed {
-  display: none;
+/* Nothing is hidden here. The two sets used to be mutually exclusive views;
+   they are now two blocks of one page, so there is no rule that can hide a
+   question the reader has not chosen to hide. */
+.p1-s4stack > .p1-s4col + .p1-s4col {
+  margin-top: 0;
+}
+
+/* ---------------------------------------------------------------------------
+   Two-column stage layout (owner decision 2026-11-26)
+
+   Stage 3 and Stage 4 share this shape: assessment content keeps the main
+   column and stays usable while a model call is in flight; the execution rail
+   sits beside it instead of pushing the content down the page.
+
+   The rail collapses under the main column on narrow viewports rather than
+   becoming a horizontal strip, so the vertical connector still reads as a
+   sequence.
+   --------------------------------------------------------------------------- */
+.p1-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 20px;
+  align-items: start;
+}
+
+.p1-stage__main {
+  min-width: 0;
+}
+
+/* Stage 3 hands its execution cards to the proposal panel, which owns the
+   page's only rail. The page is then a single column and must not keep the
+   grid's 320px rail track open beside it. */
+.p1-stage--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.p1-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: sticky;
+  top: 16px;
+  min-width: 0;
+}
+
+.p1-rail__context {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+/* ---------- Stage 4 rail: summary and readiness ---------- */
+.p1-railsum,
+.p1-railready {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 13px;
+  min-width: 0;
+}
+
+.p1-railsum__label {
+  margin: 0 0 2px;
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.p1-railsum__title {
+  margin: 0 0 8px;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.p1-railready .p1-railsum__title {
+  margin-bottom: 10px;
+}
+
+.p1-row__value--muted {
+  font-weight: 400;
+  color: #94a3b8;
+}
+
+.p1-checkrow {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 3px 0;
+  font-size: 0.76rem;
+  color: #475569;
+}
+
+.p1-checkrow__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #cbd5e1;
+  flex: none;
+  margin-top: 4px;
+}
+
+.p1-checkrow__dot--done {
+  background: var(--action);
+}
+
+.p1-railready__action {
+  margin-top: 10px;
+}
+
+.p1-btn--block {
+  width: 100%;
+  justify-content: center;
+}
+
+.p1-railready__blocked {
+  text-align: center;
+  font-size: 0.76rem;
+  color: #94a3b8;
+  background: #f1f5f9;
+  border-radius: 8px;
+  padding: 7px 10px;
+}
+/* ---------- one action for many objectives ---------- */
+.p1-batchbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+
+.p1-batchbar__text {
+  min-width: 0;
+  flex: 1 1 320px;
+}
+
+.p1-batchbar__text strong {
+  font-size: 0.82rem;
+  color: var(--ink);
+}
+
+.p1-batchbar__text p {
+  margin: 4px 0 0;
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.p1-batchresult {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 12px;
+}
+
+.p1-batchresult__row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 0.78rem;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: #f8fafc;
+  border-left: 3px solid #cbd5e1;
+}
+
+.p1-batchresult__row--ok {
+  border-left-color: #1d4ed8;
+}
+
+.p1-batchresult__row--refused {
+  border-left-color: #b45309;
+}
+
+.p1-batchresult__id {
+  font-weight: 600;
+  color: var(--ink);
+  flex: none;
+}
+
+.p1-group__pick {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 2px;
+  flex: none;
+}
+
+
+
+.p1-rail__context p {
+  margin: 0 0 6px;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  color: #475569;
+}
+
+.p1-rail__context p:last-child {
+  margin-bottom: 0;
+}
+
+@media (max-width: 1080px) {
+  .p1-stage {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .p1-rail {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  .p1-rail > .aip {
+    flex: 1 1 280px;
+  }
+  .p1-rail__context {
+    flex: 1 1 100%;
+  }
+}
+
+/* ===========================================================================
+   Stage 4 · objective cards and rail notes
+   ---------------------------------------------------------------------------
+   Each approved additional objective is one card, and the badge is a display
+   ordinal (A01, A02 …) — positional, so the objective's own id is printed
+   underneath it rather than being replaced by it.
+   =========================================================================== */
+
+.p1-group__head {
+  align-items: flex-start;
+}
+
+.p1-group__badge {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 7px;
+  background: #eef2fe;
+  color: #1d4ed8;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: .03em;
+}
+
+.p1-group__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.35;
+  color: var(--p1-ink, #15233b);
+}
+
+.p1-group__src {
+  margin: 4px 0 8px;
+  font-size: 10.5px;
+  color: #8492a6;
+}
+
+/* A caveat under a rail card. Smaller and greyer than the checks above it,
+   because it qualifies them rather than being one of them. */
+.p1-railsum__note {
+  margin: 8px 0 0;
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: #94a3b8;
+}
+
+/* ---------- Section B: generated questions, grouped by objective ----------
+   One objective, one card. The generated questions sit inside the card of the
+   objective they were generated for, so a question can never be read as
+   belonging to a different aim, and the objective's wording appears once. */
+
+.p1-s4bcard {
+  padding: 16px 18px 18px;
+}
+
+/* The filter is the only control left at the top of Section B. Its head is the
+   section heading above it, so the bar carries no title of its own. */
+.p1-filterbar--flat {
+  align-items: flex-start;
+  gap: 18px;
+  padding-bottom: 12px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--p1-line);
+}
+
+.p1-filterbar--flat .p1-filterbar__left {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+
+.p1-filterbar--flat .p1-muted {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+/* A generated question is denser than the fixed-core rows but keeps the same
+   card language, so the two sets read as one questionnaire rather than two. */
+.p1-qcard--qg {
+  margin: 12px 0;
+  padding: 15px 16px;
+}
+
+/* The intended-response control. One row per option, because the selection is
+   the control here: clicking the option is what records the intention. */
+.p1-opts--pick {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0 0;
+}
+
+.p1-optrow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  border: 1px solid #dde5f2;
+  border-radius: 9px;
+  background: #fbfcff;
+  font-size: 0.82rem;
+  color: #26344f;
+  cursor: pointer;
+}
+
+.p1-optrow:hover {
+  border-color: #b9c8e4;
+  background: #f5f8ff;
+}
+
+/* The chosen option is marked by the control itself as well as the fill, so the
+   record is not communicated by colour alone. */
+.p1-optrow.is-picked {
+  border-color: #8fb0f0;
+  background: #eef4ff;
+  font-weight: 650;
+}
+
+.p1-optrow input {
+  margin: 0;
+  accent-color: var(--action);
+}
+
+.p1-optrow__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.p1-opts__note {
+  margin: 9px 0 0;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: #7c8aa3;
+}
+
+/* An objective with no question yet. Not an error state: it is the normal
+   state before generation, and it names the server's own blocking requirement
+   instead of leaving a blank. */
+.p1-empty {
+  margin: 12px 0 2px;
+  padding: 13px 14px;
+  border: 1px dashed #cfd9e8;
+  border-radius: 10px;
+  background: #fafcff;
+}
+
+.p1-empty__title {
+  margin: 0 0 5px;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: #33415c;
+}
+
+.p1-empty .p1-muted {
+  margin: 0 0 4px;
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+/* The server's requirement list, check by check, in the order it evaluates
+   them. Folded by default because it is diagnostic detail, and owned by State
+   so a status poll cannot close a list the reader just opened. */
+.p1-reqlist {
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--p1-line);
+}
+
+.p1-req {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.p1-req__state {
+  flex: 0 0 auto;
+  min-width: 62px;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.p1-req__state--pass { color: #15803d; }
+.p1-req__state--fail { color: #b91c1c; }
+.p1-req__state--unverified { color: #b45309; }
+
+.p1-req__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: #33415c;
+}
+
+.p1-req__code {
+  flex: 0 0 auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 9.5px;
+  color: #94a3b8;
 }

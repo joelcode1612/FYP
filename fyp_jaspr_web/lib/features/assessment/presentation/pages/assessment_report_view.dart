@@ -11,6 +11,7 @@ import 'package:sitewise_jaspr_web/features/assessment/data/chart_preview.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/explanation_candidate.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/measurement_chart_preview.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/q01_synthetic_preview.dart';
+import 'package:sitewise_jaspr_web/features/assessment/data/report_composition.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/report_measurement.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/synthetic_preview_gate.dart';
 import 'package:sitewise_jaspr_web/features/assessment/presentation/components/chart_spec_view.dart';
@@ -181,10 +182,21 @@ final class AssessmentReportView extends StatelessComponent {
     this.chartPreviews,
     this.businessDescription,
     this.explanation,
+    this.composition,
     this.syntheticExplanations = const [],
     this.backLabel = 'Back',
     required this.onBack,
   });
+
+  /// The backend's own nine-section composition, or `null` when it could not
+  /// be read.
+  ///
+  /// It is the authority on section availability and on the A10 state behind
+  /// each section. When it is absent the view still renders — it keeps its own
+  /// ordering and the payload-derived coverage — but section 08 says the
+  /// composition could not be read rather than presenting its own guess as the
+  /// backend's answer.
+  final ReportComposition? composition;
 
   /// Section id, index, title, one-line purpose. The nav and the sections read
   /// the same list, so a section can never exist without a jump target.
@@ -451,6 +463,16 @@ final class AssessmentReportView extends StatelessComponent {
               'record you can inspect in Steps 2–4.',
             ),
           ]),
+          // The full data-origin disclosure lives here, once, rather than as a
+          // banner over every chart. It appears whenever a demonstration
+          // surface is actually mounted, so a reader can always find out where
+          // the responses came from — and it is absent from a report that shows
+          // no demonstration data.
+          if (chartPreviews != null || q01Preview != null)
+            p(classes: 'asw-rpt__note', [
+              strong([Component.text('${ChartSpecView.demoModeLabel}: ')]),
+              Component.text(ChartSpecView.dataOriginDisclosure),
+            ]),
         ],
       ),
     ];
@@ -592,6 +614,23 @@ final class AssessmentReportView extends StatelessComponent {
     );
   }
 
+  /// The verification label this record actually supports.
+  ///
+  /// The catalogue mapper maps every imported row to
+  /// `VerificationStatus.pending`, because the catalogue table has no
+  /// administrator-verification column. That is the right defensive default, but
+  /// it renders "Pending review" — which implies a review is queued and will
+  /// happen — for listings the dataset itself marks
+  /// `PU_RESEARCH_ONLY_NOT_VERIFIED`, meaning they are research-only and have
+  /// never been verified. Those are different claims and the stronger one is the
+  /// true one, so the raw token wins. DD-164.
+  String _verificationLabel(CommercialProperty property) {
+    final researchOnly = property.tags.any(
+      (t) => t.contains('PU_RESEARCH_ONLY_NOT_VERIFIED'),
+    );
+    return researchOnly ? 'Research only — not verified' : property.verification.label;
+  }
+
   /// The catalogue record the assessment is bound to, when there is one.
   Component _boundPropertyCard(CommercialProperty property) => _card(
     icon: 'home_work',
@@ -607,24 +646,51 @@ final class AssessmentReportView extends StatelessComponent {
           'Floor area',
           '${property.sizeSqft.toStringAsFixed(0)} sq ft',
         ),
-        _def('Verification', property.verification.label),
+        _def('Verification', _verificationLabel(property)),
       ]),
     ],
   );
 
-  List<Component> _findings() => [
-    _empty(
-      title: 'No business-findings evaluation is stored',
-      body:
-          'Business findings and their decisions come from the upstream M2 '
-          'business-declaration stage. That stage is not enabled for this '
-          'assessment, so no finding was evaluated — and this report does not '
-          'assert one.',
-      foot:
-          'Once the stage is enabled, each finding keeps its own outcome '
-          '(confirmed, declined, unresolved, superseded) here.',
-    ),
-  ];
+  /// Section 03, from the composed state rather than from a fixed sentence.
+  ///
+  /// The five states this can be in are different facts and the copy says which
+  /// one it is. "No finding" is a result; "no evaluation" is the absence of a
+  /// result; "withheld" is a result the report may not show.
+  List<Component> _findings() {
+    final composed = composition?.byIndex('03');
+    if (composed == null) {
+      return [
+        _empty(
+          title: 'The finding state could not be read',
+          body:
+              'Business findings and their decisions come from the upstream M2 '
+              'business-declaration stage. The report could not read whether an '
+              'evaluation exists for this assessment, so it asserts neither '
+              'findings nor their absence.',
+          foot: 'Reopen the report once the backend composition is available.',
+        ),
+      ];
+    }
+    return [
+      _empty(
+        title: _findingTitle(composed.findingState),
+        body: composed.detail,
+        foot: composed.findingState == 'ZERO_FINDINGS_VALID'
+            ? 'A valid zero means the rules were applied and none fired. It is '
+                  'not the same as an evaluation that never ran.'
+            : null,
+      ),
+    ];
+  }
+
+  static String _findingTitle(String? state) => switch (state) {
+    'NO_FINDINGS_RECORDED' => 'No business-findings evaluation is stored',
+    'EVALUATION_NOT_EXECUTED' => 'The findings evaluation has not run yet',
+    'ZERO_FINDINGS_VALID' => 'The evaluation found no business finding',
+    'FINDINGS_ACCEPTED_WITHHELD' => 'Findings are withheld from this report',
+    'FINDINGS_WITHHELD' => 'Findings are withheld from this report',
+    _ => 'The finding state could not be established',
+  };
 
   List<Component> _decisions() {
     final approved = decisions.values.where((v) => v == 'approve').length;
@@ -885,33 +951,39 @@ final class AssessmentReportView extends StatelessComponent {
     ];
   }
 
-  /// The synthetic chart preview for the measured slots of this campaign.
+  /// Response distribution for the measured slots of this campaign.
   ///
   /// Only [ChartPreviewSlot.isDrawable] slots are charted. A `NOT_SHOWN` slot
   /// and a slot whose contract requires an approved stimulus are *described*,
   /// never drawn: an empty axis would read as a measured zero, and for those two
   /// states that is exactly the false statement the report must avoid.
+  ///
+  /// Presentation is a business report — a small `Demo Mode` chip, a coverage
+  /// line and per-question metadata. The states behind it are untouched: every
+  /// slot here is still `SYNTHETIC_PREVIEW_ONLY` or held, and none is admitted
+  /// into R02 or R08.
   List<Component> _chartPreviewSection(ChartPreviewBundle bundle) {
     final drawn = bundle.drawable.length;
     return [
       _card(
-        icon: 'science',
-        title: 'Synthetic chart preview',
-        trailing: const Pill('Not reportable', tone: 'warning'),
+        icon: 'insights',
+        title: 'Response distribution by question',
+        trailing: const Pill(ChartSpecView.demoModeLabel, tone: 'neutral'),
         children: [
           p(classes: 'asw-rpt__note', [
             Component.text(
-              'Developer diagnostic over frozen synthetic snapshots. These '
-              'counts are not findings, not calibrated demand estimates, and '
-              'cannot be admitted to a report. The hold above is unchanged.',
+              'Distribution of the saved questionnaire responses for each '
+              'measured question. These figures illustrate the measurement '
+              'pipeline; they are not admitted findings, and the hold above is '
+              'unchanged.',
             ),
           ]),
           p(classes: 'asw-rpt__note', [
-            strong([Component.text('Preview scope: ')]),
+            strong([Component.text('Coverage: ')]),
             Component.text(
-              '$drawn of ${bundle.slots.length} measured slots drawn. '
+              '$drawn of ${bundle.slots.length} measured questions charted. '
               'Campaign ${_shortId(bundle.campaignId)} · contract '
-              '${bundle.contractVersion} · admission HELD.',
+              '${bundle.contractVersion}.',
             ),
           ]),
           // Gate 3: a slot may have more than one stored snapshot. Say so,
@@ -931,10 +1003,8 @@ final class AssessmentReportView extends StatelessComponent {
           for (final slot in bundle.slots) ...[
             div(classes: 'asw-rpt__legend', [
               StatusBadge(
-                slot.isDrawable
-                    ? 'SYNTHETIC_PREVIEW_ONLY'
-                    : (slot.spec?.renderState.wire ?? slot.refusalCode ?? 'HELD'),
-                tone: slot.isDrawable ? 'warning' : 'neutral',
+                _slotStateLabel(slot),
+                tone: slot.isDrawable ? 'neutral' : 'warning',
               ),
             ]),
             p(classes: 'asw-rpt__note', [
@@ -952,8 +1022,9 @@ final class AssessmentReportView extends StatelessComponent {
             if (slot.isDrawable)
               ChartSpecView(
                 spec: slot.spec!,
-                note: 'Synthetic preview. V is the only denominator; shares are '
-                    'the diagnostic line, not an authorised estimate.',
+                note: 'V is the denominator for every share shown; the share '
+                    'column is the saved diagnostic line, not an authorised '
+                    'estimate.',
               )
             else
               p(classes: 'asw-rpt__note', [Component.text(slot.stateLine)]),
@@ -961,6 +1032,16 @@ final class AssessmentReportView extends StatelessComponent {
         ],
       ),
     ];
+  }
+
+  /// Human label for a slot's state. The wire codes
+  /// (`SYNTHETIC_PREVIEW_ONLY`, `NOT_SHOWN`, …) stay in the API payload and in
+  /// the evidence record; a business report prints the meaning, not the enum.
+  static String _slotStateLabel(ChartPreviewSlot slot) {
+    if (slot.isDrawable) return ChartSpecView.demoModeLabel;
+    if (slot.isNotShown) return 'Not shown';
+    if (slot.isMissingStimulus) return 'Unavailable';
+    return 'Held';
   }
 
   static String _shortId(String value) =>
@@ -1167,11 +1248,8 @@ final class AssessmentReportView extends StatelessComponent {
       _card(
         icon: 'science',
         title: 'Q01 · Area connection — ${chart.questionVersion}',
-        trailing: Pill('Synthetic preview', tone: 'warning'),
+        trailing: const Pill(ChartSpecView.demoModeLabel, tone: 'neutral'),
         children: [
-          div(classes: 'asw-rpt__legend', [
-            StatusBadge(preview.marker, tone: 'warning'),
-          ]),
           p(classes: 'asw-rpt__note', [Component.text(preview.submarker)]),
           ChartSpecView(spec: chart),
           p(classes: 'asw-rpt__note', [
@@ -1227,6 +1305,32 @@ final class AssessmentReportView extends StatelessComponent {
   );
 
   List<Component> _extras() {
+    // CP-RPT-05: Section B is assessment-specific, so it is rendered from the
+    // backend's composition rather than from the fixed registry. A generated
+    // question has no registry entry and must not be hard-coded into one to
+    // make it display; the composition is the extension point.
+    final composed = composition?.byIndex('06');
+    if (composed != null && composed.items.isNotEmpty) {
+      return [
+        _card(
+          icon: 'playlist_add',
+          title: 'Additional research questions',
+          trailing: Pill('${composed.items.length} recorded', tone: 'neutral'),
+          children: [
+            for (final item in composed.items) _additionalItem(item),
+            p(classes: 'asw-rpt__note', [Component.text(composed.detail)]),
+          ],
+        ),
+      ];
+    }
+    if (composed != null && composed.availability == SectionAvailability.notApplicable) {
+      return [
+        _empty(
+          title: 'No additional questions were added',
+          body: composed.detail,
+        ),
+      ];
+    }
     if (extraQuestions.isEmpty) {
       return [
         _empty(
@@ -1257,6 +1361,64 @@ final class AssessmentReportView extends StatelessComponent {
       ),
     ];
   }
+
+  /// One Section B item, at the stage it actually reached.
+  ///
+  /// "Submitted for review" is not "admitted": the stage line names the stage,
+  /// and the measurement attributes the report cannot obtain are printed as
+  /// unestablished rather than omitted, because a blank line reads as zero.
+  Component _additionalItem(AdditionalResearchItem item) => div(
+    classes: 'asw-rpt__cov',
+    [
+      span(classes: 'asw-rpt__covlabel', [
+        Component.text(
+          item.stem.isEmpty
+              ? 'No wording recorded — the generator abstained on this candidate.'
+              : item.stem,
+        ),
+      ]),
+      StatusBadge(
+        item.isMeasured ? 'Measured' : 'Not measured',
+        tone: item.isMeasured ? 'success' : 'warning',
+      ),
+      span(classes: 'asw-rpt__covreason', [
+        Component.text('Stage: ${_stageLabel(item.admissionStage)}'),
+      ]),
+      span(classes: 'asw-rpt__covreason', [
+        Component.text(
+          'Objective ${item.objectiveId ?? 'not recorded'} · review '
+          '${item.reviewDecision ?? 'not recorded'} · measurement level '
+          '${item.measurementLevel ?? 'unestablished'} · denominator '
+          '${item.denominator ?? 'unestablished'}',
+        ),
+      ]),
+      if (item.options.isNotEmpty)
+        span(classes: 'asw-rpt__covreason', [
+          Component.text('Options: ${item.options.join(' · ')}'),
+        ]),
+      if (item.ownerIntendedOptions.isNotEmpty)
+        span(classes: 'asw-rpt__covreason', [
+          Component.text(
+            'Your intended answer (not a respondent answer): '
+            '${item.ownerIntendedOptions.join(', ')}',
+          ),
+        ]),
+    ],
+  );
+
+  /// The stage vocabulary, said in words. An unknown token is shown as
+  /// "unrecognised" rather than guessed at.
+  static String _stageLabel(String? stage) => switch (stage) {
+    'CANDIDATE_PRESENTED' => 'candidate presented, no review decision',
+    'CANDIDATE_ABSTAINED' => 'generator abstained — there is no question to field',
+    'CANDIDATE_REJECTED' => 'rejected at review',
+    'CANDIDATE_SUBMITTED_FOR_REVIEW' => 'submitted for review, not admitted',
+    'OBJECTIVE_ADMITTED' => 'admitted as a research objective',
+    'QUESTION_APPROVED' => 'approved into the questionnaire',
+    'QUESTION_RELEASED' => 'in a released questionnaire',
+    'MEASURED' => 'measured',
+    _ => 'unrecognised stage',
+  };
 
   List<Component> _evidence() {
     final checks = report.requirementMatching;
@@ -1505,7 +1667,96 @@ final class AssessmentReportView extends StatelessComponent {
       ('Research association', report.researchAssociation),
       ('Model explanation', report.explanation),
     ];
+    final composed = composition;
     return [
+      if (composed != null)
+        _card(
+          icon: 'fact_check',
+          title: 'Composed section availability',
+          trailing: Pill('${composed.sections.length}', tone: 'neutral'),
+          children: [
+            div(classes: 'table-scroll', [
+              table(classes: 'asw-rpt__table', [
+                thead([
+                  tr([
+                    th([Component.text('#')]),
+                    th([Component.text('Section')]),
+                    th([Component.text('State')]),
+                    th([Component.text('Reason')]),
+                  ]),
+                ]),
+                tbody([
+                  for (final section in composed.sections)
+                    tr([
+                      td([Component.text(section.index)]),
+                      td([Component.text(section.title)]),
+                      td([
+                        StatusBadge(
+                          _availabilityLabel(section.availability),
+                          tone: _availabilityTone(section.availability),
+                        ),
+                      ]),
+                      td([Component.text(section.reasonCode)]),
+                    ]),
+                ]),
+              ]),
+            ]),
+            p(classes: 'asw-rpt__note', [
+              strong([Component.text('Composed by the backend: ')]),
+              Component.text(
+                'each state is decided from the A10 section contract, the '
+                'measurement association and the confirmed business '
+                'description — contract ${composed.contractVersion}. Gate '
+                'identities ${composed.instrument['gate_identities_total']}, '
+                'closed ${composed.instrument['gates_closed']}; decisions '
+                'adopted ${composed.instrument['decisions_adopted']} of '
+                '${composed.instrument['decisions_total']}.',
+              ),
+            ]),
+            // The tally is over all nine sections, including this one. It is
+            // printed from the server's own count rather than recomputed here,
+            // so a client cannot disagree with the document it is showing.
+            if (composed.counts.isNotEmpty)
+              p(classes: 'asw-rpt__note', [
+                strong([Component.text('Coverage: ')]),
+                Component.text(_countsSentence(composed.counts)),
+              ]),
+            if (composed.revisions.isNotEmpty)
+              p(classes: 'asw-rpt__note', [
+                strong([Component.text('Versions: ')]),
+                Component.text(_revisionsSentence(composed.revisions)),
+              ]),
+            if (!composed.releaseAuthorized)
+              p(classes: 'asw-rpt__note', [
+                strong([Component.text('Admission: ')]),
+                Component.text(
+                  composed.countsDisclosed
+                      ? 'a measurement in this document carries its own '
+                            'admission decision, so that measurement is shown. '
+                            'Releasing the report as a whole is a separate act '
+                            'and is not authorized.'
+                      : 'no report-admission decision is adopted, so this '
+                            'document composes states and sources only. It does '
+                            'not publish a measurement.',
+                ),
+              ]),
+          ],
+        )
+      else
+        _card(
+          icon: 'fact_check',
+          title: 'Composed section availability',
+          trailing: const Pill('Not read', tone: 'warning'),
+          children: [
+            p(classes: 'asw-rpt__note', [
+              Component.text(
+                'The backend composition could not be read for this report, so '
+                'the section states below are derived from the report payload '
+                'alone. That is a degraded view, not an empty report.',
+              ),
+            ]),
+          ],
+        ),
       div(classes: 'asw-rpt__coverage', [
         for (final (label, section) in rows)
           div(
@@ -1526,12 +1777,65 @@ final class AssessmentReportView extends StatelessComponent {
       ]),
       p(classes: 'asw-rpt__note', [
         Component.text(
-          'Coverage is computed from this read, not from a frozen snapshot: '
-          'the report is assembled each time it is opened.',
+          'The payload rows are computed from this read, not from a frozen '
+          'snapshot: the report is assembled each time it is opened.',
         ),
       ]),
     ];
   }
+
+  /// "1 available, 4 administrative, 1 pending, 1 withheld, 1 unavailable,
+  /// 1 not applicable" — only the states that occur, so a zero is never read as
+  /// a finding.
+  static String _countsSentence(Map<String, dynamic> counts) {
+    const labels = <String, String>{
+      SectionAvailability.available: 'available',
+      SectionAvailability.administrative: 'administrative',
+      SectionAvailability.partial: 'partial',
+      SectionAvailability.pending: 'pending measurement',
+      SectionAvailability.withheld: 'withheld',
+      SectionAvailability.unavailable: 'unavailable',
+      SectionAvailability.notApplicable: 'not applicable',
+    };
+    final parts = <String>[];
+    var total = 0;
+    for (final entry in labels.entries) {
+      final count = (counts[entry.key] as num?)?.toInt() ?? 0;
+      total += count;
+      if (count > 0) parts.add('$count ${entry.value}');
+    }
+    if (parts.isEmpty) return 'no sections counted';
+    return 'of $total sections, ${parts.join(', ')}.';
+  }
+
+  /// The two numbers a reader would otherwise reconcile by eye.
+  static String _revisionsSentence(Map<String, dynamic> revisions) {
+    final form = revisions['marketplace_requirements_form_version'];
+    final confirmation = revisions['m2_confirmation_revision'];
+    return 'business-description form version ${form ?? '—'} (a form-schema '
+        'generation marker, not a revision counter); research record confirmed '
+        'at revision ${confirmation ?? '—'}.';
+  }
+
+  /// Human label for a composed state. The wire token is never printed as-is.
+  static String _availabilityLabel(String availability) => switch (availability) {    SectionAvailability.available => 'Available',
+    SectionAvailability.administrative => 'Administrative',
+    SectionAvailability.partial => 'Partial',
+    SectionAvailability.pending => 'Pending',
+    SectionAvailability.withheld => 'Withheld',
+    SectionAvailability.notApplicable => 'Not applicable',
+    _ => 'Unavailable',
+  };
+
+  static String _availabilityTone(String availability) => switch (availability) {
+    SectionAvailability.available => 'success',
+    SectionAvailability.administrative => 'neutral',
+    SectionAvailability.partial => 'neutral',
+    SectionAvailability.pending => 'neutral',
+    SectionAvailability.withheld => 'warning',
+    SectionAvailability.notApplicable => 'neutral',
+    _ => 'warning',
+  };
 
   List<Component> _sources() => [
     _card(

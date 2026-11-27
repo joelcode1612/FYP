@@ -12,15 +12,13 @@ import 'package:sitewise_jaspr_web/shared/presentation/components/dashboard_kit.
 import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart';
 import 'package:sitewise_jaspr_web/core/di/app_locator.dart';
 import 'package:sitewise_jaspr_web/core/utils/stage_url.dart';
-import 'package:sitewise_jaspr_web/features/assessment/application/stage_reason_copy.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/assessment_api.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/assessment_report.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/business_description.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/explanation_candidate.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/chart_preview.dart';
-import 'package:sitewise_jaspr_web/features/assessment/data/measurement_chart_preview.dart';
+import 'package:sitewise_jaspr_web/features/assessment/data/report_composition.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/report_measurement.dart';
-import 'package:sitewise_jaspr_web/features/assessment/data/q01_synthetic_preview.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/synthetic_preview_gate.dart';
 import 'package:sitewise_jaspr_web/features/assessment/application/stage3_access.dart';
 import 'package:sitewise_jaspr_web/shared/presentation/layouts/app_layout.dart';
@@ -657,22 +655,39 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
       _reportFuture ??= _loadReport(record);
 
   Future<_ReportBundle> _loadReport(AssessmentRecord record) async {
-    final report = await _api.report(record.assessmentId);
+    // The composition is read first because it carries the report body it
+    // describes. Asking for both would rebuild the same evidence twice for one
+    // document — the composition endpoint already assembles the report to
+    // decide section states, so embedding it costs nothing extra and removes a
+    // whole round trip.
+    final composition = await _api.reportComposition(record.assessmentId);
+    final embedded =
+        composition.ok ? composition.value?.reportPayload : null;
+
+    final report = embedded != null
+        ? ApiResult<AssessmentReportPayload>.success(
+            AssessmentReportPayload.fromJson(embedded),
+          )
+        : await _api.report(record.assessmentId);
     if (!report.ok) return _ReportBundle(report, null);
+
     final business = await _api.businessDescription(record.assessmentId);
     final explanation = await _loadExplanation(record);
     final chartPreviews = await _loadChartPreviews(
       record,
       report.value?.measurement,
     );
-    // A failed description read leaves the section in its held state rather
-    // than failing the whole report; the failure is not silent, because the
-    // section then says no confirmed description could be read.
+    // A failed composition is never fatal: the view falls back to its own
+    // section list, which is what it did before the composition existed. It is
+    // not silently "no composition" — the coverage section says the composition
+    // could not be read, so a section never quietly loses the state it should
+    // have shown.
     return _ReportBundle(
       report,
       business.ok ? business.value : null,
       explanation,
       chartPreviews,
+      composition.ok ? composition.value : null,
     );
   }
 
@@ -994,13 +1009,11 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   /// COMPLETE, moves `completed_stages`, and clears the stage's blocker reason.
   ///
   /// None of that is carried by workflow readiness. [AssessmentJourneyStepper]
-  /// renders the "N / 5" count, the per-stage tick and the blocker sentence from
-  /// [AssessmentRecord] alone (see its `record.completedStages` /
-  /// `stage.isComplete` / `stage.blockerReason` reads), and [_stageReasonNotice]
-  /// reads the same record. So refreshing readiness alone left the page still
-  /// asserting "Confirm your current business declaration…" and still showing
-  /// the old count after a confirmation that had already been persisted — until
-  /// the browser was reloaded and `_open` re-read the record.
+  /// renders the "N / 5" count and the per-stage tick from [AssessmentRecord]
+  /// alone (see its `record.completedStages` / `stage.isComplete` reads). So
+  /// refreshing readiness alone left the page still asserting the old count
+  /// after a confirmation that had already been persisted — until the browser
+  /// was reloaded and `_open` re-read the record.
   ///
   /// Readiness is refreshed by the caller, with the existing bounded retry: a
   /// readiness read that lands before the confirmation is visible must not
@@ -2418,11 +2431,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
             .firstOrNull ??
         record.stages.last;
 
-    // The server's own explanation for why the stage on screen is not complete.
-    // Computed once so the element below cannot be built twice with different
-    // copy.
-    final stageReason = _stageReasonNotice(selected);
-
     return _shell(
       showHead: !_openedInPlace,
       title: 'Location assessment',
@@ -2475,10 +2483,12 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
           },
         ),
 
-        // Why this stage is not complete, in the progress contract's own terms.
-        // Without it the reader sees "2 / 5" and a blocked stage with no way to
-        // tell "I still have work to do" from "the system is holding this".
-        ?stageReason,
+        // No per-stage "Next step" / "Held" banner here. It restated the
+        // stepper's own blocked state in a second place, and on this assessment
+        // it announced "Complete the business review and research goals stage
+        // first" while the stage it named was the one on screen. The blocker
+        // itself is unchanged and still governs every write; it is simply no
+        // longer printed twice, once as a badge and once as a paragraph.
 
         // One independent checkpoint at a time, each in the reference's own
         // layout: saved-property selection, questionnaire, findings &
@@ -2563,30 +2573,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
       'Assemble and review the full suitability report for this assessment.',
     _ => 'Continue this assessment to move closer to your report.',
   };
-
-  /// Why [stage] is not complete, in the server's own terms.
-  ///
-  /// Returns null for a complete stage and for a stage whose payload carries no
-  /// reason — an absent reason renders as nothing rather than as an invented
-  /// explanation. The token itself is never printed: [stageReasonCopy] owns the
-  /// wording, and it de-tokenises an unrecognised code instead of hiding it.
-  ///
-  /// The prefix is the distinction the contract draws and the page previously
-  /// lost: "Next step" means the reader's own action clears the hold, "Held"
-  /// means a contract or governance decision does. Telling a reader to act on a
-  /// hold is what sends them round the same loop again.
-  Component? _stageReasonNotice(AssessmentStage stage) {
-    if (stage.isComplete) return null;
-    final copy = stageReasonCopy(stage.blockerReason);
-    if (copy == null) return null;
-    return div(classes: 'notice notice-warn asw-stage-reason', [
-      Icon(copy.isYourAction ? 'arrow_forward' : 'lock', size: 'sm'),
-      span([
-        strong([Component.text(copy.isYourAction ? 'Next step: ' : 'Held: ')]),
-        Component.text(copy.message),
-      ]),
-    ]);
-  }
 
   /// The reference's per-step heading: icon tile, kicker, title, description.
   Component _stepHeading({
@@ -4362,9 +4348,14 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
             // every production build, because the gate is a compile-time
             // constant that defaults to false. It grants no admission — the
             // section it renders stays HELD and non-reportable.
-            q01Preview: syntheticPreviewEnabled
-                ? Q01SyntheticPreview.tryFromFixture()
-                : null,
+            // Round 25: the hardcoded demonstration fixtures are no longer
+            // mounted. The report now reads the persisted questionnaire
+            // snapshots through `chartPreviews` below, so showing a second,
+            // fabricated 40-respondent Q01 distribution beside a real
+            // 142-respondent measurement would print two denominators for one
+            // question and invite the reader to confuse them. The fixture code
+            // and its tests remain in the tree; only the live mount is gone.
+            q01Preview: null,
             // Development-only: the real EE-01 measurement readback for R03.
             // Same compile-time gate as the Q01 preview, and independently
             // `null` when the fixture is not a held, non-disclosing payload.
@@ -4375,9 +4366,10 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
             // is dropped and R03 keeps its held state. There is no live
             // campaign→assessment binding to read here yet; see
             // RT_E2E_01_SOURCE_TRACEABILITY.md.
-            measurementChart: syntheticPreviewEnabled
-                ? MeasurementChartPreview.tryFromFixture()
-                : null,
+            // Same reasoning as `q01Preview`: this fixture belonged to the
+            // FC4-D synthetic assessment and was dropped on a workspace
+            // assessment anyway. The live readback below replaces it.
+            measurementChart: null,
             // Round 24, Gate 5: the live synthetic chart preview, read from the
             // server for this assessment's own campaign. `null` in every
             // production build — the gate is compile-time and the request is
@@ -4388,6 +4380,13 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
             // bound to. `null` when the read failed, which leaves section 02 in
             // its declared/held state rather than inventing a description.
             businessDescription: bundle?.business,
+            // CP-RPT-10: the server's own nine-section composition. It decides
+            // each section's availability from the A10 contract, the
+            // measurement association and the confirmed description, so the
+            // coverage the reader sees is the backend's answer rather than the
+            // view's guess. `null` when the read failed: the view then keeps its
+            // own section list and says the composition could not be read.
+            composition: bundle?.composition,
             // EX-04: the explanation the report may render. `null` when the read
             // failed or the module is available (no per-item read exists yet), in
             // which case the report renders no explanation card at all.
@@ -5556,10 +5555,16 @@ final class _ReportBundle {
   /// separate, clearly non-reportable section.
   final ChartPreviewBundle? chartPreviews;
 
+  /// The server-composed nine-section document, or `null` when it could not be
+  /// read. It is the authority on section availability; the view's own list is
+  /// only the fallback ordering.
+  final ReportComposition? composition;
+
   const _ReportBundle(
     this.report,
     this.business, [
     this.explanation,
     this.chartPreviews,
+    this.composition,
   ]);
 }

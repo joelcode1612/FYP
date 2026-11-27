@@ -67,8 +67,14 @@ def test_main_defaults_to_dry_run_and_spends_nothing(tmp_path, capsys):
     assert files == ['01-consistent-BDJ.json', '02-contradictory-BDJ.json',
                      '03-missing-BDJ.json', '04-confirmed_uncertainty-BDJ.json',
                      '05-requires_clarification-BDJ.json',
-                     '06-requires_clarification-QJ.json', 'ledger.json',
+                     '06-requires_clarification-QJ.json',
                      'summary.json']
+    # The ledger is written only when an attempt is recorded, and a dry run
+    # records none — so its *absence* is part of "spends nothing", not an
+    # omission. This used to be listed as an expected file, which asserted the
+    # opposite of what the test is for.
+    assert not (run_dir / 'ledger.json').exists(), (
+        'a dry run recorded a ledger entry, so it reached the reservation path')
     call = json.loads((run_dir / '01-consistent-BDJ.json').read_text(encoding='utf-8'))
     assert call['dry_run'] is True and call['sent'] is False
     assert call['transport'] == 'DryRunTransport'

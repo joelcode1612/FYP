@@ -63,15 +63,18 @@ _OPEN_REPORT = """
 """
 
 MARKERS = {
-    'preview_heading': 'Synthetic chart preview',
-    'not_reportable': 'Not reportable',
+    'preview_heading': 'Response distribution by question',
+    'demo_mode': 'Demo Mode',
+    'coverage': 'measured questions charted',
     'revision_selection': 'Revision selection',
     'held_card': 'R03 · Concept intent distribution — held',
-    # `Share of V` is CSS-transformed and also appears in the Q01 demonstration,
-    # so it is not a chart count. Charts are counted from the DOM instead
-    # (`section.section_charts`), and the held states from their own badges.
-    'not_shown_badge': 'NOT_SHOWN',
-    'missing_stimulus_badge': 'UNAVAILABLE_MISSING_APPROVED_STIMULUS',
+    # The full data-origin sentence lives once, in the methodology block. Its
+    # presence here is what proves the disclosure survived the banner removal.
+    'data_origin_disclosure': 'do not represent independently collected',
+    # Human labels, not wire codes: a business report prints the meaning. The
+    # wire codes stay in the API payload, which `probe_api` captures separately.
+    'not_shown_badge': 'Not shown',
+    'missing_stimulus_badge': 'Unavailable',
 }
 
 
@@ -253,7 +256,7 @@ _MEASURE_SECTION = """
   const figures = [...document.querySelectorAll('figure.sw-chart')];
   const cards = [...document.querySelectorAll('section, div')].filter(el => {
     const t = el.innerText || '';
-    return t.includes('Synthetic chart preview') && el.querySelector('figure.sw-chart, p');
+    return t.includes('Response distribution by question') && el.querySelector('figure.sw-chart, p');
   });
   // The innermost card is the section itself, not a page wrapper.
   const card = cards.sort((a, b) => (a.innerText || '').length - (b.innerText || '').length)[0] || null;
@@ -351,7 +354,7 @@ def main() -> int:
                 out_path=out_dir / 'held_r03.png', offset=250, frames=1)
             step('capturing the preview section')
             evidence['section_frames'] = capture_section(
-                send, evaluate, needle='Synthetic chart preview',
+                send, evaluate, needle='Response distribution by question',
                 out_path=out_dir / 'preview_section.png', offset=250)
         evidence['api'] = probe_api(send)
     finally:

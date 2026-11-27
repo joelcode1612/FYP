@@ -118,12 +118,16 @@ class _FakeProposalPort implements BdjObjectiveProposalPort {
 /// `GET …/objective-proposals` reads persisted rows and, per the contract,
 /// carries no execution block. The fixture keeps one because it mirrors the
 /// evaluate envelope, so it is stripped here to keep the double faithful.
-ApiResult<BdjObjectiveProposalList> _listed(Map<String, dynamic> payload) =>
-    ApiResult.success(
-      BdjObjectiveProposalList.fromJson(
-        Map<String, dynamic>.from(payload)..remove('execution'),
-      ),
-    );
+///
+/// The eligibility block is added when the payload does not carry one. The panel
+/// now draws its generate control from the server's answer alone, so a fixture
+/// without it would render a page that can never generate — which is a real
+/// state, and is asserted separately, but not the state most tests mean.
+ApiResult<BdjObjectiveProposalList> _listed(Map<String, dynamic> payload) {
+  final body = Map<String, dynamic>.from(payload)..remove('execution');
+  body.putIfAbsent('generation', generationPayload);
+  return ApiResult.success(BdjObjectiveProposalList.fromJson(body));
+}
 
 void main() {
   late ApiM2Repository originalM2;
@@ -157,6 +161,72 @@ void main() {
     expect(find.text('Most suggested'), findsNothing);
   });
 
+  testComponents('the section head states one title, not the page heading again', (
+    tester,
+  ) async {
+    port.listResult = _listed(evaluationPayload());
+    tester.pumpComponent(panel());
+    await tester.pump();
+    await tester.pump();
+
+    // The card's own title.
+    expect(find.text('Research objectives'), findsOneComponent);
+
+    // The eyebrow that repeated the page heading in the same words is gone.
+    // The stage heading ("Business review and research goals") is rendered by
+    // the stage panel above this card, so removing the eyebrow here loses
+    // nothing — it was the third line of the same words.
+    expect(find.text('Stage 3 · Business review'), findsNothing);
+    expect(find.textContaining('Stage 3 ·'), findsNothing);
+  });
+
+  // ---------------------------------------------------------------------
+  // The generate control is drawn from the server's answer, not from the
+  // proposal list. Each case below is a context whose *proposals* look the
+  // same and whose *availability* does not, which is exactly the distinction
+  // the old conditional label could not express (CP-AUDIT-09).
+  // ---------------------------------------------------------------------
+  testComponents('an eligible context offers exactly one generate control', (
+    tester,
+  ) async {
+    tester.pumpComponent(panel());
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Generate research objectives'), findsOneComponent);
+    // The two old labels were one handler under two names.
+    expect(find.text('Propose research objectives'), findsNothing);
+    expect(find.text('Re-run pass'), findsNothing);
+  });
+
+  for (final spent in const [
+    ('ATTEMPT_SPENT', 'a spent attempt'),
+    ('IN_PROGRESS', 'an attempt still in flight'),
+    ('UNAVAILABLE', 'a ledger that could not be read'),
+    ('SOMETHING_NEW', 'a reason this client does not know'),
+  ]) {
+    testComponents(
+      '${spent.$2} withholds the generate control even with proposals on screen',
+      (tester) async {
+        port.listResult = _listed(
+          evaluationPayload()
+            ..['generation'] = generationPayload(
+              reason: spent.$1,
+              eligible: spent.$1 == 'SOMETHING_NEW',
+              attempts: 1,
+            ),
+        );
+        tester.pumpComponent(panel());
+        await tester.pump();
+        await tester.pump();
+
+        // The proposals are still readable; only the action is withheld.
+        expect(find.text('Most suggested'), findsNComponents(2));
+        expect(find.text('Generate research objectives'), findsNothing);
+      },
+    );
+  }
+
   testComponents('persisted proposals render their category and source', (
     tester,
   ) async {
@@ -170,7 +240,7 @@ void main() {
     expect(find.text('Suggested'), findsOneComponent);
     // Review state is a second, separate badge.
     expect(find.text('Approved by you'), findsOneComponent);
-    expect(find.text('Awaiting your decision'), findsNComponents(2));
+    expect(find.text('Pending review'), findsNComponents(2));
 
     // The server's own objective text, never a placeholder.
     expect(
@@ -233,16 +303,45 @@ void main() {
     port.listResult = _listed(
       evaluationPayload()
         ..['proposals'] = <Map<String, dynamic>>[]
-        ..['proposal_count'] = 0,
+        ..['proposal_count'] = 0
+        // A spent pass that stored nothing. This is the case the old empty state
+        // could not distinguish from "not run yet".
+        ..['generation'] = generationPayload(
+          reason: 'ATTEMPT_SPENT',
+          eligible: false,
+          attempts: 1,
+        ),
     );
     tester.pumpComponent(panel());
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('No research objectives yet'), findsOneComponent);
+    expect(find.textContaining('has run and stored'), findsOneComponent);
     expect(find.text('Most suggested'), findsNothing);
     expect(find.text('Suggested'), findsNothing);
-    expect(find.text('Approve'), findsNothing);
+    expect(find.text('Approve objective'), findsNothing);
+  });
+
+  testComponents('an empty list the server has not explained claims nothing', (
+    tester,
+  ) async {
+    // A server that does not send the eligibility block. The panel must not
+    // invent a cause for the emptiness, and must not offer a dispatch.
+    port.listResult = _listed(
+      evaluationPayload()
+        ..['proposals'] = <Map<String, dynamic>>[]
+        ..['proposal_count'] = 0
+        ..['generation'] = <String, dynamic>{},
+    );
+    tester.pumpComponent(panel());
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      find.textContaining('could not be established'),
+      findsOneComponent,
+    );
+    expect(find.text('Generate research objectives'), findsNothing);
   });
 
   testComponents('a moved confirmation is stale, not empty and not an error', (
@@ -324,7 +423,7 @@ void main() {
     );
     expect(find.text('Retry'), findsOneComponent);
     // A failure is never rendered as an empty success.
-    expect(find.text('No research objectives yet'), findsNothing);
+    expect(find.textContaining('has not produced a proposal'), findsNothing);
   });
 
   testComponents('recording a decision never claims downstream authority', (
@@ -339,9 +438,9 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('Approve'), findsNComponents(2));
+    expect(find.text('Approve objective'), findsNComponents(2));
     await tester.click(
-      find.ancestor(of: find.text('Approve'), matching: find.tag('button')).first,
+      find.ancestor(of: find.text('Approve objective'), matching: find.tag('button')).first,
     );
     await tester.pump();
     await tester.pump();
@@ -358,7 +457,7 @@ void main() {
       findsNComponents(2),
     );
     // The decided proposal no longer offers Approve/Reject.
-    expect(find.text('Approve'), findsOneComponent);
+    expect(find.text('Approve objective'), findsOneComponent);
   });
 
   testComponents('a stored decision tells the owner the record may have moved', (
@@ -386,7 +485,7 @@ void main() {
     expect(notified, 0, reason: 'reading proposals is not a save');
 
     await tester.click(
-      find.ancestor(of: find.text('Approve'), matching: find.tag('button')).first,
+      find.ancestor(of: find.text('Approve objective'), matching: find.tag('button')).first,
     );
     await tester.pump();
     await tester.pump();
@@ -416,7 +515,7 @@ void main() {
     await tester.pump();
 
     await tester.click(
-      find.ancestor(of: find.text('Approve'), matching: find.tag('button')).first,
+      find.ancestor(of: find.text('Approve objective'), matching: find.tag('button')).first,
     );
     await tester.pump();
     await tester.pump();
@@ -436,7 +535,7 @@ void main() {
     );
 
     await tester.click(
-      find.ancestor(of: find.text('Re-run'), matching: find.tag('button')).first,
+      find.ancestor(of: find.text('Generate research objectives'), matching: find.tag('button')).first,
     );
     await tester.pump();
     await tester.pump();
@@ -447,7 +546,7 @@ void main() {
     );
 
     await tester.click(
-      find.ancestor(of: find.text('Refresh'), matching: find.tag('button')).first,
+      find.ancestor(of: find.text('Refresh saved view'), matching: find.tag('button')).first,
     );
     await tester.pump();
     await tester.pump();
@@ -476,7 +575,7 @@ void main() {
     await tester.pump();
     await tester.pump();
     await tester.click(
-      find.ancestor(of: find.text('Re-run'), matching: find.tag('button')).first,
+      find.ancestor(of: find.text('Generate research objectives'), matching: find.tag('button')).first,
     );
     await tester.pump();
     await tester.pump();
@@ -495,6 +594,77 @@ void main() {
     expect(find.text('Updated by latest LLM pass'), findsNComponents(3));
     expect(
       find.textContaining('Simulated pass — no cloud model was called'),
+      findsNothing,
+    );
+  });
+
+  // -- the subtitle states the kind, not the decision ------------------------
+  //
+  // These three tests exist because the subtitle used to read "An additional
+  // objective you approved" and rendered for every additional objective
+  // whatever its review_state, so undecided and rejected objectives each
+  // carried a claim of approval the record did not support. DD-157/DD-165.
+
+  testComponents('an undecided objective names its kind, never a decision', (
+    tester,
+  ) async {
+    // Two of the three fixtures are PENDING, so the kind line renders twice.
+    tester.pumpComponent(panel());
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      find.text('Additional to the mandatory research objectives'),
+      findsNComponents(2),
+    );
+    expect(
+      find.textContaining('An additional objective you approved'),
+      findsNothing,
+    );
+  });
+
+  testComponents('a decided objective does not restate the decision as a kind', (
+    tester,
+  ) async {
+    final payload = evaluationPayload();
+    final all = (payload['proposals'] as List).cast<Map<String, dynamic>>();
+    payload['proposals'] = all
+        .where((p) => p['review_state'] == 'APPROVED')
+        .toList();
+    payload['proposal_count'] = 1;
+    port.listResult = _listed(payload);
+
+    tester.pumpComponent(panel());
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Approved by you'), findsOneComponent);
+    // The badge is the only statement about the decision.
+    expect(
+      find.text('Additional to the mandatory research objectives'),
+      findsNothing,
+    );
+  });
+
+  testComponents('a rejected objective is never presented as approved', (
+    tester,
+  ) async {
+    final payload = evaluationPayload();
+    final all = (payload['proposals'] as List).cast<Map<String, dynamic>>();
+    payload['proposals'] = [
+      Map<String, dynamic>.from(all.first)..['review_state'] = 'REJECTED',
+    ];
+    payload['proposal_count'] = 1;
+    port.listResult = _listed(payload);
+
+    tester.pumpComponent(panel());
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Rejected by you'), findsOneComponent);
+    expect(find.text('Approved by you'), findsNothing);
+    expect(
+      find.textContaining('An additional objective you approved'),
       findsNothing,
     );
   });

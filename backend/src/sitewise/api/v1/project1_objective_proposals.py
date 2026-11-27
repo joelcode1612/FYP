@@ -107,6 +107,23 @@ class ProposalRequest(BaseModel):
     context_id: UUID
 
 
+class EvaluationRequest(ProposalRequest):
+    """A dispatch request, which may name a registered objective arm.
+
+    Kept separate from ``ProposalRequest`` rather than added to it, so a
+    decision or an admission cannot carry a prompt key: those routes act on an
+    existing proposal and selecting a prompt there would be meaningless, and
+    ``extra='forbid'`` then refuses the field instead of ignoring it.
+
+    ``prompt_key`` is validated by ``prompts.resolve_objective_arm``, not by the
+    schema. A ``Literal`` here would hard-code the two arm spellings into the
+    HTTP contract, so registering a third arm would require an API change; the
+    registry is the authority and the refusal carries a named code.
+    """
+
+    prompt_key: str | None = Field(default=None, max_length=64)
+
+
 class DecisionRequest(ProposalRequest):
     decision: Literal['APPROVED', 'REJECTED']
     note: str | None = Field(default=None, max_length=500)
@@ -428,12 +445,19 @@ _ADMISSION_HELD = {
     'RESTRICTED_WORKFLOW_PRINCIPAL_REQUIRED': (503, 'PROPOSAL_PRINCIPAL_REFUSED'),
     # Policy refusals. Each names the disposition that decided it, because
     # "a survey cannot answer this" and "clarify first" need different actions.
+    #
+    # They used to collapse into one external code, BDJ_ADMISSION_NOT_RESEARCH_SUITABLE,
+    # which made this comment untrue and left the client unable to tell the three
+    # apart. For the four instrument-mismatch proposals (site choice, rent, hiring,
+    # supplier) the true statement is "this is your decision, not a customer
+    # question" — and the collapsed code rendered it as "not research", which is a
+    # different and discouraging claim. DD-159.
     'ADMISSION_NOT_RESEARCH_SUITABLE_BUSINESS_DECISION_REQUIRED':
-        (409, 'BDJ_ADMISSION_NOT_RESEARCH_SUITABLE'),
+        (409, 'BDJ_ADMISSION_BUSINESS_DECISION_REQUIRED'),
     'ADMISSION_NOT_RESEARCH_SUITABLE_HOLD_REVIEW':
-        (409, 'BDJ_ADMISSION_NOT_RESEARCH_SUITABLE'),
+        (409, 'BDJ_ADMISSION_HOLD_REVIEW'),
     'ADMISSION_NOT_RESEARCH_SUITABLE_NO_ACTION':
-        (409, 'BDJ_ADMISSION_NOT_RESEARCH_SUITABLE'),
+        (409, 'BDJ_ADMISSION_NO_ACTION'),
     'ADMISSION_OBJECTIVE_AMBIGUOUS': (409, 'BDJ_ADMISSION_OBJECTIVE_AMBIGUOUS'),
     'ADMISSION_OBJECTIVE_CONFLICT': (409, 'BDJ_ADMISSION_OBJECTIVE_CONFLICT'),
     'ADMISSION_ALREADY_BOUND_TO_OTHER_OBJECTIVE':
@@ -473,6 +497,28 @@ def _current_rows(engine, *, assessment_id, user, revision, context_id,
             if row.get('source_fingerprint') == source_fingerprint
             and str(row.get('context_id')) == str(context_id)
             and row.get('context_packet_hash') == context_packet_hash]
+
+
+def _generation_state(ledger_engine, user, assessment_id, *, revision,
+                      packet) -> dict:
+    """Whether a governed objective pass is still available for this context.
+
+    A ledger failure is reported as ``UNAVAILABLE`` instead of being raised. The
+    proposal list is readable and useful without this answer, and the control
+    that depends on it must fail closed anyway, so raising here would blank a
+    page over a fact that only decides whether a button is drawn.
+    """
+    from sitewise.project1.m2v2_projection import resolve_source_contract
+    from sitewise.project1.runs import objective_generation_state
+    try:
+        resolve_source_contract(packet['schema_version'])
+        return objective_generation_state(
+            ledger_engine, user.user_id, assessment_id,
+            revision=revision,
+            source_fingerprint=packet.get('source_fingerprint'))
+    except Exception:
+        return {'contract': 'bdj-objective-generation/1', 'eligible': False,
+                'reason': 'UNAVAILABLE', 'attempts': 0, 'run_recorded': None}
 
 
 def _require_current_proposal(engine, proposal_id, user, assessment_id,
@@ -517,7 +563,7 @@ def _recommendation(row: dict) -> dict:
 @router.post('/assessments/{assessment_id}/objective-proposals/evaluate')
 @router.post('/assessments/{assessment_id}/objective-proposals')
 def evaluate_objective_proposals(
-        assessment_id: UUID, payload: ProposalRequest, user: Owner,
+        assessment_id: UUID, payload: EvaluationRequest, user: Owner,
         session: SourceDatabase, packet_source: PacketSource,
         context_service: ContextService, engine: AuthorizedProposalStorageEngine,
         ledger_engine: AuthorizedLedgerEngine, response: Response):
@@ -538,13 +584,23 @@ def evaluate_objective_proposals(
     from sitewise.project1.m2v2_projection import resolve_source_contract
     contract = resolve_source_contract(packet['schema_version'])
 
+    from sitewise.project1.prompts import PROMPTS, resolve_objective_arm
+
+    # One resolution, one key, used everywhere below. ``payload.prompt_key`` is
+    # ``None`` for every pre-existing caller, which yields the adopted prompt and
+    # therefore the byte-identical behaviour they already have.
+    try:
+        objective_prompt_key = resolve_objective_arm(
+            payload.prompt_key, default=contract.objective_prompt_key)
+    except WorkflowHeld as exc:
+        raise _refused('BDJ_OBJECTIVE_ARM_REFUSED', 409, reason=str(exc)) from None
+
     from sitewise.project1 import objective_adapter
     from sitewise.project1.bdj import BDJEngine
     from sitewise.project1.ledger import PostgresAttemptLedger
     from sitewise.project1.objective_proposal import (
         bind_to_business_context, validate_objective_proposal)
     from sitewise.project1.objective_simulation import ObjectiveSimulationDisclosure
-    from sitewise.project1.prompts import PROMPTS
     from sitewise.project1.provider import ModelRunner, TokenHarbor
     from sitewise.project1.runs import (
         attempt_count, ensure_objective_run, latest_receipt)
@@ -558,7 +614,7 @@ def evaluate_objective_proposals(
         run_id = ensure_objective_run(
             ledger_engine, user.user_id, assessment_id, revision,
             source_fingerprint, context_packet_hash,
-            prompt_key=contract.objective_prompt_key,
+            prompt_key=objective_prompt_key,
             # Versioned policy identity: a real cloud execution never shares a
             # run with a historical simulated one, so it can neither reuse the
             # simulator's attempt slot nor redispatch across a policy change.
@@ -588,7 +644,7 @@ def evaluate_objective_proposals(
                 runner=None, run_id=run_id, ledger_engine=ledger_engine,
                 actor_id=user.user_id, reused=True,
                 context_packet_hash=context_packet_hash,
-                prompt_key=contract.objective_prompt_key,
+                prompt_key=objective_prompt_key,
                 model_provider=PROVIDER_NAME),
             checkpoints=[])
 
@@ -617,7 +673,7 @@ def evaluate_objective_proposals(
         user=user, assessment_id=assessment_id, revision=revision,
         confirmation=confirmation, source_fingerprint=source_fingerprint,
         context_packet_hash=context_packet_hash,
-        prompt=PROMPTS[contract.objective_prompt_key],
+        prompt=PROMPTS[objective_prompt_key],
         provider=provider, packet_source=packet_source, session=session)
     ledger = PostgresAttemptLedger(ledger_engine, user.user_id, run_id)
     runner = ModelRunner(provider, ledger, PROMPTS, disclosure=disclosure)
@@ -632,7 +688,11 @@ def evaluate_objective_proposals(
             packet,
             recheck_current=lambda: packet_source(
                 session, user, assessment_id, revision)['source_fingerprint'],
-            context_packet=context_packet, context_id=str(payload.context_id))
+            context_packet=context_packet, context_id=str(payload.context_id),
+            # The arm the route resolved. Passing it explicitly is what makes the
+            # selection real: without it the engine re-derives the adopted prompt
+            # from the packet and the caller's choice is discarded.
+            prompt_key=objective_prompt_key)
     except WorkflowHeld as exc:
         raise _held(exc, _EXECUTION_HELD, 503, 'BDJ_OBJECTIVE_EXECUTION_HELD') from None
 
@@ -640,7 +700,7 @@ def evaluate_objective_proposals(
         runner=runner, run_id=run_id, ledger_engine=ledger_engine,
         actor_id=user.user_id, reused=False,
         context_packet_hash=context_packet_hash,
-        prompt_key=contract.objective_prompt_key,
+        prompt_key=objective_prompt_key,
         model_provider=PROVIDER_NAME)
 
     outcome = result.get('outcome')
@@ -682,6 +742,13 @@ def evaluate_objective_proposals(
     # it returned. ``model_provider`` names the adapter, not the model.
     identity = provider.last_identity or {}
     dispatch_record = provider.last_execution or {}
+    # The receipt may not name the attempt yet (it is written on return). The
+    # reservation number is known before dispatch — it is the count of prior
+    # attempts plus this one — so fall back to it rather than writing half an
+    # identity, which the adapter refuses by design.
+    persisted_attempt_no = execution.get('attempt_no')
+    if persisted_attempt_no is None and execution.get('run_id') is not None:
+        persisted_attempt_no = int(prior_attempts) + 1
     try:
         written = objective_adapter.persist(
             engine, bound, owner_user_id=user.user_id,
@@ -689,10 +756,15 @@ def evaluate_objective_proposals(
             confirmation_revision=revision,
             confirmation_id=str(confirmation['confirmation_id']),
             source_fingerprint=source_fingerprint,
-            prompt_version=PROMPTS[contract.objective_prompt_key].version,
+            prompt_version=PROMPTS[objective_prompt_key].version,
             execution_mode='LIVE', model_provider=PROVIDER_NAME,
             model_requested=dispatch_record.get('model_requested') or provider.model,
-            model_returned=identity.get('returned_model'))
+            model_returned=identity.get('returned_model'),
+            # The ledger identity of *this* execution, taken from the block the
+            # route already reports. Persisted only where the schema holds it;
+            # the adapter says which happened (CP-FINAL-02).
+            run_id=execution.get('run_id'),
+            attempt_no=persisted_attempt_no)
     except WorkflowHeld as exc:
         raise _held(exc, _EXECUTION_HELD, 503, 'PROPOSAL_STORAGE_UNAVAILABLE') from None
     except Exception:
@@ -868,7 +940,7 @@ def _evaluation_envelope(*, packet, payload: ProposalRequest, rows, created,
         entry['review_state'] = row['review_state']
         proposals.append(entry)
     return {
-        'contract_version': 'bdj-objective-proposal/1',
+        'contract_version': 'bdj-objective-proposal/2',
         'assessment_id': str(packet['assessment_id']),
         'confirmation_id': str(confirmation.get('confirmation_id')),
         'confirmation_revision': payload.expected_revision,
@@ -948,7 +1020,8 @@ def list_objective_proposals(
         expected_revision: Annotated[int, Query(ge=0)],
         context_id: UUID, user: Owner, session: SourceDatabase,
         packet_source: PacketSource, context_service: ContextService,
-        engine: AuthorizedProposalStorageEngine, response: Response,
+        engine: AuthorizedProposalStorageEngine,
+        ledger_engine: AuthorizedLedgerEngine, response: Response,
         limit: Annotated[int, Query(ge=1, le=100)] = 50):
     """Read current owner proposals via individually guarded adapter reads."""
     response.headers['Cache-Control'] = 'no-store'
@@ -985,6 +1058,13 @@ def list_objective_proposals(
         'context_id': str(context_id),
         'proposal_count': len(current),
         'proposals': current,
+        # Whether the governed pass can still be performed for *this* exact
+        # source revision and context packet. The client renders the generate
+        # control from this and nothing else, so the button can never be offered
+        # for a pass the route would refuse, nor hidden for one it would perform.
+        'generation': _generation_state(
+            ledger_engine, user, assessment_id,
+            revision=expected_revision, packet=packet),
         'finding_authority': 'CANDIDATE_ONLY',
         'status_contract': 'UNRECONCILED_PROPOSAL',
         'qj_execution': False,
@@ -1203,7 +1283,7 @@ def _decision_envelope(engine, proposal_id, user, assessment_id,
 
     confirmation = packet['confirmation']
     return {
-        'contract_version': 'bdj-objective-proposal/1',
+        'contract_version': 'bdj-objective-proposal/2',
         'proposal_id': str(proposal_id),
         'assessment_id': str(assessment_id),
         'confirmation_id': str(confirmation.get('confirmation_id')),

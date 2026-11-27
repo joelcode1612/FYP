@@ -43,17 +43,36 @@ CONFLICT_CODES = frozenset({
     'QG_CANDIDATE_REVISION_STALE',
 })
 
+#: DD-171, owner decision 2026-11-26. The intended option cannot be cleared
+#: while the question remains approved. This is a conflict, not a server
+#: failure: the request is well-formed, the caller is the owner, and the record
+#: simply does not permit it. It used to fall through to 503, which told the
+#: caller "try again later" about a state that will never change on its own —
+#: the owner has to record a new decision first.
+LOCKED_BY_APPROVAL_CODES = frozenset({
+    'QG_OWNER_INTENTION_LOCKED_BY_APPROVAL',
+})
+
 #: How an additional objective is spelled as an objective identity. A registry
 #: objective keeps its ``O``-code; an additional one is identified by the
 #: proposal the owner approved, so it never has to be forced into a mandatory
 #: code (DD-036). Must match ``qg_generation_eligibility.objective_identity``.
 _PROPOSAL_PREFIX = 'proposal:'
 
-#: Refusal codes that mean "the request itself is not acceptable".
+#: Refusal codes that mean "the request itself is not acceptable". The
+#: owner-intention codes belong here: each names a defect in what was submitted
+#: (no intention with an approval, the wrong number of values, a repeat, an
+#: option that contradicts another), and every one of them is something the
+#: caller can fix without reloading the record.
 INVALID_CODES = frozenset({
     'QG_CANDIDATE_REVIEW_DECISION_INVALID',
     'QG_CANDIDATE_REVIEW_RATIONALE_TOO_LONG',
     'QG_CANDIDATE_OPTION_NOT_AVAILABLE',
+    'QG_OWNER_INTENTION_REQUIRED',
+    'QG_OWNER_INTENTION_CARDINALITY',
+    'QG_OWNER_INTENTION_DUPLICATE',
+    'QG_OWNER_INTENTION_EXCLUSIVE_VIOLATED',
+    'EXPECTED_ANSWER_NOT_APPLICABLE',
 })
 
 
@@ -71,6 +90,11 @@ def _raise_for(exc: WorkflowHeld) -> None:
         raise failure(409, code,
                       'The candidate was raised against an assessment revision '
                       'that is no longer current. Reload before deciding.')
+    if code in LOCKED_BY_APPROVAL_CODES:
+        raise failure(409, code,
+                      'This question is approved, so its intended option cannot '
+                      'be cleared. Record a new decision first; approval is '
+                      'never withdrawn on your behalf.')
     if code in INVALID_CODES:
         raise failure(422, code, 'The review request is not acceptable.')
     raise failure(503, code, 'The candidate review could not be completed.')
@@ -81,12 +105,40 @@ class ReviewRequest(BaseModel):
     decision: Literal['APPROVE_FOR_REVIEW', 'REJECT', 'REQUEST_REVISION']
     rationale: str = Field(default='', max_length=1000)
     expected_revision: int | None = Field(default=None, ge=0)
+    #: The owner's intended option(s), written by the same statement as the
+    #: decision. ``record_review`` has always required an approval to carry one,
+    #: but no route passed it, so every approval through this surface was
+    #: refused with ``QG_OWNER_INTENTION_REQUIRED`` and there was no way to
+    #: supply the missing half. The service refuses a *decision* that contradicts
+    #: its intention, so both spellings are accepted here and validated against
+    #: the candidate's own option set server-side.
+    expected_option_codes: list[str] | None = Field(default=None, max_length=64)
+    expected_option_code: str | None = Field(default=None, max_length=100)
 
 
 class ExpectedAnswerRequest(BaseModel):
     model_config = ConfigDict(extra='forbid')
     option_code: str | None = Field(default=None, max_length=100)
+    #: The set form. A multi-select question cannot be answered with one code,
+    #: so an intention for one could not be expressed through this route at all
+    #: even though the storage and the service both support it.
+    option_codes: list[str] | None = Field(default=None, max_length=64)
     expected_revision: int | None = Field(default=None, ge=0)
+
+
+def _selection(option_codes, option_code) -> list[str] | None:
+    """One selection from the two spellings, or a 422 if they disagree.
+
+    Both are accepted because two existing callers speak different ones, but a
+    request that says two different things is not resolvable: silently letting
+    one win would record an intention the caller did not necessarily state.
+    """
+    if option_codes is not None:
+        if option_code is not None and [option_code] != list(option_codes):
+            raise failure(422, 'QG_OWNER_INTENTION_CARDINALITY',
+                          'The review request names two different selections.')
+        return list(option_codes)
+    return None if option_code is None else [option_code]
 
 
 def _engine(session: M2Session):
@@ -205,12 +257,14 @@ def review_qg_candidate(
         user: Owner, session: M2Session, response: Response):
     """Record the owner's judgement. Approving here is **not** fielding."""
     response.headers.update(NO_STORE)
+    codes = _selection(payload.expected_option_codes, payload.expected_option_code)
     try:
         return readback.record_review(
             _engine(session), actor_id=user.user_id, assessment_id=assessment_id,
             candidate_id=candidate_id, decision=payload.decision,
             rationale=payload.rationale,
-            expected_revision=payload.expected_revision)
+            expected_revision=payload.expected_revision,
+            expected_option_codes=codes)
     except WorkflowHeld as exc:
         _raise_for(exc)
     except SQLAlchemyError as exc:
@@ -228,10 +282,16 @@ def set_expected_answer(
         user: Owner, session: M2Session, response: Response):
     """Record the entrepreneur's expectation. Never a respondent answer."""
     response.headers.update(NO_STORE)
+    codes = _selection(payload.option_codes, payload.option_code)
     try:
         return readback.set_expected_answer(
             _engine(session), actor_id=user.user_id, assessment_id=assessment_id,
-            candidate_id=candidate_id, option_code=payload.option_code,
+            candidate_id=candidate_id,
+            # The set is forwarded, not the singular: the service normalises the
+            # two spellings in one place, and passing the set means a multi-select
+            # intention is representable through this route instead of being
+            # truncated to its first code. ``None`` still clears.
+            option_codes=codes,
             expected_revision=payload.expected_revision)
     except WorkflowHeld as exc:
         _raise_for(exc)

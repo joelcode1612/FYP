@@ -59,6 +59,13 @@ RESULT_SCHEMA_VERSION = 'project1-bdj-result/1'
 DISCOVERY_RESULT_SCHEMA_VERSION = 'project1-bdj-result/2-candidate'
 DEFAULT_RAW_RETENTION_DAYS = 90
 
+#: The values ``project1_ai.bdj_results.execution_mode`` admits
+#: (``ck_bdj_execution_mode``). Mirrored here so a bad value is a named refusal
+#: before the INSERT rather than an ``IntegrityError`` reported as a generic
+#: storage failure (DD-175).
+EXECUTION_MODES = ('DETERMINISTIC_RULE_EVALUATION', 'MOCKED_PROVIDER_TEST',
+                   'LIVE_PROVIDER_EXECUTION')
+
 # Versioned envelope inside the existing jsonb column. The marker is a key no
 # legacy payload has, so its presence -- not a guess about shape -- is what
 # selects the decrypt path. A row written before this change is plaintext and
@@ -384,6 +391,7 @@ class BdjResultStore:
     def persist(self, attempt_no: int, review_result: dict | None,
                 execution_outcome: str, *, output_digest: str | None,
                 ruleset_version: str, prompt_version: str, model_requested: str,
+                execution_mode: str, provider_dispatched: bool,
                 model_returned: str | None = None, review_reason: str | None = None,
                 result_schema_version: str = RESULT_SCHEMA_VERSION,
                 source_fingerprint: str | None = None,
@@ -392,12 +400,36 @@ class BdjResultStore:
                 retention_days: int = DEFAULT_RAW_RETENTION_DAYS) -> UUID:
         """Write one result and its children atomically; return its id.
 
+        ``execution_mode`` and ``provider_dispatched`` are **required** and have
+        no default (DD-175). They were omitted until 2026-11-26, and because
+        ``bdj_results.execution_mode`` is ``NOT NULL`` every call raised
+        ``IntegrityError`` that ``except SQLAlchemyError`` reported as
+        ``WORKFLOW_STORAGE_UNAVAILABLE`` — measured at HEAD ``dc76101b``: 19 of
+        the 30 round-trip cases failed, 8 passed, 3 skipped (evidence:
+        ``dd175_before_head.json``). A default was deliberately not chosen: the only values
+        the column admits are ``DETERMINISTIC_RULE_EVALUATION``,
+        ``MOCKED_PROVIDER_TEST`` and ``LIVE_PROVIDER_EXECUTION``, and no
+        derivation from ``model_returned`` or from the outcome distinguishes
+        "never dispatched" from "dispatched, outcome unknown". Guessing would
+        write a false provenance statement into the column the Stage 3 gate and
+        the audit trail read, so the authoritative call site states it instead.
+
+        The pair is checked against the deployed constraint here rather than
+        left to PostgreSQL, so a mismatch is a named refusal instead of a
+        generic storage failure.
+
         Provenance that the run row owns (assessment id/revision/fingerprint) is
         read from that row inside the transaction rather than trusted from the
         caller. The version/model labels are not in the run row and are supplied
         explicitly. ``classify()`` is called first and its refusal propagates
         before a connection is opened.
         """
+        if execution_mode not in EXECUTION_MODES:
+            raise WorkflowHeld('RESULT_EXECUTION_MODE_INVALID')
+        # Mirrors ``ck_bdj_execution_dispatch``:
+        # (execution_mode = 'LIVE_PROVIDER_EXECUTION') = provider_dispatched.
+        if (execution_mode == 'LIVE_PROVIDER_EXECUTION') != bool(provider_dispatched):
+            raise WorkflowHeld('RESULT_EXECUTION_PROVENANCE_INCONSISTENT')
         if (isinstance(attempt_no, bool) or not isinstance(attempt_no, int)
                 or not 1 <= attempt_no <= 6):
             raise WorkflowHeld('RESULT_ATTEMPT_INVALID')
@@ -482,12 +514,14 @@ class BdjResultStore:
                     ' assessment_revision, source_fingerprint, ruleset_version,'
                     ' prompt_version, model_requested, model_returned, execution_outcome,'
                     ' output_digest, result_schema_version, result_payload, review_outcome,'
-                    ' finding_authority, finding_count, review_reason) VALUES ('
+                    ' finding_authority, finding_count, review_reason,'
+                    ' execution_mode, provider_dispatched) VALUES ('
                     ' :result_id, :run_id, :actor, :attempt_no, :assessment_id,'
                     ' :assessment_revision, :source_fingerprint, :ruleset_version,'
                     ' :prompt_version, :model_requested, :model_returned, :execution_outcome,'
                     ' :output_digest, :result_schema_version, CAST(:result_payload AS jsonb),'
-                    ' :review_outcome, :finding_authority, :finding_count, :review_reason)'
+                    ' :review_outcome, :finding_authority, :finding_count, :review_reason,'
+                    ' :execution_mode, :provider_dispatched)'
                     ' ON CONFLICT (result_id) DO NOTHING RETURNING result_id'), {
                         'result_id': result_id, 'run_id': self.run_id,
                         'actor': self.actor_id, 'attempt_no': attempt_no,
@@ -498,6 +532,8 @@ class BdjResultStore:
                         'prompt_version': prompt_version,
                         'model_requested': model_requested,
                         'model_returned': model_returned,
+                        'execution_mode': execution_mode,
+                        'provider_dispatched': bool(provider_dispatched),
                         'execution_outcome': row['execution_outcome'],
                         'output_digest': row['output_digest'],
                         'result_schema_version': result_schema_version,

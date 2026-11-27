@@ -16,8 +16,36 @@ from pydantic import Field
 
 from sitewise.project1.contracts import StrictModel, WorkflowHeld, digest
 
-CONTRACT_VERSION = 'bdj-objective-proposal/1'
-MAX_RECOMMENDATIONS = 5
+CONTRACT_VERSION = 'bdj-objective-proposal/2'
+
+#: The previous contract. Still accepted, because a payload that was valid when
+#: it was produced does not become invalid because a later revision raised a
+#: ceiling. Historical rows keep their own label.
+LEGACY_CONTRACT_VERSION = 'bdj-objective-proposal/1'
+
+ACCEPTED_CONTRACT_VERSIONS = (LEGACY_CONTRACT_VERSION, CONTRACT_VERSION)
+
+#: How many recommendations one proposal may carry (owner decision, 2026-11-26).
+#:
+#: Raised 5 -> 6. This is a **capacity** limit, not a shape: the field set, the
+#: two statuses and the validation rules are unchanged. That distinction is why
+#: the ceiling can move without the model having to relabel its output -- the
+#: version identifies the payload's shape, and the item ceiling is policy that
+#: was always enforced by the schema rather than by the label.
+#:
+#: No historical record changes meaning: a ``/1`` payload could never have
+#: carried six items, because the schema it was validated against forbade it.
+MAX_RECOMMENDATIONS = 6
+
+#: What ``/1`` permitted. Kept as a named constant so the difference between the
+#: two revisions is a fact in the code rather than a comment.
+HISTORICAL_MAX_RECOMMENDATIONS = 5
+
+#: There is deliberately **no minimum**. The owner's target of four to six
+#: suitable recommendations is a research goal, not a validation rule: a review
+#: that finds fewer genuine research needs must be able to say so rather than
+#: invent proposals to reach a quota. ``min_length`` is therefore unset on
+#: ``recommendations`` and a test pins that.
 
 # Status -> the only problem_type it may carry.
 PROBLEM_TYPE_FOR_STATUS = {
@@ -107,7 +135,10 @@ class Recommendation(StrictModel):
 
 
 class ObjectiveProposal(StrictModel):
-    contract_version: Literal['bdj-objective-proposal/1']
+    contract_version: Literal['bdj-objective-proposal/1',
+                              'bdj-objective-proposal/2']
+    #: Capacity only: at most MAX_RECOMMENDATIONS (6), and no minimum. A review
+    #: with one genuine research need, or none, is a valid outcome.
     recommendations: list[Recommendation] = Field(max_length=MAX_RECOMMENDATIONS)
 
 

@@ -70,8 +70,30 @@ const REQUIRED_KEYS = [
   'WEB_BASE_URL',
 ];
 
-//: The USB/loopback development origin the launchers validate against.
-const DEV_ORIGIN = 'http://127.0.0.1:8090';
+//: The USB/loopback development origin written into a NEWLY created asset.
+//:
+//: The launchers export SITEWISE_DEV_ORIGIN with the port they are about to
+//: bind, so the first write is already correct. Without the override this file
+//: would create an asset pointing at 8090 while the server listened on 8093,
+//: and the launchers would have to rewrite it immediately afterwards.
+//:
+//: The literal is only the fallback for a hand-run. It cannot be the authority:
+//: a COMPLETE asset is never rewritten here (a per-machine override is the
+//: whole point of a git-ignored file), so the alignment lives in the launchers,
+//: which know the real port.
+const DEV_ORIGIN_DEFAULT = 'http://127.0.0.1:8090';
+
+/** The origin to write, honouring SITEWISE_DEV_ORIGIN when it is valid. */
+function resolveDevOrigin() {
+  const override = (process.env.SITEWISE_DEV_ORIGIN || '').trim();
+  if (!override) return DEV_ORIGIN_DEFAULT;
+  if (!/^https?:\/\/[^/\s]+:\d+$/i.test(override)) {
+    throw new Error(
+      `SITEWISE_DEV_ORIGIN must be an absolute http(s) URL with an explicit port (got "${override}")`,
+    );
+  }
+  return override;
+}
 
 const checkOnly = process.argv.includes('--check');
 
@@ -155,6 +177,10 @@ function serialise(config) {
 }
 
 function main() {
+  // Resolved inside main so an invalid override fails through the exit-code
+  // handler at the bottom of this file instead of as an uncaught module error.
+  const DEV_ORIGIN = resolveDevOrigin();
+
   const existingRaw = (() => {
     try {
       return fs.readFileSync(targetPath, 'utf8');

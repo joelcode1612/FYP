@@ -1,0 +1,1050 @@
+/* ============================================================================
+   Stage 3 — research objectives
+   ----------------------------------------------------------------------------
+   The review surface for the six fixed objectives and the additional ones the
+   governed BDJ pass proposed.
+
+   Layout is a two-column shell: a reading column and a sticky rail that carries
+   the scope summary. The rail is what makes the page answer "how much is left"
+   without scrolling, so it must stay in view — `position: sticky` here, and it
+   collapses to a normal block the moment the grid drops to one column.
+
+   Everything below is built from the brand tokens in styles.css rather than
+   literal colours, so a palette change moves this page with the rest of the
+   product. Only two values are local: the tile wash and the slot-bar track,
+   which are tints of `--neutral-wash` with no token of their own.
+   ========================================================================== */
+
+.s3o {
+  --s3o-tile: #f4f7fb;
+  --s3o-tile-line: #e4eaf3;
+  --s3o-track: #e9eef6;
+  --s3o-radius: 14px;
+
+  display: block;
+  min-width: 0;
+}
+
+/* ---------- header ---------- */
+.s3o-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin: 0 0 16px;
+}
+
+.s3o-head__text {
+  min-width: 0;
+}
+
+.s3o-title {
+  margin: 0;
+  font-size: 1.3rem;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.s3o-sub {
+  margin: 6px 0 0;
+  max-width: 72ch;
+  font-size: 0.84rem;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.s3o-head__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ---------- shell ---------- */
+.s3o-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 18px;
+  align-items: start;
+}
+
+.s3o-main {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.s3o-rail {
+  position: sticky;
+  top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* ---------- section cards ---------- */
+.s3o-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--s3o-radius);
+  padding: 16px;
+  box-shadow:
+    0 1px 2px rgba(16, 24, 40, 0.04),
+    0 10px 26px -20px rgba(16, 24, 40, 0.28);
+  min-width: 0;
+}
+
+.s3o-section--history {
+  background: var(--alt-surface);
+}
+
+.s3o-section__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.s3o-section__text {
+  min-width: 0;
+}
+
+.s3o-kicker {
+  margin: 0 0 3px;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--overline-text);
+}
+
+.s3o-section__title {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.3;
+  color: var(--ink);
+}
+
+.s3o-section__help {
+  margin: 5px 0 0;
+  max-width: 68ch;
+  font-size: 0.78rem;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+/* ---------- fixed objective grid ---------- */
+.s3o-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.s3o-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 11px;
+  background: var(--s3o-tile);
+  border: 1px solid var(--s3o-tile-line);
+  border-radius: 10px;
+  min-width: 0;
+}
+
+.s3o-tile__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.s3o-tile__id {
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  color: var(--overline-text);
+}
+
+.s3o-tile__info {
+  display: inline-flex;
+  align-items: center;
+  color: var(--overline);
+  font-size: 15px;
+  line-height: 1;
+}
+
+.s3o-tile__label {
+  font-size: 0.86rem;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--ink);
+}
+
+.s3o-tile__meta {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+
+.s3o-tile__desc {
+  margin: 2px 0 0;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+/* ---------- footnotes ---------- */
+.s3o-foot {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 12px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.s3o-foot .ms {
+  color: var(--success);
+  font-size: 15px;
+}
+
+/* ---------- proposal cards ---------- */
+.s3o-prop {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 13px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  min-width: 0;
+}
+
+.s3o-section--history .s3o-prop {
+  background: #fff;
+}
+
+.s3o-prop + .s3o-prop {
+  margin-top: 10px;
+}
+
+.s3o-prop__top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.s3o-prop__id {
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--overline-text);
+}
+
+.s3o-prop__title {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.35;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.s3o-prop__body {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+/* A disclosure, so the provenance and admission detail is available without
+   being in the reader's way on every card. */
+.s3o-details {
+  border-top: 1px dashed var(--border);
+  padding-top: 8px;
+  margin-top: 2px;
+}
+
+.s3o-details > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--action);
+  list-style: none;
+}
+
+.s3o-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.s3o-details > summary::before {
+  content: "chevron_right";
+  font-family: "Material Symbols Outlined", sans-serif;
+  font-size: 16px;
+  line-height: 1;
+  transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.s3o-details[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.s3o-details > summary:focus-visible {
+  outline: 2px solid var(--action);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.s3o-details__body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+}
+
+.s3o-prop__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+  margin-top: 2px;
+}
+
+.s3o-prop__actions .btn {
+  min-width: 0;
+  /* The card footer is a secondary surface: the page's default 12px/19px pill
+     is a page-level CTA and reads oversized here, so the footer uses the
+     source's `.btn.sm` scale instead of a new size of its own. */
+  padding: 9px 15px;
+  font-size: 12px;
+}
+
+/* ---------- rail ---------- */
+.s3o-rail__label {
+  margin: 0 0 6px;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--overline-text);
+}
+
+.s3o-rail__card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 13px 14px;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  min-width: 0;
+}
+
+.s3o-rail__title {
+  margin: 0 0 2px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.s3o-rail__hint {
+  margin: 0 0 8px;
+  font-size: 0.7rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.s3o-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 0;
+  font-size: 0.77rem;
+  line-height: 1.4;
+}
+
+.s3o-row__label {
+  color: var(--muted);
+  min-width: 0;
+}
+
+.s3o-row__value {
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.s3o-row--muted .s3o-row__value {
+  font-weight: 600;
+  color: var(--muted);
+}
+
+/* proposal-slot meter */
+.s3o-meter {
+  margin: 10px 0 0;
+}
+
+.s3o-meter__track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--s3o-track);
+  overflow: hidden;
+}
+
+.s3o-meter__fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--action);
+  transition: width 240ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.s3o-meter__legend {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 5px;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.s3o-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--border);
+}
+
+.s3o-total__label {
+  font-size: 0.77rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.s3o-total__value {
+  font-size: 1.45rem;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--action);
+  font-variant-numeric: tabular-nums;
+}
+
+/* collapsible business-context card */
+.s3o-context {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+}
+
+.s3o-context > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 11px 14px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--ink);
+  list-style: none;
+}
+
+.s3o-context > summary::-webkit-details-marker {
+  display: none;
+}
+
+.s3o-context > summary .ms {
+  font-size: 18px;
+  color: var(--muted);
+  transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.s3o-context[open] > summary .ms {
+  transform: rotate(90deg);
+}
+
+.s3o-context > summary:focus-visible {
+  outline: 2px solid var(--action);
+  outline-offset: -2px;
+  border-radius: 12px;
+}
+
+.s3o-context__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 14px 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+/* status checklist */
+.s3o-check {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 0;
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.s3o-check + .s3o-check {
+  border-top: 1px solid var(--border);
+}
+
+.s3o-check__name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+}
+
+.s3o-check__name .ms {
+  font-size: 15px;
+  flex: none;
+}
+
+.s3o-check__value {
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--ink);
+}
+
+.s3o-check--ok .s3o-check__name .ms,
+.s3o-check--ok .s3o-check__value {
+  color: var(--success-text);
+}
+
+.s3o-check--wait .s3o-check__name .ms,
+.s3o-check--wait .s3o-check__value {
+  color: var(--warning);
+}
+
+.s3o-check--none .s3o-check__value {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.s3o-note {
+  margin: 9px 0 0;
+  font-size: 0.68rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* ---------- inline states ---------- */
+.s3o-empty {
+  padding: 14px;
+  border: 1px dashed var(--border-strong, var(--border));
+  border-radius: 12px;
+  font-size: 0.8rem;
+  line-height: 1.55;
+  color: var(--muted);
+  background: var(--neutral-wash);
+}
+
+.s3o-inline-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 10px 0 0;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.s3o-inline-note .ms {
+  font-size: 15px;
+  color: var(--warning);
+}
+
+/* ---------- responsive ---------- */
+@media (max-width: 1180px) {
+  .s3o-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .s3o-rail {
+    position: static;
+  }
+}
+
+@media (max-width: 900px) {
+  .s3o-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .s3o-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .s3o-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .s3o-section {
+    padding: 13px;
+  }
+
+  .s3o-prop__actions {
+    justify-content: stretch;
+  }
+
+  .s3o-prop__actions .btn {
+    flex: 1 1 auto;
+  }
+}
+
+/* Motion is decorative here — a disclosure chevron and a meter fill. Remove it
+   for readers who asked the platform for less. */
+@media (prefers-reduced-motion: reduce) {
+  .s3o-details > summary::before,
+  .s3o-context > summary .ms,
+  .s3o-meter__fill {
+    transition: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Compact vertical execution rail (CP-PROG-05)
+
+   Replaces the horizontal five-step strip. Four milestones only: the ledger
+   cannot prove "Dispatched", so the rail does not draw it. The only motion is
+   an indeterminate pulse on the step whose evidence has not arrived; there is
+   no percentage anywhere in this component.
+   --------------------------------------------------------------------------- */
+.aip {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 16px 18px;
+  color: #0f2744;
+}
+
+.aip__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.aip__title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #0f2744;
+  letter-spacing: 0.01em;
+}
+
+.aip__badge--stale {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.aip__rail {
+  display: flex;
+  flex-direction: column;
+}
+
+.aip__row {
+  display: flex;
+  gap: 12px;
+  position: relative;
+  padding-bottom: 6px;
+}
+
+/* The connector: a thin rule joining one dot to the next. Drawn behind the
+   dot so a completed step reads as a continuous path. */
+.aip__row::before {
+  content: "";
+  position: absolute;
+  left: 11px;
+  top: 22px;
+  bottom: -4px;
+  width: 2px;
+  background: #e2e8f0;
+}
+
+.aip__row--last::before {
+  display: none;
+}
+
+.aip__row--completed::before {
+  background: #86efac;
+}
+
+.aip__marker {
+  flex: 0 0 auto;
+  width: 24px;
+  display: flex;
+  justify-content: center;
+  padding-top: 2px;
+}
+
+.aip__dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  line-height: 1;
+  border: 2px solid #cbd5e1;
+  background: #ffffff;
+  color: #94a3b8;
+  z-index: 1;
+}
+
+.aip__dot--completed {
+  border-color: #15803d;
+  background: #15803d;
+  color: #ffffff;
+}
+
+.aip__dot--active {
+  border-color: #1d4ed8;
+  color: #1d4ed8;
+  background: #eff6ff;
+  animation: aip-pulse 1.4s ease-in-out infinite;
+}
+
+.aip__dot--failed {
+  border-color: #b45309;
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.aip__dot--unknown {
+  border-color: #b45309;
+  color: #b45309;
+  background: #ffffff;
+}
+
+.aip__content {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.aip__toggle {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 2px 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+
+.aip__toggle:focus-visible {
+  outline: 2px solid #1d4ed8;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.aip__name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #0f2744;
+}
+
+.aip__row--pending .aip__name {
+  color: #64748b;
+  font-weight: 500;
+}
+
+.aip__status {
+  font-size: 0.76rem;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.aip__row--completed .aip__status {
+  color: #15803d;
+}
+
+.aip__row--active .aip__status {
+  color: #1d4ed8;
+}
+
+.aip__row--failed .aip__status,
+.aip__row--unknown .aip__status {
+  color: #b45309;
+}
+
+.aip__detail {
+  margin: 4px 0 8px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border-left: 3px solid #cbd5e1;
+  border-radius: 0 8px 8px 0;
+}
+
+.aip__detail p {
+  margin: 0 0 6px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: #334155;
+}
+
+.aip__detail p:last-child {
+  margin-bottom: 0;
+}
+
+.aip__fact {
+  font-variant-numeric: tabular-nums;
+  color: #475569;
+}
+
+.aip__blocker {
+  margin: 8px 0 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.aip__note {
+  margin: 8px 0 0;
+  font-size: 0.76rem;
+  color: #64748b;
+}
+
+.aip__unavailable p {
+  margin: 0 0 10px;
+  font-size: 0.85rem;
+  color: #475569;
+}
+
+.aip__refresh {
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #1d4ed8;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.aip__refresh:focus-visible {
+  outline: 2px solid #1d4ed8;
+  outline-offset: 2px;
+}
+
+/* ---------- not asked yet ----------
+   A skeleton, not a verdict. The card has no reading, so it says nothing about
+   the ledger; "could not be read" is reserved for a read that was attempted. */
+.aip__pending-line {
+  margin: 0 0 10px;
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.aip__pending-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+}
+
+.aip__pending-dot {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.aip__pending-bar {
+  height: 10px;
+  flex: 1 1 auto;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #eef2f7 0%, #e2e8f0 50%, #eef2f7 100%);
+  background-size: 200% 100%;
+  animation: aip-shimmer 1.6s ease-in-out infinite;
+}
+
+@keyframes aip-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: 0 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aip__pending-bar { animation: none; }
+}
+
+/* ---------- More details ----------
+   Collapsed by default. A native details/summary so it is keyboard-operable
+   without a custom handler and announces its own expanded state. */
+.aip__more {
+  margin-top: 12px;
+  border-top: 1px solid #e8edf6;
+  padding-top: 10px;
+}
+
+.aip__more-summary {
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #475569;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.aip__more-summary::-webkit-details-marker {
+  display: none;
+}
+
+.aip__more-summary::before {
+  content: 'chevron_right';
+  font-family: 'Material Symbols Outlined';
+  font-size: 16px;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+
+.aip__more[open] > .aip__more-summary::before {
+  transform: rotate(90deg);
+}
+
+.aip__more-summary:focus-visible {
+  outline: 2px solid #1d4ed8;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.aip__facts {
+  display: grid;
+  grid-template-columns: minmax(96px, auto) 1fr;
+  gap: 4px 12px;
+  margin: 10px 0 0;
+}
+
+.aip__fact-label {
+  font-size: 0.74rem;
+  color: #64748b;
+}
+
+.aip__fact-value {
+  margin: 0;
+  font-size: 0.74rem;
+  color: #334155;
+  word-break: break-word;
+}
+
+.aip__more-note {
+  margin: 10px 0 0;
+  font-size: 0.72rem;
+  color: #94a3b8;
+}
+
+/* Indeterminate only. No width is ever set from elapsed time: the system does
+   not know how much work remains, so it must not imply a fraction. */
+.aip__indeterminate {
+  position: relative;
+  height: 4px;
+  margin-top: 10px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+.aip__indeterminate::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 35%;
+  border-radius: 999px;
+  background: #1d4ed8;
+  animation: aip-slide 1.6s ease-in-out infinite;
+}
+
+@keyframes aip-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(29, 78, 216, 0.35); }
+  50% { box-shadow: 0 0 0 5px rgba(29, 78, 216, 0); }
+}
+
+@keyframes aip-slide {
+  0% { left: -35%; }
+  100% { left: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aip__dot--active,
+  .aip__indeterminate::after {
+    animation: none;
+  }
+  .aip__indeterminate::after {
+    left: 0;
+    width: 100%;
+    opacity: 0.5;
+  }
+}
+
+/* Rejected-objective history is a `details` now (CP-FINAL-05): collapsed by
+   default, keyboard operable, with expanded-state semantics from the platform.
+   The default disclosure triangle is replaced by the existing section head so
+   the layout is unchanged when open. */
+.s3o-section--history > summary.s3o-section__head {
+  cursor: pointer;
+  list-style: none;
+  display: block;
+}
+
+.s3o-section--history > summary.s3o-section__head::-webkit-details-marker {
+  display: none;
+}
+
+.s3o-section--history > summary.s3o-section__head:focus-visible {
+  outline: 2px solid #1d4ed8;
+  outline-offset: 2px;
+  border-radius: 8px;
+}

@@ -509,6 +509,48 @@ def is_running() -> bool:
     return _worker._thread is not None and _worker._thread.is_alive()
 
 
+def queue_available() -> bool:
+    """Whether the queue table this worker drains actually exists.
+
+    ``to_regclass`` returns NULL rather than raising for an absent relation, so
+    this is a single cheap catalog lookup and never an error path. A missing
+    ``fyp`` schema is covered by the same answer.
+    """
+    from sqlalchemy import text
+
+    try:
+        with engine.connect() as conn:
+            return bool(
+                conn.execute(
+                    text("SELECT to_regclass('fyp.panorama_jobs') IS NOT NULL")
+                ).scalar()
+            )
+    except Exception:  # noqa: BLE001 - an unreachable database is "not available"
+        logger.warning("Panorama queue availability could not be determined", exc_info=True)
+        return False
+
+
 def startup() -> str:
+    """Start the loop only when there is a queue for it to drain.
+
+    A loop that can only fail is worse than no loop. Before this guard the
+    worker started unconditionally, so on a database without
+    ``fyp.panorama_jobs`` every tick raised inside ``claim_next_job``, the
+    handler logged a full traceback, and the loop slept and did it again —
+    roughly 12 errors a minute, indefinitely, while holding a pooled connection
+    open each tick. It also pinned ``/api/v1/health`` at ``degraded`` for a
+    subsystem PROJECT1 does not use.
+
+    Declining to start is the honest state: capture-360 stitching is
+    unavailable in this database, and it becomes available by creating the
+    table, not by restarting the worker.
+    """
+    if not queue_available():
+        logger.info(
+            "Panorama worker not started: fyp.panorama_jobs is absent. "
+            "Capture-360 stitching is unavailable in this database; the worker "
+            "starts on the next boot once the table exists."
+        )
+        return "not started: fyp.panorama_jobs is absent"
     _worker.start()
     return "durable stitching worker polling every %.0fs" % POLL_SECONDS

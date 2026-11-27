@@ -39,7 +39,16 @@ def test_current_source_refuses_legacy_answer_keys():
 def test_information_gap_proposal_reuses_engine_without_adoption():
     rules = proposed_rules()
     assert rules.ADOPTED is False
-    assert rules.RULE_VERSION not in RULE_MODULES
+    # This used to assert ``rules.RULE_VERSION not in RULE_MODULES``, i.e. "the
+    # version string is not adopted". That premise stopped being true on
+    # 2026-11-21, when ``BDJ-M2V1-IG-0.1-PROP`` was adopted — but as a *different
+    # file* (``sitewise.project1.rules.bdj_m2v1_ig_proposal``). Two artefacts now
+    # share one version string, so the version alone no longer identifies which
+    # one the registry resolves. The claim this test needs is about the artefact:
+    # the CP13 proposal module is not the registered implementation.
+    assert RULE_MODULES.get(rules.RULE_VERSION) != rules.__name__, (
+        'the registry resolves this version to the CP13 proposal artefact '
+        'itself; it must resolve to the adopted module of the same name')
     source = packet()
     result = BDJEngine(rules).review(source, recheck_current=lambda: source['source_fingerprint'])
     assert result['outcome'] == 'reviewed'

@@ -1,0 +1,217 @@
+[
+  {
+    "method": "---",
+    "url": "PHASE: stage=ai_explanation",
+    "status": "",
+    "mime": ""
+  },
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:8093/api/v1/auth/me",
+    "type": "Fetch",
+    "status": 200,
+    "mime": "application/json"
+  },
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:8093/api/v1/auth/me",
+    "type": "Fetch",
+    "status": 200,
+    "mime": "application/json"
+  },
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:8093/api/v1/saved-properties/me",
+    "type": "Fetch",
+    "status": 200,
+    "mime": "application/json"
+  },
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:8093/api/v1/assessments/by-property/EP-02638",
+    "type": "Fetch",
+    "status": 200,
+    "mime": "application/json"
+  },
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:8093/api/v1/m2/assessments/by-marketplace/9af8000e-7eef-4597-a0c8-d7f88ad1381f",
+    "type": "Fetch",
+    "status": 200,
+    "mime": "application/json"
+  },
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:8093/api/v1/m2/assessments/0f958d15-c629-4df4-90b1-ba444e042612",
+    "type": "Fetch",
+    "status": 200,
+    "mime": "application/json"
+  },
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:8093/api/v1/m2/assessments/0f958d15-c629-4df4-90b1-ba444e042612/confirmation-current",
+    "type": "Fetch",
+    "status": 200,
+    "mime": "application/json"
+  },
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:8093/api/v1/assessments/9af8000e-7eef-4597-a0c8-d7f88ad1381f/workflow-readiness",
+    "type": "Fetch",
+    "status": 200,
+    "mime": "application/json"
+  },
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:8093/api/v1/m2/assessments/0f958d15-c629-4df4-90b1-ba444e042612/confirmed-review?confirmation_id=d5a72e84-c653-4b16-b225-3de857009b45&expected_revision=24",
+    "type": "Fetch",
+    "status": 200,
+    "mime": "application/json"
+  },
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:8093/api/v1/m2/confirmations/d5a72e84-c653-4b16-b225-3de857009b45/research-workspace?expected_revision=24",
+    "type": "Fetch",
+    "status": 200,
+    "mime": "application/json"
+  },
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:8093/api/v1/m2/assessments/0f958d15-c629-4df4-90b1-ba444e042612/bdj/current?confirmation_id=d5a72e84-c653-4b16-b225-3de857009b45&expected_revision=24",
+    "type": "Fetch",
+    "status": 200,
+    "mime": "application/json"
+  },
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:8093/api/v1/m2/assessments/0f958d15-c629-4df4-90b1-ba444e042612/confirmation-current",
+    "type": "Fetch",
+    "status": 200,
+    "mime": "application/json"
+  },
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:8093/api/v1/m2/assessments/by-marketplace/9af8000e-7eef-4597-a0c8-d7f88ad1381f",
+    "type": "Fetch",
+    "status": 200,
+    "mime": "application/json"
+  },
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:8093/api/v1/m2/assessments/0f958d15-c629-4df4-90b1-ba444e042612/confirmations/d5a72e84-c653-4b16-b225-3de857009b45/business-context-status",
+    "type": "Fetch",
+    "status": 200,
+    "mime": "application/json"
+  },
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:8093/api/v1/m2/assessments/0f958d15-c629-4df4-90b1-ba444e042612/business-contexts/4a2a8906-f110-5e54-931a-a14fc60260b7",
+    "type": "Fetch",
+    "status": 200,
+    "mime": "application/json"
+  },
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:8093/api/v1/m2/assessments/0f958d15-c629-4df4-90b1-ba444e042612/confirmation-current",
+    "type": "Fetch",
+    "status": 200,
+    "mime": "application/json"
+  },
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:8093/api/v1/m2/assessments/by-marketplace/9af8000e-7eef-4597-a0c8-d7f88ad1381f",
+    "type": "Fetch",
+    "status": 200,
+    "mime": "application/json"
+  },
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:8093/api/v1/project1-workflow/assessments/0f958d15-c629-4df4-90b1-ba444e042612/stage4/preview-questionnaire?expected_revision=24&confirmation_id=d5a72e84-c653-4b16-b225-3de857009b45",
+    "type": "Fetch",
+    "status": 200,
+    "mime": "application/json"
+  },
+  {
+    "method": "---",
+    "url": "PHASE: stage=business_requirements",
+    "status": "",
+    "mime": ""
+  },
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:8093/api/v1/auth/me",
+    "type": "Fetch",
+    "status": 200,
+    "mime": "application/json"
+  },
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:8093/api/v1/saved-properties/me",
+    "type": "Fetch",
+    "status": 200,
+    "mime": "application/json"
+  },
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:8093/api/v1/auth/me",
+    "type": "Fetch",
+    "status": 200,
+    "mime": "application/json"
+  },
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:8093/api/v1/assessments/by-property/EP-02638",
+    "type": "Fetch",
+    "status": 200,
+    "mime": "application/json"
+  },
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:8093/api/v1/m2/assessments/by-marketplace/9af8000e-7eef-4597-a0c8-d7f88ad1381f",
+    "type": "Fetch",
+    "status": 200,
+    "mime": "application/json"
+  },
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:8093/api/v1/m2/assessments?limit=50&offset=0",
+    "type": "Fetch",
+    "status": 200,
+    "mime": "application/json"
+  },
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:8093/api/v1/m2/assessments/0f958d15-c629-4df4-90b1-ba444e042612",
+    "type": "Fetch",
+    "status": 200,
+    "mime": "application/json"
+  },
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:8093/api/v1/assessments/9af8000e-7eef-4597-a0c8-d7f88ad1381f/workflow-readiness",
+    "type": "Fetch",
+    "status": 200,
+    "mime": "application/json"
+  },
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:8093/api/v1/m2/assessments/0f958d15-c629-4df4-90b1-ba444e042612/concept-preview?expected_revision=24",
+    "type": "Fetch",
+    "status": 200,
+    "mime": "application/json"
+  },
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:8093/api/v1/m2/assessments/0f958d15-c629-4df4-90b1-ba444e042612/confirmation-current",
+    "type": "Fetch",
+    "status": 200,
+    "mime": "application/json"
+  },
+  {
+    "method": "GET",
+    "url": "http://127.0.0.1:8093/api/v1/m2/assessments/0f958d15-c629-4df4-90b1-ba444e042612/confirmations/d5a72e84-c653-4b16-b225-3de857009b45/business-context-status",
+    "type": "Fetch",
+    "status": 200,
+    "mime": "application/json"
+  }
+]

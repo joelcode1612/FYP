@@ -42,8 +42,14 @@ from production_binding_checks import (  # noqa: F401
 
 #: The ruleset the product code path actually imports (``bdj_service`` imports
 #: this module by name) and the fingerprint its loader pins.
+#:
+#: The fingerprint is the hash of the **committed** content (LF). It was
+#: ``42f7fef3…``, which is the hash of the CRLF working copy on Windows; since
+#: ``load_rules`` hashes CRLF-normalised bytes, that pin refused every load with
+#: ``BDJ_RULE_FINGERPRINT_MISMATCH``. Measured 2026-11-26: committed blob LF →
+#: 725cf7c0…, working tree CRLF → 42f7fef3…, so the ruleset did not change.
 RULESET_VERSION = 'BDJ-RULESET-0.2-CAND'
-RULESET_SHA256 = '42f7fef3bf2bb48255ab8eac406dfb8232923b76789dd065d693732e8bf2a061'
+RULESET_SHA256 = '725cf7c05864b520a257f7e95e725ad0cf98e11a4e66da4ff5ccb3999057a760'
 
 #: The owner-policy principal and the schema version under test.
 RESTRICTED_ROLE = 'p1_m2_runtime'
@@ -187,7 +193,9 @@ def test_CC2_deterministic_BDJ_evaluates_confirmed_data_with_real_ruleset(lab):
     from sitewise.domain import bdj_candidate_rules as rules_module
     from sitewise.project1.bdj import validate_candidates
 
-    assert hashlib.sha256(Path(rules_module.__file__).read_bytes()).hexdigest() == RULESET_SHA256
+    assert hashlib.sha256(
+        Path(rules_module.__file__).read_bytes().replace(b'\r\n', b'\n')
+    ).hexdigest() == RULESET_SHA256
     assert rules_module.RULE_VERSION == RULESET_VERSION
 
     mid, cid, uid = confirmed(lab, PROFIT_CLAIM)

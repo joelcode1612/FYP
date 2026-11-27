@@ -36,6 +36,77 @@ SYNTHETIC_DATA_CLASS = 'SYNTHETIC_NONHUMAN'
 SYNTHETIC_PURPOSE = 'SYNTHETIC_BDJ_DIAGNOSTIC'
 
 
+def _execution_provenance(runner) -> tuple[str, bool] | None:
+    """The execution condition to record, or ``None`` when nothing executed.
+
+    Read from the adapter's own dispatch state, never inferred from
+    ``model_returned`` (DD-175): a provider can report a model label for a
+    request that failed, and a dispatch can be attempted with no label at all.
+
+    ``TokenHarbor`` tracks ``dispatched`` as a tri-state, and each value means
+    exactly one thing:
+
+    * ``True``  — a response was received;
+    * ``None``  — the request was sent and the outcome is unknown;
+    * ``False`` — nothing was sent.
+
+    ``None`` is recorded as **dispatched**, deliberately. Under-reporting a
+    possible spend is the dangerous error because it would permit a second
+    dispatch; over-reporting cannot. The uncertainty is not lost — it is carried
+    by ``execution_outcome = 'unknown_outcome'``, which the column already
+    admits.
+
+    ``False`` returns ``None``: no execution occurred, so there is no result to
+    describe. The attempt ledger already holds the refusal, and writing a
+    ``bdj_results`` row would assert a disposition for something that never ran
+    — and no value in ``ck_bdj_execution_mode`` is true of it.
+
+    A dispatch that could not have reached the provider is recorded as
+    ``MOCKED_PROVIDER_TEST``. "Could not have" is read from configuration, not
+    inferred from the outcome: only a real ``TokenHarbor`` with **no** injected
+    ``transport`` talks to the adopted endpoint. An injected transport — the
+    test doubles, and the synthetic trials — never leaves the process, and a
+    provider object without a ``transport`` attribute is a stand-in that has no
+    network path at all. Recording either as ``LIVE_PROVIDER_EXECUTION`` would
+    assert a provider call that did not happen, which is the same class of false
+    provenance this defect is about. The pairing is truthful under the deployed
+    constraint too: ``ck_bdj_execution_dispatch`` forces
+    ``MOCKED_PROVIDER_TEST`` to carry ``provider_dispatched = false``, i.e. "no
+    provider was dispatched".
+
+    A receipt that recorded an outcome but not a dispatch state is a composition
+    defect, not a guess: it fails closed.
+    """
+    receipt = getattr(runner, 'last_execution', None)
+    if not receipt:
+        return None
+    if 'dispatched' not in receipt:
+        raise WorkflowHeld('BDJ_EXECUTION_PROVENANCE_UNAVAILABLE')
+    if receipt['dispatched'] is False:
+        return None
+    provider = getattr(runner, 'provider', None)
+    if not hasattr(provider, 'transport') or provider.transport is not None:
+        return 'MOCKED_PROVIDER_TEST', False
+    return 'LIVE_PROVIDER_EXECUTION', True
+
+
+def _persist_with_provenance(store, runner, attempt_no, review_result,
+                             execution_outcome, **kwargs):
+    """Persist only when an execution actually happened.
+
+    Returns the result id, or ``None`` when nothing was dispatched. Centralised
+    so the persistence points cannot drift into recording different provenance
+    for the same condition.
+    """
+    provenance = _execution_provenance(runner)
+    if provenance is None:
+        return None
+    execution_mode, dispatched = provenance
+    return store.persist(attempt_no, review_result, execution_outcome,
+                         execution_mode=execution_mode,
+                         provider_dispatched=dispatched, **kwargs)
+
+
 def run_registered_synthetic_bdj_trial(*, enabled=False, packet, item_definitions,
                                        rules, runner, store, current_fingerprint,
                                        inventory_envelope=None):
@@ -92,7 +163,9 @@ def run_registered_synthetic_bdj_trial(*, enabled=False, packet, item_definition
     except WorkflowHeld:
         receipt = runner.last_execution
         if receipt and receipt.get('receipt_recorded'):
-            store.persist(receipt['attempt_no'], None, receipt['receipt_outcome'],
+            _persist_with_provenance(
+                store, runner, receipt['attempt_no'], None,
+                receipt['receipt_outcome'],
                 output_digest=receipt.get('output_sha256'),
                 model_returned=receipt.get('model_returned'),
                 result_schema_version=DISCOVERY_RESULT_SCHEMA_VERSION, **provenance)
@@ -100,10 +173,15 @@ def run_registered_synthetic_bdj_trial(*, enabled=False, packet, item_definition
     receipt = runner.last_execution
     if not receipt or not receipt.get('receipt_recorded'):
         raise WorkflowHeld('MODEL_RECEIPT_OUTCOME_INVALID')
-    result_id = store.persist(receipt['attempt_no'], result, receipt['receipt_outcome'],
-        output_digest=receipt.get('output_sha256'), result_schema_version=DISCOVERY_RESULT_SCHEMA_VERSION,
+    result_id = _persist_with_provenance(
+        store, runner, receipt['attempt_no'], result, receipt['receipt_outcome'],
+        output_digest=receipt.get('output_sha256'),
+        result_schema_version=DISCOVERY_RESULT_SCHEMA_VERSION,
         model_returned=receipt.get('model_returned'),
         validations=_validations(result), **provenance)
+    if result_id is None:
+        # Dispatched nothing, so nothing is stored; the ledger holds the refusal.
+        raise WorkflowHeld('BDJ_EXECUTION_NOT_DISPATCHED')
     return store.read(result_id)
 
 MODEL_ASSISTED_MESSAGES = {
@@ -344,9 +422,13 @@ def run_model_assisted(*, packet: dict, actor_id: UUID, runtime_engine,
             if receipt is None:
                 raise WorkflowHeld('MODEL_RECEIPT_OUTCOME_INVALID') from None
             attempt_no, execution_outcome, output_digest = receipt
-            store.persist(attempt_no, None, execution_outcome,
-                          output_digest=output_digest,
-                          validations=_validations(None), **provenance)
+            # Only records a row when something was dispatched. A hold after
+            # reserve but before dispatch leaves the ledger as the sole record,
+            # which is the truthful place for a refusal (DD-175).
+            _persist_with_provenance(
+                store, runner, attempt_no, None, execution_outcome,
+                output_digest=output_digest,
+                validations=_validations(None), **provenance)
         # A hold before reserve (disclosure, already-reserved, budget) wrote no
         # attempt, so there is no result row to create.
         raise
@@ -367,9 +449,13 @@ def run_model_assisted(*, packet: dict, actor_id: UUID, runtime_engine,
     attempt_no, execution_outcome, output_digest = receipt
     review_reason = ('CANDIDATE_VALIDATION_FAILED'
                      if review_result.get('outcome') == 'rejected' else None)
-    result_id = store.persist(
-        attempt_no, review_result, execution_outcome, output_digest=output_digest,
+    result_id = _persist_with_provenance(
+        store, runner, attempt_no, review_result, execution_outcome,
+        output_digest=output_digest,
         review_reason=review_reason, validations=_validations(review_result),
         **provenance)
+    if result_id is None:
+        # A receipt exists but nothing was dispatched: the ledger is the record.
+        return _response(None, packet, 'held')
     stored = store.read(result_id)
     return _response(stored, packet, stored['review_outcome'])

@@ -28,12 +28,21 @@ from sitewise.services.assessment_service import AssessmentService
 from sitewise.services.explanation_service import ExplanationService
 from sitewise.services.report_service import ReportService
 from sitewise.services.report_measurement import resolve_report_measurement
+from sitewise.api.v1.report_business_description import (
+    get_report_business_description_service,
+)
 
 router = APIRouter()
 
 EntrepreneurUser = Annotated[AuthenticatedUser, Depends(require_entrepreneur)]
 AppSession = Annotated[Session, Depends(get_db)]
 AnalyticsSession = Annotated[Session, Depends(get_analytics_db)]
+#: Resolved through ``Depends`` so FastAPI fills the provider's own nested
+#: dependencies. The provider is imported at module scope deliberately: it is
+#: mounted unconditionally, so it cannot drag in the M2 stage module that this
+#: router must stay importable without.
+BusinessDescriptionService = Annotated[
+    Any, Depends(get_report_business_description_service)]
 
 
 class StartAssessmentRequest(BaseModel):
@@ -295,7 +304,27 @@ def assessment_report(
     """
     service = _service(session, analytics)
     assessment = service.get_owned(assessment_id, user.user_id)
-    record = service.payload(assessment)
+    return _report_payload(
+        service=service, assessment=assessment, session=session,
+        analytics=analytics, user=user,
+    )
+
+
+def _report_payload(
+    *, service, assessment, session, analytics, user, record=None,
+) -> dict:
+    """The report body, shared by ``/report`` and ``/report-composition``.
+
+    Extracted rather than duplicated: the composition endpoint has to see the
+    *same* report a reader sees, so it must not build a second, thinner one that
+    could disagree with it about which sections have evidence.
+
+    ``record`` is the already-computed ``service.payload(assessment)``. The
+    composition route reads it for its own identity fields, and passing it in
+    stops that read from being issued twice for one document.
+    """
+    if record is None:
+        record = service.payload(assessment)
 
     property_report = None
     try:
@@ -351,3 +380,113 @@ def _ee01_service_for_report():
     from sitewise.api.v1.customer_questionnaire import get_ee01_service
 
     return get_ee01_service()
+
+
+@router.get("/{assessment_id}/report-composition")
+def assessment_report_composition(
+    assessment_id: uuid.UUID,
+    session: AppSession,
+    analytics: AnalyticsSession,
+    user: EntrepreneurUser,
+    response: Response,
+    description_service: BusinessDescriptionService,
+) -> dict:
+    """The nine-section composition for this assessment.
+
+    Separate from ``/report`` because it answers a different question and costs
+    different work. ``/report`` returns the five-stage evidence payload; this
+    returns *which sections exist for this record, in what state, from which
+    sources* — the decision that previously lived only in the Jaspr view, where
+    a second consumer could not obtain it and the A10 section contract was never
+    consulted.
+
+    It reuses ``/report``'s own body rather than building a thinner report, so
+    the composition cannot disagree with the document it describes. It adds one
+    read the report never needed: the Section B question-design records.
+    """
+    from sitewise.core.config import settings
+    from sitewise.db.m2_session import get_m2_engine
+    from sitewise.project1 import a10_decisions, a10_gates
+    from sitewise.services import report_composition
+    from sitewise.services.report_additional_research import load_additional_research
+    from sitewise.services.report_findings_state import load_findings_state
+
+    response.headers['Cache-Control'] = 'no-store'
+
+    service = _service(session, analytics)
+    assessment = service.get_owned(assessment_id, user.user_id)
+    record = service.payload(assessment)
+    report = _report_payload(
+        service=service, assessment=assessment, session=session,
+        analytics=analytics, user=user, record=record,
+    )
+
+    # Section 02's own source. A held state here is data for the composition,
+    # never an error: the section reports the absence with its reason code.
+    description: dict | None = None
+    if settings.m2_upstream_enabled:
+        try:
+            description = description_service.for_assessment(
+                marketplace_assessment_id=assessment_id,
+                user_id=user.user_id,
+                role=user.role,
+                verified_email=user.email,
+            )
+        except Exception as exc:  # noqa: BLE001 - a section state, not a 500
+            description = {
+                'status': 'UNAVAILABLE',
+                'reason_code': 'BUSINESS_DESCRIPTION_UNAVAILABLE',
+                'detail': ('The confirmed business description could not be read '
+                           'while this report was composed '
+                           f'({type(exc).__name__}).'),
+            }
+    else:
+        description = {
+            'status': 'UNAVAILABLE',
+            'reason_code': 'M2_STAGE_NOT_ENABLED',
+            'detail': ('The upstream business-declaration stage is not enabled '
+                       'for this deployment, so no confirmed business context '
+                       'exists to read.'),
+        }
+
+    # Section B. The M2 tables are RLS-scoped on ``project1.actor_id``, so this
+    # runs on its own M2 session with the caller bound transaction-locally.
+    # Section 03 reads the same store for the same reason: whether a finding
+    # evaluation ran is an M2 fact, and the report may not assert it without
+    # looking.
+    m2_id = (record.get('m2_confirmation') or {}).get('m2_assessment_id')
+    additional = None
+    findings = None
+    if m2_id:
+        try:
+            with Session(get_m2_engine()) as m2_session:
+                additional = load_additional_research(
+                    m2_session, actor_id=user.user_id, m2_assessment_id=str(m2_id),
+                )
+                findings = load_findings_state(
+                    m2_session, actor_id=user.user_id, m2_assessment_id=str(m2_id),
+                    has_measurement=bool(
+                        (report.get('measurement') or {}).get('slots')),
+                )
+        except Exception as exc:  # noqa: BLE001 - degrades to a named state
+            additional = {
+                'status': 'UNAVAILABLE',
+                'reason_code': 'ADDITIONAL_RESEARCH_UNAVAILABLE',
+                'detail': ('The additional-research store could not be opened '
+                           f'({type(exc).__name__}).'),
+                'objectives': [], 'items': [],
+            }
+
+    return report_composition.compose(
+        assessment=record,
+        report=report,
+        measurement=report.get('measurement'),
+        business_description=description,
+        additional=additional,
+        findings=findings,
+        section_map=a10_gates.section_map(),
+        a10_counts=a10_gates.counts(),
+        decision_counts=a10_decisions.counts(),
+        adopted_decision_count=len(a10_decisions.adopted()),
+        embed_report=True,
+    )

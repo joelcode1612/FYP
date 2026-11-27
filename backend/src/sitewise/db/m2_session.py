@@ -5,19 +5,22 @@ from uuid import UUID
 
 from sqlalchemy import event, text
 from sqlalchemy.engine import make_url
-from sqlalchemy.pool import NullPool
 from sqlmodel import Session, create_engine
 
 from sitewise.core.config import settings
 from sitewise.core.exceptions import AssessmentError
+from sitewise.db.pooling import pool_kwargs
 
 
 @lru_cache(maxsize=4)
 def _engine(url):
-    # NullPool: the requesting owner is bound as a session GUC on the connection,
-    # so a pooled connection must never be handed to a different actor. Each
-    # request gets a fresh connection that is discarded on close.
-    return create_engine(url, pool_pre_ping=True, echo=False, hide_parameters=True, poolclass=NullPool)
+    # The requesting owner is bound as a *transaction-local* GUC
+    # (`set_config(..., true)`) on every `after_begin`, so a connection returned
+    # to the pool carries no actor for the next request to inherit. That is what
+    # makes reuse safe, and `sitewise.db.pooling` states the pool policy once.
+    # `M2_POOL_MODE=null` restores the old one-connection-per-request behaviour
+    # without a code change.
+    return create_engine(url, echo=False, hide_parameters=True, **pool_kwargs())
 
 
 def _verified_engine(raw: str):

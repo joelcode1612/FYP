@@ -277,10 +277,17 @@ class _FakeStagePort implements StageFourFivePort {
     required String assessmentId,
     required String candidateId,
     String? optionCode,
+    List<String>? optionCodes,
     int? expectedRevision,
   }) async {
-    expectedAnswerCalls.add('$candidateId|$optionCode|$expectedRevision');
-    return expectedAnswerResult ?? ApiResult.success(optionCode);
+    // The set is what the control sends, so the recorded call keeps it: a test
+    // that only saw the singular could not tell a truncated multi-select
+    // intention from a single-choice one.
+    expectedAnswerCalls.add(
+      '$candidateId|${optionCodes?.join(',') ?? optionCode}|$expectedRevision',
+    );
+    return expectedAnswerResult ??
+        ApiResult.success(optionCodes?.join(',') ?? optionCode);
   }
 }
 
@@ -1066,9 +1073,13 @@ void main() {
       await tester.pump();
 
       expect(find.text('Your intended answer'), findsOneComponent);
-      // Named with the code and the label the record holds.
+      // Named with the label and the code the record holds. The label leads
+      // because the label is what a respondent would read; the code is kept
+      // beside it so the sentence can be checked against the stored row.
       expect(
-        find.text('You expect respondents to choose INTERESTED — Interested.'),
+        find.text(
+          'You expect respondents to choose option Interested (INTERESTED).',
+        ),
         findsOneComponent,
       );
       // And still denied any evidentiary status, in the same box.

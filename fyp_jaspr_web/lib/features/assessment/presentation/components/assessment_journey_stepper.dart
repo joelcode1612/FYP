@@ -2,7 +2,6 @@ import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 
 import 'package:sitewise_jaspr_web/features/assessment/application/stage_labels.dart';
-import 'package:sitewise_jaspr_web/features/assessment/application/stage_reason_copy.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/assessment_api.dart';
 import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart';
 
@@ -124,12 +123,6 @@ class AssessmentJourneyStepper extends StatelessComponent {
       _ => 'Not started',
     };
 
-    // The server's own blocker, in words. A complete stage has nothing to
-    // explain; every other state shows the reason it is not complete, so the
-    // badge and the count cannot be read as "you have not done your part" when
-    // the hold is a contract the reader cannot clear.
-    final reason = stage.isComplete ? null : stageReasonCopy(stage.blockerReason);
-
     final contents = <Component>[
       span(classes: 'sw-assessment-journey__circle', [
         Component.text(state == 'complete' ? '✓' : '${stage.number}'),
@@ -137,21 +130,15 @@ class AssessmentJourneyStepper extends StatelessComponent {
       span(classes: 'sw-assessment-journey__step-title', [
         Component.text(label),
       ]),
-      // Only the step on screen carries the sentence. Repeating it under all
-      // five would turn the compact tracker into a paragraph, and four of the
-      // five reasons are the previous stage's anyway.
-      if (reason != null && isSelected)
-        span(classes: 'sw-assessment-journey__step-reason', [
-          Component.text(reason.message),
-        ]),
+      // No per-step blocker sentence. It printed the same "Complete the … stage
+      // first" line under the step, under a page banner and again in the panel
+      // on screen, and on this assessment it named the stage the reader was
+      // already looking at. The step's own state still comes from the server.
     ];
 
     final attrs = <String, String>{
-      'aria-label': reason == null
-          ? 'Step ${stage.number}: $label — $statusLabel'
-          : 'Step ${stage.number}: $label — $statusLabel. ${reason.message}',
+      'aria-label': 'Step ${stage.number}: $label — $statusLabel',
       if (isSelected) 'aria-current': 'step',
-      if (reason != null) 'title': reason.message,
     };
 
     final classes = 'sw-assessment-journey__control';

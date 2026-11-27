@@ -378,22 +378,60 @@ final class CandidateReview {
     this.rationale,
     this.recordedAt,
     this.expectedOptionCode,
+    this.expectedOptionCodes = const [],
     this.reviewed = false,
   });
 
   final String? decision;
   final String? rationale;
   final String? recordedAt;
+
+  /// The compatibility projection of [expectedOptionCodes]. NULL for a
+  /// multi-select intention, so it must never be read as "no intention".
   final String? expectedOptionCode;
+
+  /// The owner's intended response, as the set the server stores.
+  final List<String> expectedOptionCodes;
+
   final bool reviewed;
 
-  factory CandidateReview.fromJson(Map<String, dynamic> json) => CandidateReview(
-    decision: json['decision'] as String?,
-    rationale: json['rationale'] as String?,
-    recordedAt: json['recorded_at'] as String?,
-    expectedOptionCode: json['expected_option_code'] as String?,
-    reviewed: json['reviewed'] == true,
-  );
+  factory CandidateReview.fromJson(Map<String, dynamic> json) {
+    final raw = json['expected_option_codes'];
+    final codes = <String>[];
+    if (raw is List) {
+      for (final entry in raw) {
+        if (entry == null) continue;
+        codes.add('$entry');
+      }
+    }
+    final singular = json['expected_option_code'] as String?;
+    return CandidateReview(
+      decision: json['decision'] as String?,
+      rationale: json['rationale'] as String?,
+      recordedAt: json['recorded_at'] as String?,
+      expectedOptionCode: singular,
+      // A projection that omits the set but carries the singular is one
+      // selection, not an absent one.
+      expectedOptionCodes: codes.isEmpty && singular != null
+          ? [singular]
+          : List<String>.unmodifiable(codes),
+      reviewed: json['reviewed'] == true,
+    );
+  }
+
+  /// True when the owner recorded an intention, by either spelling.
+  bool get hasIntention =>
+      expectedOptionCodes.isNotEmpty || expectedOptionCode != null;
+
+  /// The selection, whichever spelling the payload carried.
+  ///
+  /// A record built with only the compatibility field still has an intention,
+  /// so every reader goes through this getter rather than the set directly.
+  List<String> get selection {
+    if (expectedOptionCodes.isNotEmpty) return expectedOptionCodes;
+    final singular = expectedOptionCode;
+    return singular == null ? const <String>[] : <String>[singular];
+  }
 }
 
 /// The receipt a candidate review returns.
@@ -814,6 +852,12 @@ final class AiExecutionPurpose {
     this.receiptAt,
     this.persisted = 0,
     this.pendingValidation = 0,
+    this.milestones = const <AiMilestone>[],
+    this.stale = false,
+    this.assessmentRevision,
+    this.attributable = true,
+    this.domainStore = '',
+    this.assessmentWidePersisted = 0,
   });
 
   /// `BDJ` or `QG`.
@@ -831,10 +875,38 @@ final class AiExecutionPurpose {
   final int persisted;
   final int pendingValidation;
 
-  bool get isTerminal => state == 'PERSISTED' || state == 'FAILED';
+  /// Per-milestone status, as the server derived it from [state]. Empty when an
+  /// older server answered, in which case the panel falls back to deriving the
+  /// rail from [state] alone rather than inventing one.
+  final List<AiMilestone> milestones;
+
+  /// True when the attempt was recorded at a different assessment revision than
+  /// the one now on screen. The state is preserved — a superseded execution
+  /// really happened — but it is not presented as the current one.
+  final bool stale;
+
+  /// The revision the attempt was recorded at, if the server reported one.
+  final int? assessmentRevision;
+
+  /// False when the persisted count cannot be joined to *this* attempt. BDJ
+  /// objective proposals carry no run/attempt identity, so their count is a
+  /// true fact about the assessment that cannot complete the Persisted
+  /// milestone for a new attempt (CP-PROG-01).
+  final bool attributable;
+
+  final String domainStore;
+
+  /// The assessment-wide figure, reported beside [persisted] so history is not
+  /// silently dropped when it cannot be attributed.
+  final int assessmentWidePersisted;
+
+  bool get isTerminal =>
+      state == 'PERSISTED' || state == 'FAILED' || state == 'UNKNOWN_OUTCOME';
 
   factory AiExecutionPurpose.fromJson(Map<String, dynamic> json) {
     final domain = json['domain'];
+    final wide = json['domain_assessment_wide'];
+    final rawMilestones = json['milestones'];
     return AiExecutionPurpose(
       purpose: json['purpose'] as String? ?? '',
       state: json['state'] as String? ?? 'UNKNOWN_OUTCOME',
@@ -850,8 +922,42 @@ final class AiExecutionPurpose {
       pendingValidation: domain is Map
           ? (domain['pending_validation'] as num?)?.toInt() ?? 0
           : 0,
+      milestones: rawMilestones is List
+          ? rawMilestones
+                .whereType<Map<String, dynamic>>()
+                .map(AiMilestone.fromJson)
+                .toList(growable: false)
+          : const <AiMilestone>[],
+      stale: json['stale'] as bool? ?? false,
+      assessmentRevision: (json['assessment_revision'] as num?)?.toInt(),
+      attributable: domain is Map
+          ? (domain['attributable'] as bool? ?? true)
+          : true,
+      domainStore: json['domain_store'] as String? ?? '',
+      assessmentWidePersisted: wide is Map
+          ? (wide['persisted'] as num?)?.toInt() ?? 0
+          : 0,
     );
   }
+}
+
+/// One milestone of the execution rail, as the server derived it.
+///
+/// The server sends four, never five: `DISPATCHED` is absent because nothing
+/// durable records it. A client must not add it back.
+final class AiMilestone {
+  const AiMilestone({required this.name, required this.status});
+
+  /// `RESERVED` | `RETURNED` | `VALIDATED` | `PERSISTED`.
+  final String name;
+
+  /// `COMPLETED` | `ACTIVE` | `PENDING` | `FAILED` | `UNKNOWN`.
+  final String status;
+
+  factory AiMilestone.fromJson(Map<String, dynamic> json) => AiMilestone(
+    name: json['milestone'] as String? ?? '',
+    status: json['status'] as String? ?? 'PENDING',
+  );
 }
 
 final class AiExecutionReading {
@@ -860,6 +966,14 @@ final class AiExecutionReading {
     required this.domainReadable,
     this.progressPercent,
     this.bdjObjectives,
+    this.contract = '',
+    this.currentRevision,
+    this.milestones = const <String>[],
+    this.unprovableMilestones = const <String>[],
+    this.providerTimeoutSeconds,
+    this.graceSeconds,
+    this.objectiveId,
+    this.objectiveScoped = false,
   });
 
   final List<AiExecutionPurpose> purposes;
@@ -878,6 +992,45 @@ final class AiExecutionReading {
   /// null means the read failed, never zero.
   final BdjObjectiveCounts? bdjObjectives;
 
+  /// The contract this reading was produced under, e.g.
+  /// `sitewise-ai-execution-status/2`. Empty when an older server answered.
+  final String contract;
+
+  /// The M2 revision the staleness qualifier was evaluated against.
+  final int? currentRevision;
+
+  /// The milestones the server supports, in order. Authoritative: the client
+  /// renders these rather than a list of its own, so the two cannot drift.
+  final List<String> milestones;
+
+  /// Milestones the server explicitly cannot prove (today: `DISPATCHED`).
+  final List<String> unprovableMilestones;
+
+  /// The provider budget the server actually enforces, and the derived grace
+  /// period. Reported so the client stops hardcoding its own copy.
+  final int? providerTimeoutSeconds;
+  final int? graceSeconds;
+
+  /// The objective this reading was scoped to, echoed by the server.
+  ///
+  /// Direct-QG can be generating for two approved objectives at once, and the
+  /// route answers one objective at a time. Without this echo a client polling
+  /// two objectives cannot tell which response it is holding, and the slower
+  /// answer overwrites the other objective's rail (CP-FINAL-04).
+  final String? objectiveId;
+
+  /// Whether the server scoped this reading to one objective. False means the
+  /// figures are stage-wide.
+  final bool objectiveScoped;
+
+  /// Whether this reading answers a request for [objective].
+  ///
+  /// A stage-wide reading (`objectiveScoped == false`) is *not* an answer to an
+  /// objective-scoped question: it reports the newest attempt whichever objective
+  /// produced it, which is exactly the confusion the scoping exists to remove.
+  bool answersObjective(String objective) =>
+      objectiveScoped && objectiveId == objective;
+
   AiExecutionPurpose? forPurpose(String purpose) {
     for (final p in purposes) {
       if (p.purpose == purpose) return p;
@@ -887,6 +1040,9 @@ final class AiExecutionReading {
 
   factory AiExecutionReading.fromJson(Map<String, dynamic> json) {
     final raw = json['purposes'];
+    final timing = json['timing'];
+    final rawMilestones = json['milestones'];
+    final rawUnprovable = json['unprovable_milestones'];
     return AiExecutionReading(
       purposes: raw is List
           ? raw
@@ -901,6 +1057,22 @@ final class AiExecutionReading {
               (json['bdj_objectives'] as Map).cast<String, dynamic>(),
             )
           : null,
+      contract: json['contract'] as String? ?? '',
+      currentRevision: (json['current_revision'] as num?)?.toInt(),
+      milestones: rawMilestones is List
+          ? rawMilestones.whereType<String>().toList(growable: false)
+          : const <String>[],
+      unprovableMilestones: rawUnprovable is List
+          ? rawUnprovable.whereType<String>().toList(growable: false)
+          : const <String>[],
+      providerTimeoutSeconds: timing is Map
+          ? (timing['provider_timeout_seconds'] as num?)?.toInt()
+          : null,
+      graceSeconds: timing is Map
+          ? (timing['grace_seconds'] as num?)?.toInt()
+          : null,
+      objectiveId: json['objective_id'] as String?,
+      objectiveScoped: json['objective_scoped'] as bool? ?? false,
     );
   }
 }
@@ -1040,10 +1212,17 @@ abstract interface class StageFourFivePort {
   });
 
   /// Records the entrepreneur's expected answer. Never a respondent answer.
+  ///
+  /// [optionCodes] is the selection. The server stores it as a set and already
+  /// accepts `option_codes` on the route; the singular [optionCode] is kept for
+  /// the one-option formats, where the two spellings mean the same thing. A
+  /// multiple-choice intention sent through [optionCode] would lose every option
+  /// but the first, so a multi-select caller must use the set.
   Future<ApiResult<String?>> setExpectedAnswer({
     required String assessmentId,
     required String candidateId,
     String? optionCode,
+    List<String>? optionCodes,
     int? expectedRevision,
   });
 
@@ -1207,20 +1386,36 @@ final class StageFourFiveApi implements StageFourFivePort {
     },
   );
 
-  /// Records the entrepreneur's expectation. A null `optionCode` clears it.
+  /// Records the entrepreneur's expectation. A null selection clears it.
+  ///
+  /// The set is what is sent when the caller has one. The server normalises the
+  /// two spellings itself, so sending only `option_codes` cannot disagree with
+  /// sending only `option_code`.
   @override
   Future<ApiResult<String?>> setExpectedAnswer({
     required String assessmentId,
     required String candidateId,
     String? optionCode,
+    List<String>? optionCodes,
     int? expectedRevision,
   }) => _call(
     '$_m2/assessments/${Uri.encodeComponent(assessmentId)}/qg-candidates/'
     '${Uri.encodeComponent(candidateId)}/expected-answer',
+    // The receipt echoes the selection, but the set is authoritative and the
+    // singular column is NULL for a multi-select intention. The set is read
+    // from the candidate envelope (`review.expected_option_codes`), which is
+    // what the list renders from; this return value is only the single code the
+    // one-option formats carry.
     (json) => json['expected_option_code'] as String?,
     method: 'PUT',
     body: {
-      'option_code': optionCode,
+      // One spelling or the other, never both: the server normalises whichever
+      // arrives, and sending both would make the request ambiguous about which
+      // of the two it means.
+      if (optionCodes == null)
+        'option_code': optionCode
+      else
+        'option_codes': optionCodes,
       'expected_revision': ?expectedRevision,
     },
   );
