@@ -107,6 +107,7 @@ class DataColumn {
 class DataTable extends StatelessComponent {
   final List<DataColumn> columns;
   final List<List<Component>> rows;
+  final String? scrollLabel;
 
   /// Shown instead of an empty `<tbody>`.
   final String? emptyLabel;
@@ -115,6 +116,7 @@ class DataTable extends StatelessComponent {
     super.key,
     required this.columns,
     required this.rows,
+    this.scrollLabel,
     this.emptyLabel,
   });
 
@@ -124,7 +126,7 @@ class DataTable extends StatelessComponent {
       return EmptyState(title: 'Nothing to show', body: emptyLabel!);
     }
     return div([
-      div(classes: 'table-scroll', [
+      TableScroll(label: scrollLabel, children: [
         table(classes: 'audit-table', [
           thead([
             tr([
@@ -150,6 +152,31 @@ class DataTable extends StatelessComponent {
         Component.text('Scroll the table sideways for the other columns.'),
       ]),
     ]);
+  }
+}
+
+/// Gives wide record tables a named, keyboard-scrollable region.
+class TableScroll extends StatelessComponent {
+  final String? label;
+  final String classes;
+  final List<Component> children;
+
+  const TableScroll({
+    super.key,
+    this.label,
+    this.classes = 'table-scroll',
+    required this.children,
+  });
+
+  @override
+  Component build(BuildContext context) {
+    return div(
+      classes: classes,
+      attributes: label == null
+          ? null
+          : {'role': 'region', 'aria-label': label!, 'tabindex': '0'},
+      children,
+    );
   }
 }
 

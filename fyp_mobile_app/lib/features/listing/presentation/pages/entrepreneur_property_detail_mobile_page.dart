@@ -32,10 +32,16 @@ import 'package:fyp/core/routing/app_routes.dart';
 class EntrepreneurPropertyDetailMobilePage extends ConsumerStatefulWidget {
   final String propertyId;
   final String? resultId;
+
+  /// Opens the same detail presentation over the authenticated Agent
+  /// assignment endpoint. Public Entrepreneur routes keep their published-only
+  /// catalogue/explore reads.
+  final bool agentView;
   const EntrepreneurPropertyDetailMobilePage({
     super.key,
     required this.propertyId,
     this.resultId,
+    this.agentView = false,
   });
 
   @override
@@ -54,7 +60,9 @@ class _EntrepreneurPropertyDetailMobilePageState
   /// listing, in which case the older assessment-derived block is shown instead
   /// — the two scoring systems are never merged into one number.
   late final Future<PropertyInsightsModel?> _insightsFuture =
-      ApiPropertyInsightsRepository(ServiceLocator.apiClient).fetch(widget.propertyId);
+      ApiPropertyInsightsRepository(
+        ServiceLocator.apiClient,
+      ).fetch(widget.propertyId);
 
   /// One-shot timer that re-reads the analysis while the backend is still
   /// measuring this property.
@@ -79,10 +87,12 @@ class _EntrepreneurPropertyDetailMobilePageState
   /// Called from `build`: the guards make it idempotent, so a rebuild caused by
   /// the refresh itself cannot stack a second timer.
   void _syncAnalysisPolling(LocationAnalysis? analysis) {
-    final processing = analysis != null &&
+    final processing =
+        analysis != null &&
         analysis.propertyId == widget.propertyId &&
-        analysis.measurementGroups
-            .any((group) => group.status == 'pending' || group.status == 'running');
+        analysis.measurementGroups.any(
+          (group) => group.status == 'pending' || group.status == 'running',
+        );
     if (!processing) {
       _analysisTimer?.cancel();
       _analysisTimer = null;
@@ -95,9 +105,9 @@ class _EntrepreneurPropertyDetailMobilePageState
       _analysisTimer = null;
       if (!mounted) return;
       _analysisRefreshes++;
-      ref.read(entrepreneurNotifierProvider.notifier).loadAnalysis(
-            widget.propertyId,
-          );
+      ref
+          .read(entrepreneurNotifierProvider.notifier)
+          .loadAnalysis(widget.propertyId);
     });
   }
 
@@ -141,6 +151,65 @@ class _EntrepreneurPropertyDetailMobilePageState
   Future<_PropertyRecord?> _loadProperty() async {
     final id = widget.propertyId;
     if (id.isEmpty) return null;
+    if (widget.agentView) {
+      final listingId = int.tryParse(id);
+      if (listingId == null) return null;
+      final detail = await ServiceLocator.agentListings.listingDetail(
+        listingId,
+      );
+      final facts = detail.facts;
+      if (facts == null) return null;
+      final property = CommercialProperty(
+        id: '$listingId',
+        title: facts.name,
+        address: facts.address ?? '',
+        city: facts.city ?? '',
+        state: facts.state ?? '',
+        postcode: facts.postcode ?? '',
+        rentalRm: facts.rentalPrice,
+        sizeSqft: facts.sizeSqft,
+        latitude: facts.latitude,
+        longitude: facts.longitude,
+        propertyType: facts.propertyType ?? 'Not provided',
+        verification: switch (facts.verificationStatus.toLowerCase()) {
+          'approved' => VerificationStatus.verified,
+          'pending' || 'under_review' => VerificationStatus.pending,
+          'rejected' || 'changes_requested' => VerificationStatus.rejected,
+          _ => VerificationStatus.draft,
+        },
+        suitabilityScore: 0,
+        hasSuitabilityScore: false,
+        ownerId: facts.ownerUserId ?? '',
+        hasTour: false,
+        description: facts.description,
+        availability: facts.availability,
+        leaseDurationMonths: facts.leaseDurationMonths,
+        leaseDurationNegotiable: facts.leaseDurationNegotiable,
+        availableFrom: facts.availableFrom,
+        rentalDepositMyr: facts.rentalDepositMyr,
+        titleType: facts.titleType,
+        landlordFnbPermission: facts.landlordFnbPermission,
+        floorDescription: facts.floorDescription,
+        tenure: facts.tenure,
+        furnishing: facts.furnishing,
+        floorLevel: facts.floorLevel?.toString(),
+        bathrooms: facts.bathrooms,
+        isFnbSuitable: facts.isFnbSuitable,
+        hasParking: facts.hasParking,
+        unitPosition: facts.unitPosition,
+        facingDirection: facts.facingDirection,
+        frontageFt: facts.frontageFt,
+        depthFt: facts.depthFt,
+        landAreaSqft: facts.landAreaSqft,
+        builtUpSqft: facts.builtUpSqft,
+        psf: facts.psf,
+        imageUrls: [for (final photo in detail.photos) photo.url],
+      );
+      return _PropertyRecord(
+        property: property,
+        photos: [for (final photo in detail.photos) photo.url],
+      );
+    }
     // Read before the first await: the route may pop while the catalogue
     // request is in flight, and `ref` is dead afterwards.
     final explore = ref.read(exploreRepositoryProvider);
@@ -166,9 +235,9 @@ class _EntrepreneurPropertyDetailMobilePageState
     setState(() => _propertyFuture = _loadProperty());
     // The location insights are a second, independent request — refreshing the
     // listing alone would leave stale analysis next to fresh facts.
-    ref.read(entrepreneurNotifierProvider.notifier).loadAnalysis(
-      widget.propertyId,
-    );
+    ref
+        .read(entrepreneurNotifierProvider.notifier)
+        .loadAnalysis(widget.propertyId);
   }
 
   /// Saves/unsaves against the server first, so the list the Favourites tab
@@ -184,9 +253,7 @@ class _EntrepreneurPropertyDetailMobilePageState
       SnackBar(
         content: Text(
           failure ??
-              (wantSaved
-                  ? 'Added to favourites.'
-                  : 'Removed from favourites.'),
+              (wantSaved ? 'Added to favourites.' : 'Removed from favourites.'),
         ),
         behavior: SnackBarBehavior.floating,
       ),
@@ -225,14 +292,22 @@ class _EntrepreneurPropertyDetailMobilePageState
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Property details', style: TextStyle(
-                fontFamily: kFontFamily, fontSize: 22,
-                fontWeight: FontWeight.w800, color: SitewiseColors.ink,
-              )),
+              Text(
+                'Property details',
+                style: TextStyle(
+                  fontFamily: kFontFamily,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: SitewiseColors.ink,
+                ),
+              ),
               SizedBox(height: 3),
-              Text('View property information and location insights.',
-                maxLines: 2, overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 13, color: SitewiseColors.muted)),
+              Text(
+                'View property information and location insights.',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 13, color: SitewiseColors.muted),
+              ),
             ],
           ),
         ),
@@ -243,67 +318,107 @@ class _EntrepreneurPropertyDetailMobilePageState
           future: _propertyFuture,
           builder: (context, snap) {
             if (snap.connectionState != ConnectionState.done) {
-              return const MobilePropertyListSkeleton(padding: EdgeInsets.all(16));
+              return const MobilePropertyListSkeleton(
+                padding: EdgeInsets.all(16),
+              );
             }
             if (snap.hasError) {
-              return Center(child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  Text(readableFailure(snap.error!, fallback:
-                    'We could not load this property. Please try again.'),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 15, color: SitewiseColors.muted)),
-                  const SizedBox(height: 14),
-                  SitewiseSecondaryButton(label: 'Try again',
-                    icon: Icons.refresh_rounded, onPressed: _reload),
-                ]),
-              ));
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        readableFailure(
+                          snap.error!,
+                          fallback:
+                              'We could not load this property. Please try again.',
+                        ),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          color: SitewiseColors.muted,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      SitewiseSecondaryButton(
+                        label: 'Try again',
+                        icon: Icons.refresh_rounded,
+                        onPressed: _reload,
+                      ),
+                    ],
+                  ),
+                ),
+              );
             }
             final record = snap.data;
             if (record == null) {
-              return const Center(child: Text('This property is no longer available.'));
+              return const Center(
+                child: Text('This property is no longer available.'),
+              );
             }
             final p = record.property;
             final saved = appState.saved.contains(p.id);
-            return Column(children: [
-              Expanded(child: RefreshIndicator(
-                color: SitewiseColors.action,
-                onRefresh: () async { _reload(); },
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  children: [
-                    _heroWithPanorama(p, record.photos, saved),
-                    const SizedBox(height: 16),
-                    _identity(p),
-                    const SizedBox(height: 18),
-                    _keyFacts(p),
-                    const SizedBox(height: 16),
-                    _referenceTabs(),
-                    const SizedBox(height: 14),
-                    if (_referenceDetailTab == 0) _referenceBasic(p)
-                    else ...[
-                      const MobileSectionHeader(title: 'Location insights',
-                        subtitle: 'What surrounds this property.'),
-                      const SizedBox(height: 12),
-                      _insights(p, model),
-                      if (p.hasTour) ...[
+            return Column(
+              children: [
+                Expanded(
+                  child: RefreshIndicator(
+                    color: SitewiseColors.action,
+                    onRefresh: () async {
+                      _reload();
+                    },
+                    child: ListView(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      children: [
+                        _heroWithPanorama(p, record.photos, saved),
                         const SizedBox(height: 16),
-                        SitewiseSecondaryButton(label: 'View 360° tour',
-                          icon: Icons.threesixty_rounded,
-                          onPressed: () => _open('/entrepreneur/tour', arguments: p.id)),
+                        _identity(p),
+                        const SizedBox(height: 18),
+                        _keyFacts(p),
+                        const SizedBox(height: 16),
+                        _referenceTabs(),
+                        const SizedBox(height: 14),
+                        if (_referenceDetailTab == 0)
+                          _referenceBasic(p)
+                        else ...[
+                          const MobileSectionHeader(
+                            title: 'Location insights',
+                            subtitle: 'What surrounds this property.',
+                          ),
+                          const SizedBox(height: 12),
+                          _insights(p, model),
+                          if (!widget.agentView && p.hasTour) ...[
+                            const SizedBox(height: 16),
+                            SitewiseSecondaryButton(
+                              label: 'View 360° tour',
+                              icon: Icons.threesixty_rounded,
+                              onPressed: () =>
+                                  _open('/entrepreneur/tour', arguments: p.id),
+                            ),
+                          ],
+                          if (!widget.agentView) ...[
+                            const SizedBox(height: 16),
+                            const M3Banner(
+                              text:
+                                  'Evaluate this property for your own business. '
+                                  'Survey and location analysis are linked separately when available.',
+                            ),
+                            const SizedBox(height: 16),
+                            _actions(p, saved),
+                          ],
+                        ],
                       ],
-                      const SizedBox(height: 16),
-                      const M3Banner(text: 'Evaluate this property for your own business. '
-                        'Survey and location analysis are linked separately when available.'),
-                      const SizedBox(height: 16),
-                      _actions(p, saved),
-                    ],
-                  ],
+                    ),
+                  ),
                 ),
-              )),
-              _referenceFooter(p, saved),
-            ]);
+                if (widget.agentView)
+                  _agentInspectionFooter(p)
+                else
+                  _referenceFooter(p, saved),
+              ],
+            );
           },
         ),
       ),
@@ -316,27 +431,42 @@ class _EntrepreneurPropertyDetailMobilePageState
       border: Border.all(color: SitewiseColors.border),
       borderRadius: BorderRadius.circular(26),
     ),
-    child: Row(children: [
-      for (var index = 0; index < 2; index++)
-        Expanded(child: Semantics(
-          button: true, selected: _referenceDetailTab == index,
-          child: Material(
-            color: _referenceDetailTab == index
-                ? SitewiseColors.action : Colors.transparent,
-            borderRadius: BorderRadius.circular(24),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(24),
-              onTap: () => setState(() => _referenceDetailTab = index),
-              child: SizedBox(height: 48, child: Center(child: Text(
-                index == 0 ? 'Basic' : 'Extra',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700,
-                  color: _referenceDetailTab == index
-                      ? Colors.white : SitewiseColors.ink),
-              ))),
+    child: Row(
+      children: [
+        for (var index = 0; index < 2; index++)
+          Expanded(
+            child: Semantics(
+              button: true,
+              selected: _referenceDetailTab == index,
+              child: Material(
+                color: _referenceDetailTab == index
+                    ? SitewiseColors.action
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(24),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(24),
+                  onTap: () => setState(() => _referenceDetailTab = index),
+                  child: SizedBox(
+                    height: 48,
+                    child: Center(
+                      child: Text(
+                        index == 0 ? 'Basic' : 'Extra',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: _referenceDetailTab == index
+                              ? Colors.white
+                              : SitewiseColors.ink,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
-        )),
-    ]),
+      ],
+    ),
   );
 
   Widget _referenceBasic(CommercialProperty p) => Container(
@@ -346,66 +476,180 @@ class _EntrepreneurPropertyDetailMobilePageState
       borderRadius: BorderRadius.circular(16),
       color: SitewiseColors.surface,
     ),
-    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Row(children: [
-        Icon(Icons.info_outline, color: SitewiseColors.action, size: 22),
-        SizedBox(width: 10),
-        Expanded(child: Text('Basic details', style: TextStyle(
-          fontSize: 17, fontWeight: FontWeight.w800, color: SitewiseColors.ink))),
-      ]),
-      const SizedBox(height: 10),
-      _referenceDetailRow('Monthly rental', p.rentalRm > 0 ? _referenceRent(p) : 'Not listed'),
-      _referenceDetailRow('Floor area', p.sizeSqft > 0
-          ? '${_referenceNumber(p.sizeSqft)} sq ft' : 'Not listed'),
-      _referenceDetailRow('Rental efficiency', p.rentalRm > 0 && p.sizeSqft > 0
-          ? 'RM${p.rentalPerSqft.toStringAsFixed(2)} / sq ft' : 'Not computable'),
-      _referenceDetailRow('Property type', p.propertyType),
-    ]),
-  );
-
-  Widget _referenceDetailRow(String label, String value) => Column(children: [
-    Padding(padding: const EdgeInsets.symmetric(vertical: 12), child: Row(
+    child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(child: Text(label, style: const TextStyle(
-          fontSize: 14, color: SitewiseColors.muted))),
-        const SizedBox(width: 12),
-        Expanded(child: Text(value, textAlign: TextAlign.end,
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600,
-            color: SitewiseColors.ink))),
+        const Row(
+          children: [
+            Icon(Icons.info_outline, color: SitewiseColors.action, size: 22),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Basic details',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                  color: SitewiseColors.ink,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        _referenceDetailRow(
+          'Monthly rental',
+          p.rentalRm > 0 ? _referenceRent(p) : 'Not listed',
+        ),
+        _referenceDetailRow(
+          'Floor area',
+          p.sizeSqft > 0
+              ? '${_referenceNumber(p.sizeSqft)} sq ft'
+              : 'Not listed',
+        ),
+        _referenceDetailRow(
+          'Rental efficiency',
+          p.rentalRm > 0 && p.sizeSqft > 0
+              ? 'RM${p.rentalPerSqft.toStringAsFixed(2)} / sq ft'
+              : 'Not computable',
+        ),
+        _referenceDetailRow('Property type', p.propertyType),
+        if (widget.agentView &&
+            (p.description?.trim().isNotEmpty ?? false)) ...[
+          const SizedBox(height: 16),
+          const Text(
+            'Description',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: SitewiseColors.ink,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            p.description!.trim(),
+            style: const TextStyle(
+              fontSize: 14,
+              height: 1.5,
+              color: SitewiseColors.muted,
+            ),
+          ),
+        ],
       ],
-    )),
-    const Divider(height: 1, color: SitewiseColors.border),
-  ]);
+    ),
+  );
+
+  Widget _referenceDetailRow(String label, String value) => Column(
+    children: [
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: SitewiseColors.muted,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                value,
+                textAlign: TextAlign.end,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: SitewiseColors.ink,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      const Divider(height: 1, color: SitewiseColors.border),
+    ],
+  );
 
   Widget _referenceFooter(CommercialProperty p, bool saved) => Container(
     padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-    decoration: const BoxDecoration(color: SitewiseColors.surface,
-      border: Border(top: BorderSide(color: SitewiseColors.border))),
-    child: Row(children: [
-      Expanded(flex: 2, child: OutlinedButton.icon(
-        style: OutlinedButton.styleFrom(
-          minimumSize: const Size(0, 52), foregroundColor: SitewiseColors.action,
-          side: const BorderSide(color: SitewiseColors.action),
-          shape: const StadiumBorder(), padding: const EdgeInsets.symmetric(horizontal: 8)),
-        onPressed: () => _toggleSaved(p.id, !saved),
-        icon: Icon(saved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded, size: 21),
-        label: Text(saved ? 'Saved' : 'Save', style: const TextStyle(
-          fontSize: 15, fontWeight: FontWeight.w700)),
-      )),
-      const SizedBox(width: 10),
-      Expanded(flex: 3, child: FilledButton.icon(
+    decoration: const BoxDecoration(
+      color: SitewiseColors.surface,
+      border: Border(top: BorderSide(color: SitewiseColors.border)),
+    ),
+    child: Row(
+      children: [
+        Expanded(
+          flex: 2,
+          child: OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(0, 52),
+              foregroundColor: SitewiseColors.action,
+              side: const BorderSide(color: SitewiseColors.action),
+              shape: const StadiumBorder(),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+            ),
+            onPressed: () => _toggleSaved(p.id, !saved),
+            icon: Icon(
+              saved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+              size: 21,
+            ),
+            label: Text(
+              saved ? 'Saved' : 'Save',
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          flex: 3,
+          child: FilledButton.icon(
+            style: FilledButton.styleFrom(
+              minimumSize: const Size(0, 52),
+              backgroundColor: SitewiseColors.action,
+              foregroundColor: Colors.white,
+              shape: const StadiumBorder(),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+            ),
+            // Keep the existing assessment route. It owns the questionnaire / draft selection.
+            onPressed: () => _open(AppRoutes.assessmentHome),
+            icon: const Icon(Icons.bar_chart_rounded, size: 21),
+            label: const Text(
+              'Assess location',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _agentInspectionFooter(CommercialProperty p) => Container(
+    padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+    decoration: const BoxDecoration(
+      color: SitewiseColors.surface,
+      border: Border(top: BorderSide(color: SitewiseColors.border)),
+    ),
+    child: SizedBox(
+      width: double.infinity,
+      child: FilledButton.icon(
         style: FilledButton.styleFrom(
-          minimumSize: const Size(0, 52), backgroundColor: SitewiseColors.action,
-          foregroundColor: Colors.white, shape: const StadiumBorder(),
-          padding: const EdgeInsets.symmetric(horizontal: 8)),
-        // Keep the existing assessment route. It owns the questionnaire / draft selection.
-        onPressed: () => _open(AppRoutes.assessmentHome),
-        icon: const Icon(Icons.bar_chart_rounded, size: 21),
-        label: const Text('Assess location', textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-      )),
-    ]),
+          minimumSize: const Size(0, 52),
+          backgroundColor: SitewiseColors.action,
+          foregroundColor: Colors.white,
+          shape: const StadiumBorder(),
+        ),
+        onPressed: () => _open('/provider/inspection', arguments: p.id),
+        icon: const Icon(Icons.fact_check_outlined),
+        label: const Text(
+          'Open property inspection',
+          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+        ),
+      ),
+    ),
   );
 
   /// Media block over the house gallery: every photograph the record returned,
@@ -429,11 +673,15 @@ class _EntrepreneurPropertyDetailMobilePageState
     borderRadius: BorderRadius.circular(18),
     aspectRatio: 1.95,
     detailControls: true,
-    tourAction: panoramaUrl == null ? null : _PanoramaChip(
-      label: p.title,
-      onTap: () => _open('/entrepreneur/panorama',
-        arguments: {'url': panoramaUrl, 'title': p.title}),
-    ),
+    tourAction: panoramaUrl == null
+        ? null
+        : _PanoramaChip(
+            label: p.title,
+      onTap: () => _open(
+        '/entrepreneur/panorama',
+        arguments: {'url': panoramaUrl, 'title': p.title},
+      ),
+          ),
   );
 
   /// The hero waits on the insights read for one reason: the 360° chip.
@@ -455,7 +703,9 @@ class _EntrepreneurPropertyDetailMobilePageState
     final raw = value.toStringAsFixed(value == value.roundToDouble() ? 0 : 2);
     final parts = raw.split('.');
     final whole = parts.first.replaceAllMapped(
-      RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ',');
+      RegExp(r'\B(?=(\d{3})+(?!\d))'),
+      (_) => ',',
+    );
     return parts.length == 1 ? whole : '$whole.${parts.last}';
   }
 
@@ -481,67 +731,152 @@ class _EntrepreneurPropertyDetailMobilePageState
   Widget _identity(CommercialProperty p) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Text(p.title, style: const TextStyle(
-        fontFamily: kFontFamily, fontSize: 24, fontWeight: FontWeight.w800,
-        color: SitewiseColors.ink, height: 1.18, letterSpacing: -.4)),
+      Text(
+        p.title,
+        style: const TextStyle(
+          fontFamily: kFontFamily,
+          fontSize: 24,
+          fontWeight: FontWeight.w800,
+          color: SitewiseColors.ink,
+          height: 1.18,
+          letterSpacing: -.4,
+        ),
+      ),
       const SizedBox(height: 8),
-      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Icon(Icons.place_outlined, size: 20, color: SitewiseColors.action),
-        const SizedBox(width: 7),
-        Expanded(child: Text(_referenceAddress(p), style: const TextStyle(
-          fontSize: 15, height: 1.4, color: SitewiseColors.muted))),
-      ]),
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.place_outlined,
+            size: 20,
+            color: SitewiseColors.action,
+          ),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text(
+              _referenceAddress(p),
+              style: const TextStyle(
+                fontSize: 15,
+                height: 1.4,
+                color: SitewiseColors.muted,
+              ),
+            ),
+          ),
+        ],
+      ),
       const SizedBox(height: 16),
-      LayoutBuilder(builder: (context, constraints) {
-        final price = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(p.rentalRm > 0 ? _referenceRent(p) : 'Rent on request',
-            style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w800,
-              color: SitewiseColors.action, height: 1.1)),
-          if (p.rentalRm > 0) const Text('/ month', style: TextStyle(
-            fontSize: 14, color: SitewiseColors.muted)),
-        ]);
-        final score = _referenceScore(p);
-        if (constraints.maxWidth < 340 || MediaQuery.textScalerOf(context).scale(14) > 18) {
-          return Column(crossAxisAlignment: CrossAxisAlignment.start,
-            children: [price, const SizedBox(height: 12), score]);
-        }
-        return Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-          Expanded(child: price),
-          Container(width: 1, height: 48, color: SitewiseColors.border,
-            margin: const EdgeInsets.symmetric(horizontal: 12)),
-          Expanded(flex: 1, child: score),
-        ]);
-      }),
+      LayoutBuilder(
+        builder: (context, constraints) {
+          final price = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                p.rentalRm > 0 ? _referenceRent(p) : 'Rent on request',
+                style: const TextStyle(
+                  fontSize: 25,
+                  fontWeight: FontWeight.w800,
+                  color: SitewiseColors.action,
+                  height: 1.1,
+                ),
+              ),
+              if (p.rentalRm > 0)
+                const Text(
+                  '/ month',
+                  style: TextStyle(fontSize: 14, color: SitewiseColors.muted),
+                ),
+            ],
+          );
+          final score = _referenceScore(p);
+          if (constraints.maxWidth < 340 ||
+              MediaQuery.textScalerOf(context).scale(14) > 18) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [price, const SizedBox(height: 12), score],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(child: price),
+              Container(
+                width: 1,
+                height: 48,
+                color: SitewiseColors.border,
+                margin: const EdgeInsets.symmetric(horizontal: 12),
+              ),
+              Expanded(flex: 1, child: score),
+            ],
+          );
+        },
+      ),
     ],
   );
 
   Widget _referenceScore(CommercialProperty p) {
     if (!p.hasSuitabilityScore) {
-      return const Text('Suitability not scored yet', style: TextStyle(
-        fontSize: 14, color: SitewiseColors.muted));
+      return const Text(
+        'Suitability not scored yet',
+        style: TextStyle(fontSize: 14, color: SitewiseColors.muted),
+      );
     }
     final score = p.suitabilityScore;
     final color = suitabilityColor(score);
-    return Row(children: [
-      Semantics(label: 'Suitability ${score.toStringAsFixed(0)} out of 100',
-        child: SizedBox(width: 46, height: 46, child: Stack(
-          alignment: Alignment.center, children: [
-            SizedBox.expand(child: CircularProgressIndicator(
-              value: (score / 100).clamp(0.0, 1.0).toDouble(),
-              strokeWidth: 4, backgroundColor: SitewiseColors.border,
-              valueColor: AlwaysStoppedAnimation<Color>(color))),
-            Text(score.toStringAsFixed(0), style: TextStyle(fontSize: 15,
-              fontWeight: FontWeight.w800, color: color)),
-          ],
-        ))),
-      const SizedBox(width: 9),
-      const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Suitability', style: TextStyle(fontSize: 14,
-          fontWeight: FontWeight.w800, color: SitewiseColors.ink)),
-        Text('Location suitability for your business.', style: TextStyle(
-          fontSize: 12, height: 1.25, color: SitewiseColors.muted)),
-      ])),
-    ]);
+    return Row(
+      children: [
+        Semantics(
+          label: 'Suitability ${score.toStringAsFixed(0)} out of 100',
+          child: SizedBox(
+            width: 46,
+            height: 46,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                SizedBox.expand(
+                  child: CircularProgressIndicator(
+                    value: (score / 100).clamp(0.0, 1.0).toDouble(),
+                    strokeWidth: 4,
+                    backgroundColor: SitewiseColors.border,
+                    valueColor: AlwaysStoppedAnimation<Color>(color),
+                  ),
+                ),
+                Text(
+                  score.toStringAsFixed(0),
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: color,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 9),
+        const Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Suitability',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  color: SitewiseColors.ink,
+                ),
+              ),
+              Text(
+                'Location suitability for your business.',
+                style: TextStyle(
+                  fontSize: 12,
+                  height: 1.25,
+                  color: SitewiseColors.muted,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _keyFacts(CommercialProperty p) => Container(
@@ -554,12 +889,26 @@ class _EntrepreneurPropertyDetailMobilePageState
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Row(children: [
-          Icon(Icons.apartment_outlined, color: SitewiseColors.action, size: 22),
-          SizedBox(width: 10),
-          Expanded(child: Text('Property information', style: TextStyle(
-            fontSize: 17, fontWeight: FontWeight.w800, color: SitewiseColors.ink))),
-        ]),
+        const Row(
+          children: [
+            Icon(
+              Icons.apartment_outlined,
+              color: SitewiseColors.action,
+              size: 22,
+            ),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Property information',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                  color: SitewiseColors.ink,
+                ),
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 14),
         Row(
           children: [
@@ -614,10 +963,8 @@ class _EntrepreneurPropertyDetailMobilePageState
             Expanded(
               child: FutureBuilder<PropertyInsightsModel?>(
                 future: _insightsFuture,
-                builder: (context, snap) => _Fact(
-                  label: '360° view',
-                  value: _tourState(p, snap),
-                ),
+                builder: (context, snap) =>
+                    _Fact(label: '360° view', value: _tourState(p, snap)),
               ),
             ),
           ],
@@ -681,18 +1028,24 @@ class _EntrepreneurPropertyDetailMobilePageState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SitewiseMapPanel(
-            height: 190,
-            pins: [
-              MapPin(
-                id: p.id,
-                label: p.title,
-                latitude: p.latitude,
-                longitude: p.longitude,
-                highlighted: true,
-              ),
-            ],
-          ),
+          if (p.hasCoordinates)
+            SitewiseMapPanel(
+              height: 190,
+              pins: [
+                MapPin(
+                  id: p.id,
+                  label: p.title,
+                  latitude: p.latitude,
+                  longitude: p.longitude,
+                  highlighted: true,
+                ),
+              ],
+            )
+          else
+            const Text(
+              'A confirmed map location is not available.',
+              style: TextStyle(fontSize: 13, color: SitewiseColors.muted),
+            ),
           const SizedBox(height: 16),
           FutureBuilder<PropertyInsightsModel?>(
             future: _insightsFuture,
@@ -708,7 +1061,9 @@ class _EntrepreneurPropertyDetailMobilePageState
               // assessment block below is a DIFFERENT scoring system, so it is
               // only shown when Location Fit itself is unavailable — the two
               // are never blended into one number.
-              if (insights != null) return MobileInsightsPanel(insights: insights);
+              if (insights != null) {
+                return MobileInsightsPanel(insights: insights);
+              }
               return _assessmentBlock(p, model, a, error);
             },
           ),
@@ -900,11 +1255,7 @@ class _PanoramaChip extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    Icons.threesixty_rounded,
-                    size: 19,
-                    color: Colors.white,
-                  ),
+                  Icon(Icons.threesixty_rounded, size: 19, color: Colors.white),
                   SizedBox(width: 6),
                   Text(
                     '360° View',
@@ -959,11 +1310,20 @@ class _Fact extends StatelessWidget {
     children: [
       Icon(_icon, size: 20, color: SitewiseColors.action),
       const SizedBox(height: 6),
-      Text(label, style: const TextStyle(fontSize: 13,
-        color: SitewiseColors.muted)),
+      Text(
+        label,
+        style: const TextStyle(fontSize: 13, color: SitewiseColors.muted),
+      ),
       const SizedBox(height: 4),
-      Text(value, style: const TextStyle(fontSize: 15,
-        fontWeight: FontWeight.w700, color: SitewiseColors.ink, height: 1.3)),
+      Text(
+        value,
+        style: const TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w700,
+          color: SitewiseColors.ink,
+          height: 1.3,
+        ),
+      ),
     ],
   );
 }
@@ -992,15 +1352,17 @@ class _Tag extends StatelessWidget {
           ),
           const SizedBox(width: 4),
         ],
-        Flexible(child: Text(
-          label,
-          softWrap: true,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: positive ? SitewiseColors.success : SitewiseColors.accent,
+        Flexible(
+          child: Text(
+            label,
+            softWrap: true,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: positive ? SitewiseColors.success : SitewiseColors.accent,
+            ),
           ),
-        )),
+        ),
       ],
     ),
   );

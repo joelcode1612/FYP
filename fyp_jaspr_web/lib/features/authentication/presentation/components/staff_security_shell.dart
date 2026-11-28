@@ -1,6 +1,7 @@
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 
+import 'package:sitewise_jaspr_web/core/routing/landing_routes.dart';
 import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart';
 
 /// Unified branded shell for all post-password staff MFA screens.
@@ -25,7 +26,7 @@ class StaffSecurityShell extends StatelessComponent {
     [
       header(classes: 'smfa-header', [
         div(classes: 'smfa-header-inner', [
-          a(href: '/', classes: 'smfa-brand', [
+          AppLink(to: LandingRoutes.home, classes: 'smfa-brand', children: [
             img(src: '/assets/sitewise-mark-64.png',
                 alt: 'SiteWise', width: 35, height: 35),
             span([
@@ -34,10 +35,22 @@ class StaffSecurityShell extends StatelessComponent {
             ]),
           ]),
           nav(classes: 'smfa-nav', attributes: const {'aria-label': 'SiteWise public sections'}, [
-            a(href: '/#how', [Component.text('Problem & solution')]),
-            a(href: '/#geo', [Component.text('Explore')]),
-            a(href: '/#assessment', [Component.text('Assessment')]),
-            a(href: '/#recs', [Component.text('Recommendations')]),
+            AppLink(
+              to: LandingRoutes.problem,
+              children: [Component.text('Problem & solution')],
+            ),
+            AppLink(
+              to: LandingRoutes.explore,
+              children: [Component.text('Explore')],
+            ),
+            AppLink(
+              to: LandingRoutes.assessment,
+              children: [Component.text('Assessment')],
+            ),
+            AppLink(
+              to: LandingRoutes.recommendations,
+              children: [Component.text('Recommendations')],
+            ),
           ]),
           div(classes: 'smfa-session-chip', [
             const Icon('verified_user', size: 'sm'),

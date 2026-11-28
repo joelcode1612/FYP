@@ -11,22 +11,21 @@ import 'package:shared_logic/shared_logic.dart' as manifest show CapturedFrame;
 
 import 'package:fyp/core/di/service_locator.dart';
 import 'package:fyp/core/config/mobile_config.dart';
+import 'package:fyp/core/errors/failures.dart';
 import 'package:fyp/core/utils/capture_log.dart';
 // The handoff stage enum is shared with the preview; the upload work itself
 // now flows through [FrameUploadQueue].
 import 'package:fyp/features/capture_360/application/backend_capture_coordinator.dart'
-    show BackendHandoffStage;
+    show BackendCaptureCoordinator, BackendHandoffStage;
 import 'package:fyp/features/capture_360/application/capture_panorama_generation_service.dart';
 import 'package:fyp/features/capture_360/application/frame_upload_queue.dart';
 import 'package:fyp/features/capture_360/data/repositories/sitewise_capture_repository.dart';
-import 'package:fyp/features/capture_360/data/quality/dartcv_overlap_probe.dart';
-import 'package:fyp/features/capture_360/data/quality/ui_frame_pixels_decoder.dart';
 import 'package:fyp/features/capture_360/data/sphere/equirectangular_stitcher.dart';
 import 'package:fyp/features/capture_360/data/sphere/sitewise_sphere_session_store.dart';
-import 'package:fyp/features/capture_360/domain/quality/frame_quality_analyzer.dart';
 import 'package:fyp/features/capture_360/domain/sphere/sphere_capture_session.dart';
 import 'package:fyp/features/capture_360/domain/sphere/sphere_target.dart';
 import 'package:fyp/features/capture_360/guide/presentation/screens/capture_guide_screen.dart';
+import 'package:fyp/features/capture_360/presentation/sphere/screens/panorama_candidate_review_screen.dart';
 import 'package:fyp/features/capture_360/presentation/sphere/screens/sphere_capture_screen.dart';
 import 'package:fyp/shared/presentation/widgets/sitewise_button.dart';
 import 'package:fyp/shared/presentation/widgets/sitewise_confirm_dialog.dart';
@@ -74,11 +73,12 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
   /// stitch completes. One instance per station, shared process-wide.
   FrameUploadQueue? _uploadQueue;
 
-  /// The per-photograph quality verifier. Warnings are attached to the saved
-  /// frames and shown in the capture UI; this page never acts on them
-  /// automatically — the agent decides on any retake.
-  FrameQualityAnalyzer? _qualityAnalyzer;
   String? _tourId;
+
+  /// The capture station inside the tour. Normally the tour id; after an
+  /// explicit recovery it is a fresh sibling so the incompatible station can
+  /// be archived intact.
+  String? _stationId;
   bool _preparing = true;
   bool _guideCompleted = false;
   bool _resumedComplete = false;
@@ -88,10 +88,17 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
   int _processed = 0;
   int _total = kSphereTargetCount;
   int _requiredTargetCount = kSphereTargetCount;
+  int _planVersion = kSphereCapturePlanVersion;
   bool _selectingPlan = false;
   int? _processingPercent;
+
+  /// The honest sentence for the current backend stage. Never a percentage:
+  /// the worker reports stages, not progress within a stage.
+  String? _statusLine;
   String? _failure;
   String? _setupError;
+  bool _setupCanStartFresh = false;
+  bool _freshStartInProgress = false;
 
   /// What failed, so the recovery screen offers the RIGHT recovery: a device
   /// stitch failure retries stitching (the originals are untouched); an
@@ -107,6 +114,14 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
   bool _returnedAfterCapture = false;
 
   bool get _draftRunning => _draftFuture != null;
+
+  /// Whether this capture's panorama comes from the backend worker. Plan-driven
+  /// versions (4, 5, 6, 7, 8) and the retired 56-target plan do; only the
+  /// retired 38-target plan still stitches on the device.
+  bool get _isBackendStitched =>
+      (_planVersion == kSphereEnhancedPlanVersion &&
+          _requiredTargetCount == 56) ||
+      planIsBackendStitched(_planVersion);
 
   @override
   void initState() {
@@ -137,30 +152,38 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
             frameCount: 0,
           );
       final frameStore = ServiceLocator.frameStore;
+      // A recovered capture lives in a fresh sibling station. Read the pointer
+      // BEFORE constructing the store so a reopened app resumes the current
+      // attempt, never the archived one.
+      final stationId = await SitewiseSphereSessionStore.stationIdForTour(
+        frameStore: frameStore,
+        tourId: tour.id,
+      );
 
       // Engine check before anything opens: records without a session marker
       // were written by the retired 26-point flow and must not be resumed as a
-      // 38-point session. A station the 38-flow has never touched (no records
-      // at all) just starts normally.
+      // 38-point session. A station the sphere flow has never touched (no
+      // records at all) just starts normally.
       final isSphereEngine = await SitewiseSphereSessionStore.hasSessionMarker(
         frameStore: frameStore,
         tourId: tour.id,
+        stationId: stationId,
       );
       if (!isSphereEngine) {
         final legacyRecords = await SiteWiseCaptureRepository(
           tourId: tour.id,
           frameStore: frameStore,
-        ).loadRecords(tour.id);
+        ).loadRecords(stationId);
         if (legacyRecords.isNotEmpty) {
           if (!mounted) return;
           final restart = await showSitewiseConfirmDialog(
             context,
-            title: 'Start the 38-point capture over?',
+            title: 'Start the capture over?',
             message:
                 'This tour was captured with the previous 26-point flow, which '
                 'this app no longer runs. Its ${legacyRecords.length} saved '
-                'photographs cannot be finished into a 38-point panorama. '
-                'Start over deletes them and captures all 38 points; Cancel '
+                'photographs cannot be finished into a panorama. '
+                'Start over deletes them and captures all $kSphereTargetCount points; Cancel '
                 'keeps everything exactly as it is.',
             confirmLabel: 'Start over',
             destructive: true,
@@ -170,7 +193,7 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
             Navigator.of(context).pop();
             return;
           }
-          await _purgeLegacyCapture(tour.id);
+          await _purgeLegacyCapture(tour.id, stationId: stationId);
         }
       }
 
@@ -182,54 +205,93 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
       final sessions = SitewiseSphereSessionStore(
         frameStore: frameStore,
         tourId: tour.id,
+        stationId: stationId,
       );
-      // One queue per station, shared with the preview and the property
-      // detail. Created before the camera starts so the FIRST photograph is
-      // already queued before the second is shot.
+      // The durable per-photograph upload queue. One instance per station,
+      // created before the camera starts so the FIRST photograph is already
+      // queued before the second is shot. Quality verification is the
+      // backend worker's job: the capture loop stays camera-only, which is
+      // what keeps the UI isolate free of decode work.
       final uploadQueue = MobileConfig.usesLiveApi
-          ? FrameUploadQueue.forTour(frameStore: frameStore, tourId: tour.id)
+          ? FrameUploadQueue.forTour(
+              frameStore: frameStore,
+              tourId: tour.id,
+              stationId: stationId,
+            )
           : null;
 
-      // The lightweight on-device quality checks (sharpness/blur, exposure,
-      // integrity/dimensions, orientation metadata, advisory overlap). The
-      // decoder and probe are stateless, so one instance serves the session.
-      final qualityAnalyzer = FrameQualityAnalyzer(
-        decoder: const UiJpegFrameDecoder(),
-        overlapProbe: const DartCvOverlapProbe(),
-      );
+      // Publish the tour/station identity BEFORE reading saved metadata. An
+      // incompatible saved plan must be recoverable by archiving this exact
+      // station; if these fields stayed null until a successful read, the
+      // recovery button could never be offered.
+      _tourId = tour.id;
+      _stationId = stationId;
+      _repository = repository;
+      _sessions = sessions;
+      _uploadQueue = uploadQueue;
 
       // App-closed recovery: if all originals are already on disk, do not open
       // the camera or re-run the guide. The resume path saves the panorama
       // draft (stitching first if the previous launch never got to it), then
       // the queue resumes the remaining uploads.
       final restoredFrames = isSphereEngine
-          ? await sessions.loadFrames(tour.id)
+          ? await sessions.loadFrames(stationId)
           : const <CapturedFrame>[];
       final restoredSession = isSphereEngine
-          ? await sessions.getSession(tour.id)
+          ? await sessions.getSession(stationId)
           : null;
-      final count = restoredSession?.requiredTargetCount ?? kSphereTargetCount;
-      sitewisePlanVersionForCount(count);
-      if (isSphereEngine && restoredSession == null && restoredFrames.isNotEmpty) {
-        throw StateError('Saved photos have no capture plan.');
+      final int count;
+      final int version;
+      try {
+        count = restoredSession?.requiredTargetCount ?? kSphereTargetCount;
+        version =
+            restoredSession?.capturePlanVersion ?? kSphereCapturePlanVersion;
+        if (!planVersionMatchesCount(version, count)) {
+          throw StateError('Saved plan version and target count do not match.');
+        }
+      } on Object catch (error) {
+        // Unsupported/legacy count: the frames must not be reinterpreted under
+        // the current 44-target geometry. Offer the same explicit recovery as
+        // an unreadable session.json.
+        throw IncompatibleCaptureSessionFailure(
+          'The saved capture plan for this station cannot be used. '
+          'Your photographs are kept. ${readableFailure(error, fallback: 'unsupported plan')}',
+        );
+      }
+      if (isSphereEngine &&
+          restoredSession == null &&
+          restoredFrames.isNotEmpty) {
+        throw const IncompatibleCaptureSessionFailure(
+          'Saved photographs have no capture plan. Your photographs are kept; '
+          'start a new capture to leave this attempt intact.',
+        );
       }
       final savedIds = <int>{};
       for (final frame in restoredFrames) {
-        if (frame.targetId < 1 || frame.targetId > count || !savedIds.add(frame.targetId)) {
-          throw StateError('Saved photos do not match the capture plan.');
+        if (frame.targetId < 1 ||
+            frame.targetId > count ||
+            !savedIds.add(frame.targetId)) {
+          throw const IncompatibleCaptureSessionFailure(
+            'Saved photographs do not match the capture plan. Your '
+            'photographs are kept; start a new capture to leave this attempt '
+            'intact.',
+          );
         }
       }
-      final present = restoredFrames.where((f) => File(f.imagePath).existsSync()).length;
+      final present = restoredFrames
+          .where((f) => File(f.imagePath).existsSync())
+          .length;
       final shouldResume = MobileConfig.usesLiveApi && present == count;
 
       if (!mounted) return;
       setState(() {
         _tourId = tour.id;
+        _stationId = stationId;
         _repository = repository;
         _sessions = sessions;
         _uploadQueue = uploadQueue;
-        _qualityAnalyzer = qualityAnalyzer;
         _requiredTargetCount = count;
+        _planVersion = version;
         _total = count;
         _guideCompleted = restoredSession != null;
         _resumedComplete = shouldResume;
@@ -237,10 +299,18 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
       });
 
       if (shouldResume) {
+        // A backend-stitched session's panorama is downloaded to disk, so
+        // "ready" is only trustworthy while that file still exists. The legacy
+        // 38-target flow re-stitches instead, and has no downloaded artifact to
+        // check.
+        final backendStitched =
+            (version == kSphereEnhancedPlanVersion && count == 56) ||
+            planIsBackendStitched(version);
         if (restoredSession?.syncStatus == FrameSyncStatus.ready &&
             restoredSession?.panoramaSyncStatus == FrameSyncStatus.ready &&
-            (count != 56 || (restoredSession?.localPanoramaPath != null &&
-                File(restoredSession!.localPanoramaPath!).existsSync()))) {
+            (!backendStitched ||
+                (restoredSession?.localPanoramaPath != null &&
+                    File(restoredSession!.localPanoramaPath!).existsSync()))) {
           _returnAfterCapture();
         } else {
           unawaited(_resumeDraftFlow(restoredFrames, restoredSession));
@@ -259,28 +329,106 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
         }());
       }
     } catch (error) {
+      CaptureLog.log('Capture preparation failed: $error');
       if (!mounted) return;
       setState(() {
         _setupError = readableFailure(
           error,
           fallback: 'The capture session could not be prepared.',
         );
+        _setupCanStartFresh =
+            error is IncompatibleCaptureSessionFailure &&
+            _tourId != null &&
+            _stationId != null &&
+            _sessions != null &&
+            _repository != null;
         _preparing = false;
       });
     }
   }
 
-  Future<void> _selectPlan(int count) async {
+  /// Explicit recovery: archive the incompatible station intact, then rebuild
+  /// the capture screen against a fresh station in the same tour. No photo,
+  /// manifest, panorama, session row or Supabase object is deleted.
+  Future<void> _startFreshCapture() async {
+    if (_freshStartInProgress) return;
+    final tourId = _tourId;
+    final sessions = _sessions;
+    final repository = _repository;
+    if (tourId == null || sessions == null || repository == null) return;
+    setState(() => _freshStartInProgress = true);
+    try {
+      final archive = await sessions.archiveStation(
+        reason: 'unreadable-session',
+      );
+      CaptureLog.log('Previous capture station archived at $archive');
+      final freshStationId = 'sphere-${DateTime.now().millisecondsSinceEpoch}';
+      final frameStore = ServiceLocator.frameStore;
+      final freshSessions = SitewiseSphereSessionStore(
+        frameStore: frameStore,
+        tourId: tourId,
+        stationId: freshStationId,
+      );
+      // Record the fresh station BEFORE any session exists, so a restart after
+      // this point reopens the new attempt instead of the archived one. This
+      // is a pointer write; nothing is deleted.
+      await freshSessions.markActiveStation();
+      setState(() {
+        _stationId = freshStationId;
+        _sessions = freshSessions;
+        _uploadQueue = MobileConfig.usesLiveApi
+            ? FrameUploadQueue.forTour(
+                frameStore: frameStore,
+                tourId: tourId,
+                stationId: freshStationId,
+              )
+            : null;
+        _setupError = null;
+        _setupCanStartFresh = false;
+        _failure = null;
+        _failureKind = null;
+        _resumedComplete = false;
+        _handoffStage = null;
+        _guideCompleted = false;
+        _panoramaPath = null;
+        _returnedAfterCapture = false;
+        _requiredTargetCount = kSphereTargetCount;
+        _planVersion = kSphereCapturePlanVersion;
+        _total = kSphereTargetCount;
+        _preparing = false;
+      });
+    } on Object catch (error) {
+      CaptureLog.log('Could not archive the previous station: $error');
+      if (mounted) {
+        setState(() {
+          _setupError =
+              'The previous capture could not be archived, so nothing was '
+              'changed: ${readableFailure(error, fallback: 'storage error')}';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _freshStartInProgress = false);
+    }
+  }
+
+  Future<void> _beginCapture() async {
     if (_selectingPlan || _guideCompleted) return;
     final sessions = _sessions;
-    final id = _tourId;
+    // After explicit recovery the station is a fresh sibling; keep the
+    // session id equal to the station directory so the saved plan, the frame
+    // rows and the upload queue all describe the same attempt.
+    final id = _stationId ?? _tourId;
     if (sessions == null || id == null) return;
     setState(() => _selectingPlan = true);
     try {
-      sitewisePlanVersionForCount(count);
-      if (count == 56 && (!MobileConfig.usesLiveApi || _uploadQueue == null)) {
-        throw StateError('Enhanced capture requires the SiteWise service.');
-      }
+      // Every new session runs the ONE canonical adaptive five-ring plan:
+      // 36 primary targets on the 0°/±30° rings plus 8 polar targets at
+      // ±65°, with target ids equal to the connected-sector capture order.
+      // The retired plan-version selection (V4/V11/26/30/38/56) is gone;
+      // historical sessions are restored from their persisted plan metadata
+      // and are never re-planned.
+      final count = kSphereTargetCount;
+      final version = sitewisePlanVersionForCount(count);
       // The saved session is authoritative, even if it has zero frames.
       final saved = await sessions.createSession(
         sessionId: id,
@@ -290,15 +438,27 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
       if (!mounted) return;
       setState(() {
         _requiredTargetCount = saved.requiredTargetCount;
+        _planVersion = saved.capturePlanVersion;
         _total = saved.requiredTargetCount;
         _guideCompleted = true;
       });
+      // Defensive: the store derives the version for a 44-target session, so
+      // it must be the canonical plan. If a future store change breaks that,
+      // fail loudly here rather than capturing against unexpected geometry.
+      if (_planVersion != version) {
+        throw StateError(
+          'The session store saved plan $_planVersion for a new capture; '
+          'expected the canonical plan $version.',
+        );
+      }
     } on Object catch (error) {
       CaptureLog.log('Capture plan could not be saved: $error');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Could not save the capture plan. Please try again.'),
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not save the capture plan. Please try again.'),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _selectingPlan = false);
@@ -308,10 +468,13 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
   /// Deletes the legacy 26-point station and its manifest mirror, so the
   /// 38-point flow starts from an empty directory. Only the station subtree is
   /// removed — the tour record and anything else in the tour directory stay.
-  Future<void> _purgeLegacyCapture(String tourId) async {
+  Future<void> _purgeLegacyCapture(
+    String tourId, {
+    required String stationId,
+  }) async {
     try {
       final root = await ServiceLocator.frameStore.tourRoot(tourId);
-      final stationDir = Directory(p.join(root, 'ar_capture', tourId));
+      final stationDir = Directory(p.join(root, 'ar_capture', stationId));
       if (await stationDir.exists()) {
         await stationDir.delete(recursive: true);
       }
@@ -319,14 +482,16 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
         tourId,
         const <int, manifest.CapturedFrame>{},
       );
-      CaptureLog.log('Legacy 26-point capture cleared for tour $tourId');
+      CaptureLog.log(
+        'Legacy 26-point capture cleared for station $stationId in tour $tourId',
+      );
     } catch (error) {
       CaptureLog.log('Legacy capture could not be cleared: $error');
       if (!mounted) return;
       setState(() {
         _setupError =
-            'The previous capture could not be cleared, so the 38-point '
-            'capture was not started: ${readableFailure(error, fallback: 'storage error')}';
+            'The previous capture could not be cleared, so the '
+            '$kSphereTargetCount-point capture was not started: ${readableFailure(error, fallback: 'storage error')}';
         _preparing = false;
       });
     }
@@ -364,9 +529,21 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
     final sessions = _sessions;
     final repository = _repository;
     if (tourId == null || sessions == null || repository == null) return;
+    final stationId = _stationId ?? tourId;
     final propertyId = int.tryParse(widget.request.propertyId);
-    final saved = await sessions.getSession(tourId);
-    if (saved?.requiredTargetCount == 56) {
+    final saved = await sessions.getSession(stationId);
+    // Adaptive and 56-target sessions are stitched by the backend worker from
+    // the originals. A resumed one must go straight back to waiting on that
+    // job: stitching locally would produce a second, different panorama and
+    // the panorama endpoint refuses it for these modes anyway.
+    final planVersion =
+        saved?.capturePlanVersion ??
+        restoredSession?.capturePlanVersion ??
+        _planVersion;
+    if ((saved?.requiredTargetCount ?? restoredSession?.requiredTargetCount) ==
+                56 &&
+            planVersion == kSphereEnhancedPlanVersion ||
+        planIsBackendStitched(planVersion)) {
       await _completeEnhanced();
       return;
     }
@@ -374,7 +551,7 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
     // Recovery never re-uploads what the backend already confirmed.
     var frames = restoredFrames;
     if (frames.isEmpty) {
-      frames = await sessions.loadFrames(tourId);
+      frames = await sessions.loadFrames(stationId);
     }
     await _uploadQueue?.reconcileFrames(frames, propertyId: propertyId);
 
@@ -397,13 +574,13 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
       });
     }
     try {
-      final records = await repository.loadRecords(tourId);
+      final records = await repository.loadRecords(stationId);
       final result =
           await const PanoramaGenerationService(
             EquirectangularStitcher(),
           ).generate(
             records: records,
-            total: kSphereTargetCount,
+            total: saved?.requiredTargetCount ?? kSphereTargetCount,
             onStage: (String stage) {
               // Diagnostic only. The stitcher's stage wording ("Matching
               // overlaps: 12/38 pairs") is image-processing jargon; it is
@@ -418,15 +595,14 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
             _processingPercent = null;
             _failureKind = 'stitch';
             _failure =
-                'We couldn\u2019t create your panorama. Your 38 photographs '
-                'are saved.';
+                'We couldn\u2019t create your panorama. Your photographs are saved.';
           });
         }
         return;
       }
       _panoramaPath = result.panoramaPath;
       await sessions.savePanorama(
-        sessionId: tourId,
+        sessionId: stationId,
         localPanoramaPath: result.panoramaPath,
         status: PanoramaGenerationStatus.ready,
         error: null,
@@ -440,8 +616,7 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
           _processingPercent = null;
           _failureKind = 'stitch';
           _failure =
-              'We couldn\u2019t create your panorama. Your 38 photographs '
-              'are saved.';
+              'We couldn\u2019t create your panorama. Your photographs are saved.';
         });
       }
       return;
@@ -449,19 +624,43 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
     await _savePanoramaDraft(_panoramaPath!);
   }
 
-  /// The device panorama exists on disk. This is the draft trigger:
+  /// The capture engine reports every planned photograph durable. Plan-driven
+  /// sessions go straight to the backend handoff; the retired 38-target plan
+  /// still finishes through the legacy device stitch on the saved originals.
+  Future<void> _onCaptureEngineComplete() async {
+    if (_isBackendStitched) {
+      await _completeEnhanced();
+      return;
+    }
+    final sessions = _sessions;
+    final id = _stationId ?? _tourId;
+    if (sessions == null || id == null) return;
+    await _resumeDraftFlow(
+      await sessions.loadFrames(id),
+      await sessions.getSession(id),
+    );
+  }
+
+  /// The backend handoff driver for a completed plan-driven capture.
   ///
-  ///   Layer A — the LOCAL draft is persisted (the controller already wrote
-  ///   the session store; the tour record gets the path and the ready
-  ///   status here, so reopening the property finds it);
-  ///   Layer B — the panorama joins the upload queue, which syncs it to
-  ///   Supabase and confirms it through FastAPI in the background;
-  /// The completed capture returns to the inspection while the queue runs.
+  /// This used to call `queue.resume()` and then *immediately* check
+  /// `panoramaSyncStatus` / `hasPanorama` / the local file. `resume()` only
+  /// starts the drain, so the check ran before anything had happened and the
+  /// screen fell through to "Retry Handoff" — while the backend was working
+  /// perfectly. Worse, the old `finishEnhanced` polled for six minutes inside
+  /// the drain and then threw, so a slow-but-healthy job always ended in that
+  /// same failure.
+  ///
+  /// The handoff is now driven by [FrameUploadQueue.completeHandoff], which
+  /// reports the real stage and returns `pending` — not `failed` — while the
+  /// worker is still processing. Only a genuine failure reaches the Retry
+  /// action, and that action resumes the same job rather than creating a new
+  /// one.
   Future<void> _completeEnhanced() async {
     if (_draftRunning) return;
     final queue = _uploadQueue;
     final sessions = _sessions;
-    final id = _tourId;
+    final id = _stationId ?? _tourId;
     if (queue == null || sessions == null || id == null) return;
     final future = () async {
       try {
@@ -471,21 +670,91 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
             _handoffStage = BackendHandoffStage.processing;
             _failure = null;
             _failureKind = null;
+            _statusLine = 'Preparing your photographs…';
             _processed = _requiredTargetCount;
             _total = _requiredTargetCount;
           });
         }
-        await queue.reconcileFrames(await sessions.loadFrames(id),
-          propertyId: int.tryParse(widget.request.propertyId));
-        await queue.resume();
-        final saved = await sessions.getSession(id);
-        if (saved?.panoramaSyncStatus != FrameSyncStatus.ready ||
-            saved?.hasPanorama != true ||
-            !await File(saved!.localPanoramaPath!).exists()) {
-          throw StateError('Panorama is not ready.');
+        await queue.reconcileFrames(
+          await sessions.loadFrames(id),
+          propertyId: int.tryParse(widget.request.propertyId),
+        );
+        // Up to three follow passes. A pass returns `pending` when the worker
+        // is still running, which is a normal state, not an error: pause and
+        // follow the same job again. Nothing here creates a second job, and
+        // nothing here reports a failure for a job that is merely slow.
+        for (var pass = 0; pass < 3; pass++) {
+          if (!mounted) return;
+          final outcome = await queue.completeHandoff(
+            onStage: (stage, message) {
+              if (!mounted) return;
+              setState(() {
+                _handoffStage = BackendHandoffStage.processing;
+                _statusLine = message;
+              });
+            },
+          );
+          if (outcome.ready) {
+            if (mounted) {
+              setState(() {
+                _handoffStage = BackendHandoffStage.ready;
+                _statusLine = 'Review your new panorama…';
+                _panoramaPath = outcome.localPath;
+              });
+            }
+            final propertyId = int.tryParse(widget.request.propertyId);
+            if (propertyId == null ||
+                outcome.localPath == null ||
+                outcome.localPath!.isEmpty ||
+                outcome.panoramaId == null ||
+                outcome.panoramaId!.isEmpty ||
+                outcome.sessionId == null ||
+                outcome.sessionId!.isEmpty) {
+              _returnAfterCapture();
+              return;
+            }
+            await _reviewCandidate(
+              sessionId: outcome.sessionId!,
+              propertyId: propertyId,
+              candidatePath: outcome.localPath!,
+              candidatePanoramaId: outcome.panoramaId!,
+              qualityStatus: outcome.verificationStatus,
+            );
+            return;
+          }
+          if (outcome.pending) {
+            if (mounted) {
+              setState(() => _statusLine = outcome.message ?? _statusLine);
+            }
+            if (pass < 2) {
+              await Future<void>.delayed(const Duration(seconds: 20));
+              continue;
+            }
+            // Still running after the follow budget: keep the screen in its
+            // working state with the honest message. The user can leave and
+            // come back — the job is durable and the preview resumes it.
+            if (mounted) {
+              setState(() {
+                _handoffStage = BackendHandoffStage.processing;
+                _statusLine =
+                    'Your panorama is still being created. You can leave this '
+                    'screen — it will be here when you come back.';
+              });
+            }
+            return;
+          }
+          // A genuine failure.
+          if (mounted) {
+            setState(() {
+              _failure =
+                  outcome.message ?? 'The panorama could not be created.';
+              _failureKind = 'upload';
+              _handoffStage = null;
+              _statusLine = null;
+            });
+          }
+          return;
         }
-        if (mounted) setState(() => _handoffStage = BackendHandoffStage.ready);
-        _returnAfterCapture();
       } on Object catch (error) {
         CaptureLog.log('Enhanced capture could not finish: $error');
         if (mounted) {
@@ -493,14 +762,107 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
             _failure = 'Your photos are saved. Retry to finish the panorama.';
             _failureKind = 'upload';
             _handoffStage = null;
+            _statusLine = null;
           });
         }
       }
     }();
     _draftFuture = future;
-    try { await future; } finally {
+    try {
+      await future;
+    } finally {
       if (identical(_draftFuture, future)) _draftFuture = null;
       if (mounted) setState(() {});
+    }
+  }
+
+  Future<String?> _activePanoramaId(int propertyId) async {
+    try {
+      final response = await ServiceLocator.apiClient.get(
+        '/api/v1/provider-flow/properties/$propertyId/inspection',
+      );
+      final data = response['data'];
+      if (data is Map && data['panorama_id'] is String) {
+        final id = (data['panorama_id'] as String).trim();
+        return id.isEmpty ? null : id;
+      }
+    } on Object catch (error) {
+      CaptureLog.log('Active panorama lookup failed: $error');
+    }
+    return null;
+  }
+
+  /// Shows the interactive candidate preview. Viewing never activates the
+  /// candidate; only the explicit Use this panorama action does.
+  Future<void> _reviewCandidate({
+    required String sessionId,
+    required int propertyId,
+    required String candidatePath,
+    required String candidatePanoramaId,
+    String? qualityStatus,
+  }) async {
+    final sessions = _sessions;
+    if (sessions == null) return;
+    final activeId = await _activePanoramaId(propertyId);
+    if (!mounted) return;
+    final accepted = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => PanoramaCandidateReviewScreen(
+          candidatePath: candidatePath,
+          candidatePanoramaId: candidatePanoramaId,
+          sessionId: sessionId,
+          activePanoramaId: activeId,
+          qualityStatus: qualityStatus,
+          onConfirm: () async {
+            final coordinator = BackendCaptureCoordinator(
+              client: ServiceLocator.apiClient,
+              store: sessions,
+            );
+            await coordinator.acceptPanoramaCandidate(
+              sessionId: sessionId,
+              panoramaId: candidatePanoramaId,
+              expectedActivePanoramaId: activeId,
+            );
+            // Only after the backend committed the active reference does the
+            // local draft pointer move to the accepted file.
+            final tour = await ServiceLocator.tourRepo.tourById(_tourId ?? '');
+            if (tour != null) {
+              await ServiceLocator.tourRepo.updateTour(
+                tour.copyWith(
+                  panoramaPath: candidatePath,
+                  status: VirtualTourStatus.ready,
+                ),
+              );
+            }
+            await sessions.savePanorama(
+              sessionId: sessionId,
+              localPanoramaPath: candidatePath,
+              status: PanoramaGenerationStatus.ready,
+              error: null,
+            );
+          },
+          onCancel: () async {
+            final coordinator = BackendCaptureCoordinator(
+              client: ServiceLocator.apiClient,
+              store: sessions,
+            );
+            await coordinator.cancelCaptureSession(sessionId);
+            await _uploadQueue?.discardPanoramaCandidate();
+            await sessions.savePanorama(
+              sessionId: sessionId,
+              localPanoramaPath: null,
+              status: PanoramaGenerationStatus.failed,
+              error: 'Recapture cancelled',
+            );
+          },
+        ),
+      ),
+    );
+    if (!mounted) return;
+    // A back gesture also returns false: it leaves the candidate unconfirmed
+    // and preserved, but still returns to the inspection screen.
+    if (accepted == true || accepted == false) {
+      _returnAfterCapture();
     }
   }
 
@@ -589,6 +951,9 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
     );
   }
 
+  /// Return to the inspection route after the saved panorama is ready.
+  /// The inspection screen owns the review and submission workflow and reloads
+  /// its persisted tour data when this route completes.
   void _returnAfterCapture() {
     if (_returnedAfterCapture ||
         !mounted ||
@@ -622,10 +987,27 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
               const SizedBox(height: 12),
               Text(_setupError!, textAlign: TextAlign.center),
               const SizedBox(height: 16),
-              SitewiseButton(
-                label: 'Back',
-                onPressed: () => Navigator.of(context).pop(),
-              ),
+              if (_setupCanStartFresh) ...[
+                SitewiseButton(
+                  label: _freshStartInProgress
+                      ? 'Archiving the old capture…'
+                      : 'Start a new capture',
+                  icon: Icons.camera_alt_outlined,
+                  onPressed: _freshStartInProgress
+                      ? null
+                      : () => unawaited(_startFreshCapture()),
+                ),
+                const SizedBox(height: 12),
+                SitewiseSecondaryButton(
+                  label: 'Back',
+                  icon: Icons.arrow_back_rounded,
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ] else
+                SitewiseButton(
+                  label: 'Back',
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
             ],
           ),
         ),
@@ -648,10 +1030,16 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
         processed: _processed,
         total: _total,
         percent: _processingPercent,
+        statusLine: _statusLine,
         failure: _failure,
         failureKind: _failureKind,
+        // A plan-driven capture retries by resuming the SAME backend job:
+        // uploads that are already confirmed are skipped, and an existing
+        // panorama is downloaded rather than generated again.
         onRetry: _draftRunning || !MobileConfig.usesLiveApi
             ? null
+            : _isBackendStitched
+            ? () => unawaited(_completeEnhanced())
             : _panoramaPath == null
             ? () => unawaited(_resumeDraftFlow(const <CapturedFrame>[], null))
             : () => unawaited(_onPanoramaReady(_panoramaPath!)),
@@ -662,27 +1050,39 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
 
     // Pre-capture instruction screen from the existing AR guide. The host
     // remains mounted so property, tour and frame-session state stay intact.
+    // There is no plan selection: every new session runs the canonical
+    // adaptive five-ring plan, so the guide starts the capture directly.
     if (!_guideCompleted) {
       return CaptureGuideScreen(
-        allowEnhanced: MobileConfig.usesLiveApi && _uploadQueue != null,
-        onStartCapturePlan: (count) => unawaited(_selectPlan(count)),
+        showStartAction: true,
+        onStartCapture: () => unawaited(_beginCapture()),
+      );
+    }
+    final captureStationId = _stationId ?? _tourId;
+    if (captureStationId == null) {
+      return const Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(child: CircularProgressIndicator()),
       );
     }
     return SphereCaptureScreen(
+      // A keyed rebuild guarantees an explicit new capture gets a NEW
+      // controller instead of reusing the failed one and its subscriptions.
+      key: ValueKey<String>('sphere-$captureStationId'),
       autoStart: true,
-      requiredTargetCount: _requiredTargetCount,
-      sessionId: _tourId,
+      planVersion: _planVersion,
+      sessionId: captureStationId,
       repository: repository,
       sessions: _sessions,
-      // The device stitches the canonical panorama; the draft is saved and
-      // the cloud sync starts the moment the stitch completes.
-      backendProcessing: _requiredTargetCount == 56,
-      onCaptureComplete: () => unawaited(_completeEnhanced()),
-      onPanoramaReady: _onPanoramaReady,
+      // Plan-driven captures hand off to the backend worker; the retired
+      // 38-target plan still finishes through the legacy device stitch.
+      onCaptureComplete: () => unawaited(_onCaptureEngineComplete()),
       // Every photograph is queued for Supabase upload the moment it lands.
       onFrameSaved: _onFrameSaved,
-      // Quality warnings are shown in the capture UI; only the agent retakes.
-      qualityAnalyzer: _qualityAnalyzer,
+      // An unreadable saved plan is recovered explicitly here. The host
+      // archives the old station before rebuilding this screen, so the
+      // previous photographs and uploads remain intact.
+      onStartNewCapture: () => unawaited(_startFreshCapture()),
     );
   }
 }
@@ -695,6 +1095,7 @@ class _HandoffStatusScreen extends StatelessWidget {
     required this.processed,
     required this.total,
     this.percent,
+    this.statusLine,
     this.failure,
     this.failureKind,
     this.onRetry,
@@ -706,6 +1107,10 @@ class _HandoffStatusScreen extends StatelessWidget {
   final int processed;
   final int total;
   final int? percent;
+
+  /// The real backend stage ("Checking image connections…"). Shown instead of
+  /// an invented percentage.
+  final String? statusLine;
   final String? failure;
 
   /// `'stitch'` or `'upload'` — decides the recovery offered: a stitch
@@ -740,8 +1145,9 @@ class _HandoffStatusScreen extends StatelessWidget {
     } else if (stage == BackendHandoffStage.processing) {
       title = 'Creating your 360° panorama';
       message =
+          statusLine ??
           'Your $total photographs are being stitched into one panorama '
-          'for your property.';
+              'for your property.';
     } else if (stage == BackendHandoffStage.panoramaUploading) {
       title = 'Uploading your 360° panorama';
       message =
@@ -821,11 +1227,12 @@ class _HandoffStatusScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      stage == BackendHandoffStage.framesBackingUp
-                          ? '$processed of $total photos backed up'
-                          : stage == BackendHandoffStage.processing
-                          ? 'Creating the 360° panorama'
-                          : 'Sending to Sitewise',
+                      statusLine ??
+                          (stage == BackendHandoffStage.framesBackingUp
+                              ? '$processed of $total photos backed up'
+                              : stage == BackendHandoffStage.processing
+                              ? 'Creating the 360° panorama'
+                              : 'Sending to Sitewise'),
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodyMedium,
                     ),

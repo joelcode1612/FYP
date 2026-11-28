@@ -59,6 +59,28 @@ logger = logging.getLogger("sitewise.capture_session")
 #: through the panorama endpoints instead of a Python stitching job.
 BACKEND_38_MODE = "device_38_backend"
 
+#: The adaptive workflow. Its target count is not a constant: the five-ring
+#: geometry is generated on the device from the camera's measured field of
+#: view, so two devices in the same room can legitimately need 40 and 48
+#: photographs. The plan therefore travels with the session and supplies
+#: ``expected_frames`` — but it is supplied exactly once, at creation, and
+#: ``capture_alignment_service.save_capture_plan`` refuses to replace it
+#: afterwards. The invariant the fixed table enforced ("a client cannot claim
+#: a plan whose length differs from the photographs it expects") is preserved:
+#: the count and the geometry are now written together instead of the count
+#: being read from a table that no longer exists.
+ADAPTIVE_MODE = "device_adaptive"
+#: The adaptive five-ring planner is version 4. Its reference layout is 44
+#: targets (12/12/12 at 0°/±30° plus 4+4 at ±65°), but the plan payload is the
+#: authority for the count: a measured narrow lens may add positions.
+ACTIVE_CAPTURE_PLAN_VERSION = "4"
+ACTIVE_CAPTURE_TARGET_COUNT = 44
+
+#: Modes whose expected frame count comes from the stored plan. The ``0`` in
+#: the table is a sentinel, never a usable count: ``create_capture_session``
+#: rejects an adaptive session that arrives without its plan.
+ADAPTIVE_MODES = frozenset({ADAPTIVE_MODE})
+
 CAPTURE_MODES: dict[str, int] = {
     BACKEND_38_MODE: 38,
     "device_38": 38,
@@ -67,7 +89,14 @@ CAPTURE_MODES: dict[str, int] = {
     "device_56_backend": 56,
     "arcore_26": 26,
     "arcore_tour_30": 30,
+    ADAPTIVE_MODE: 0,
 }
+
+#: Modes whose panorama is produced by the backend worker from the uploaded
+#: originals. The adaptive workflow belongs here: its whole point is that the
+#: rotations are solved jointly on the server, where every original is
+#: available at full resolution and the global bundle adjustment can run.
+BACKEND_STITCH_MODES = frozenset({BACKEND_38_MODE, "device_56_backend", ADAPTIVE_MODE})
 
 _SESSION_STATUSES = frozenset(
     {
@@ -117,12 +146,16 @@ def _same_capture(
     property_id: int,
     user_id: uuid.UUID,
     capture_mode: str,
+    expected_frames: int,
 ) -> bool:
     return (
         str(record.property_id) == str(property_id)
         and str(record.owner_id) == str(user_id)
         and record.capture_mode == capture_mode
-        and record.expected_frames == CAPTURE_MODES[capture_mode]
+        # Compared against the count this request is about to write, not
+        # against the mode table: for an adaptive capture the table holds a
+        # sentinel and the plan is the only authority.
+        and record.expected_frames == expected_frames
     )
 
 
@@ -134,6 +167,7 @@ def create_capture_session(
     capture_mode: str,
     capture_plan_version: str | None,
     idempotency_key: str | None = None,
+    expected_frames: int | None = None,
 ) -> CaptureSession:
     """Create a session, or return the one a retried request already created.
 
@@ -141,10 +175,52 @@ def create_capture_session(
     completed capture could create a second session and a second job. The
     caller's local station id supplies the key; an existing row is returned
     only when its property, owner and capture plan still agree.
+
+    [expected_frames] carries the adaptive plan's target count. It is required
+    for an adaptive mode and ignored for the fixed-count modes, which keep
+    reading their count from [CAPTURE_MODES].
     """
+    version = str(capture_plan_version or "").strip()
+    fixed_id = (
+        capture_session_id_for_key(idempotency_key) if idempotency_key else None
+    )
+    # Versions 1–3 are historical fixed layouts. They may be resumed only by an
+    # idempotent retry of the exact session already on record and can never
+    # create a new session. Version 4 is the active adaptive plan.
+    if version in {"1", "2", "3"}:
+        existing = session.get(CaptureSession, fixed_id) if fixed_id is not None else None
+        expected_count = (
+            expected_frames
+            if capture_mode in ADAPTIVE_MODES
+            else CAPTURE_MODES.get(capture_mode)
+        )
+        if (
+            existing is not None
+            and existing.capture_plan_version == version
+            and int(existing.expected_frames or 0) == int(expected_count or 0)
+            and str(existing.property_id) == str(property_id)
+            and str(existing.owner_id) == str(user_id)
+            and existing.capture_mode == capture_mode
+            and expected_count is not None
+        ):
+            return existing
+        raise ValidationError("A historical capture may only resume its matching saved session.")
+    if capture_mode != ADAPTIVE_MODE or version != ACTIVE_CAPTURE_PLAN_VERSION:
+        raise ValidationError(
+            "New 360° capture sessions must use the adaptive five-ring plan (version 4)."
+        )
     if capture_mode not in CAPTURE_MODES:
         modes = ", ".join(sorted(CAPTURE_MODES))
         raise ValidationError(f"capture_mode must be one of: {modes}.")
+    if capture_mode in ADAPTIVE_MODES:
+        if not expected_frames or expected_frames < 1:
+            raise ValidationError(
+                "An adaptive capture session must be created with the plan it "
+                "will capture; the target count cannot be assumed."
+            )
+        frame_count = expected_frames
+    else:
+        frame_count = CAPTURE_MODES[capture_mode]
     # capture_sessions.property_id is legacy TEXT with no FK, so a bad or
     # deleted property would otherwise create an orphan capture session.
     # Validate the typed id against the canonical table before inserting.
@@ -153,9 +229,6 @@ def create_capture_session(
         {"pid": property_id},
     ).scalar_one_or_none() is None:
         raise ValidationError("Capture session requires an existing property.")
-    fixed_id = (
-        capture_session_id_for_key(idempotency_key) if idempotency_key else None
-    )
     if fixed_id is not None:
         existing = session.get(CaptureSession, fixed_id)
         if existing is not None:
@@ -164,6 +237,7 @@ def create_capture_session(
                 property_id=property_id,
                 user_id=user_id,
                 capture_mode=capture_mode,
+                expected_frames=frame_count,
             ):
                 raise ConflictError(
                     "The capture idempotency key belongs to a different "
@@ -175,9 +249,9 @@ def create_capture_session(
         property_id=str(property_id),
         owner_id=user_id,
         status="capturing",
-        expected_frames=CAPTURE_MODES[capture_mode],
+        expected_frames=frame_count,
         capture_mode=capture_mode,
-        capture_plan_version=(capture_plan_version or "1").strip() or "1",
+        capture_plan_version=version,
     )
     session.add(record)
     try:
@@ -195,6 +269,7 @@ def create_capture_session(
             property_id=property_id,
             user_id=user_id,
             capture_mode=capture_mode,
+            expected_frames=frame_count,
         ):
             raise ConflictError(
                 "The capture idempotency key belongs to a different property, "
@@ -351,7 +426,7 @@ def request_processing(
         raise NotFoundError("Capture session not found.")
     if record_session.status == "cancelled":
         raise ValidationError("A cancelled capture session cannot be processed.")
-    if record_session.capture_mode in {BACKEND_38_MODE, "device_56_backend"}:
+    if record_session.capture_mode in BACKEND_STITCH_MODES:
         frames = list_capture_frames(session, session_id)
         ready_targets = {
             frame.target_index for frame in frames
@@ -372,7 +447,7 @@ def request_processing(
             "AND (status IN ('queued', 'processing') OR (:retain_result AND status = 'done')) "
             "ORDER BY created_at DESC LIMIT 1"
         ),
-        {"sid": str(session_id), "retain_result": record_session.capture_mode in {BACKEND_38_MODE, "device_56_backend"}},
+        {"sid": str(session_id), "retain_result": record_session.capture_mode in BACKEND_STITCH_MODES},
     ).first()
     if live is not None:
         job = session.get(PanoramaJob, live[0])
@@ -462,10 +537,18 @@ def claim_next_job(
 def set_job_progress(
     session: Session, *, job_id: uuid.UUID, stage: str, progress: int
 ) -> None:
+    """Records the stage AND renews the claim lease.
+
+    ``claimed_at`` is the staleness clock, so a job that keeps reporting
+    progress cannot be reclaimed by a second worker mid-stitch — this is the
+    heartbeat the durable queue needs, and it costs nothing because progress is
+    already written at every stage boundary.
+    """
     session.execute(
         text(
             "UPDATE fyp.panorama_jobs SET processing_stage = :stage, "
-            "progress = :progress, updated_at = now() WHERE id = :jid"
+            "progress = :progress, updated_at = now(), claimed_at = now() "
+            "WHERE id = :jid"
         ),
         {"stage": stage, "progress": int(progress), "jid": str(job_id)},
     )
@@ -492,41 +575,209 @@ def complete_job(
     job.updated_at = _now()
     record_session = session.get(CaptureSession, job.session_id)
     if record_session is not None:
+        if record_session.status == "cancelled" or job.status == "cancelled":
+            # A cancelled attempt may finish its stitch in a worker, but its
+            # result is never completed or made active. The candidate object
+            # remains for reference-aware cleanup, not promotion.
+            job.status = "cancelled"
+            job.completed_at = _now()
+            job.updated_at = _now()
+            session.add(job)
+            session.commit()
+            return
         record_session.status = "completed"
         record_session.updated_at = _now()
         session.add(record_session)
-        # Reuse the existing assignment record (and its outbox mirror) for the
-        # only cross-database metadata the inspection workflow needs. This is
-        # best-effort bookkeeping AFTER the canonical panorama exists: a mirror
-        # outage never fails a successful stitch, and no second job table or
-        # duplicate panorama copy is introduced.
-        try:
-            property_id = int(record_session.property_id)
-            with session.begin_nested():
-                session.execute(
-                    text(
-                        "UPDATE fyp.agent_listing_assignment "
-                        "SET panorama_id = :pan, panorama_tour_id = :tour, "
-                        "panorama_job_id = :job, panorama_uploaded_at = now(), "
-                        "updated_at = now() "
-                        "WHERE listing_id = :pid "
-                        "AND workflow_status IN ('accepted', 'needs_correction')"
-                    ),
-                    {
-                        "pan": str(panorama_id),
-                        "tour": str(record_session.id),
-                        "job": str(job.id),
-                        "pid": property_id,
-                    },
-                )
-        except Exception:  # noqa: BLE001 - secondary metadata must not block
-            logger.warning(
-                "Could not mirror panorama metadata for session %s",
-                record_session.id,
-                exc_info=True,
-            )
+        # Deliberately NO assignment mirror here. A generated panorama is an
+        # unconfirmed candidate until the agent explicitly accepts it through
+        # accept_panorama_candidate(); the active inspection reference must
+        # keep pointing at the previous valid panorama.
     session.add(job)
     session.commit()
+
+
+def accept_panorama_candidate(
+    session: Session,
+    *,
+    session_id: uuid.UUID,
+    panorama_id: uuid.UUID,
+    agent_id: int,
+    expected_active_panorama_id: uuid.UUID | None = None,
+) -> tuple[Panorama, uuid.UUID | None]:
+    """Activate one generated candidate for the assigned Agent.
+
+    The worker/device confirmation only registers a candidate. This function is
+    the ONLY writer that changes the assignment's active ``panorama_id``. The
+    assignment row is locked, the previously active reference is compared, and
+    the update is conditional so two concurrent acceptances cannot both win.
+
+    Returns ``(panorama, job_id)``. A repeated acceptance of the same candidate
+    is idempotent.
+    """
+    record_session = session.get(
+        CaptureSession, session_id, populate_existing=True, with_for_update=True
+    )
+    if record_session is None:
+        raise NotFoundError("Capture session not found.")
+    if record_session.status == "cancelled":
+        raise ConflictError("This capture attempt was cancelled.")
+    if record_session.status != "completed":
+        raise ConflictError("The candidate panorama is not ready for acceptance.")
+
+    panorama = session.get(
+        Panorama, panorama_id, populate_existing=True, with_for_update=True
+    )
+    if panorama is None or panorama.session_id != session_id:
+        raise NotFoundError("Candidate panorama not found for this capture.")
+    if str(panorama.property_id) != str(record_session.property_id):
+        raise ConflictError("Candidate panorama belongs to a different property.")
+    if panorama.published_at is not None:
+        raise ConflictError("A published panorama cannot be accepted as a draft.")
+    if str(panorama.verification_status).lower() == "rejected":
+        raise ConflictError("The candidate panorama was rejected and cannot be accepted.")
+
+    assignment = session.execute(
+        text(
+            """
+            SELECT a.listing_id, a.agent_id, a.workflow_status, a.panorama_id,
+                   p.verification_status, p.is_published
+              FROM fyp.agent_listing_assignment a
+              JOIN fyp.rental_properties p ON p.id = a.listing_id
+             WHERE a.listing_id = :pid AND a.agent_id = :aid
+             FOR UPDATE OF a
+            """
+        ),
+        {"pid": int(record_session.property_id), "aid": int(agent_id)},
+    ).mappings().first()
+    if assignment is None:
+        raise ForbiddenError("Assigned property not found.")
+    if assignment["workflow_status"] not in ("accepted", "needs_correction"):
+        raise ConflictError("The assignment is not open for Agent changes.")
+    if assignment["is_published"] or assignment["verification_status"] in (
+        "approved",
+        "pending",
+        "under_review",
+    ):
+        raise ConflictError("Property is locked for Admin review or publication.")
+
+    current_active = assignment["panorama_id"]
+    current_active_text = str(current_active) if current_active is not None else None
+    candidate_text = str(panorama.panorama_id)
+    if current_active_text == candidate_text:
+        return panorama, _done_job_id(session, session_id, panorama.storage_path)
+
+    if current_active_text is not None:
+        if expected_active_panorama_id is None:
+            raise ConflictError(
+                "The active panorama must be supplied before replacing it."
+            )
+        if str(expected_active_panorama_id) != current_active_text:
+            raise ConflictError(
+                "The active panorama changed while this recapture was running. "
+                "Review the current panorama before accepting this candidate."
+            )
+        previous = session.get(Panorama, uuid.UUID(str(current_active)))
+        if previous is not None and previous.published_at is not None:
+            raise ConflictError(
+                "The active panorama is published and cannot be replaced by an "
+                "Agent draft."
+            )
+
+    job_id: uuid.UUID | None = None
+    if record_session.capture_mode in BACKEND_STITCH_MODES:
+        job_id = _done_job_id(session, session_id, panorama.storage_path)
+        if job_id is None:
+            raise ConflictError(
+                "The candidate has no completed processing job; it cannot be accepted."
+            )
+
+    updated = session.execute(
+        text(
+            """
+            UPDATE fyp.agent_listing_assignment
+               SET panorama_id = :pan, panorama_tour_id = :tour,
+                   panorama_job_id = :job, panorama_uploaded_at = now(),
+                   updated_at = now()
+             WHERE listing_id = :pid AND agent_id = :aid
+               AND panorama_id IS NOT DISTINCT FROM :current
+            """
+        ),
+        {
+            "pan": candidate_text,
+            "tour": str(record_session.id),
+            "job": str(job_id) if job_id is not None else None,
+            "pid": int(record_session.property_id),
+            "aid": int(agent_id),
+            "current": current_active_text,
+        },
+    )
+    if updated.rowcount != 1:
+        session.rollback()
+        raise ConflictError(
+            "The active panorama changed while this candidate was being accepted."
+        )
+    session.commit()
+    session.refresh(panorama)
+    return panorama, job_id
+
+
+def _done_job_id(
+    session: Session, session_id: uuid.UUID, storage_path: str
+) -> uuid.UUID | None:
+    row = session.execute(
+        text(
+            """
+            SELECT id FROM fyp.panorama_jobs
+             WHERE session_id = :sid AND status = 'done'
+               AND output_storage_path = :path
+             ORDER BY completed_at DESC NULLS LAST
+             LIMIT 1
+            """
+        ),
+        {"sid": str(session_id), "path": storage_path},
+    ).first()
+    return row[0] if row is not None else None
+
+
+def cancel_capture_session(
+    session: Session, *, session_id: uuid.UUID
+) -> CaptureSession:
+    """Cancel a candidate attempt without touching the active panorama."""
+    record_session = session.get(
+        CaptureSession, session_id, populate_existing=True, with_for_update=True
+    )
+    if record_session is None:
+        raise NotFoundError("Capture session not found.")
+    if record_session.status == "cancelled":
+        return record_session
+    candidate = panorama_for_session(session, session_id)
+    if candidate is not None:
+        active = session.execute(
+            text(
+                "SELECT panorama_id FROM fyp.agent_listing_assignment "
+                "WHERE listing_id = :pid FOR UPDATE"
+            ),
+            {"pid": int(record_session.property_id)},
+        ).first()
+        if active is not None and str(active[0]) == str(candidate.panorama_id):
+            raise ConflictError(
+                "The active panorama cannot be cancelled. Start a recapture first."
+            )
+    session.execute(
+        text(
+            "UPDATE fyp.panorama_jobs "
+            "SET status = 'cancelled', completed_at = now(), "
+            "    claimed_at = NULL, claimed_by = NULL, updated_at = now() "
+            "WHERE session_id = :sid AND status IN ('queued', 'processing')"
+        ),
+        {"sid": str(session_id)},
+    )
+    record_session.status = "cancelled"
+    record_session.updated_at = _now()
+    session.add(record_session)
+    session.commit()
+    session.refresh(record_session)
+    return record_session
 
 
 def fail_job(session: Session, *, job_id: uuid.UUID, message: str) -> None:
@@ -542,6 +793,12 @@ def fail_job(session: Session, *, job_id: uuid.UUID, message: str) -> None:
     job.updated_at = _now()
     record_session = session.get(CaptureSession, job.session_id)
     if record_session is not None:
+        if record_session.status == "cancelled":
+            job.status = "cancelled"
+            job.updated_at = _now()
+            session.add(job)
+            session.commit()
+            return
         record_session.status = "failed"
         record_session.updated_at = _now()
         session.add(record_session)
@@ -552,23 +809,60 @@ def fail_job(session: Session, *, job_id: uuid.UUID, message: str) -> None:
 def latest_property_panorama(
     session: Session, property_id: int
 ) -> Panorama | None:
-    rows = session.execute(
+    """The property's ACTIVE panorama, not its newest candidate.
+
+    A generated replacement is an unconfirmed candidate until the Agent
+    accepts it. Falling back to ``ORDER BY created_at`` would make every
+    successful worker run replace the visible tour before confirmation.
+    Historical properties without an assignment row keep the legacy newest-row
+    behaviour.
+    """
+    active = session.execute(
+        text(
+            "SELECT p.* FROM fyp.agent_listing_assignment a "
+            "JOIN fyp.panoramas p ON p.panorama_id = a.panorama_id "
+            "WHERE a.listing_id = :pid LIMIT 1"
+        ),
+        {"pid": int(property_id)},
+    ).mappings().first()
+    if active is not None:
+        return Panorama.model_validate(dict(active))
+    assignment_exists = session.execute(
+        text(
+            "SELECT EXISTS (SELECT 1 FROM fyp.agent_listing_assignment "
+            "WHERE listing_id = :pid)"
+        ),
+        {"pid": int(property_id)},
+    ).scalar()
+    if assignment_exists:
+        return None
+    row = session.execute(
         text(
             "SELECT * FROM fyp.panoramas WHERE property_id = :pid "
             "ORDER BY created_at DESC LIMIT 1"
         ),
         {"pid": str(property_id)},
-    ).mappings()
-    row = rows.first()
-    if row is None:
-        return None
-    return Panorama.model_validate(dict(row))
+    ).mappings().first()
+    return Panorama.model_validate(dict(row)) if row is not None else None
 
 
 def get_panorama(
     session: Session, panorama_id: uuid.UUID
 ) -> Panorama | None:
     return session.get(Panorama, panorama_id)
+
+
+def is_active_panorama(
+    session: Session, *, property_id: int, panorama_id: uuid.UUID
+) -> bool:
+    active = session.execute(
+        text(
+            "SELECT panorama_id FROM fyp.agent_listing_assignment "
+            "WHERE listing_id = :pid LIMIT 1"
+        ),
+        {"pid": int(property_id)},
+    ).scalar()
+    return active is not None and str(active) == str(panorama_id)
 
 
 def panorama_for_session(
@@ -707,32 +1001,9 @@ def confirm_device_panorama(
         record_session.status = "completed"
         record_session.updated_at = _now()
         session.add(record_session)
-    # Same best-effort mirror as the worker's completion path: the inspection
-    # workflow reads the assignment's panorama metadata, and a mirror outage
-    # must never fail a verified upload.
-    try:
-        with session.begin_nested():
-            session.execute(
-                text(
-                    "UPDATE fyp.agent_listing_assignment "
-                    "SET panorama_id = :pan, panorama_tour_id = :tour, "
-                    "panorama_job_id = NULL, panorama_uploaded_at = now(), "
-                    "updated_at = now() "
-                    "WHERE listing_id = :pid "
-                    "AND workflow_status IN ('accepted', 'needs_correction')"
-                ),
-                {
-                    "pan": str(record.panorama_id),
-                    "tour": str(record_session.id),
-                    "pid": int(record_session.property_id),
-                },
-            )
-    except Exception:  # noqa: BLE001 - secondary metadata must not block
-        logger.warning(
-            "Could not mirror device-panorama metadata for session %s",
-            record_session.id,
-            exc_info=True,
-        )
+    # Deliberately NO assignment mirror. This row is an unconfirmed candidate
+    # until the agent accepts it through accept_panorama_candidate(). Keeping
+    # the previous assignment reference is what makes recapture safe.
     session.commit()
     session.refresh(record)
     return record

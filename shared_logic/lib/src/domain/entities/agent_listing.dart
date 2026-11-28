@@ -58,6 +58,98 @@ class AgentAssignment {
   }
 
   String get displayId => 'L-$listingId';
+
+  // ── Authoritative agent workflow facts ───────────────────────────────────
+  //
+  // Added by `GET /api/v1/staff/me/listings` from the assignment row's own
+  // columns and the backend's single readiness classifier. Every getter is
+  // null when the payload predates the enrichment or the record does not
+  // exist — the UI reports "not reported", never a guess.
+
+  /// `agent_listing_assignment.workflow_status`:
+  /// requested | accepted | needs_correction | submitted | declined.
+  String? get assignmentStatus =>
+      _optText(raw['assignment_status'] ?? raw['workflow_status']);
+
+  String? get requestedAt => _optText(raw['requested_at']);
+  String? get respondedAt => _optText(raw['responded_at']);
+
+  /// When the agent actually SUBMITTED the inspection (assignment row) —
+  /// distinct from the verification row's timestamp.
+  String? get submittedAt => _optText(raw['submitted_at']);
+  String? get declineReason => _optText(raw['decline_reason']);
+  String? get inspectionUpdatedAt => _optText(raw['inspection_updated_at']);
+
+  int? get inspectionChecksCompleted =>
+      _optInt(raw['inspection_checks_completed']);
+  int? get inspectionChecksTotal => _optInt(raw['inspection_checks_total']);
+
+  bool? get ownershipProofUploaded => _readinessBool(
+    raw['ownership_proof_uploaded'],
+    'ownership_proof_uploaded',
+  );
+  String? get ownershipSubmissionStatus => _optText(
+    raw['ownership_submission_status'] ??
+        _readinessValue('ownership_submission_status'),
+  );
+  bool? get panoramaConfirmed =>
+      _readinessBool(raw['panorama_confirmed'], 'panorama_confirmed');
+  bool? get submissionReady {
+    final direct = raw['submission_ready'];
+    if (direct is bool) return direct;
+    final readiness = raw['submission_readiness'];
+    if (readiness is Map && readiness['ready'] is bool) {
+      return readiness['ready'] as bool;
+    }
+    return null;
+  }
+
+  /// The blockers the submission gate words, verbatim from the backend.
+  List<String> get submissionBlockers {
+    final readiness = raw['submission_readiness'];
+    if (readiness is Map) return _optStrings(readiness['blockers']);
+    return _optStrings(raw['submission_blockers']);
+  }
+
+  /// The single next step the records support, and who owns it
+  /// (`agent` | `owner` | `admin` | `system` | `none`).
+  String? get nextAction => _optText(raw['next_action']);
+  String? get nextActionOwner => _optText(raw['next_action_owner']);
+
+  /// The backend's `submission_readiness` map, when the payload carries it.
+  Map<String, dynamic>? get _readiness =>
+      raw['submission_readiness'] is Map<String, dynamic>
+      ? raw['submission_readiness'] as Map<String, dynamic>
+      : null;
+
+  dynamic _readinessValue(String key) => _readiness?[key];
+
+  /// A boolean that may arrive at the top level or inside `submission_readiness`.
+  bool? _readinessBool(dynamic direct, String readinessKey) {
+    if (direct is bool) return direct;
+    final nested = _readinessValue(readinessKey);
+    if (nested is bool) return nested;
+    return null;
+  }
+
+  static String? _optText(dynamic value) {
+    final text = value?.toString().trim();
+    return text == null || text.isEmpty ? null : text;
+  }
+
+  static int? _optInt(dynamic value) {
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value.trim());
+    return null;
+  }
+
+  static List<String> _optStrings(dynamic value) {
+    if (value is! List) return const [];
+    return [
+      for (final item in value)
+        if ('${item ?? ''}'.trim().isNotEmpty) '${item}'.trim(),
+    ];
+  }
 }
 
 /// The operational property row joined by the backend for one assignment.
@@ -70,6 +162,8 @@ class AgentListingFacts {
   final String? city;
   final String? state;
   final String? postcode;
+  final double? latitude;
+  final double? longitude;
   final double? rentalPrice;
   final double? sizeSqft;
   final double? psf;
@@ -77,6 +171,11 @@ class AgentListingFacts {
   final double? floorLevel;
   final String? floorDescription;
   final double? frontageFt;
+  final double? depthFt;
+  final double? builtUpSqft;
+  final double? landAreaSqft;
+  final String? facingDirection;
+  final int? bathrooms;
   final String? furnishing;
   final String? tenure;
   final String? unitPosition;
@@ -110,6 +209,8 @@ class AgentListingFacts {
     this.city,
     this.state,
     this.postcode,
+    this.latitude,
+    this.longitude,
     this.rentalPrice,
     this.sizeSqft,
     this.psf,
@@ -117,6 +218,11 @@ class AgentListingFacts {
     this.floorLevel,
     this.floorDescription,
     this.frontageFt,
+    this.depthFt,
+    this.builtUpSqft,
+    this.landAreaSqft,
+    this.facingDirection,
+    this.bathrooms,
     this.furnishing,
     this.tenure,
     this.unitPosition,
@@ -142,6 +248,8 @@ class AgentListingFacts {
         city: row['city']?.toString(),
         state: row['state']?.toString(),
         postcode: row['postcode']?.toString(),
+        latitude: _numFromJson(row['latitude']),
+        longitude: _numFromJson(row['longitude']),
         rentalPrice: _numFromJson(row['rental_price']),
         sizeSqft: _numFromJson(row['size_sqft']),
         psf: _numFromJson(row['psf']),
@@ -149,6 +257,11 @@ class AgentListingFacts {
         floorLevel: _numFromJson(row['floor_level']),
         floorDescription: row['floor_description']?.toString(),
         frontageFt: _numFromJson(row['frontage_ft']),
+        depthFt: _numFromJson(row['depth_ft']),
+        builtUpSqft: _numFromJson(row['built_up_sqft']),
+        landAreaSqft: _numFromJson(row['land_area_sqft']),
+        facingDirection: row['facing_direction']?.toString(),
+        bathrooms: (row['bathrooms'] as num?)?.toInt(),
         furnishing: row['furnishing']?.toString(),
         tenure: row['tenure']?.toString(),
         unitPosition: row['unit_position']?.toString(),

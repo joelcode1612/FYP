@@ -437,6 +437,8 @@ def test_performance_counts_managed_listings_and_reports_untracked(
     assert report["listings"]["published"] >= 1
     assert report["listings"]["total"] >= 1
     assert report["enquiries"]["total"] == 1
+    assert report["portfolio"] == {"median_rent": 5200, "average_size_sqft": 1450}
+    assert report["listings"]["by_inspection"]["requested"] >= 1
 
     # Engagement is NOT tracked. It must say so instead of reporting zeroes.
     engagement = report["engagement"]

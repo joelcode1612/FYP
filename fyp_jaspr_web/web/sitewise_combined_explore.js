@@ -113,14 +113,11 @@
       mapUnavailable(el, 'The map library could not load. Property search and listings remain available.');
       return false;
     }
-    // Optional key: CARTO serves these raster tiles without one, so a blank
-    // CARTO_BASEMAPS_KEY must not disable the map. Only a real tile failure
-    // (handled below) is reported as unavailable.
-    const cartoKey = (window.SITEWISE_MAP_CONFIG?.cartoBasemapsKey || '').trim();
     try {
       map = L.map(mountFor(el), {
         zoomControl: true,
         preferCanvas: true,
+        maxZoom: 19,
         // Google-Maps-like wheel behaviour: the pointer is the zoom anchor and
         // one wheel notch advances one level. 100px per level damps trackpad
         // bursts without making a mouse wheel feel unresponsive.
@@ -128,23 +125,17 @@
         wheelDebounceTime: 40,
         wheelPxPerZoomLevel: 100,
       }).setView(DEFAULT, 11);
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png' +
-        (cartoKey ? '?key=' + encodeURIComponent(cartoKey) : ''), {
-        subdomains: 'abcd', maxZoom: 19,
-        attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-      }).on('tileerror', () => {
-        mapUnavailable(el, 'The map background could not load. Check the network connection and retry.');
-      }).addTo(map);
       markerLayer = (typeof L.markerClusterGroup === 'function')
         ? L.markerClusterGroup({ maxClusterRadius: 42, showCoverageOnHover: false })
         : L.layerGroup();
       markerLayer.addTo(map);
       root = el;
       buildLayerChips(mountFor(el));
+      window.SitewiseBasemap.mount(map);
       return true;
     } catch (_) {
       destroy();
-      mapUnavailable(el, 'Map tiles or initialization are unavailable. Listings are unaffected.');
+      mapUnavailable(el, 'The map could not open. Property listings are still available.');
       return false;
     }
   }

@@ -286,6 +286,29 @@ def get_catalog_insights(
     the cost.
     """
     row = CatalogRepository(session).get_property(property_id)
+    if row is None and property_id.isdigit():
+        # An assigned Agent may read the same model output for an unpublished
+        # operational property. Public catalogue access remains unchanged.
+        from sitewise.domain import rbac
+
+        if rbac.canonical_role(_user.role) == rbac.ROLE_AGENT:
+            if _user.assurance_level != "aal2":
+                raise HTTPException(
+                    status_code=403,
+                    detail={
+                        "code": "staff_mfa_required",
+                        "message": "Complete staff MFA to view this assigned listing.",
+                    },
+                )
+            from sitewise.api.v1.properties import _agent_manages_listing
+            from sitewise.repositories.fyp_property_repository import FypPropertyRepository
+
+            if _agent_manages_listing(
+                operational_session, int(property_id), _user
+            ):
+                row = FypPropertyRepository(operational_session).owner_listing(
+                    int(property_id)
+                )
     if row is None:
         raise HTTPException(
             status_code=404,

@@ -26,6 +26,13 @@ class StorageFailure extends CaptureFailure {
   const StorageFailure(super.message);
 }
 
+/// A saved capture plan exists but cannot be interpreted with the current
+/// geometry. Distinct from a generic storage error because the only safe
+/// recovery is an EXPLICIT new capture; the old evidence is never deleted.
+class IncompatibleCaptureSessionFailure extends StorageFailure {
+  const IncompatibleCaptureSessionFailure(super.message);
+}
+
 class BackendFailure extends CaptureFailure {
   final bool retryable;
   const BackendFailure(super.message, {this.retryable = true});

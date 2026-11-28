@@ -60,11 +60,16 @@ class TourPreviewViewModel extends ChangeNotifier {
 
   /// Whether the 38-direction sphere flow owns this tour.
   bool _sphereEngine = false;
+  int _spherePlanVersion = kSphereCapturePlanVersion;
 
   /// The 38-point flow's own session store, for the backend handoff state and
   /// the saved frames a handoff retry reads. `null` unless this tour is a
   /// sphere-engine tour in a live build.
   SitewiseSphereSessionStore? _sphereSessions;
+
+  /// The station this tour is currently using. Equal to [tourId] unless the
+  /// capture was explicitly recovered into a fresh sibling station.
+  String? _stationId;
 
   /// The per-pair stitching verifier for this tour. The capture screen owns
   /// one while shooting; this one restores the persisted document so the
@@ -89,6 +94,8 @@ class TourPreviewViewModel extends ChangeNotifier {
   String? canonicalError;
 
   TourPreviewViewModel({required this.tourId});
+
+  String get _activeStationId => _stationId ?? tourId;
 
   SiteWiseCaptureRepository _repository() => SiteWiseCaptureRepository(
     tourId: tourId,
@@ -118,20 +125,35 @@ class TourPreviewViewModel extends ChangeNotifier {
     notifyListeners();
     try {
       tour = await ServiceLocator.tourService.tourById(tourId);
-      final repository = _repository();
-      records = await repository.loadRecords(tourId);
-      // The engine marker decides the layout and the stitcher. It is written
-      // before the 38-flow's camera starts, so a station that holds records
-      // but no marker is a legacy 26-point capture and keeps that flow's
-      // behaviour below.
-      _sphereEngine = await SitewiseSphereSessionStore.hasSessionMarker(
+      final stationId = await SitewiseSphereSessionStore.stationIdForTour(
         frameStore: ServiceLocator.frameStore,
         tourId: tourId,
       );
+      _stationId = stationId;
+      final repository = _repository();
+      records = await repository.loadRecords(stationId);
+      // The engine marker decides the layout and the stitcher. It is written
+      // before the sphere flow's camera starts, so a station that holds
+      // records but no marker is a legacy 26-point capture and keeps that
+      // flow's behaviour below.
+      _sphereEngine = await SitewiseSphereSessionStore.hasSessionMarker(
+        frameStore: ServiceLocator.frameStore,
+        tourId: tourId,
+        stationId: stationId,
+      );
       if (_sphereEngine) {
-        final store = SitewiseSphereSessionStore(frameStore: ServiceLocator.frameStore, tourId: tourId);
-        final plan = await store.getSession(tourId);
-        specs = _sphereSpecs(plan?.requiredTargetCount ?? kSphereTargetCount);
+        final store = SitewiseSphereSessionStore(
+          frameStore: ServiceLocator.frameStore,
+          tourId: tourId,
+          stationId: stationId,
+        );
+        final plan = await store.getSession(stationId);
+        _spherePlanVersion =
+            plan?.capturePlanVersion ?? kSphereCapturePlanVersion;
+        specs = _sphereSpecs(
+          plan?.requiredTargetCount ?? kSphereTargetCount,
+          _spherePlanVersion,
+        );
       } else {
         specs = buildCaptureSphere();
       }
@@ -147,6 +169,7 @@ class TourPreviewViewModel extends ChangeNotifier {
         final sessions = SitewiseSphereSessionStore(
           frameStore: ServiceLocator.frameStore,
           tourId: tourId,
+          stationId: stationId,
         );
         _sphereSessions = sessions;
         await _queueSavedPanorama();
@@ -156,10 +179,11 @@ class TourPreviewViewModel extends ChangeNotifier {
         queueState = await FrameUploadQueue.readState(
           ServiceLocator.frameStore,
           tourId,
+          stationId: stationId,
         );
         // Persisted device quality verdicts, so the preview can show which
         // photographs carry warnings without re-analyzing any pixels.
-        final savedFrames = await sessions.loadFrames(tourId);
+        final savedFrames = await sessions.loadFrames(stationId);
         final quality = <int, FrameQualityReport>{};
         for (final frame in savedFrames) {
           final report = FrameQualityReport.tryDecode(frame.qualityJson);
@@ -178,27 +202,31 @@ class TourPreviewViewModel extends ChangeNotifier {
   /// The 38-direction layout mapped onto the preview's chip model. Ids,
   /// angles and ring names come straight from the capture flow's own target
   /// list, so the grid the user reviews is the grid they were guided through.
-  static List<CaptureTargetSpec> _sphereSpecs(int count) => <CaptureTargetSpec>[
-    for (final SphereTargetSpec target in buildSitewiseSessionTargets(count))
-      CaptureTargetSpec(
-        targetId: target.targetId,
-        yawDegrees: target.yawDeg,
-        pitchDegrees: target.pitchDeg,
-        direction: target.direction,
-        ringName: target.ringName,
-        indexInRing: target.indexInRing,
-        isPole: target.isZenith || target.isNadir,
-        isZenith: target.isZenith,
-        isNadir: target.isNadir,
-      ),
-  ];
+  static List<CaptureTargetSpec> _sphereSpecs(int count, int planVersion) =>
+      <CaptureTargetSpec>[
+        for (final SphereTargetSpec target in buildSitewiseSessionTargets(
+          count,
+          planVersion: planVersion,
+        ))
+          CaptureTargetSpec(
+            targetId: target.targetId,
+            yawDegrees: target.yawDeg,
+            pitchDegrees: target.pitchDeg,
+            direction: target.direction,
+            ringName: target.ringName,
+            indexInRing: target.indexInRing,
+            isPole: target.isZenith || target.isNadir,
+            isZenith: target.isZenith,
+            isNadir: target.isNadir,
+          ),
+      ];
 
   void _ensureStitchService(SiteWiseCaptureRepository repository) {
     if (stitchService != null || records.isEmpty) return;
     final service = IncrementalStitchService(
-      stationId: tourId,
+      stationId: _activeStationId,
       resolveStationDir: () => _resolveStationDirectory(repository),
-      loadRecords: () => repository.loadRecords(tourId),
+      loadRecords: () => repository.loadRecords(_activeStationId),
       worker: runIncrementalStitchJob,
       onChanged: () {
         if (_disposed) return;
@@ -220,7 +248,7 @@ class TourPreviewViewModel extends ChangeNotifier {
       final framesDir = p.dirname(record.imagePath);
       if (p.basename(framesDir) == 'frames') return p.dirname(framesDir);
     }
-    final saved = await repository.loadRecords(tourId);
+    final saved = await repository.loadRecords(_activeStationId);
     for (final record in saved) {
       final framesDir = p.dirname(record.imagePath);
       if (p.basename(framesDir) == 'frames') return p.dirname(framesDir);
@@ -313,7 +341,15 @@ class TourPreviewViewModel extends ChangeNotifier {
 
   Future<bool> regenerate() async {
     if (generating) return false;
-    if (_sphereEngine && specs.length == 56) return retryHandoff();
+    // A backend-stitched session has no device panorama to rebuild: its
+    // panorama comes from the worker, so "regenerate" means re-driving the
+    // upload queue and the job, not running the local stitcher.
+    if (_sphereEngine &&
+        ((_spherePlanVersion == kSphereEnhancedPlanVersion &&
+                specs.length == 56) ||
+            planIsBackendStitched(_spherePlanVersion))) {
+      return retryHandoff();
+    }
     generating = true;
     stage = 'Validating frames...';
     error = null;
@@ -366,13 +402,15 @@ class TourPreviewViewModel extends ChangeNotifier {
   /// 26-point-flow component.
   Future<bool> _regenerateSphere() async {
     try {
-      final records = await _repository().loadRecords(tourId);
+      final records = await _repository().loadRecords(_activeStationId);
+      final savedSession = await _sphereSessions?.getSession(_activeStationId);
+      final total = savedSession?.requiredTargetCount ?? kSphereTargetCount;
       final result =
           await const PanoramaGenerationService(
             EquirectangularStitcher(),
           ).generate(
             records: records,
-            total: kSphereTargetCount,
+            total: total,
             onStage: (s) {
               stage = s;
               notifyListeners();
@@ -387,7 +425,7 @@ class TourPreviewViewModel extends ChangeNotifier {
       }
       final saved = await ServiceLocator.tourRepo.tourById(tourId);
       await _sphereSessions?.savePanorama(
-        sessionId: tourId,
+        sessionId: _activeStationId,
         localPanoramaPath: result.panoramaPath,
         status: PanoramaGenerationStatus.ready,
         error: null,
@@ -638,6 +676,7 @@ class TourPreviewViewModel extends ChangeNotifier {
   FrameUploadQueue get _uploadQueue => FrameUploadQueue.forTour(
     frameStore: ServiceLocator.frameStore,
     tourId: tourId,
+    stationId: _activeStationId,
   );
 
   /// Re-reads the handoff record, the canonical panorama metadata and the
@@ -648,7 +687,7 @@ class TourPreviewViewModel extends ChangeNotifier {
     final sessions = _sphereSessions;
     if (sessions == null) return;
     try {
-      backendSession = await sessions.getSession(tourId);
+      backendSession = await sessions.getSession(_activeStationId);
     } on Object {
       backendSession = null;
     }
@@ -739,27 +778,78 @@ class TourPreviewViewModel extends ChangeNotifier {
       assignmentReady &&
       checksComplete &&
       (hasPanorama || inspectionStatus?['panorama_uploaded'] == true) &&
-      (specs.length == 38 || specs.length == 56) &&
+      // Any sphere plan qualifies: the adaptive five-ring count is derived from
+      // the camera, so enumerating counts here would silently exclude every
+      // device whose plan is not one of the historical constants.
+      specs.isNotEmpty &&
       frames.length == specs.length;
 
   /// Re-arms the durable upload queue and drains it — the ONLY retry path a
-  /// live 38-point tour needs. Every pending frame and the panorama draft
-  /// resume without recapturing; confirmed units are skipped byte-for-byte.
-  /// Returns true when the panorama draft reached Sitewise.
+  /// live capture needs. Every pending frame and the panorama draft resume
+  /// without recapturing; confirmed units are skipped byte-for-byte.
+  ///
+  /// For a plan-driven capture this follows the SAME backend job instead of
+  /// waiting on a queue that has nothing left to upload: the old version
+  /// called `resume()` and then read `panoramaConfirmed`, which is only true
+  /// after the worker finishes — so a job that was still processing looked
+  /// exactly like a failure.
+  ///
+  /// Returns true only when the panorama is confirmed and on disk.
   Future<bool> retryHandoff() async {
     if (generating || !liveBackend) return false;
     generating = true;
     error = null;
     notifyListeners();
+    // A job that is still running leaves its sentence on screen. Clearing the
+    // stage in `finally` would erase the only explanation the user has for a
+    // panorama that has not appeared yet.
+    var keepStage = false;
     try {
       final sessions = _sphereSessions;
       if (sessions == null) return false;
       final property = int.tryParse(tour?.propertyId ?? '');
       await _uploadQueue.reconcileFrames(
-        await sessions.loadFrames(tourId),
+        await sessions.loadFrames(_activeStationId),
         propertyId: property,
       );
       final queue = _uploadQueue;
+      final backendStitched =
+          specs.isNotEmpty &&
+          ((_spherePlanVersion == kSphereEnhancedPlanVersion &&
+                  specs.length == 56) ||
+              planIsBackendStitched(_spherePlanVersion));
+      if (backendStitched) {
+        final outcome = await queue.completeHandoff(
+          onStage: (jobStage, message) {
+            // The preview's own `stage` is the sentence shown under the card;
+            // the job stage is what decides it.
+            stage = message;
+            notifyListeners();
+          },
+        );
+        if (outcome.pending) {
+          // Not a failure: the worker is still running. Say so, and leave the
+          // Retry action available for the user without claiming an error.
+          stage = outcome.message;
+          keepStage = true;
+          await _refreshBackendState();
+          return false;
+        }
+        if (outcome.failed) {
+          error = outcome.message;
+          return false;
+        }
+        // The handoff recorded the panorama on the tour, the session and the
+        // queue document. Re-read all three so the preview shows it.
+        tour = await ServiceLocator.tourService.tourById(tourId);
+        queueState = await FrameUploadQueue.readState(
+          ServiceLocator.frameStore,
+          tourId,
+          stationId: _activeStationId,
+        );
+        await _refreshBackendState();
+        return queueState?.panoramaConfirmed ?? false;
+      }
       if (queueState?.panorama == null &&
           inspectionStatus?['panorama_uploaded'] != true) {
         final path = await _devicePanoramaPath(sessions);
@@ -768,7 +858,6 @@ class TourPreviewViewModel extends ChangeNotifier {
         }
       }
       await queue.resume();
-      if (specs.length == 56) tour = await ServiceLocator.tourService.tourById(tourId);
       await refreshServerState();
       return queueState?.panoramaConfirmed ?? false;
     } on Object catch (e) {
@@ -780,7 +869,7 @@ class TourPreviewViewModel extends ChangeNotifier {
       return false;
     } finally {
       generating = false;
-      stage = null;
+      if (!keepStage) stage = null;
       notifyListeners();
     }
   }
@@ -809,7 +898,7 @@ class TourPreviewViewModel extends ChangeNotifier {
         if (sessions != null) {
           final property = int.tryParse(tour?.propertyId ?? '');
           await _uploadQueue.reconcileFrames(
-            await sessions.loadFrames(tourId),
+            await sessions.loadFrames(_activeStationId),
             propertyId: property,
           );
         }
@@ -818,24 +907,32 @@ class TourPreviewViewModel extends ChangeNotifier {
         // The archive below keeps everything anyway.
       }
       // 2. Archive the station directory (frames, session, queue document,
-      //    panorama). The rename keeps every previous byte on disk.
-      final root = await ServiceLocator.frameStore.tourRoot(tourId);
-      final stationDir = Directory(p.join(root, 'ar_capture', tourId));
-      if (await stationDir.exists()) {
-        final archiveName =
-            '${tourId}_prev_'
-            '${DateTime.now().millisecondsSinceEpoch}';
-        try {
-          await stationDir.rename(p.join(root, 'ar_capture', archiveName));
-        } on Object {
-          // A rename across filesystem boundaries can fail; fall back to
-          // copying is overkill — a failed archive keeps the capture as-is
-          // and the caller shows the error instead of destroying anything.
-          error =
-              'The previous capture could not be archived, so a new capture '
-              'was not started. Nothing was deleted.';
-          return false;
+      //    panorama). The rename keeps every previous byte on disk. Use the
+      //    store's CURRENT station, which differs from the tour id after an
+      //    explicit recovery.
+      final sessions = _sphereSessions;
+      try {
+        if (sessions != null) {
+          await sessions.archiveStation(reason: 'previous');
+        } else {
+          final root = await ServiceLocator.frameStore.tourRoot(tourId);
+          final stationDir = Directory(
+            p.join(root, 'ar_capture', _activeStationId),
+          );
+          if (await stationDir.exists()) {
+            final archiveName =
+                '${_activeStationId}_prev_'
+                '${DateTime.now().millisecondsSinceEpoch}';
+            await stationDir.rename(p.join(root, 'ar_capture', archiveName));
+          }
         }
+      } on Object {
+        // A failed archive keeps the capture as-is; the caller shows the
+        // error instead of destroying anything.
+        error =
+            'The previous capture could not be archived, so a new capture '
+            'was not started. Nothing was deleted.';
+        return false;
       }
       // 3. Clear the manifest mirror so the capture host starts fresh.
       await ServiceLocator.frameStore.saveManifest(
@@ -881,7 +978,7 @@ class TourPreviewViewModel extends ChangeNotifier {
   ) async {
     final candidates = <String?>[
       tour?.panoramaPath,
-      (await sessions.getSession(tourId))?.localPanoramaPath,
+      (await sessions.getSession(_activeStationId))?.localPanoramaPath,
     ];
     for (final path in candidates) {
       if (path == null || path.isEmpty) continue;

@@ -144,7 +144,7 @@ class _ProfilePageState extends State<ProfilePage> {
       title: 'Profile',
       eyebrow: 'Account',
       subtitle: 'Your administrator account details and sign-in information.',
-      child: div(classes: 'w-60', [
+      child: div(classes: 'admin-profile', [
         div(classes: 'card stack', [
           span(classes: 'avatar', [Component.text(_initial)]),
           span(classes: 'title', [
@@ -191,7 +191,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 'changed from a profile form.',
           ),
 
-          div(classes: 'row', [
+          div(classes: 'actions-row', [
             ActionButton(
               _saving ? 'Saving…' : 'Save changes',
               onClick: _saving ? null : _save,

@@ -1,8 +1,7 @@
 import 'dart:math' as math;
 
-import 'package:fyp/features/capture_360/domain/vio_sphere_math.dart'
+import 'package:fyp/features/capture_360/domain/models/vio_sphere_constants.dart'
     show VioSphereConstants;
-import 'package:fyp/features/capture_360/domain/services/station_frame.dart';
 import 'package:fyp/features/capture_360/domain/virtual_tour/math/quaternions.dart';
 import 'package:fyp/features/capture_360/domain/virtual_tour/math/scalars.dart';
 import 'package:fyp/features/capture_360/domain/virtual_tour/math/sphere.dart';
@@ -447,64 +446,3 @@ class CaptureGeometryConfig {
   }
 }
 
-/// Where one target actually is, in the AR world.
-///
-/// **The single authority for target placement.** The AR scene and the tests
-/// both read this; the sphere map projects the same [CaptureTargetSpec.direction]
-/// through the same station frame, so a marker on the map and its GLB in the
-/// world are the same target by construction rather than by coincidence.
-///
-/// The position is `station.origin + radius × station.localToWorld(direction)`:
-/// gravity-aligned, frozen at calibration, and never derived from the live
-/// camera pose.
-({Vec3 worldPosition, Vec3 facingNormal, Quat localRotation}) resolveTarget({
-  required StationFrame station,
-  required CaptureTargetSpec spec,
-  required double radiusM,
-}) {
-  final worldDirection = station.localToWorld(spec.direction).normalized;
-  // The plate's face points back at the station: the user standing there is
-  // who aims at it, however far they step away afterwards.
-  final facing = (-worldDirection).normalized;
-  return (
-    worldPosition: station.origin + worldDirection * radiusM,
-    facingNormal: facing,
-    localRotation: facingRotation(facing),
-  );
-}
-
-/// The rotation that takes the model's `+Z` (the plate's face normal) onto
-/// [normal].
-///
-/// `Quat.axisAngle` about `ẑ × n`, by the angle between them. `+Z → −Z` is the
-/// degenerate case (an anti-parallel normal), where any perpendicular axis gives
-/// a valid 180° rotation; `x̂` is chosen so the result is deterministic.
-///
-/// Pure and static because it is the one piece of orientation maths in the whole
-/// anchoring path, and it is the piece that decides whether the marker faces the
-/// user or the inside of the wall.
-///
-/// The `+Z` face is **verified against the shipped asset**, not assumed:
-/// `ar_capture_target.glb` is a disc in the `XY` plane with its thickness along
-/// `Z` — the front face sits at `+0.006`, and the bezel's own front face at
-/// `+0.012` is what the `bezelSetbackM` of `0.006` makes coplanar with it. Both
-/// are parsed from the GLB by `GlbMeshSource`, and `docs/` records the
-/// measurement. A model whose face were on `−Z` would need the negation here.
-Quat facingRotation(Vec3 normal) {
-  final n = normal.normalized;
-  if (n.length == 0) return Quat.identity;
-  final dot = clampDouble(Vec3.unitZ.dot(n), -1, 1);
-  // 1e-9 rather than an exact compare: n comes from a tracked plane and is never
-  // exact.
-  if (dot > 1 - 1e-9) return Quat.identity;
-  if (dot < -1 + 1e-9) return Quat.axisAngle(180, Vec3.unitX);
-  final axis = Vec3.unitZ.cross(n);
-  final angleDeg = _acosDeg(dot);
-  return Quat.axisAngle(angleDeg, axis.normalized);
-}
-
-double _acosDeg(double v) {
-  // atan2 form, stable at both ends of the range.
-  final s = math.sqrt(math.max(0, 1 - v * v));
-  return math.atan2(s, v) * radToDeg;
-}

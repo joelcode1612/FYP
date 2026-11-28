@@ -8,11 +8,11 @@ import 'package:fyp/features/capture_360/domain/sphere/sphere_target.dart';
 /// supplied `SiteWise_360_Capture_Guidelines.html`.
 ///
 /// **The real capture plan is the source of truth.** Every count, ring pitch
-/// and example target id in this file is derived from [buildSphereTargets] /
-/// [kSphereTargetCount] rather than hard-coded from the HTML, so if the
-/// capture algorithm's plan ever changes, the guide's numbers follow it. The
-/// HTML's own values (38 directions: 12+12+12+1+1 at 0°/±40°/±90°) were
-/// verified against `sphere_target.dart` before being written down here.
+/// and example target id in this file is derived from [buildSphereTargets]
+/// rather than hard-coded, so if the capture plan changes the guide's numbers
+/// follow it. The supplied HTML described 38 directions in three rings plus
+/// two poles; the adaptive plan generates five rings from the camera's own
+/// field of view, and this file reads whatever that plan produces.
 ///
 /// Everything here is a teaching example: no live camera, no AR pose data and
 /// no captured photographs are involved.
@@ -36,10 +36,17 @@ enum CaptureGuideSection {
 }
 
 /// Ring/target counts read from the real capture plan.
+///
+/// The polar lookups are tolerant on purpose. Plans 1–3 place their caps at
+/// exactly ±90°, while the adaptive five-ring plan stops at ±65° and calls
+/// those rings the ceiling and floor. Asking for "the target at pitch 90"
+/// would therefore throw on the current plan — so the guide takes the highest
+/// and lowest target the plan actually has, which is the same illustration on
+/// either layout.
 class CaptureGuidePlan {
   CaptureGuidePlan._(List<SphereTargetSpec> targets)
-    : total = kSphereTargetCount,
-      ringPitchDeg = kSphereRingPitchDeg,
+    : total = targets.length,
+      ringPitchDeg = _upperRingPitch(targets),
       middleCount = targets.where((t) => t.pitchDeg.abs() < 1e-9).length,
       upperCount = targets
           .where((t) => t.pitchDeg > 1e-9 && !t.isZenith)
@@ -49,18 +56,56 @@ class CaptureGuidePlan {
           .length,
       exampleStartTarget = targets.firstWhere(
         (t) => t.pitchDeg.abs() < 1e-9 && t.yawDeg.abs() < 1e-9,
+        orElse: () => targets.first,
       ),
       exampleMiddleTarget = targets.firstWhere(
         (t) => t.pitchDeg.abs() < 1e-9 && (t.yawDeg - 30).abs() < 1e-9,
+        orElse: () => targets.first,
       ),
-      exampleUpperTarget = targets
-          .where((t) => t.pitchDeg > 1e-9 && !t.isZenith)
-          .reduce((a, b) => a.targetId > b.targetId ? a : b),
-      exampleLowerTarget = targets
-          .where((t) => t.pitchDeg < -1e-9 && !t.isNadir)
-          .reduce((a, b) => a.targetId < b.targetId ? a : b),
-      exampleZenithTarget = targets.firstWhere((t) => t.isZenith),
-      exampleNadirTarget = targets.firstWhere((t) => t.isNadir);
+      exampleUpperTarget = _highestBelowPole(targets),
+      exampleLowerTarget = _lowestAbovePole(targets),
+      exampleZenithTarget = _highest(targets),
+      exampleNadirTarget = _lowest(targets);
+
+  /// The pitch of the main upper ring, not of the polar cap.
+  ///
+  /// The largest group of positive-pitch targets is the upper ring: the cap
+  /// above it holds four directions at most, so the mode cannot pick the cap
+  /// by accident.
+  static double _upperRingPitch(List<SphereTargetSpec> targets) {
+    final counts = <double, int>{};
+    for (final target in targets) {
+      if (target.pitchDeg <= 1e-9) continue;
+      final key = double.parse(target.pitchDeg.toStringAsFixed(3));
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    if (counts.isEmpty) return kSphereRingPitchDeg;
+    var best = counts.keys.first;
+    for (final entry in counts.entries) {
+      if (entry.value > counts[best]!) best = entry.key;
+    }
+    return best;
+  }
+
+  static SphereTargetSpec _highest(List<SphereTargetSpec> targets) =>
+      targets.reduce((a, b) => a.pitchDeg >= b.pitchDeg ? a : b);
+
+  static SphereTargetSpec _lowest(List<SphereTargetSpec> targets) =>
+      targets.reduce((a, b) => a.pitchDeg <= b.pitchDeg ? a : b);
+
+  static SphereTargetSpec _highestBelowPole(List<SphereTargetSpec> targets) {
+    final ring = targets.where((t) => t.pitchDeg > 1e-9 && !t.isZenith);
+    return ring.isEmpty
+        ? _highest(targets)
+        : ring.reduce((a, b) => a.pitchDeg <= b.pitchDeg ? a : b);
+  }
+
+  static SphereTargetSpec _lowestAbovePole(List<SphereTargetSpec> targets) {
+    final ring = targets.where((t) => t.pitchDeg < -1e-9 && !t.isNadir);
+    return ring.isEmpty
+        ? _lowest(targets)
+        : ring.reduce((a, b) => a.pitchDeg >= b.pitchDeg ? a : b);
+  }
 
   /// The verified plan, built once.
   static final CaptureGuidePlan instance = CaptureGuidePlan._(

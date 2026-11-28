@@ -96,6 +96,10 @@ from sqlalchemy import text
 from sqlmodel import Session
 
 from sitewise.core.config import settings
+from sitewise.repositories.fyp_property_repository import (
+    FypPropertyRepository,
+    NEAREST_COMPETITOR_RADIUS_M,
+)
 from sitewise.services.age_band_raster_service import (
     COVERAGE_STATUSES as AGE_COVERAGE_STATUSES,
 )
@@ -610,7 +614,7 @@ class PropertyEnrichmentService:
         existing = self.session.execute(
             text(
                 """
-                SELECT status, coordinate_hash
+                SELECT status, coordinate_hash, measurement
                 FROM fyp.property_enrichment_category
                 WHERE property_id = :pid AND category = :category
                 """
@@ -626,6 +630,10 @@ class PropertyEnrichmentService:
             and existing is not None
             and existing["status"] == "current"
             and existing["coordinate_hash"] == hash_value
+            and (
+                category != "fnb_competitors"
+                or "nearest_competitor" in (existing["measurement"] or {})
+            )
         ):
             return
 
@@ -684,13 +692,18 @@ class PropertyEnrichmentService:
                 ).scalar_one()
             )
         return _Outcome.current(
-            counts,
+            {
+                **counts,
+                "nearest_competitor": FypPropertyRepository(self.session).nearest_competitor(lat, lon),
+            },
             {
                 "source": "fnb_a.fnb_outlet",
                 "definition": "in_target_region AND in_main_scope (OSM F&B contract)",
                 "radii_m": [500, 1000],
                 "licence": SOURCE_LICENCES["fnb_a.fnb_outlet"],
                 "method": "ST_DWithin(geography)",
+                "nearest_radius_m": NEAREST_COMPETITOR_RADIUS_M,
+                "nearest_method": "ST_DistanceSphere, straight-line metres",
             },
         )
 

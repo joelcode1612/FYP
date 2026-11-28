@@ -19,6 +19,7 @@ import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_router/jaspr_router.dart';
 import 'package:shared_logic/shared_logic.dart';
 
+import 'package:sitewise_jaspr_web/core/routing/landing_routes.dart';
 import 'package:sitewise_jaspr_web/core/utils/icon_variants.dart';
 import 'package:sitewise_jaspr_web/shared/presentation/components/letter_reveal.dart';
 
@@ -94,7 +95,7 @@ class Brand extends StatelessComponent {
   @override
   Component build(BuildContext context) {
     return Link(
-      to: '/',
+      to: LandingRoutes.home,
       classes: 'brand',
       children: [
         span(classes: 'brand__mark', [

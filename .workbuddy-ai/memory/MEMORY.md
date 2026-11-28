@@ -26,6 +26,15 @@
 - FC4-D (`artifacts/cq_fc4d_50_real_service_replay_v1/`): staging in schema `synthetic_lab`; SQL readback is release-scoped, digest is not (compare values, not totals). 35/35 SQL + 1762/1762 digest, 0 routing mismatches; report 403 is PASS. New fixtures need their own release tag.
 - Mobile: `assets/config/sitewise_dev.json` overrides `--dart-define`; bypass needs kDebugMode + asset edit + loopback `CQ_TEST_BASE` port >1023 not in {3080,5432,8000,8090}; `adb reverse tcp:18090 tcp:18090`; UI text in `content-desc`; unlock before launch.
 
+## 360 capture plan (2026-11-27, joel uncommitted)
+- **Current plan is version 11 = exactly 44 targets** (`sphere_plan_v11.dart` / `plan_v11.py`), restoring plan 4's adaptive five-ring layout with repositioned caps: 12/12/12 at pitch 0/±30 (upper+lower staggered +15°) plus 4 ceiling @ +60° yaw 0/90/180/270 and 4 floor @ −60° yaw 30/120/210/300. Every cap sits *between* two ring targets, never above one.
+- **Cap pitch is 60°, not 62°**: the binding transition is the cap→upper *exit*, which projects to 1.012 of the half-frame at 62° (outside), 0.976 at 61° (0.8° margin, inside the 2° cone) and 0.938 at 60°. Plan 4's +65° aligned caps were the mechanical cause of 0/4 ceiling registration.
+- **4 of 43 transitions cannot be visible** and are provable, not a bug: edge count demands `e(M-U)+e(M-L)=24` but 4+4 caps consume 8 upper + 8 lower slots, so 4 upper→lower steps (66.5° apart) fall outside. Exempt ids `{11,22,33,44}` are computed by the plan (`previousVisibilityExempt`) and read by `_previousTargetInFrame`; never hard-code them in the gate. Worst visible transition 0.9382 (2.0° margin), coverage 100% single / 97.4% double.
+- Plans 4 (44), 5 (48), 7 (80), 8 (126), 9 (48) and 10 (48) stay readable; 44 is claimed by 4 and 11, so the version must come from the session. `sitewisePlanVersionForCount(44)` → 11, `planVersionMatchesCount(4, 44)` stays true.
+- Visibility rule is geometric: `x = tan(Δyaw)/cos(Δpitch)/tan(hH)` with `tan(hH)=0.4774 < tan(hV)=0.6371` (portrait 3072×4096, 65° vFOV). Max safe yaw step 25.5°, pitch 32.5°; the shutter also projects the previous target instead of trusting the cone.
+- `_pole_frames(frame_records, plan_version)` in `stitcher.py` derives poles from recorded pitch (≥80°), never from an id set; oblique-only versions {4,5,6,7,8,9,10,11} get no pole ids at all.
+- `flutter test` and `dart run` are **blocked by the sandbox** (they shell out to `reg.exe`); only `flutter analyze` runs. Geometry parity is therefore checked by `backend/scripts/validate_capture_plan_44.py` plus a text diff of the Dart and Python tables.
+
 ## Report surfaces
 - `AssessmentReportView` 9 sections, no route; production mount `assessment_workspace_page.dart:3953`, browser test via `/dev/report`. `/entrepreneur/report?id=` is a different report. `.asw-rpt` CSS source: `artifacts/stage34_integration_20261119/isolated_build_workspace/…/styles.css`.
 - RP-13 BLOCKED (no revisions/snapshots; the only confirmed BCB belongs to another assessment — never join).
@@ -38,3 +47,14 @@
 - `network` category needs `STATEMENT_TIMEOUTS['network']=180s` (pgRouting reach + hull + WorldPop overlay); everything else 25s. `Connection.exec_driver_sql` needs positional `%s`, not `:named`.
 - Entry points: `scripts/backfill_location_intelligence.py` (enqueue all), `scripts/drain_location_intelligence.py` (parallel drain). `GET /explore/analysis` returns `data.location_measurements`.
 
+
+## Agent dashboard integration (Task E, 20261127, joel uncommitted)
+`GET /staff/me/listings` now returns enriched rows + `counts`: repo `_LIST_SELECT`
+carries all assignment workflow cols; `staff.py` `_enrich_agent_rows` reuses
+`agent_submission_readiness` (it also returns `ownership_submission_status` now);
+`_next_agent_action` → (action, owner∈agent|owner|admin|system); `_agent_counts`
+rules: declined ≠ active, drafts count only when workflow accepted, approved ≠
+published. Flutter: `ProviderListing` workflow fields + `buildAgentTasks`
+workflow-first with `responsibility`; overview metrics New Requests/Inspections
+in Progress/Pending Admin Review/Published; mutations bump `listingsRevision`
+(inspectCommand/saveInspection/details sheet/proof upload/panorama confirm).

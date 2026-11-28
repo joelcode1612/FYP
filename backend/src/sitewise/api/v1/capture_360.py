@@ -8,19 +8,28 @@ plus MFA comes from ``require_property_owner``; the record-level rule comes
 from the session's property, resolved per request — ownership is never
 inherited from a stale ``owner_id`` comparison alone.
 
-Storage transport lives in the storage gateway (signed direct uploads), so
-these routes register metadata and enqueue work; they never proxy image
-bytes.
+Adaptive frame transport is proxied through FastAPI: the device streams one
+original JPEG to ``/frames/{target}/photo`` and this process owns the
+Supabase write and checksum verification. Signed URLs remain for the legacy
+device-panorama workflow and for viewing, never for active frame capture.
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
+import math
+import os
+import tempfile
+import threading
 import uuid
+from dataclasses import replace
 from datetime import datetime
+from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field, field_validator
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from pydantic import BaseModel, Field, ValidationError as PydanticValidationError, field_validator
 from sqlalchemy import text
 from sqlmodel import Session
 
@@ -36,6 +45,15 @@ from sitewise.dependencies import (
     require_property_owner,
 )
 from sitewise.domain import rbac
+from sitewise.panorama.alignment import (
+    FrameAlignmentInput,
+    PairFrame,
+    candidate_pairs,
+    match_new_frame,
+    pairs_for_frame,
+)
+from sitewise.panorama.sphere_math import Quat
+from sitewise.services import capture_alignment_service
 from sitewise.services import capture_session_service as svc
 from sitewise.services import capture_storage, provider_scope
 from sitewise.services.agent_inspection_policy import (
@@ -80,26 +98,72 @@ def _frame_json(record, created: bool) -> dict[str, Any]:
     }
 
 
+#: The user-facing stage for a job, derived from the worker's own stage text.
+#: Order matters: the specific stages are tested before the generic ones, so a
+#: frame download is never reported as "creating the panorama".
+_STAGE_LABELS: tuple[tuple[str, str], ...] = (
+    ("downloading", "Finishing photo uploads"),
+    ("matching", "Checking image connections"),
+    ("checking image alignment", "Checking image connections"),
+    ("optimising all camera orientations", "Aligning photographs"),
+    ("refining", "Aligning photographs"),
+    ("measuring spherical coverage", "Checking spherical coverage"),
+    ("verifying cross-ring", "Checking spherical coverage"),
+    ("project", "Creating your 360° panorama"),
+    ("blend", "Blending photographs"),
+    ("seam", "Blending photographs"),
+    ("verifying capture quality", "Verifying panorama quality"),
+    ("uploading panorama", "Saving your panorama"),
+    ("recording the canonical", "Saving your panorama"),
+    ("loading capture manifest", "Preparing your photographs"),
+)
+
+
+def _stage_label(record) -> str:
+    """The stage sentence for the mobile app.
+
+    Derived from the stage the worker actually wrote, never invented: a job with
+    no stage is queued, and a stage this table does not recognise keeps its own
+    wording rather than being guessed at.
+    """
+    if record.status == "done":
+        return "Panorama ready"
+    if record.status in ("error", "failed"):
+        return "Panorama processing needs a retry"
+    raw = str(record.processing_stage or "").strip()
+    if not raw:
+        return "Your photos are saved. Panorama processing will begin shortly."
+    lowered = raw.lower()
+    for needle, label in _STAGE_LABELS:
+        if needle in lowered:
+            return label
+    return "Creating your 360° panorama"
+
+
 def _job_json(record) -> dict[str, Any]:
     # Worker stages and exception details stay in backend logs/database only;
-    # the polling contract exposes safe, actionable copy to the Agent.
-    failed = record.status == "failed"
-    stage = (
-        "Panorama ready"
-        if record.status == "done"
-        else "Panorama processing needs a retry"
-        if failed
-        else "Preparing your 360° preview"
-    )
+    # the polling contract exposes a safe, stage-derived sentence and the one
+    # decision the client needs to make: retry this stage, or wait.
+    #
+    # `failed` used to test for the literal "failed", but ``fail_job`` writes
+    # "error", so a failed job reported no error message and no retry hint.
+    failed = record.status in ("error", "failed")
     return {
         "jobId": str(record.id),
         "sessionId": str(record.session_id),
         "status": record.status,
+        # A queued or processing job is NOT a failure. The client must not
+        # offer "Retry" for either.
+        "isTerminal": record.status in ("done", "error", "failed"),
+        "isFailure": failed,
+        "retryable": failed and record.retry_count < 3,
         "progress": record.progress,
-        "processingStage": stage,
+        "processingStage": _stage_label(record),
         "retryCount": record.retry_count,
         "errorMessage": (
-            "We couldn't prepare your 360° preview. Please retry processing or recapture manually."
+            "We couldn't prepare your 360° preview. Your photographs are saved — "
+            "retry processing, or recapture manually if the photographs "
+            "themselves are the problem."
             if failed
             else None
         ),
@@ -137,9 +201,37 @@ def _panorama_json(record) -> dict[str, Any]:
     }
 
 
+class PlanTarget(BaseModel):
+    """One planned camera direction.
+
+    ``target_id`` is the stable key every frame and match row is recorded
+    against, so it is required and never re-derived from list position.
+    """
+
+    target_id: int = Field(gt=0)
+    yaw_deg: float
+    pitch_deg: float
+    ring: str = Field(min_length=1, max_length=40)
+    capture_order: int | None = Field(default=None, ge=1)
+
+
+class PlanPayload(BaseModel):
+    plan_version: str = Field(min_length=1, max_length=16)
+    intrinsics: dict[str, Any] = Field(default_factory=dict)
+    targets: list[PlanTarget] = Field(min_length=1)
+
+    @field_validator("targets")
+    @classmethod
+    def _unique_targets(cls, value: list[PlanTarget]) -> list[PlanTarget]:
+        ids = [target.target_id for target in value]
+        if len(set(ids)) != len(ids):
+            raise ValueError("target_id values must be unique.")
+        return value
+
+
 class SessionCreate(BaseModel):
     property_id: int = Field(gt=0)
-    capture_mode: str = "device_38"
+    capture_mode: str = "device_adaptive"
     capture_plan_version: str | None = None
     # Optional stable key from the device's local station id. It lets a retry
     # after a lost create response resolve the SAME session row without
@@ -148,6 +240,11 @@ class SessionCreate(BaseModel):
         default=None, min_length=1, max_length=200,
         pattern=r"^[A-Za-z0-9._:-]+$",
     )
+    # The adaptive plan, for adaptive capture modes. It arrives with the
+    # session because it decides how many photographs the session expects:
+    # storing the geometry and the count in one request is what keeps a
+    # client from claiming one plan while the server waits for another.
+    plan: PlanPayload | None = None
 
 
 # Pose keys beyond the orientation quaternion that the capture manifest may
@@ -253,12 +350,55 @@ def _validated_frame_path(
     return cleaned
 
 
+def _plan_geometry(plan: PlanPayload) -> list[dict[str, Any]]:
+    """The stored shape of a plan: one row per target, sorted by target id.
+
+    Sorting is deliberate. The geometry is compared and re-read by target id
+    everywhere downstream (frames, match rows, the aligner's frame order), so
+    the stored list must not depend on the order the device happened to
+    serialise its capture sequence in.
+    """
+    return [
+        {
+            "targetId": target.target_id,
+            "yawDeg": target.yaw_deg,
+            "pitchDeg": target.pitch_deg,
+            "ring": target.ring,
+            "captureOrder": target.capture_order,
+        }
+        for target in sorted(plan.targets, key=lambda t: t.target_id)
+    ]
+
+
 @router.post("/sessions")
 def create_session(
     body: SessionCreate,
     db: DbSession,
     current: ProviderUser,
 ) -> dict[str, Any]:
+    # The adaptive planner's count is derived from the measured lens. The
+    # reference layout is 44 targets, but a narrow lens may legitimately need
+    # more, so the plan payload is validated by bounds rather than by equality
+    # with 44. The lower bound rejects a truncated plan; the upper bound keeps
+    # a malformed client from opening an unbounded session.
+    adaptive_count = len(body.plan.targets) if body.plan is not None else 0
+    active_adaptive = (
+        body.capture_mode == svc.ADAPTIVE_MODE
+        and body.capture_plan_version == svc.ACTIVE_CAPTURE_PLAN_VERSION
+        and body.plan is not None
+        and body.plan.plan_version == svc.ACTIVE_CAPTURE_PLAN_VERSION
+        and 24 <= adaptive_count <= 96
+    )
+    historical_retry = (
+        body.capture_plan_version in {"1", "2", "3"}
+        and body.idempotency_key is not None
+        and body.plan is None
+    )
+    if not (active_adaptive or historical_retry):
+        raise ValidationError(
+            "New 360° capture sessions must use the adaptive five-ring plan "
+            "(version 4) with its generated target geometry."
+        )
     provider_scope.require_mutable_listing(
         db, listing_id=body.property_id, role=current.role
     )
@@ -279,6 +419,10 @@ def create_session(
                 body.capture_plan_version is not None
                 and existing.capture_plan_version != body.capture_plan_version
             )
+            or (
+                body.plan is not None
+                and existing.expected_frames != len(body.plan.targets)
+            )
         ):
             raise
         if not require_frame_backup(db, existing, current):
@@ -286,6 +430,21 @@ def create_session(
         svc.ensure_property_access(
             db, property_id=body.property_id, user_id=current.user_id, role=current.role
         )
+        # A replay may resolve an existing session without creating one. It
+        # must still prove the plan it is replaying is the SAME plan, not just
+        # the same target count: otherwise a changed yaw/pitch could be
+        # silently accepted against already-captured frames.
+        if body.plan is not None:
+            capture_alignment_service.save_capture_plan(
+                db,
+                session_id=session_id,
+                geometry=_plan_geometry(body.plan),
+                intrinsics=body.plan.intrinsics,
+                plan_version=body.plan.plan_version,
+            )
+            refreshed = svc.get_capture_session(db, session_id)
+            if refreshed is not None:
+                existing = refreshed
         return _session_json(existing, svc.confirmed_frame_count(db, session_id))
     svc.ensure_property_access(
         db,
@@ -300,7 +459,16 @@ def create_session(
         capture_mode=body.capture_mode,
         capture_plan_version=body.capture_plan_version,
         idempotency_key=body.idempotency_key,
+        expected_frames=len(body.plan.targets) if body.plan is not None else None,
     )
+    if body.plan is not None:
+        capture_alignment_service.save_capture_plan(
+            db,
+            session_id=record.id,
+            geometry=_plan_geometry(body.plan),
+            intrinsics=body.plan.intrinsics,
+            plan_version=body.plan.plan_version,
+        )
     return _session_json(record, svc.confirmed_frame_count(db, record.id))
 
 
@@ -344,6 +512,216 @@ def get_session_quality(
     }
 
 
+@router.put("/sessions/{session_id}/plan")
+def save_plan(
+    session_id: uuid.UUID,
+    body: PlanPayload,
+    db: DbSession,
+    current: ProviderUser,
+) -> dict[str, Any]:
+    """Persist the adaptive target geometry generated on the device.
+
+    The plan is generated from the camera's measured field of view, so the
+    backend cannot reproduce it and must not guess: target identifiers would
+    drift between a capture and its resume, and every frame already recorded
+    would point at the wrong direction. Writing a *different* plan over an
+    existing one is refused for the same reason.
+    """
+    svc.require_capture_session(
+        db, session_id=session_id, user_id=current.user_id, role=current.role
+    )
+    geometry = _plan_geometry(body)
+    try:
+        capture_alignment_service.save_capture_plan(
+            db,
+            session_id=session_id,
+            geometry=geometry,
+            intrinsics=body.intrinsics,
+            plan_version=body.plan_version,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {
+        "sessionId": str(session_id),
+        "planVersion": body.plan_version,
+        "targets": len(geometry),
+    }
+
+
+@router.get("/sessions/{session_id}/plan")
+def read_plan(
+    session_id: uuid.UUID,
+    db: DbSession,
+    current: ProviderUser,
+) -> dict[str, Any]:
+    """The stored plan, or ``None`` for a session captured before plans were
+    stored. A historical session keeps its original geometry."""
+    svc.require_capture_session(
+        db, session_id=session_id, user_id=current.user_id, role=current.role
+    )
+    plan = capture_alignment_service.stored_plan(db, session_id)
+    return {"sessionId": str(session_id), "plan": plan}
+
+
+@router.get("/sessions/{session_id}/alignment")
+def get_alignment(
+    session_id: uuid.UUID,
+    db: DbSession,
+    current: ProviderUser,
+) -> dict[str, Any]:
+    """The incremental matching graph: verified, weak and refused pairs."""
+    svc.require_capture_session(
+        db, session_id=session_id, user_id=current.user_id, role=current.role
+    )
+    return capture_alignment_service.alignment_state(db, session_id)
+
+
+class FrameMatchRequest(BaseModel):
+    target_index: int = Field(gt=0)
+
+
+@router.post("/sessions/{session_id}/match")
+def match_frame(
+    session_id: uuid.UUID,
+    body: FrameMatchRequest,
+    db: DbSession,
+    current: ProviderUser,
+) -> dict[str, Any]:
+    """Verify one freshly captured photograph against its overlapping neighbours.
+
+    This is what lets the capture screen say "image connection verified" while
+    the photographer is still in the room, instead of discovering a weak
+    vertical connection after the session ends.
+
+    Only the new frame and the photographs that actually overlap it are
+    downloaded. The candidate set comes from recorded orientation and the
+    camera footprint, so the endpoint does not need the whole session in
+    memory to decide what to compare.
+    """
+    svc.require_capture_session(
+        db, session_id=session_id, user_id=current.user_id, role=current.role
+    )
+    frames = [
+        frame
+        for frame in svc.list_capture_frames(db, session_id)
+        if frame.upload_status == "confirmed"
+    ]
+    target = next(
+        (frame for frame in frames if frame.target_index == body.target_index), None
+    )
+    if target is None:
+        raise HTTPException(status_code=404, detail="That photograph is not confirmed.")
+
+    inputs = [_alignment_input_for(frame) for frame in frames]
+    inputs = [item for item in inputs if item is not None]
+    if not any(item.target_id == body.target_index for item in inputs):
+        raise HTTPException(
+            status_code=422,
+            detail="That photograph has no usable orientation or dimensions.",
+        )
+
+    candidate_partners = _overlapping_partners(inputs, body.target_index)
+    to_download = {body.target_index} | candidate_partners
+
+    try:
+        with tempfile.TemporaryDirectory(prefix="sitewise-match-") as work:
+            work_dir = Path(work)
+            for frame in frames:
+                if frame.target_index not in to_download:
+                    continue
+                data = capture_storage.download(frame.storage_path)
+                (work_dir / f"frame_{frame.target_index:02d}.jpg").write_bytes(data)
+            resolved: list[FrameAlignmentInput] = []
+            for item in inputs:
+                if item.target_id in to_download:
+                    resolved.append(
+                        replace(
+                            item,
+                            image_path=str(
+                                work_dir / f"frame_{item.target_id:02d}.jpg"
+                            ),
+                        )
+                    )
+                else:
+                    resolved.append(item)
+            new_frame = next(
+                item for item in resolved if item.target_id == body.target_index
+            )
+            accepted = [
+                item for item in resolved if item.target_id != body.target_index
+            ]
+            result = match_new_frame(
+                new_frame,
+                accepted,
+                partner_ids=candidate_partners,
+            )
+    except capture_storage.CaptureStorageUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    payload = result.as_dict()
+    capture_alignment_service.record_matches(
+        db, session_id=session_id, matches=payload.get("matches", [])
+    )
+    if result.coverage:
+        capture_alignment_service.save_coverage_contributions(
+            db,
+            session_id=session_id,
+            contributions=result.coverage.per_frame_fraction,
+        )
+    return payload
+
+
+def _alignment_input_for(frame):
+    """Build the aligner's input for a stored frame, or ``None`` if unusable."""
+    pose = frame.capture_pose
+    raw = pose if isinstance(pose, dict) else None
+    if raw is None and isinstance(pose, list) and len(pose) == 4:
+        raw = dict(zip(("x", "y", "z", "w"), pose))
+    if not raw or not all(key in raw for key in ("x", "y", "z", "w")):
+        return None
+    width = int(frame.image_width or raw.get("sourceImageWidth") or 0)
+    height = int(frame.image_height or raw.get("sourceImageHeight") or 0)
+    if width <= 0 or height <= 0:
+        return None
+    try:
+        rotation = Quat(
+            float(raw["x"]), float(raw["y"]), float(raw["z"]), float(raw["w"])
+        ).normalized
+    except (TypeError, ValueError):
+        return None
+    focal = raw.get("focalLengthYPx")
+    try:
+        focal = float(focal) if focal is not None else 0.0
+    except (TypeError, ValueError):
+        focal = 0.0
+    if focal <= 0:
+        focal = (height / 2.0) / math.tan(math.radians(65.0) / 2.0)
+    return FrameAlignmentInput(
+        target_id=frame.target_index,
+        image_path="",
+        rotation=rotation,
+        width=width,
+        height=height,
+        focal=focal,
+        cx=raw.get("principalPointXPx"),
+        cy=raw.get("principalPointYPx"),
+    )
+
+
+def _overlapping_partners(
+    inputs: list[FrameAlignmentInput], target_index: int
+) -> set[int]:
+    """Targets whose footprint overlaps [target_index], from orientation alone."""
+    frames = [
+        PairFrame(target_id=item.target_id, rotation=item.rotation, camera=item.camera)
+        for item in inputs
+    ]
+    return {
+        (pair.second if pair.first == target_index else pair.first)
+        for pair in pairs_for_frame(candidate_pairs(frames), target_index)
+    }
+
+
 @router.post("/sessions/{session_id}/frames")
 def confirm_frame(
     session_id: uuid.UUID,
@@ -354,11 +732,13 @@ def confirm_frame(
     record = svc.require_mutable_capture_session(
         db, session_id=session_id, user_id=current.user_id, role=current.role
     )
+    if record.status == "cancelled":
+        raise ConflictError("This capture attempt was cancelled.")
     append_only = require_frame_backup(db, record, current)
     if body.target_index > record.expected_frames:
         raise ValidationError(f"target_index must be between 1 and {record.expected_frames}.")
     path = _validated_frame_path(record, session_id, body.storage_path)
-    require_original = append_only or record.capture_mode in {svc.BACKEND_38_MODE, "device_56_backend"}
+    require_original = append_only or record.capture_mode in svc.BACKEND_STITCH_MODES
     if require_original and (
         body.checksum_sha256 is None
         or path != capture_storage.frame_object_path(record.property_id, str(session_id), body.target_index)
@@ -435,6 +815,182 @@ def confirm_frame(
         except Exception:  # noqa: BLE001 - the audit is best-effort evidence
             pass
     return _frame_json(frame, created)
+
+
+#: Server-side frame writes are bounded. The device is already limited to one
+#: active transfer; this is the second guard, for several agents or a retry
+#: storm hitting the same process.
+_FRAME_UPLOAD_SLOTS = threading.BoundedSemaphore(2)
+_UPLOAD_CHUNK_BYTES = 1024 * 1024
+
+
+def _persist_received_frame(file: UploadFile) -> tuple[Path, str, int]:
+    """Stream an uploaded JPEG to a durable temporary file.
+
+    The file is flushed and fsynced before any storage/DB work so a FastAPI
+    acknowledgment never describes bytes that only exist in a request buffer.
+    """
+    temp = tempfile.NamedTemporaryFile(
+        prefix="fyp-frame-", suffix=".jpg", delete=False
+    )
+    path = Path(temp.name)
+    digest = hashlib.sha256()
+    total = 0
+    try:
+        with temp:
+            while True:
+                chunk = file.file.read(_UPLOAD_CHUNK_BYTES)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > capture_storage.FRAME_MAX_BYTES:
+                    raise ValidationError(
+                        "The photograph exceeds the maximum frame size."
+                    )
+                digest.update(chunk)
+                temp.write(chunk)
+            temp.flush()
+            os.fsync(temp.fileno())
+        if total <= 0:
+            raise ValidationError("The uploaded photograph is empty.")
+        return path, digest.hexdigest(), total
+    except Exception:
+        path.unlink(missing_ok=True)
+        raise
+
+
+@router.post("/sessions/{session_id}/frames/{target_index}/photo")
+def upload_frame_photo(
+    session_id: uuid.UUID,
+    target_index: int,
+    db: DbSession,
+    current: ProviderUser,
+    file: Annotated[UploadFile, File(...)],
+    metadata: Annotated[str, Form(...)],
+) -> dict[str, Any]:
+    """Receive one original photograph, store it, and confirm the frame.
+
+    This is the only photograph transport for the adaptive capture flow. The
+    device no longer receives Supabase credentials or signed frame-upload URLs;
+    FastAPI writes the object with the service-role client, reads it back to
+    verify the digest, and only then writes ``fyp.capture_frames``.
+    """
+    record = svc.require_mutable_capture_session(
+        db, session_id=session_id, user_id=current.user_id, role=current.role
+    )
+    if record.status == "cancelled":
+        raise ConflictError("This capture attempt was cancelled.")
+    append_only = require_frame_backup(db, record, current)
+    if target_index < 1 or target_index > record.expected_frames:
+        raise ValidationError(
+            f"target_index must be between 1 and {record.expected_frames}."
+        )
+    content_type = (file.content_type or "").lower()
+    if content_type and not (
+        content_type.startswith("image/") or content_type == "application/octet-stream"
+    ):
+        raise ValidationError("The frame must be uploaded as a JPEG image.")
+
+    storage_path = capture_storage.frame_object_path(
+        record.property_id, str(session_id), target_index
+    )
+    try:
+        payload = json.loads(metadata)
+    except (TypeError, ValueError) as exc:
+        raise ValidationError("The frame metadata is not valid JSON.") from exc
+    if not isinstance(payload, dict):
+        raise ValidationError("The frame metadata must be a JSON object.")
+    payload["target_index"] = target_index
+    payload["storage_path"] = storage_path
+    payload["uploaded"] = True
+    try:
+        body = FrameConfirm.model_validate(payload)
+    except PydanticValidationError as exc:
+        raise ValidationError(f"The frame metadata is invalid: {exc}") from exc
+
+    path, checksum, byte_count = _persist_received_frame(file)
+    try:
+        # Decode before writing to storage: a truncated or non-JPEG body must
+        # never create a frame row that the panorama worker cannot read.
+        decoded = path.read_bytes()
+        width, height = capture_storage.decode_panorama(decoded)
+        if body.image_width is not None and body.image_width != width:
+            raise ValidationError(
+                "The photograph width does not match the capture metadata."
+            )
+        if body.image_height is not None and body.image_height != height:
+            raise ValidationError(
+                "The photograph height does not match the capture metadata."
+            )
+
+        previous = next(
+            (
+                frame
+                for frame in svc.list_capture_frames(db, session_id)
+                if frame.target_index == target_index
+            ),
+            None,
+        )
+        # Idempotent retry: the same bytes already confirmed and still present
+        # in storage need no second upload or row update.
+        if (
+            previous is not None
+            and previous.upload_status == "confirmed"
+            and previous.checksum_sha256
+            and previous.checksum_sha256.lower() == checksum
+        ):
+            try:
+                if capture_storage.object_exists(storage_path):
+                    result = _frame_json(previous, False)
+                    result["uploadedBytes"] = byte_count
+                    return result
+            except capture_storage.CaptureStorageUnavailable as exc:
+                raise _storage_unavailable(exc) from exc
+
+        # Append-only backup may not replace a submitted original.
+        if (
+            append_only
+            and previous is not None
+            and previous.checksum_sha256
+            and previous.checksum_sha256.lower() != checksum
+        ):
+            raise ConflictError(
+                "A backed-up original cannot be replaced after submission."
+            )
+
+        with _FRAME_UPLOAD_SLOTS:
+            try:
+                capture_storage.upload_file(storage_path, path)
+                stored = capture_storage.download(storage_path)
+            except capture_storage.ObjectMissing as exc:
+                raise ConflictError(
+                    "The photograph did not reach storage; retry the frame."
+                ) from exc
+            except capture_storage.CaptureStorageUnavailable as exc:
+                raise _storage_unavailable(exc) from exc
+            if not capture_storage.verify_checksum(stored, checksum):
+                raise ConflictError(
+                    "The stored photograph does not match the received bytes; "
+                    "retry the frame."
+                )
+
+        frame, created = svc.confirm_frame(
+            db,
+            session_id=session_id,
+            target_index=target_index,
+            storage_path=storage_path,
+            checksum_sha256=checksum,
+            image_width=width,
+            image_height=height,
+            capture_pose=body.capture_pose,
+            captured_at=body.captured_at,
+            append_only=append_only,
+        )
+        result = _frame_json(frame, created)
+        result["uploadedBytes"] = byte_count
+        return result
+    finally:
+        path.unlink(missing_ok=True)
 
 
 @router.get("/sessions/{session_id}/frames")
@@ -676,6 +1232,17 @@ class PanoramaConfirm(BaseModel):
         return cleaned
 
 
+class PanoramaAcceptRequest(BaseModel):
+    """The active reference the Agent saw when recapture began.
+
+    Supplying it turns the acceptance into a compare-and-swap: if another
+    device accepted a different candidate meanwhile, this request fails instead
+    of silently replacing the newer active panorama.
+    """
+
+    expected_active_panorama_id: uuid.UUID | None = None
+
+
 def _validated_panorama_path(
     record, session_id: uuid.UUID, storage_path: str
 ) -> str:
@@ -733,7 +1300,7 @@ def confirm_panorama(
     record = svc.require_mutable_capture_session(
         db, session_id=session_id, user_id=current.user_id, role=current.role
     )
-    if record.capture_mode in {svc.BACKEND_38_MODE, "device_56_backend"}:
+    if record.capture_mode in svc.BACKEND_STITCH_MODES:
         raise ValidationError("A backend-first session must use its worker-generated panorama.")
     agent_assignment(db, int(record.property_id), current, writable=True)
     if str(record.owner_id) != str(current.user_id):
@@ -800,6 +1367,83 @@ def confirm_panorama(
         coverage_report=merged_report,
     )
     return _panorama_json(panorama)
+
+
+@router.post("/sessions/{session_id}/panoramas/{panorama_id}/accept")
+def accept_panorama_candidate(
+    session_id: uuid.UUID,
+    panorama_id: uuid.UUID,
+    body: PanoramaAcceptRequest,
+    db: DbSession,
+    current: ProviderUser,
+) -> dict[str, Any]:
+    """Agent accepts one generated candidate as the active inspection panorama.
+
+    Processing/storage confirmation only registered the candidate. This route is
+    the explicit promotion step; it verifies the stored object and the
+    completed job, then updates the assignment under a row lock. It never
+    changes a published panorama reference.
+    """
+    record = svc.require_mutable_capture_session(
+        db, session_id=session_id, user_id=current.user_id, role=current.role
+    )
+    assignment = agent_assignment(db, int(record.property_id), current, writable=True)
+    panorama = svc.get_panorama(db, panorama_id)
+    if panorama is None or panorama.session_id != session_id:
+        raise NotFoundError("Candidate panorama not found for this capture.")
+    if panorama.published_at is not None:
+        raise ConflictError("A published panorama cannot be accepted as a draft.")
+    if not panorama.coverage_report:
+        raise ConflictError(
+            "The candidate has no quality verification report and cannot be accepted."
+        )
+    try:
+        if not capture_storage.object_exists(panorama.storage_path):
+            raise ConflictError(
+                "The candidate panorama object is not in storage yet."
+            )
+        data = capture_storage.download(panorama.storage_path)
+    except capture_storage.ObjectMissing as exc:
+        raise ConflictError(
+            "The candidate panorama object is not in storage yet."
+        ) from exc
+    except capture_storage.CaptureStorageUnavailable as exc:
+        raise _storage_unavailable(exc) from exc
+    width, height = capture_storage.decode_panorama(data)
+    if height * 2 != width:
+        raise ValidationError(
+            "The candidate panorama is not a 2:1 equirectangular image."
+        )
+    accepted, job_id = svc.accept_panorama_candidate(
+        db,
+        session_id=session_id,
+        panorama_id=panorama_id,
+        agent_id=int(assignment["agent_id"]),
+        expected_active_panorama_id=body.expected_active_panorama_id,
+    )
+    result = _panorama_json(accepted)
+    result["activePanoramaId"] = str(accepted.panorama_id)
+    result["jobId"] = str(job_id) if job_id is not None else None
+    result["accepted"] = True
+    return result
+
+
+@router.post("/sessions/{session_id}/cancel")
+def cancel_capture(
+    session_id: uuid.UUID,
+    db: DbSession,
+    current: ProviderUser,
+) -> dict[str, Any]:
+    """Cancel a candidate attempt without touching the active panorama."""
+    record = svc.require_mutable_capture_session(
+        db, session_id=session_id, user_id=current.user_id, role=current.role
+    )
+    agent_assignment(db, int(record.property_id), current, writable=True)
+    cancelled = svc.cancel_capture_session(db, session_id=session_id)
+    return _session_json(
+        cancelled,
+        svc.confirmed_frame_count(db, cancelled.id),
+    )
 
 
 @router.get("/panoramas/{panorama_id}/view")

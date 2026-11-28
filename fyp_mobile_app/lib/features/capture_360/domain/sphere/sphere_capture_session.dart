@@ -98,7 +98,7 @@ enum FrameSyncStatus {
   }
 }
 
-/// One 38-target capture session.
+/// One adaptive five-ring capture session.
 ///
 /// The primary key is the session id, which is also the station directory name
 /// the SiteWise tour repository uses. Keeping them equal is what makes the
@@ -116,6 +116,7 @@ class CaptureSession {
     required this.userId,
     required this.propertyId,
     required this.requiredTargetCount,
+    this.planVersion = kSphereCapturePlanVersion,
     required this.status,
     required this.createdAt,
     required this.updatedAt,
@@ -141,23 +142,64 @@ class CaptureSession {
   /// the tour record and is never converted to an integer.
   final int? propertyId;
 
-  /// Always [kSphereTargetCount] for this flow; stored rather than assumed so
+  /// Always [kSphereTargetCount] for a new flow; stored rather than assumed so
   /// a future layout change is a data migration, not a code hunt.
   final int requiredTargetCount;
 
-  int get capturePlanVersion => sitewisePlanVersionForCount(requiredTargetCount);
+  /// The plan version this session was captured with, when the file recorded
+  /// one. It is **not** derived from [requiredTargetCount] on read: V4 and V11
+  /// both contain 44 targets, and V1 and V2 both contain 38.
+  final int? planVersion;
+
+  int get capturePlanVersion {
+    final version = planVersion;
+    if (version != null) return version;
+    if (requiredTargetCount == kSpherePlanV11TargetCount ||
+        requiredTargetCount == kSphereLegacyTargetCount) {
+      throw StateError(
+        'This session must record its plan version because multiple plans share its target count.',
+      );
+    }
+    return sitewisePlanVersionForCount(requiredTargetCount);
+  }
 
   static int _readPlanCount(Map<String, Object?> row) {
-    final raw = row['required_target_count'];
-    final count = raw ?? kSphereTargetCount;
-    if (count is! int || (count != 38 && count != 56)) {
+    // The count is authority; the plan version is a consistency check against
+    // it. Hard-coding 38/56 here rejected the current adaptive 44-target
+    // session before any photograph could be restored. `num` is accepted
+    // because JSON decodes whole numbers written by older builds as `int`
+    // but a hand-edited/double-encoded file can legitimately carry `44.0`.
+    final raw = row['required_target_count'] ?? kSphereTargetCount;
+    if (raw is! num) {
       throw const FormatException('Invalid saved capture plan count');
     }
-    final version = row['capture_plan_version'];
-    if (version != null && '$version' != '${sitewisePlanVersionForCount(count)}') {
-      throw const FormatException('Saved capture plan version does not match its count');
+    final count = raw.toInt();
+    if (count < 1 || count != raw) {
+      throw const FormatException('Invalid saved capture plan count');
+    }
+    final version = _readPlanVersion(row);
+    if ((count == kSpherePlanV11TargetCount ||
+            count == kSphereLegacyTargetCount) &&
+        version == null) {
+      throw const FormatException(
+        'A saved capture with an ambiguous target count must include its plan version.',
+      );
+    }
+    if (version != null && !planVersionMatchesCount(version, count)) {
+      throw const FormatException(
+        'Saved capture plan version does not match its count',
+      );
     }
     return count;
+  }
+
+  /// The plan version the file recorded, or `null` when it predates the field.
+  ///
+  /// The stored version decides which directions a target id means.
+  static int? _readPlanVersion(Map<String, Object?> row) {
+    final version = row['capture_plan_version'];
+    if (version is num) return version.toInt();
+    return int.tryParse('$version');
   }
 
   final CaptureSessionStatus status;
@@ -237,6 +279,7 @@ class CaptureSession {
     userId: userId ?? this.userId,
     propertyId: clearProperty ? null : (propertyId ?? this.propertyId),
     requiredTargetCount: requiredTargetCount,
+    planVersion: planVersion,
     status: status ?? this.status,
     createdAt: createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
@@ -288,6 +331,7 @@ class CaptureSession {
     userId: row['user_id'] as String?,
     propertyId: (row['property_id'] as num?)?.toInt(),
     requiredTargetCount: _readPlanCount(row),
+    planVersion: _readPlanVersion(row),
     status: CaptureSessionStatus.fromWire(row['status'] as String?),
     createdAt: _time(row['created_at']),
     updatedAt: _time(row['updated_at']),

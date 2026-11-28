@@ -31,16 +31,25 @@ abstract final class ProviderWorkspaceService {
     return data;
   }
 
+  /// An agent workflow mutation (accept / decline / submit) over the
+  /// assignment. Every successful command changes the assigned-listings
+  /// state the dashboard, listings and task screens render, so it bumps the
+  /// shared [ServiceLocator.listingsRevision] — those screens invalidate
+  /// their providers on it instead of serving stale counts.
   static Future<void> inspectionCommand(
     int propertyId, String action, Map<String, dynamic> body,
   ) async {
     await ServiceLocator.apiClient.post('${_inspectionPath(propertyId)}/$action', body);
+    ServiceLocator.listingsRevision.value++;
   }
 
+  /// Saves the on-site inspection checklist. Mutates the assignment's
+  /// inspection record, so the revision is bumped like every other mutation.
   static Future<void> saveInspection(
     int propertyId, Map<String, dynamic> checklist,
   ) async {
     await ServiceLocator.apiClient.patch('${_inspectionPath(propertyId)}/inspection', checklist);
+    ServiceLocator.listingsRevision.value++;
   }
 
   /// The signed-in account's own identity payload (`GET /api/v1/auth/me`).

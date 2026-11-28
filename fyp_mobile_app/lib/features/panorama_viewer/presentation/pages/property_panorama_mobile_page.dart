@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:panorama_viewer/panorama_viewer.dart';
 
+import 'package:fyp/core/theme/sitewise_m3.dart';
 import 'package:fyp/core/theme/sitewise_theme.dart';
 import 'package:fyp/core/utils/pano_bytes.dart';
 
@@ -252,18 +253,30 @@ class _PropertyPanoramaMobilePageState
               children: [
                 TextButton.icon(
                   style: TextButton.styleFrom(
-                    minimumSize: const Size(44, 44),
+                    minimumSize: const Size(0, 48),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
                     foregroundColor: SitewiseColors.accent,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(
+                        SitewiseM3.radiusPill,
+                      ),
+                    ),
                   ),
                   onPressed: _load,
                   icon: const Icon(Icons.refresh_rounded),
                   label: const Text('Try again'),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 12),
                 FilledButton(
                   style: FilledButton.styleFrom(
-                    minimumSize: const Size(96, 44),
+                    minimumSize: const Size(96, 52),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
                     backgroundColor: SitewiseColors.action,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(
+                        SitewiseM3.radiusPill,
+                      ),
+                    ),
                   ),
                   onPressed: () => Navigator.of(context).maybePop(),
                   child: const Text('Close'),

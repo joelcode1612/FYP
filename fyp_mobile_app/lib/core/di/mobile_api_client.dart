@@ -144,6 +144,16 @@ class MobileApiClient implements ApiClient {
         code = detail['code'] as String;
       }
     } catch (_) {}
+    // FastAPI uses 413 for a photo above the configured upload limit. Treat
+    // it as an input problem so the user sees the server's safe explanation
+    // instead of the generic service-outage message.
+    if (status == 413) {
+      return ValidationFailure.response(
+        message,
+        statusCode: status,
+        backendCode: code,
+      );
+    }
     return apiOperationFailure(status: status, code: code, message: message);
   }
 
@@ -197,6 +207,40 @@ class MobileApiClient implements ApiClient {
       )
       ..headers[HttpHeaders.authorizationHeader] = 'Bearer $token';
     final streamed = await request.send().timeout(const Duration(seconds: 30));
+    final response = await http.Response.fromStream(streamed);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw _failureForStatus(response.statusCode, response.body);
+    }
+    return _decodePayload(response.body);
+  }
+
+  @override
+  Future<Map<String, dynamic>> uploadFileMultipart(
+    String path, {
+    required Map<String, String> fields,
+    required String fileField,
+    required String filename,
+    required String filePath,
+    required String contentType,
+  }) async {
+    final token = _bearer();
+    if (token == null) {
+      throw const NetworkFailure('No authenticated session is available.');
+    }
+    final request = http.MultipartRequest('POST', _uri(path))
+      ..fields.addAll(fields)
+      ..files.add(
+        await http.MultipartFile.fromPath(
+          fileField,
+          filePath,
+          filename: filename,
+          contentType: _mediaType(contentType),
+        ),
+      )
+      ..headers[HttpHeaders.authorizationHeader] = 'Bearer $token';
+    final streamed = await request.send().timeout(
+      const Duration(minutes: 3),
+    );
     final response = await http.Response.fromStream(streamed);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw _failureForStatus(response.statusCode, response.body);

@@ -91,6 +91,7 @@ class ExploreService:
         *,
         catalogue_score: Callable[[str], float | None] | None = None,
         measurements: Callable[[int, float, float], dict] | None = None,
+        include_unpublished: bool = False,
     ) -> dict | None:
         """Cross-universe location analysis for one property reference.
 
@@ -107,7 +108,9 @@ class ExploreService:
         degrades to ``available: false`` rather than failing the whole analysis
         — an unavailable measurement must never hide the rest of the page.
         """
-        resolved = self.repo.resolve_reference(ref)
+        resolved = self.repo.resolve_reference(
+            ref, include_unpublished=include_unpublished
+        )
         if resolved is None:
             return None
         geo = None

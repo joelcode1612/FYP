@@ -10,6 +10,7 @@ authenticated; the two never share a bucket or an endpoint.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import uuid
 
@@ -130,31 +131,76 @@ def _client():
         ) from exc
 
 
-def save_photo(data: bytes, ext: str, content_type: str) -> str:
-    """Upload one photo and return its permanent public URL."""
+def _bucket_id(bucket) -> str | None:
+    """Read a bucket id from storage3's model or a plain mapping."""
+    value = getattr(bucket, "id", None)
+    if value is None and isinstance(bucket, dict):
+        value = bucket.get("id") or bucket.get("name")
+    return str(value) if value else None
+
+
+def _upload_once(storage, path: str, data: bytes, mime: str) -> None:
+    """Upload at a stable path, treating a prior copy of the bytes as success.
+
+    The object path is content-addressed, so an interrupted attempt can leave
+    the object behind without its database row. The existence probe lets the
+    retry finish by inserting the row instead of creating a second object.
+    """
+    try:
+        if storage.exists(path):
+            return
+    except Exception:  # noqa: BLE001 - probe only; upload gives the real error
+        pass
+    try:
+        storage.upload(path, data, {"content-type": mime})
+    except Exception as exc:  # noqa: BLE001 - concurrent identical retry
+        if "already exists" in str(exc).lower() or "duplicate" in str(exc).lower():
+            return
+        raise
+
+
+def save_photo(
+    data: bytes, ext: str, content_type: str, *, identity: str = ""
+) -> str:
+    """Upload one photo and return its permanent public URL.
+
+    ``identity`` scopes the content-addressed path to one listing. Retrying the
+    same bytes therefore reuses the same object instead of uploading a second
+    copy; this is what makes a Step 3 retry safe. It never changes the upload
+    credentials or the bucket: the server-side service role remains the only
+    writer.
+    """
     client = _client()
     storage = client.storage.from_(BUCKET)
-    path = f"listings/{uuid.uuid4().hex}{ext}"
+    scope = "".join(
+        ch for ch in str(identity).strip() if ch.isalnum() or ch in "-_"
+    )[:64] or "shared"
+    digest = hashlib.sha256(data).hexdigest()[:32]
+    path = f"listings/{scope}/{digest}{ext}"
+    mime = (content_type or "").split(";")[0] or "image/jpeg"
     try:
-        storage.upload(
-            path,
-            data,
-            {"content-type": (content_type or "").split(";")[0] or "image/jpeg"},
-        )
+        _upload_once(storage, path, data, mime)
     except Exception as exc:  # noqa: BLE001
-        message = str(exc)
-        if "duplicate" in message.lower() or "exists" in message.lower():
-            # Bucket-level idempotence is not needed; treat as success only
-            # for the bucket-not-found case below.
-            pass
-        if "not found" in message.lower() or "does not exist" in message.lower():
-            _ensure_bucket(client)
-            storage.upload(
-                path,
-                data,
-                {"content-type": (content_type or "").split(";")[0] or "image/jpeg"},
-            )
+        message = str(exc).lower()
+        if "not found" in message or "does not exist" in message:
+            try:
+                _ensure_bucket(client)
+                _upload_once(storage, path, data, mime)
+            except Exception as retry_exc:  # noqa: BLE001
+                # Keep the useful exception and traceback in server logs while
+                # returning only the safe, user-facing storage message.
+                logger.exception(
+                    "Property photo storage retry failed (%s)",
+                    type(retry_exc).__name__,
+                )
+                raise PhotoStorageUnavailable(
+                    "The photo storage bucket is unavailable. Your draft is saved; "
+                    "please retry the upload."
+                ) from retry_exc
         else:
+            logger.exception(
+                "Property photo storage upload failed (%s)", type(exc).__name__
+            )
             raise PhotoStorageUnavailable(
                 "The photo upload failed. Your draft is saved; "
                 "please retry the upload."
@@ -167,11 +213,26 @@ def save_photo(data: bytes, ext: str, content_type: str) -> str:
 
 
 def _ensure_bucket(client) -> None:
+    """Reuse the configured bucket; create it only when genuinely absent.
+
+    storage3 2.x declares ``create_bucket(id, name=None, options=None)``. The
+    previous call passed ``{"name": ..., "public": ...}`` as the second
+    positional argument, binding the dict to ``name`` and producing
+    ``body/name must be string``. ``options`` is the correct keyword for the
+    public/file-size flags. Bucket inventory is read first so a manually
+    created bucket is never replaced or duplicated.
+    """
     try:
-        client.storage.create_bucket(
-            BUCKET, {"name": BUCKET, "public": True}
-        )
+        buckets = client.storage.list_buckets()
+        if any(_bucket_id(bucket) == BUCKET for bucket in buckets):
+            return
+        client.storage.create_bucket(BUCKET, options={"public": True})
     except Exception as exc:  # noqa: BLE001
+        if "already exists" in str(exc).lower() or "duplicate" in str(exc).lower():
+            return
+        logger.exception(
+            "Property photo bucket setup failed (%s)", type(exc).__name__
+        )
         raise PhotoStorageUnavailable(
             "The photo storage bucket is unavailable. Your draft is saved; "
             "please retry the upload."

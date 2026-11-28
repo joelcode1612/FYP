@@ -3,12 +3,10 @@ import 'package:jaspr/jaspr.dart';
 import 'package:shared_logic/shared_logic.dart' show AppRole;
 
 import 'package:sitewise_jaspr_web/features/property_verification/presentation/components/admin_review_split.dart';
-import 'package:sitewise_jaspr_web/features/administration/presentation/components/agent_change_requests_panel.dart';
 import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart';
 import 'package:sitewise_jaspr_web/shared/presentation/layouts/app_layout.dart';
 
-/// Administrative property directory and agent change-request workspace.
-/// Each workflow retains its original FastAPI endpoints and review actions.
+/// Administrative property directory and verification queue.
 @client
 class ListingsPage extends StatefulComponent {
   const ListingsPage({super.key});
@@ -18,22 +16,18 @@ class ListingsPage extends StatefulComponent {
 }
 
 class _ListingsPageState extends State<ListingsPage> {
-  /// 0 = property/ownership verification; 1 = agent change requests.
-  int _tab = 0;
+  _ListingsTab _tab = _ListingsTab.allProperties;
 
   Component _navigationItem({
-    required int index,
+    required _ListingsTab tab,
     required String label,
     required String icon,
   }) {
-    final selected = _tab == index;
+    final selected = _tab == tab;
     return button(
       classes: 'al2-nav${selected ? ' is-active' : ''}',
-      attributes: {
-        'type': 'button',
-        'aria-pressed': selected.toString(),
-      },
-      events: events(onClick: () => setState(() => _tab = index)),
+      attributes: {'type': 'button', 'aria-pressed': selected.toString()},
+      events: events(onClick: () => setState(() => _tab = tab)),
       [
         Icon(icon, size: 'sm'),
         span([Component.text(label)]),
@@ -49,28 +43,30 @@ class _ListingsPageState extends State<ListingsPage> {
       title: 'Property listings',
       eyebrow: 'Admin / Property management',
       subtitle:
-          'Manage verification decisions and review agent-proposed changes '
-          'from one workspace.',
+          'Manage property listings and verification requests in one workspace.',
       child: div(classes: 'admin-listings-v2 stack', [
         div(classes: 'al2-navigation', [
           _navigationItem(
-            index: 0,
-            label: 'Property reviews',
-            icon: 'domain_verification',
+            tab: _ListingsTab.allProperties,
+            label: 'All properties',
+            icon: 'inventory_2',
           ),
           _navigationItem(
-            index: 1,
-            label: 'Agent changes',
-            icon: 'edit_document',
+            tab: _ListingsTab.verificationQueue,
+            label: 'Verification queue',
+            icon: 'domain_verification',
           ),
         ]),
-        if (_tab == 0)
-          const ReviewSplit()
+        if (_tab == _ListingsTab.allProperties)
+          const ReviewSplit(key: ValueKey('all-properties'), scope: 'all')
         else
-          div(classes: 'al2-agent-workspace', [
-            const AgentChangeRequestsPanel(),
-          ]),
+          const ReviewSplit(
+            key: ValueKey('verification-queue'),
+            scope: 'queue',
+          ),
       ]),
     );
   }
 }
+
+enum _ListingsTab { allProperties, verificationQueue }

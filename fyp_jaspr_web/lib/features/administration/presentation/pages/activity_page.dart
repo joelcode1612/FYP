@@ -360,65 +360,62 @@ class _ActivityState extends State<AdminActivityPage> {
           ActionButton('Clear filters', variant: 'secondary', onClick: _resetFilters),
       ]);
     }
-    return div(
+    return TableScroll(
       classes: 'sa-table-scroll',
-      attributes: const {
-        'role': 'region',
-        'aria-label': 'Activity history table, scroll horizontally if needed',
-        'tabindex': '0',
-      },
-      [
-      table(classes: 'sa-table', [
-        thead([
-          tr([
-            th([const Component.text('Event')]),
-            th([const Component.text('Affected account')]),
-            th([const Component.text('Performed by')]),
-            th([const Component.text('Date & time')]),
-            th([const Component.text('Result')]),
-            th([const Component.text('Action')]),
-          ]),
-        ]),
-        tbody([
-          for (final event in data.events)
+      label: 'Activity history',
+      children: [
+        table(classes: 'sa-table', [
+          thead([
             tr([
-              td([
-                div(classes: 'sa-event-cell', [
-                  span(classes: 'sa-event-icon sa-event-icon--${event.category}', [
-                    Icon(_eventIcon(event), size: 'sm'),
-                  ]),
-                  div(classes: 'sa-event-copy', [
-                    strong(classes: 'sa-event-title', [Component.text(event.title)]),
-                    span(classes: 'sa-event-meta', [
-                      Component.text('${event.categoryLabel} · ${event.source}'),
+              th([const Component.text('Event')]),
+              th([const Component.text('Affected account')]),
+              th([const Component.text('Performed by')]),
+              th([const Component.text('Date & time')]),
+              th([const Component.text('Result')]),
+              th([const Component.text('Action')]),
+            ]),
+          ]),
+          tbody([
+            for (final event in data.events)
+              tr([
+                td([
+                  div(classes: 'sa-event-cell', [
+                    span(classes: 'sa-event-icon sa-event-icon--${event.category}', [
+                      Icon(_eventIcon(event), size: 'sm'),
+                    ]),
+                    div(classes: 'sa-event-copy', [
+                      strong(classes: 'sa-event-title', [Component.text(event.title)]),
+                      span(classes: 'sa-event-meta', [
+                        Component.text('${event.categoryLabel} · ${event.source}'),
+                      ]),
                     ]),
                   ]),
                 ]),
-              ]),
-              td([
-                div(classes: 'sa-person-cell', [
-                  span(classes: 'sa-person-primary', [Component.text(_account(event))]),
-                  span(classes: 'sa-person-muted', [
-                    Component.text(event.role ?? 'Role not recorded'),
+                td([
+                  div(classes: 'sa-person-cell', [
+                    span(classes: 'sa-person-primary', [Component.text(_account(event))]),
+                    span(classes: 'sa-person-muted', [
+                      Component.text(event.role ?? 'Role not recorded'),
+                    ]),
                   ]),
                 ]),
+                td([
+                  span(classes: 'sa-actor', [Component.text(_actor(event))]),
+                ]),
+                td([
+                  span(classes: 'sa-date', [Component.text(_when(event.createdAt))]),
+                ]),
+                td([
+                  StatusBadge(event.resultLabel, tone: _resultTone(event.result), dot: true),
+                ]),
+                td(classes: 'sa-table-actions', [
+                  ActionButton('View details', variant: 'ghost', onClick: () => _openDetails(event)),
+                ]),
               ]),
-              td([
-                span(classes: 'sa-actor', [Component.text(_actor(event))]),
-              ]),
-              td([
-                span(classes: 'sa-date', [Component.text(_when(event.createdAt))]),
-              ]),
-              td([
-                StatusBadge(event.resultLabel, tone: _resultTone(event.result), dot: true),
-              ]),
-              td(classes: 'sa-table-actions', [
-                ActionButton('View details', variant: 'ghost', onClick: () => _openDetails(event)),
-              ]),
-            ]),
+          ]),
         ]),
-      ]),
-    ]);
+      ],
+    );
   }
 
   Component _pager() {

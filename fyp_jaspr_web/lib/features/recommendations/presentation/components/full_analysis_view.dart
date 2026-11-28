@@ -454,7 +454,7 @@ class _MapRow extends StatelessComponent {
             Component.text('Coordinates: '),
             strong([Component.text(coords)]),
             Component.text(
-              ' · Radius selectable inside the map · © OpenStreetMap contributors, © CARTO when tiles load',
+              ' · Radius selectable inside the map',
             ),
           ]),
           if (googleMapsDirectionsUrl(property.latitude, property.longitude)

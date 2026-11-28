@@ -1,6 +1,11 @@
+import 'dart:async';
+
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
+import 'package:jaspr_router/jaspr_router.dart';
 
+import 'package:sitewise_jaspr_web/core/routing/landing_routes.dart';
+import 'package:sitewise_jaspr_web/core/routing/landing_scroll.dart';
 import 'package:sitewise_jaspr_web/shared/presentation/components/letter_reveal.dart';
 import 'package:sitewise_jaspr_web/shared/presentation/components/site_topbar.dart';
 import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart';
@@ -39,6 +44,27 @@ class LandingPage extends StatefulComponent {
 }
 
 class _LandingState extends State<LandingPage> {
+  /// Last path whose section was scrolled into view.
+  String? _scrolledPath;
+
+  /// The active route selects a section of this one continuous page. Scrolling
+  /// is programmatic: the public URL is a clean path, never a fragment.
+  /// `InheritedRouteState` notifies on location changes, so direct loads,
+  /// refreshes and browser back/forward all reach this hook.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = RouteState.maybeOf(context);
+    final path = route == null ? null : Uri.parse(route.location).path;
+    if (path == null || path == _scrolledPath) return;
+    _scrolledPath = path;
+    if (!context.binding.isClient) return;
+    final sectionId = LandingRoutes.sectionIdForPath(path);
+    // Defer until after this frame's DOM update: the target section must
+    // exist in the document before the browser can scroll to it.
+    Timer.run(() => scrollToLandingSection(sectionId));
+  }
+
   // Section 01 — problem/solution topic (0..3).
   int _challenge = 0;
 
@@ -218,6 +244,7 @@ class _LandingState extends State<LandingPage> {
   // -------------------------------------------------------------- hero
 
   Component _hero() => section(
+    id: LandingRoutes.topSectionId,
     classes: 'scroll-experience',
     attributes: {'aria-label': 'Commercial F&B property showcase'},
     [
@@ -293,12 +320,16 @@ class _LandingState extends State<LandingPage> {
                 ),
               ]),
               div(classes: 'scene-actions', [
-                a(classes: 'btn primary', href: '#explore', [
-                  Component.text('Explore properties ↓'),
-                ]),
-                a(classes: 'btn', href: '#assessment', [
-                  Component.text('See how it works'),
-                ]),
+                AppLink(
+                  to: LandingRoutes.explore,
+                  classes: 'btn primary',
+                  children: [Component.text('Explore properties ↓')],
+                ),
+                AppLink(
+                  to: LandingRoutes.assessment,
+                  classes: 'btn',
+                  children: [Component.text('See how it works')],
+                ),
               ]),
             ],
           ),
@@ -793,10 +824,14 @@ class _LandingState extends State<LandingPage> {
               'Live preview: EP-01037 · RM 10,000/mo · 2,400 sqft (RM 4.17 psf) · Corner frontage.',
               'Shortlist with context',
             ),
-            a(classes: 'geo-explore-cta', href: '#assessment', [
-              span([Component.text('Next: tell us about your business')]),
-              b(attributes: {'aria-hidden': 'true'}, [Component.text('↗')]),
-            ]),
+            AppLink(
+              to: LandingRoutes.assessment,
+              classes: 'geo-explore-cta',
+              children: [
+                span([Component.text('Next: tell us about your business')]),
+                b(attributes: {'aria-hidden': 'true'}, [Component.text('↗')]),
+              ],
+            ),
           ]),
         ]),
       ]),
@@ -1235,9 +1270,11 @@ class _LandingState extends State<LandingPage> {
           ),
         ]),
       ]),
-      a(classes: 'btn primary sm', href: '#recommendations', [
-        Component.text('View Recommendations ↓'),
-      ]),
+      AppLink(
+        to: LandingRoutes.recommendations,
+        classes: 'btn primary sm',
+        children: [Component.text('View Recommendations ↓')],
+      ),
     ]),
   ]);
 
@@ -1584,12 +1621,22 @@ class _LandingState extends State<LandingPage> {
       ]),
       div(classes: 'footer-col', [
         strong([Component.text('Explore')]),
-        a(href: '#problem', [Component.text('Problem & solution')]),
-        a(href: '#explore', [Component.text('Location exploration')]),
-        a(href: '#assessment', [Component.text('Business assessment')]),
-        a(href: '#recommendations', [
-          Component.text('Recommendations & report'),
-        ]),
+        AppLink(
+          to: LandingRoutes.problem,
+          children: [Component.text('Problem & solution')],
+        ),
+        AppLink(
+          to: LandingRoutes.explore,
+          children: [Component.text('Location exploration')],
+        ),
+        AppLink(
+          to: LandingRoutes.assessment,
+          children: [Component.text('Business assessment')],
+        ),
+        AppLink(
+          to: LandingRoutes.recommendations,
+          children: [Component.text('Recommendations & report')],
+        ),
       ]),
       div(classes: 'footer-col', [
         strong([Component.text('Get started')]),

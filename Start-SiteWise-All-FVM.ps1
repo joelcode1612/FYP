@@ -148,16 +148,6 @@ MustSucceed 'npm gen-auth-config'
 & npm.cmd run build-auth --prefix $toolDir
 MustSucceed 'npm build-auth'
 
-# Optional licensed map tiles, when a public CARTO Basemaps key is configured.
-$backendEnv = Get-Content -LiteralPath (Join-Path $backendDir '.env')
-$hasMapKey = @($backendEnv | Where-Object { $_ -match '^\s*CARTO_BASEMAPS_KEY\s*=\s*cb1_' }).Count -gt 0
-if ($hasMapKey) {
-    & npm.cmd run gen-map-config --prefix $toolDir
-    MustSucceed 'npm gen-map-config'
-} else {
-    Write-Warning 'CARTO_BASEMAPS_KEY not detected; maps that need that tile provider may be unavailable.'
-}
-
 Step 'Build Jaspr web application (client mode)'
 Push-Location $webDir
 try {

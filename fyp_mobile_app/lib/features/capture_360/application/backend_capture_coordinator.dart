@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
@@ -9,9 +10,12 @@ import 'package:path/path.dart' as p;
 import 'package:shared_logic/shared_logic.dart' hide CapturedFrame;
 
 import 'package:fyp/core/utils/capture_log.dart';
+import 'package:fyp/features/capture_360/data/sphere/processing_derivative.dart';
+import 'package:fyp/features/capture_360/domain/sphere/adaptive_sphere_plan.dart'
+    show AdaptiveSpherePlan;
 import 'package:fyp/features/capture_360/domain/sphere/sphere_capture_session.dart';
 import 'package:fyp/features/capture_360/domain/sphere/sphere_target.dart'
-    show sitewisePlanVersionForCount;
+    show planIsBackendStitched;
 
 /// One successful cloud synchronization.
 class BackendHandoffResult {
@@ -88,6 +92,67 @@ class BackendHandoffFailure implements Exception {
 
 enum _PutOutcome { stored, expired, retryable, fatal }
 
+/// The stage of the backend panorama job, as the server reports it.
+///
+/// These are the real states of the durable worker — `queued` means the job is
+/// waiting for a worker, `processing` means one has claimed it. The capture
+/// screen maps them onto its own copy; it never invents a percentage.
+enum PanoramaJobStage { queued, processing, downloading }
+
+/// The uploads are not finished yet.
+///
+/// Deliberately NOT a [BackendHandoffFailure]: the handoff has not failed, it
+/// has not finished uploading. Treating the two as one is what made the capture
+/// screen offer "Retry Handoff" for a capture that was still working normally.
+class UploadsIncompleteFailure implements Exception {
+  const UploadsIncompleteFailure({required this.count, required this.confirmed});
+
+  final int count;
+  final int confirmed;
+
+  int get missing => (count - confirmed).clamp(0, count);
+
+  @override
+  String toString() =>
+      '$confirmed of $count photographs are confirmed on Sitewise.';
+}
+
+/// The outcome of following one panorama job.
+class PanoramaFollowResult {
+  const PanoramaFollowResult._({
+    required this.ready,
+    required this.pending,
+    this.failureMessage,
+    this.panorama,
+    this.panoramaId,
+  });
+
+  /// The panorama is downloaded and on disk.
+  const PanoramaFollowResult.ready(Map<String, dynamic> panorama)
+    : this._(ready: true, pending: false, panorama: panorama);
+
+  /// Still working on the server. Call again later; the job keeps running.
+  const PanoramaFollowResult.pending(String message)
+    : this._(ready: false, pending: true, failureMessage: message);
+
+  /// A genuine failure that needs the user or a stage-aware retry.
+  const PanoramaFollowResult.failed(String message, {String? panoramaId})
+    : this._(
+        ready: false,
+        pending: false,
+        failureMessage: message,
+        panoramaId: panoramaId,
+      );
+
+  final bool ready;
+  final bool pending;
+  final String? failureMessage;
+  final Map<String, dynamic>? panorama;
+  final String? panoramaId;
+
+  bool get failed => !ready && !pending;
+}
+
 /// The device-generated-panorama cloud synchronization.
 ///
 /// Flutter has already stitched the 38 originals into one 2:1 equirectangular
@@ -116,6 +181,13 @@ class BackendCaptureCoordinator {
   final CaptureSessionStore _store;
   final HttpClient _http = HttpClient();
 
+  /// Poll jitter. Two devices following the same job must not tick in lockstep
+  /// against the backend.
+  static final math.Random _random = math.Random();
+
+  /// Legacy device-panorama handoff. The active adaptive capture uses
+  /// [FrameUploadQueue] and [sendFrameToBackend]; this path is retained only
+  /// for historical device-38 sessions and is not called by the adaptive UI.
   Future<BackendHandoffResult> handOff({
     required String stationId,
     required int propertyId,
@@ -372,6 +444,13 @@ class BackendCaptureCoordinator {
   /// Creates the authorized backend session for this capture attempt, or
   /// returns the one an earlier launch already created and persisted.
   ///
+  /// [plan] carries the adaptive target geometry. It travels with the create
+  /// request because it decides how many photographs the session expects: the
+  /// five-ring layout is generated from the camera's measured field of view,
+  /// so the count is no longer a constant the server can look up. Sending the
+  /// geometry and the count in one request is what stops a device from
+  /// claiming one plan while the server waits for another.
+  ///
   /// The returned id is written back into the local session store BEFORE any
   /// frame is uploaded, so an app restart always knows which session to
   /// resume. A server-side 404 (expired backend data) recreates the session
@@ -380,6 +459,7 @@ class BackendCaptureCoordinator {
     required String stationId,
     required int propertyId,
     required String attemptKey,
+    AdaptiveSpherePlan? plan,
   }) async {
     // The attempt key resolves the same session on retry. A replacement
     // panorama has a different key even when it shares the local station.
@@ -388,8 +468,18 @@ class BackendCaptureCoordinator {
       throw const BackendHandoffFailure('Save the capture plan before uploading.');
     }
     final count = local.requiredTargetCount;
-    final version = sitewisePlanVersionForCount(count);
-    final mode = count == 56 ? 'device_56_backend' : 'device_38_panorama';
+    // The stored version, not the count: V4 and V11 both have 44 targets but
+    // use different geometry and capture order.
+    final version = local.capturePlanVersion;
+    // Plan-driven sessions send originals to the worker. V4 (the adaptive
+    // five-ring plan) is used for new sessions; V11 remains readable when a
+    // session captured with its fixed staggered geometry is resumed.
+    final planDriven = count != 56 && planIsBackendStitched(version);
+    final mode = planDriven
+        ? 'device_adaptive'
+        : count == 56
+        ? 'device_56_backend'
+        : 'device_38_panorama';
     final Map<String, dynamic> created;
     try {
       created = await _client.post('$_api/sessions', <String, dynamic>{
@@ -399,6 +489,7 @@ class BackendCaptureCoordinator {
         'capture_mode': mode,
         'capture_plan_version': '$version',
         'idempotency_key': _idempotencyKey(propertyId, stationId, attemptKey),
+        if (planDriven && plan != null) 'plan': plan.toBackendPayload(),
       });
     } on Object catch (error) {
       throw _friendlyFailure(error);
@@ -424,6 +515,69 @@ class BackendCaptureCoordinator {
     return id;
   }
 
+  /// The stored plan for a session, or `null` when it predates plan storage.
+  ///
+  /// Resume reads this instead of regenerating target identifiers. A session
+  /// whose geometry cannot be restored is not silently re-planned: the caller
+  /// must start a new session, because mixing two viewpoints under one plan
+  /// produces a panorama that looks plausible and is wrong.
+  Future<Map<String, dynamic>?> loadPlan(String sessionId) async {
+    try {
+      final payload = await _client.get('$_api/sessions/$sessionId/plan');
+      final plan = payload['plan'];
+      return plan is Map<String, dynamic> ? plan : null;
+    } on Object catch (error) {
+      CaptureLog.log('Capture plan read failed: $error');
+      return null;
+    }
+  }
+
+  /// Asks the backend to verify one just-uploaded photograph against its
+  /// overlapping neighbours.
+  ///
+  /// Returns the endpoint's `matches` list, which is empty when nothing
+  /// overlaps yet. A transport failure returns `null` — the capture carries on
+  /// and the connection stays `pending`, because a photograph is never
+  /// discarded and never reported as verified on the strength of a failed
+  /// request.
+  Future<List<Map<String, Object?>>?> matchFrame({
+    required String sessionId,
+    required int targetIndex,
+  }) async {
+    try {
+      final payload = await _client.post(
+        '$_api/sessions/$sessionId/match',
+        <String, dynamic>{'target_index': targetIndex},
+      );
+      final matches = payload['matches'];
+      if (matches is! List) return const <Map<String, Object?>>[];
+      return <Map<String, Object?>>[
+        for (final entry in matches)
+          if (entry is Map)
+            <String, Object?>{
+              for (final item in entry.entries)
+                '${item.key}': item.value as Object?,
+            },
+      ];
+    } on Object catch (error) {
+      // A single weak request must not interrupt a sweep the user is halfway
+      // through: the frame is already saved and will be re-verified by the
+      // panorama worker, which matches every pair anyway.
+      CaptureLog.log('Incremental match failed for target $targetIndex: $error');
+      return null;
+    }
+  }
+
+  /// The alignment graph recorded so far: verified, weak and refused pairs.
+  Future<Map<String, dynamic>?> alignmentState(String sessionId) async {
+    try {
+      return await _client.get('$_api/sessions/$sessionId/alignment');
+    } on Object catch (error) {
+      CaptureLog.log('Alignment state read failed: $error');
+      return null;
+    }
+  }
+
   /// Uploads and confirms ONE original photograph against its session —
   /// the unit the durable per-capture upload queue drains. Byte-for-byte
   /// idempotent with the batched backup: the same signed-URL transport, the
@@ -436,108 +590,376 @@ class BackendCaptureCoordinator {
   /// backend schema changes and no second record are introduced. A warning
   /// never blocks or alters the upload: the photograph is confirmed exactly
   /// as captured.
-  // Actual worker-generated result for the existing version-3 backend mode.
-  // Never send a local panorama to the device-confirmation endpoint for v3.
-  Future<Map<String, dynamic>> finishEnhanced({
+  // Actual worker-generated result for a backend-stitched capture: the
+  // 56-target enhanced mode and every plan-driven mode (4, 5, 6, 7 and the
+  // densified 8). Never send a local panorama to the device-confirmation
+  // endpoint for any of them.
+  //
+  // ## Why this is split into two calls
+  //
+  // The old `finishEnhanced` created the job and then polled it for up to six
+  // minutes inside the caller's `await`. Two things went wrong with that:
+  //
+  //  1. A job that was still legitimately processing at the end of the poll
+  //     threw, so the capture screen showed "Retry Handoff" for a *healthy*
+  //     panorama. Pressing it did nothing new — the same job was resumed and
+  //     the same timeout hit again.
+  //  2. Because the call blocked, the caller could not distinguish "uploaded
+  //     and queued" from "not uploaded yet", so the UI had only two states:
+  //     spinner, or failure.
+  //
+  // The job is now *created* (idempotently) by [ensurePanoramaJob] and
+  // *followed* by [followPanoramaJob]. The caller can therefore show the real
+  // backend stage, survive an app restart mid-stitch, and reserve the Retry
+  // action for a genuine failure.
+  Future<Map<String, dynamic>> ensurePanoramaJob({
     required String stationId,
     required String sessionId,
-    required String directory,
   }) async {
     final saved = await _store.getSession(stationId);
-    if (saved == null || saved.requiredTargetCount != 56 ||
-        saved.backendSessionId != sessionId) {
+    if (saved == null || saved.backendSessionId != sessionId) {
       throw const BackendHandoffFailure('Saved enhanced session does not match.');
     }
+    final count = saved.requiredTargetCount;
+    final version = saved.capturePlanVersion;
+    final planDriven = count != 56 && planIsBackendStitched(version);
+    if (!planDriven && count != 56) {
+      throw const BackendHandoffFailure('Saved enhanced session does not match.');
+    }
+    // The mode follows the plan version, exactly as `ensureSession` chose it.
+    // A plan-driven session's expected count is its plan's target count, so
+    // the completeness check is the same check against a number that is no
+    // longer a constant.
+    final mode = planDriven ? 'device_adaptive' : 'device_56_backend';
     final server = await _client.get('$_api/sessions/$sessionId');
-    if (server['captureMode'] != 'device_56_backend' ||
-        server['expectedFrames'] != 56 || server['confirmedFrames'] != 56 ||
-        '${server['capturePlanVersion']}' != '3') {
-      throw const BackendHandoffFailure('All 56 original photos must be confirmed.');
+    if (server['captureMode'] != mode || server['expectedFrames'] != count ||
+        '${server['capturePlanVersion']}' != '$version') {
+      throw const BackendHandoffFailure('Saved capture plan does not match the session.');
+    }
+    if (server['confirmedFrames'] != count) {
+      // Not a panorama failure: the uploads are not finished. The caller keeps
+      // uploading and calls again; this is never surfaced as "stitching
+      // failed".
+      throw UploadsIncompleteFailure(
+        count: count,
+        confirmed: (server['confirmedFrames'] as num?)?.toInt() ?? 0,
+      );
     }
     Map<String, dynamic> job;
     final savedJob = saved.backendJobId;
     if (savedJob != null && savedJob.isNotEmpty) {
-      job = await _client.get('$_api/jobs/$savedJob');
+      try {
+        job = await _client.get('$_api/jobs/$savedJob');
+      } on NotFoundFailure {
+        job = const <String, dynamic>{};
+      }
       if (job['sessionId'] != sessionId) {
-        throw const BackendHandoffFailure('Saved panorama job belongs to another session.');
+        throw const BackendHandoffFailure(
+          'Saved panorama job belongs to another session.',
+        );
       }
       if (job['status'] == 'error') {
+        // A failed job is retried once per explicit request. The frames are
+        // untouched and the same job id is reused, so no duplicate job can be
+        // created by a client that retried too often.
         job = await _client.post('$_api/jobs/$savedJob/retry', <String, dynamic>{});
       }
     } else {
+      // Idempotent server-side: an existing queued/processing/done job for this
+      // session is returned rather than a second one being created.
       job = await _client.post('$_api/sessions/$sessionId/process', <String, dynamic>{});
     }
     final jobId = job['jobId'] as String?;
     if (jobId == null || jobId.isEmpty || job['sessionId'] != sessionId) {
       throw const BackendHandoffFailure('Invalid panorama job response.');
     }
-    // Save before polling. The same job is resumed after app/backend restart.
-    await _store.saveBackendHandoff(sessionId: stationId,
-      syncStatus: FrameSyncStatus.processing, backendSessionId: sessionId,
-      backendJobId: jobId, backupSyncStatus: FrameSyncStatus.ready,
-      backupUploaded: 56, backupTotal: 56);
-    for (var poll = 0; poll < 180; poll++) {
-      job = await _client.get('$_api/jobs/$jobId');
+    // Persist BEFORE polling: an app restart resumes THIS job rather than
+    // creating a second one.
+    await _store.saveBackendHandoff(
+      sessionId: stationId,
+      syncStatus: FrameSyncStatus.processing,
+      backendSessionId: sessionId,
+      backendJobId: jobId,
+      backupSyncStatus: FrameSyncStatus.ready,
+      backupUploaded: count,
+      backupTotal: count,
+    );
+    return job;
+  }
+
+  /// Follows an existing panorama job to a terminal state.
+  ///
+  /// Returns a [PanoramaFollowResult]. A job that is still processing when the
+  /// budget expires returns `pending`, **never** a failure: the worker is
+  /// healthy and the next call resumes the same job. Only a backend `error`
+  /// status or an unusable result is reported as a failure.
+  ///
+  /// Polling uses exponential backoff with jitter rather than a fixed two
+  /// second tick, so a job that takes two minutes costs a few dozen requests
+  /// instead of sixty, and the device is not held in a tight loop.
+  Future<PanoramaFollowResult> followPanoramaJob({
+    required String stationId,
+    required String sessionId,
+    required String jobId,
+    required String directory,
+    Duration budget = const Duration(minutes: 15),
+    void Function(PanoramaJobStage stage, Map<String, dynamic> job)? onStage,
+  }) async {
+    final deadline = DateTime.now().add(budget);
+    var attempt = 0;
+    var consecutiveTransportFailures = 0;
+    while (true) {
+      attempt++;
+      Map<String, dynamic> job;
+      try {
+        job = await _client.get('$_api/jobs/$jobId');
+        consecutiveTransportFailures = 0;
+      } on NotFoundFailure {
+        return const PanoramaFollowResult.failed(
+          'This panorama job no longer exists on the server. Your photographs '
+          'are saved — start the panorama again from this screen.',
+        );
+      } on Object catch (error) {
+        consecutiveTransportFailures++;
+        // A temporary network problem is not a stitching failure. Keep
+        // following until the budget expires; the job keeps running on the
+        // server either way.
+        if (consecutiveTransportFailures >= 8 ||
+            DateTime.now().isAfter(deadline)) {
+          CaptureLog.log('Panorama job poll gave up: $error');
+          return const PanoramaFollowResult.pending(
+            'Connection interrupted. Resuming automatically. '
+            'Your photos are safe.',
+          );
+        }
+        await _backoff(attempt);
+        continue;
+      }
       if (job['sessionId'] != sessionId) {
-        throw const BackendHandoffFailure('Panorama job session mismatch.');
+        return const PanoramaFollowResult.failed(
+          'The panorama job belongs to a different capture.',
+        );
       }
-      if (job['status'] == 'error') {
-        throw const BackendHandoffFailure('Panorama generation failed. Retry with your saved photos.');
+      final status = '${job['status']}';
+      if (status == 'error' || status == 'failed') {
+        return PanoramaFollowResult.failed(
+          '${job['errorMessage'] ?? 'Panorama generation failed.'} '
+          'Your photographs are saved — retry the panorama, or recapture '
+          'manually if the photos themselves are the problem.',
+        );
       }
-      if (job['status'] == 'done') {
-        final id = job['panoramaId'] as String?;
-        final path = job['outputStoragePath'] as String?;
-        if (id == null || !RegExp(r'^[a-fA-F0-9-]{36}$').hasMatch(id) ||
-            path == null || path.isEmpty) {
-          throw const BackendHandoffFailure('The completed panorama is not available.');
-        }
-        final view = await _client.get('$_api/panoramas/$id/view');
-        if (view['panoramaId'] != id) {
-          throw const BackendHandoffFailure('Panorama response does not match the job.');
-        }
-        final uri = Uri.tryParse('${view['viewUrl']}');
-        if (uri == null || !uri.hasAuthority || uri.scheme != 'https') {
-          throw const BackendHandoffFailure('The panorama viewing link is invalid.');
-        }
-        final file = File(p.join(directory, 'server_$id.jpg'));
-        final temporary = File('${file.path}.partial');
-        await file.parent.create(recursive: true);
+      if (status == 'done') {
+        onStage?.call(PanoramaJobStage.downloading, job);
         try {
-          final req = await _http.getUrl(uri).timeout(_uploadTimeout);
-          final response = await req.close().timeout(_uploadTimeout);
-          if (response.statusCode != 200) {
-            throw const BackendHandoffFailure('Could not download the generated panorama.');
-          }
-          await response.pipe(temporary.openWrite()).timeout(_uploadTimeout);
-          if (await temporary.length() < 4) {
-            throw const BackendHandoffFailure('The generated panorama is empty.');
-          }
-          final handle = await temporary.open();
-          try {
-            final first = await handle.read(2);
-            await handle.setPosition(await handle.length() - 2);
-            final last = await handle.read(2);
-            if (first.length != 2 || last.length != 2 || first[0] != 255 || first[1] != 216 ||
-                last[0] != 255 || last[1] != 217) {
-              throw const BackendHandoffFailure('The generated panorama is not a complete JPEG.');
-            }
-          } finally { await handle.close(); }
-          if (await file.exists()) {
-            // Same server artifact ID only; never replace a different panorama.
-            if (await _checksum(file.path) != await _checksum(temporary.path)) {
-              throw const BackendHandoffFailure('The server panorama differs from its cached copy.');
-            }
-          } else {
-            await temporary.rename(file.path);
-          }
-          return <String, dynamic>{'id': id, 'storagePath': path, 'localPath': file.path};
-        } finally {
-          if (await temporary.exists()) await temporary.delete();
+          final downloaded = await _downloadPanorama(
+            job: job,
+            directory: directory,
+          );
+          return PanoramaFollowResult.ready(downloaded);
+        } on Object catch (error) {
+          CaptureLog.log('Panorama download failed: $error');
+          // The panorama EXISTS on the server. This must never trigger another
+          // stitching job — only another download.
+          return PanoramaFollowResult.failed(
+            'Your panorama is ready on Sitewise but could not be saved to '
+            'this device yet. Retry to download it again — the panorama does '
+            'not need to be generated twice.',
+            panoramaId: job['panoramaId'] as String?,
+          );
         }
       }
-      await Future<void>.delayed(const Duration(seconds: 2));
+      onStage?.call(
+        status == 'queued'
+            ? PanoramaJobStage.queued
+            : PanoramaJobStage.processing,
+        job,
+      );
+      if (DateTime.now().isAfter(deadline)) {
+        return PanoramaFollowResult.pending(
+          status == 'queued'
+              ? 'Your photos are saved. Panorama processing will begin shortly.'
+              : 'Your panorama is still being created. This can take a few '
+                  'minutes on a busy server.',
+        );
+      }
+      await _backoff(attempt);
     }
-    throw const BackendHandoffFailure('Panorama is still processing. Retry to resume the same job.');
+  }
+
+  /// Exponential backoff with jitter, capped so the UI stays responsive.
+  Future<void> _backoff(int attempt) {
+    final base = math.min(6000, 400 * (1 << math.min(attempt, 4)));
+    final jitter = _random.nextInt(400);
+    return Future<void>.delayed(Duration(milliseconds: base + jitter));
+  }
+
+  Future<Map<String, dynamic>> _downloadPanorama({
+    required Map<String, dynamic> job,
+    required String directory,
+  }) async {
+    var id = job['panoramaId'] as String?;
+    var path = job['outputStoragePath'] as String?;
+    if (id == null || !RegExp(r'^[a-fA-F0-9-]{36}$').hasMatch(id) ||
+        path == null || path.isEmpty) {
+      // `done` without a panorama id means the canonical row is not linked to
+      // this job's output; ask the canonical endpoint once before giving up.
+      throw const BackendHandoffFailure('The completed panorama is not available.');
+    }
+    final view = await _client.get('$_api/panoramas/$id/view');
+    if (view['panoramaId'] != id) {
+      throw const BackendHandoffFailure('Panorama response does not match the job.');
+    }
+    final uri = Uri.tryParse('${view['viewUrl']}');
+    if (uri == null || !uri.hasAuthority || uri.scheme != 'https') {
+      throw const BackendHandoffFailure('The panorama viewing link is invalid.');
+    }
+    final file = File(p.join(directory, 'server_$id.jpg'));
+    // Already downloaded by an earlier launch: the same artifact id is the
+    // same bytes, so this is the resumed success case, not a second download.
+    if (await file.exists()) {
+      return <String, dynamic>{
+        'id': id,
+        'storagePath': path,
+        'localPath': file.path,
+        'verificationStatus': view['verificationStatus'],
+      };
+    }
+    final temporary = File('${file.path}.partial');
+    await file.parent.create(recursive: true);
+    try {
+      final req = await _http.getUrl(uri).timeout(_uploadTimeout);
+      final response = await req.close().timeout(_uploadTimeout);
+      if (response.statusCode != 200) {
+        throw const BackendHandoffFailure('Could not download the generated panorama.');
+      }
+      await response.pipe(temporary.openWrite()).timeout(_uploadTimeout);
+      if (await temporary.length() < 4) {
+        throw const BackendHandoffFailure('The generated panorama is empty.');
+      }
+      final handle = await temporary.open();
+      try {
+        final first = await handle.read(2);
+        await handle.setPosition(await handle.length() - 2);
+        final last = await handle.read(2);
+        if (first.length != 2 || last.length != 2 || first[0] != 255 ||
+            first[1] != 216 || last[0] != 255 || last[1] != 217) {
+          throw const BackendHandoffFailure(
+            'The generated panorama is not a complete JPEG.',
+          );
+        }
+      } finally {
+        await handle.close();
+      }
+      await temporary.rename(file.path);
+      return <String, dynamic>{
+        'id': id,
+        'storagePath': path,
+        'localPath': file.path,
+        'verificationStatus': view['verificationStatus'],
+      };
+    } finally {
+      if (await temporary.exists()) await temporary.delete();
+    }
+  }
+
+  /// Job creation and following in one call, kept for callers that want the
+  /// old shape. Prefer the split methods: they can report a real stage.
+  Future<Map<String, dynamic>> finishEnhanced({
+    required String stationId,
+    required String sessionId,
+    required String directory,
+  }) async {
+    final job = await ensurePanoramaJob(stationId: stationId, sessionId: sessionId);
+    final jobId = job['jobId'] as String;
+    final result = await followPanoramaJob(
+      stationId: stationId,
+      sessionId: sessionId,
+      jobId: jobId,
+      directory: directory,
+    );
+    if (result.panorama != null) return result.panorama!;
+    throw BackendHandoffFailure(
+      result.failureMessage ?? 'Panorama is still processing. Retry to resume the same job.',
+    );
+  }
+
+  /// SHA-256 of one file, streamed. Public so the capture-time verifier can
+  /// confirm a single photograph without building the whole upload queue.
+  Future<String> checksumOf(String path) => _checksum(path);
+
+  /// Explicit Agent acceptance of a generated candidate. This is the only
+  /// mobile call that changes the active inspection panorama reference.
+  Future<Map<String, dynamic>> acceptPanoramaCandidate({
+    required String sessionId,
+    required String panoramaId,
+    String? expectedActivePanoramaId,
+  }) async {
+    try {
+      return await _client.post(
+        '$_api/sessions/$sessionId/panoramas/$panoramaId/accept',
+        <String, dynamic>{
+          'expected_active_panorama_id': expectedActivePanoramaId,
+        },
+      );
+    } on Object catch (error) {
+      throw _friendlyFailure(error);
+    }
+  }
+
+  /// Cancels a candidate attempt server-side. The active panorama and all
+  /// uploaded originals are preserved.
+  Future<void> cancelCaptureSession(String sessionId) async {
+    try {
+      await _client.post(
+        '$_api/sessions/$sessionId/cancel',
+        const <String, dynamic>{},
+      );
+    } on Object catch (error) {
+      throw _friendlyFailure(error);
+    }
+  }
+
+  /// Sends one original photograph to FastAPI. The backend owns the Supabase
+  /// write; this method never requests a signed URL and never touches Storage.
+  Future<Map<String, dynamic>> sendFrameToBackend({
+    required String sessionId,
+    required CapturedFrame frame,
+    required String checksum,
+    Map<String, Object?>? qualityReport,
+  }) async {
+    final metadata = <String, Object?>{
+      'checksum_sha256': checksum,
+      if (frame.imageWidth > 0) 'image_width': frame.imageWidth,
+      if (frame.imageHeight > 0) 'image_height': frame.imageHeight,
+      'captured_at': frame.capturedAt.toUtc().toIso8601String(),
+      'capture_pose': <String, Object?>{
+        'x': frame.cameraOrientation.x,
+        'y': frame.cameraOrientation.y,
+        'z': frame.cameraOrientation.z,
+        'w': frame.cameraOrientation.w,
+        'sourceImageWidth': frame.sourceImageWidth,
+        'sourceImageHeight': frame.sourceImageHeight,
+        'cropOffsetX': frame.cropOffsetX,
+        'cropOffsetY': frame.cropOffsetY,
+        'targetYawDegrees': frame.targetYawDegrees,
+        'targetPitchDegrees': frame.targetPitchDegrees,
+        'alignmentErrorDeg': frame.alignmentErrorDeg,
+        'toleranceDeg': frame.toleranceDeg,
+        'quality': ?qualityReport,
+      },
+    };
+    try {
+      return await _client.uploadFileMultipart(
+        '$_api/sessions/$sessionId/frames/${frame.targetId}/photo',
+        fields: <String, String>{'metadata': jsonEncode(metadata)},
+        fileField: 'file',
+        filename: '${frame.targetId}.jpg',
+        filePath: frame.imagePath,
+        contentType: 'image/jpeg',
+      );
+    } on Object catch (error) {
+      throw _friendlyFailure(error);
+    }
   }
 
   Future<String> uploadFrame({
@@ -545,6 +967,7 @@ class BackendCaptureCoordinator {
     required CapturedFrame frame,
     required String checksum,
     Map<String, Object?>? qualityReport,
+    ProcessingDerivative? derivative,
   }) async {
     try {
       final permission = await _issueUploadUrls(sessionId, <int>[
@@ -556,6 +979,7 @@ class BackendCaptureCoordinator {
         checksum: checksum,
         permission: permission[frame.targetId],
         qualityReport: qualityReport,
+        derivative: derivative,
         onProgress: () {},
       );
       return permission[frame.targetId]!['storagePath'] as String;
@@ -1095,6 +1519,7 @@ class BackendCaptureCoordinator {
     required String checksum,
     required Map<String, dynamic>? permission,
     Map<String, Object?>? qualityReport,
+    ProcessingDerivative? derivative,
     required void Function() onProgress,
   }) async {
     if (permission == null) {
@@ -1109,7 +1534,11 @@ class BackendCaptureCoordinator {
       final stored = _alreadyStored(upload);
       if (!stored) {
         upload = await _putWithRetries(
-          filePath: frame.imagePath,
+          // The derivative when one exists: the same photograph, scaled down
+          // for transfer, with the original still on the device. Its digest is
+          // the one the queue declared, so the server's integrity check is
+          // against the bytes it actually receives.
+          filePath: derivative?.path ?? frame.imagePath,
           target: frame.targetId,
           permission: upload,
           overwrite: replaced,
@@ -1138,6 +1567,7 @@ class BackendCaptureCoordinator {
           storagePath,
           qualityReport: qualityReport,
           uploaded: !stored,
+          derivative: derivative,
         );
         onProgress();
         return;
@@ -1230,7 +1660,30 @@ class BackendCaptureCoordinator {
     String storagePath, {
     Map<String, Object?>? qualityReport,
     bool uploaded = true,
+    ProcessingDerivative? derivative,
   }) async {
+    // Every geometric number is expressed in the pixels that were actually
+    // uploaded. When the upload is a uniformly scaled derivative, the declared
+    // dimensions, the pre-crop source size and the crop origin all scale by
+    // the same factor — which keeps the derived focal length and the principal
+    // point exact (the server reconstructs the lens from the declared height).
+    // Declaring the *original* size for a smaller upload would make the server
+    // believe the lens is twice as long as it is.
+    final scale = derivative?.scale ?? 1.0;
+    final imageWidth = derivative?.width ?? frame.imageWidth;
+    final imageHeight = derivative?.height ?? frame.imageHeight;
+    final sourceWidth = scale == 1.0
+        ? frame.sourceImageWidth
+        : (frame.sourceImageWidth * scale).round();
+    final sourceHeight = scale == 1.0
+        ? frame.sourceImageHeight
+        : (frame.sourceImageHeight * scale).round();
+    final cropX = scale == 1.0
+        ? frame.cropOffsetX
+        : (frame.cropOffsetX * scale).round();
+    final cropY = scale == 1.0
+        ? frame.cropOffsetY
+        : (frame.cropOffsetY * scale).round();
     await _client.post('$_api/sessions/$sessionId/frames', <String, dynamic>{
       'target_index': frame.targetId,
       'storage_path': storagePath,
@@ -1238,17 +1691,17 @@ class BackendCaptureCoordinator {
       // False = the object was already in storage and this confirmation must
       // verify the stored bytes against the digest above.
       'uploaded': uploaded,
-      if (frame.imageWidth > 0) 'image_width': frame.imageWidth,
-      if (frame.imageHeight > 0) 'image_height': frame.imageHeight,
+      if (imageWidth > 0) 'image_width': imageWidth,
+      if (imageHeight > 0) 'image_height': imageHeight,
       'capture_pose': <String, Object?>{
         'x': frame.cameraOrientation.x,
         'y': frame.cameraOrientation.y,
         'z': frame.cameraOrientation.z,
         'w': frame.cameraOrientation.w,
-        'sourceImageWidth': frame.sourceImageWidth,
-        'sourceImageHeight': frame.sourceImageHeight,
-        'cropOffsetX': frame.cropOffsetX,
-        'cropOffsetY': frame.cropOffsetY,
+        'sourceImageWidth': sourceWidth,
+        'sourceImageHeight': sourceHeight,
+        'cropOffsetX': cropX,
+        'cropOffsetY': cropY,
         // These are the guided target and capture gate observations, not
         // claimed camera calibration. The quaternion above is the device pose.
         'targetYawDegrees': frame.targetYawDegrees,

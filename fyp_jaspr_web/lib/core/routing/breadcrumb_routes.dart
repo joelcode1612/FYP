@@ -99,8 +99,9 @@ const Map<String, _TrailSpec> _trails = {
   '/admin/user-detail': _TrailSpec('User detail', sectionRoute: '/admin/users'),
   '/admin/listings': _TrailSpec('Listings', usePageTitle: true),
   '/admin/listing-detail':
-      _TrailSpec('Listing detail', sectionRoute: '/admin/listings'),
+      _TrailSpec('Listing review', sectionRoute: '/admin/listings'),
   '/admin/agents': _TrailSpec('Agents'),
+  '/admin/activity': _TrailSpec('System activity'),
   '/admin/surveys': _TrailSpec('Surveys'),
   '/admin/campaigns': _TrailSpec('Campaigns'),
   '/admin/profile': _TrailSpec('Profile'),

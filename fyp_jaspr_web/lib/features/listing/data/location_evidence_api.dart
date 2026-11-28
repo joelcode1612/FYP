@@ -80,6 +80,7 @@ class PropertyEvidence {
   final String? snapshotAt;
   final num? dataCompletenessPct;
   final List<EvidenceGroup> groups;
+  final EvidenceMetric? nearestCompetitor;
 
   /// Official DOSM demographics for the property's whole district.
   ///
@@ -98,6 +99,7 @@ class PropertyEvidence {
     this.snapshotAt,
     this.dataCompletenessPct,
     this.districtStatistics,
+    this.nearestCompetitor,
   });
 
   factory PropertyEvidence.unavailable(String id, String reason) =>
@@ -257,10 +259,29 @@ abstract final class LocationEvidenceApi {
     bool catalog = true,
   }) async {
     if (!catalog) {
-      return PropertyEvidence.unavailable(
-        propertyId,
-        'No verified analytics mapping is exposed for this numeric listing. '
-        'Do not combine it with an unrelated research property.',
+      final response = await WebAuth.request(
+        '/api/v1/explore/properties/${Uri.encodeComponent(propertyId)}',
+      );
+      final data = response['data'] as Map?;
+      final nearest = data?['nearest_competitor'] as Map?;
+      final distance = nearest?['distance_m'] as num?;
+      final note = [
+        nearest?['name'],
+        nearest?['category']?.toString().replaceAll('_', ' '),
+        nearest?['source'],
+      ].whereType<String>().where((part) => part.isNotEmpty).join(' · ');
+      return PropertyEvidence(
+        propertyId: propertyId,
+        available: false,
+        groups: const [],
+        nearestCompetitor: EvidenceMetric(
+          key: 'nearest_competitor_distance_m',
+          label: 'Nearest F&B competitor',
+          unit: 'm',
+          value: distance,
+          status: distance == null ? 'unavailable' : 'available',
+          note: note.isEmpty ? null : note,
+        ),
       );
     }
     final response = await WebAuth.request(

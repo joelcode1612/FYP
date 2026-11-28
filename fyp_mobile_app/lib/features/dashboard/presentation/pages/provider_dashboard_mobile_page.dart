@@ -5,6 +5,7 @@ import 'package:fyp/core/di/service_locator.dart';
 import 'package:fyp/core/theme/sitewise_m3.dart';
 import 'package:fyp/core/theme/sitewise_theme.dart';
 import 'package:fyp/shared/presentation/components/m3_kit.dart';
+import 'package:fyp/shared/presentation/components/provider_card_actions.dart';
 import 'package:fyp/shared/presentation/components/sitewise_network_image.dart';
 import 'package:fyp/shared/presentation/layouts/provider_tab_scope.dart';
 import 'package:fyp/features/dashboard/application/provider_dashboard_controller.dart';
@@ -19,8 +20,8 @@ import 'package:fyp/shared/presentation/components/provider_ui.dart';
 /// authorized endpoint (`GET /api/v1/properties/listings/mine` for an owner,
 /// `GET /api/v1/staff/me/listings` for an agent), and the status counts are
 /// arithmetic over those server rows. Metrics SiteWise does not record
-/// (viewings, closed deals) render as an explicit "—" with a not-tracked
-/// caption — never a fabricated zero or percentage.
+/// (viewings, closed deals) are simply not shown — never a fabricated zero
+/// or percentage in their place.
 ///
 /// The dashboard no longer depends on the Enquiries or Schedule features:
 /// those screens are removed from the mobile Provider workspace, and their
@@ -42,6 +43,12 @@ class ProviderDashboardMobilePage extends ConsumerStatefulWidget {
 
 class _ProviderDashboardMobilePageState
     extends ConsumerState<ProviderDashboardMobilePage> {
+  /// Invalidates the workspace when the app comes back to the foreground:
+  /// an administrator decision or an owner action may have changed the
+  /// records while the process was suspended. Tab switches still do NOT
+  /// refetch — only real lifecycle resumes do.
+  AppLifecycleListener? _lifecycle;
+
   @override
   void initState() {
     super.initState();
@@ -49,10 +56,12 @@ class _ProviderDashboardMobilePageState
     // shared repository. Refresh only when that revision actually changes;
     // simply switching back to Home must not refetch the dashboard.
     ServiceLocator.listingsRevision.addListener(_reload);
+    _lifecycle = AppLifecycleListener(onResume: _reload);
   }
 
   @override
   void dispose() {
+    _lifecycle?.dispose();
     ServiceLocator.listingsRevision.removeListener(_reload);
     super.dispose();
   }
@@ -102,14 +111,18 @@ class _ProviderDashboardMobilePageState
           children: [
             _Greeting(data: data),
             const SizedBox(height: 4),
-            _OverviewCard(data: data),
+            _OverviewCard(data: data, onOpen: _open),
             const SizedBox(height: 16),
             _QuickActionRow(data: data, onOpen: _open),
             const SizedBox(height: 18),
-            ProviderProcessOverview(isAgent: data.isAgent, onOpen: _open),
-            const SizedBox(height: 8),
+            if (!data.isAgent) ...[
+              ProviderProcessOverview(isAgent: data.isAgent, onOpen: _open),
+              const SizedBox(height: 8),
+            ],
             M3SectionRow(
-              title: data.isAgent ? 'Assigned properties' : 'Your properties',
+              title: data.isAgent
+                  ? 'Assigned properties (${data.listingCount})'
+                  : 'Your properties',
               actionLabel: 'View all',
               onAction: () => _open('/provider/listings'),
             ),
@@ -130,7 +143,7 @@ class _ProviderDashboardMobilePageState
             else
               for (final listing in data.recentListings)
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.only(bottom: 12),
                   child: _PropertyCard(
                     listing: listing,
                     manageLabel: data.isAgent ? 'Open' : 'Manage',
@@ -154,7 +167,7 @@ class _ProviderDashboardMobilePageState
               else
                 for (final task in data.tasks)
                   Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.only(bottom: 12),
                     child: _TaskRow(task: task, onOpen: _open),
                   ),
             ],
@@ -233,7 +246,7 @@ class _Greeting extends StatelessWidget {
 
 /// One metric slot of the overview card.
 class _Metric {
-  const _Metric(this.icon, this.value, this.label, [this.caption]);
+  const _Metric(this.icon, this.value, this.label, [this.caption, this.route]);
 
   final IconData icon;
 
@@ -244,34 +257,53 @@ class _Metric {
   /// Present only on untracked metrics, saying WHY there is no number.
   final String? caption;
 
+  /// An existing screen this metric drills into, when the metric is
+  /// navigable. Only routes the app already registers — never a new
+  /// destination invented for the card.
+  final String? route;
+
   bool get unavailable => value == '—';
 }
 
 class _OverviewCard extends StatelessWidget {
-  const _OverviewCard({required this.data});
+  const _OverviewCard({required this.data, required this.onOpen});
 
   final ProviderDashboardData data;
+  final void Function(String route) onOpen;
 
   List<_Metric> get _metrics {
     if (data.isAgent) {
+      // Workflow metrics from the backend's own records. Viewings are not
+      // tracked by SiteWise and are no longer shown at all: the four slots
+      // report the states the agent workflow actually has.
       return [
         _Metric(
-          Icons.apartment_outlined,
-          '${data.listingCount}',
-          'Assigned Properties',
+          Icons.mark_email_unread_outlined,
+          '${data.newRequestsCount}',
+          'New Requests',
+          null,
+          '/provider/tasks',
         ),
-        _Metric(Icons.layers_outlined, '${data.publishedCount}', 'Published'),
+        _Metric(
+          Icons.fact_check_outlined,
+          '${data.inspectionsInProgressCount}',
+          'Inspections in Progress',
+          null,
+          '/provider/tasks',
+        ),
         _Metric(
           Icons.schedule_outlined,
-          '${data.pendingCount}',
-          'Pending Review',
+          '${data.pendingAdminReviewCount}',
+          'Pending Admin Review',
+          null,
+          '/provider/tasks',
         ),
-        // SiteWise emits no viewing events; the report states this too.
-        const _Metric(
-          Icons.calendar_today_outlined,
-          '—',
-          'Viewings Today',
-          'Not tracked',
+        _Metric(
+          Icons.layers_outlined,
+          '${data.publishedCount}',
+          'Published',
+          null,
+          '/provider/listings',
         ),
       ];
     }
@@ -365,7 +397,20 @@ class _OverviewCard extends StatelessWidget {
                         Container(width: 1, height: 42, color: SitewiseM3.line),
                         const SizedBox(width: 6),
                       ],
-                      Expanded(child: _MetricSlot(metric: metrics[i])),
+                      Expanded(
+                        child: metrics[i].route == null
+                            ? _MetricSlot(metric: metrics[i])
+                            : Semantics(
+                                button: true,
+                                label:
+                                    '${metrics[i].label}: ${metrics[i].value}',
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: () => onOpen(metrics[i].route!),
+                                  child: _MetricSlot(metric: metrics[i]),
+                                ),
+                              ),
+                      ),
                     ],
                   ],
                 ),
@@ -602,107 +647,105 @@ class _PropertyCard extends StatelessWidget {
       label: '$manageLabel ${listing.displayTitle}',
       child: M3Card(
         onTap: onOpen,
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(14),
-              child: SitewiseNetworkImage(
-                url: listing.imageUrl,
-                width: 84,
-                height: 66,
-                fit: BoxFit.cover,
-                semanticLabel: 'Photo of ${listing.displayTitle}',
-                fallback: Container(
-                  width: 84,
-                  height: 66,
-                  color: providerWash,
-                  alignment: Alignment.center,
-                  child: const Icon(
-                    Icons.image_outlined,
-                    size: 24,
-                    color: SitewiseColors.muted,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    listing.displayTitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontFamily: kFontFamily,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                      color: SitewiseM3.ink,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: SitewiseNetworkImage(
+                    url: listing.imageUrl,
+                    width: 84,
+                    height: 66,
+                    fit: BoxFit.cover,
+                    semanticLabel: 'Photo of ${listing.displayTitle}',
+                    fallback: Container(
+                      width: 84,
+                      height: 66,
+                      color: providerWash,
+                      alignment: Alignment.center,
+                      child: const Icon(
+                        Icons.image_outlined,
+                        size: 24,
+                        color: SitewiseColors.muted,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 3),
-                  Row(
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(
-                        Icons.location_on_outlined,
-                        size: 13,
-                        color: SitewiseM3.muted,
+                      Text(
+                        listing.displayTitle,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontFamily: kFontFamily,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          color: SitewiseM3.ink,
+                        ),
                       ),
-                      const SizedBox(width: 3),
-                      Expanded(
-                        child: Text(
-                          listing.address.isEmpty
-                              ? 'Address not set'
-                              : listing.address,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontFamily: kFontFamily,
-                            fontSize: 11,
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.location_on_outlined,
+                            size: 14,
                             color: SitewiseM3.muted,
                           ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              listing.address.isEmpty
+                                  ? 'Address not set'
+                                  : listing.address,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontFamily: kFontFamily,
+                                fontSize: 12,
+                                color: SitewiseM3.muted,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        listing.rentDisplay,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontFamily: kFontFamily,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color: SitewiseColors.action,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 5),
-                  Text(
-                    listing.rentDisplay,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontFamily: kFontFamily,
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w800,
-                      color: SitewiseColors.action,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                ProviderStatusPill(stage: listing.stage, compact: true),
-                const SizedBox(height: 8),
-                OutlinedButton(
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: ProviderStatusPill(stage: listing.stage, compact: true),
+            ),
+            const SizedBox(height: 12),
+            ProviderCardActions(
+              actions: [
+                ProviderCardAction(
+                  label: manageLabel,
+                  icon: Icons.arrow_forward_rounded,
                   onPressed: onOpen,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: SitewiseColors.action,
-                    side: const BorderSide(color: SitewiseColors.action),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(
-                        SitewiseM3.radiusPill,
-                      ),
-                    ),
-                    minimumSize: const Size(64, 34),
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                  ),
-                  child: Text(manageLabel),
+                  emphasis: ProviderCardActionEmphasis.primary,
                 ),
               ],
             ),

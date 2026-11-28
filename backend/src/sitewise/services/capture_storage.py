@@ -3,8 +3,10 @@
 The 360° capture originals and stitched panoramas are source imagery tied to
 a property — the opposite of ``photo_storage``'s display media — so they live
 in a dedicated PRIVATE bucket and are reached only through short-lived
-signed URLs issued by this backend after authorization. The service-role key
-stays server-side; Flutter receives upload/view URLs, never credentials.
+signed URLs issued by this backend after authorization. Active adaptive
+frames now arrive through FastAPI and are written here server-side; signed
+upload URLs remain for the legacy device-panorama workflow. The service-role
+key stays server-side; Flutter never receives credentials.
 
 Object paths are deterministic and property-scoped:
 
@@ -24,6 +26,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from pathlib import Path
 from dataclasses import dataclass
 
 from sitewise.core.config import settings
@@ -335,12 +338,41 @@ def decode_panorama(data: bytes) -> tuple[int, int]:
     return int(width), int(height)
 
 
-def upload_bytes(storage_path: str, data: bytes, content_type: str = "image/jpeg") -> None:
-    """Server-side write — the stitched panorama path only.
+def upload_file(
+    storage_path: str, file_path: str | Path, content_type: str = "image/jpeg"
+) -> None:
+    """Server-side write of a received frame, streamed from disk.
 
-    Frames are uploaded by the device through signed URLs; the backend writes
-    only the panorama it produced itself.
+    The FastAPI capture endpoint receives the JPEG into a durable temporary
+    file, then hands that path here. Opening the file inside the SDK call keeps
+    the frame out of the Python heap and lets Supabase read it as a stream.
     """
+    client = _client()
+
+    def _put() -> None:
+        with open(file_path, "rb") as handle:
+            client.storage.from_(BUCKET).upload(
+                storage_path,
+                handle,
+                {"content-type": content_type, "x-upsert": "true"},
+            )
+
+    try:
+        _put()
+    except Exception as exc:  # noqa: BLE001
+        message = str(exc).lower()
+        if "not found" in message or "does not exist" in message:
+            ensure_bucket()
+            _put()
+            return
+        raise CaptureStorageUnavailable(
+            "The photograph could not be uploaded to storage. It is kept on "
+            "the device; retry when storage is reachable."
+        ) from exc
+
+
+def upload_bytes(storage_path: str, data: bytes, content_type: str = "image/jpeg") -> None:
+    """Server-side write for an in-memory artifact (panorama path)."""
     client = _client()
     try:
         client.storage.from_(BUCKET).upload(

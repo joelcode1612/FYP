@@ -1,8 +1,6 @@
-import 'package:fyp/features/capture_360/domain/vio_sphere_math.dart'
-    show VioSphereConstants;
+import 'package:fyp/features/capture_360/domain/models/vio_sphere_constants.dart';
 import 'package:fyp/features/capture_360/domain/virtual_tour/math/quaternions.dart';
 import 'package:fyp/features/capture_360/domain/virtual_tour/math/vectors.dart';
-import 'package:fyp/features/capture_360/domain/platform/ar_types.dart';
 
 /// One capture station: the physical spot a set of 26 photographs is taken from.
 ///

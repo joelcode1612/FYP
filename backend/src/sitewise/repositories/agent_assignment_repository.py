@@ -55,6 +55,15 @@ SELECT
     a.assigned_by_user_id,
     a.created_at,
     a.updated_at,
+    a.workflow_status,
+    a.requested_at,
+    a.responded_at,
+    a.submitted_at,
+    a.decline_reason,
+    a.inspection_data,
+    a.inspection_updated_at,
+    a.panorama_id,
+    a.panorama_uploaded_at,
     p.name,
     p.address,
     p.city,
@@ -175,7 +184,11 @@ def _task_projection(data: dict[str, Any]) -> dict[str, Any]:
 
 def _as_dict(row: Any) -> dict[str, Any]:
     data = dict(row)
-    for key in ("created_at", "updated_at", "correction_at", "verification_submitted_at", "available_from"):
+    for key in (
+        "created_at", "updated_at", "correction_at", "verification_submitted_at",
+        "available_from", "requested_at", "responded_at", "submitted_at",
+        "inspection_updated_at", "panorama_uploaded_at",
+    ):
         value = data.get(key)
         if value is not None and hasattr(value, "isoformat"):
             data[key] = value.isoformat()

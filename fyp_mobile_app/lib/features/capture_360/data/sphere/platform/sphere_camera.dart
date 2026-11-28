@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -22,7 +23,28 @@ export 'package:fyp/features/capture_360/application/sphere/sphere_platform_port
 /// measures the actual JPEG and crops only if the device returned something
 /// else. Nothing here claims a resolution the hardware did not deliver.
 class PluginSphereCamera implements SphereCamera {
+  /// CameraX owns one physical device. A screen can be disposed and the next
+  /// capture opened before the old close finishes; serialising open/close
+  /// across instances prevents two CameraX clients racing for device 0.
+  static Future<void> _cameraTransition = Future<void>.value();
+
   CameraController? _controller;
+  Future<void>? _openFuture;
+  bool _takingPicture = false;
+
+  Future<void> _serialize(Future<void> Function() operation) {
+    final previous = _cameraTransition;
+    final completer = Completer<void>();
+    _cameraTransition = previous.then((_) async {
+      try {
+        await operation();
+        if (!completer.isCompleted) completer.complete();
+      } catch (error, stack) {
+        if (!completer.isCompleted) completer.completeError(error, stack);
+      }
+    });
+    return completer.future;
+  }
 
   @override
   bool get isOpen => _controller?.value.isInitialized ?? false;
@@ -37,14 +59,35 @@ class PluginSphereCamera implements SphereCamera {
   }
 
   @override
-  Future<void> open() async {
-    if (isOpen) return;
+  Future<void> open() {
+    if (isOpen) return Future<void>.value();
+    final inFlight = _openFuture;
+    if (inFlight != null) return inFlight;
+    final future = _serialize(_open);
+    _openFuture = future;
+    return future.whenComplete(() {
+      if (identical(_openFuture, future)) _openFuture = null;
+    });
+  }
+
+  Future<void> _open() async {
+    final started = DateTime.now();
+    debugPrint('SPHERE_CAMERA: opening');
     // A previous controller may exist but never have initialised (a failed
     // attempt). Dispose it rather than overwriting the reference.
     final previous = _controller;
     _controller = null;
-    await previous?.dispose();
-    final cameras = await availableCameras();
+    final previousClosing = previous?.dispose();
+    if (previousClosing != null) {
+      try {
+        await previousClosing.timeout(const Duration(seconds: 5));
+      } catch (_) {
+        // A wedged previous controller must not block a new capture forever.
+      }
+    }
+    final cameras = await availableCameras().timeout(
+      const Duration(seconds: 10),
+    );
     if (cameras.isEmpty) {
       throw CameraException('no_camera', 'This device reports no camera.');
     }
@@ -64,14 +107,25 @@ class PluginSphereCamera implements SphereCamera {
     // the widget that had already decided "not open" was never rebuilt.
     _controller = controller;
     try {
-      await controller.initialize();
+      await controller.initialize().timeout(const Duration(seconds: 12));
       try {
         await controller.setFlashMode(FlashMode.off);
       } on CameraException {
         // Some devices expose no flash; the still is unaffected.
       }
+      debugPrint(
+        'SPHERE_CAMERA: opened in '
+        '${DateTime.now().difference(started).inMilliseconds}ms',
+      );
     } catch (_) {
       _controller = null;
+      // A failed/timed-out initialize must not leave a half-open CameraX
+      // device behind; otherwise the next attempt sees a leaked camera client.
+      try {
+        await controller.dispose().timeout(const Duration(seconds: 5));
+      } catch (_) {
+        // Best effort.
+      }
       rethrow;
     }
   }
@@ -157,33 +211,75 @@ class PluginSphereCamera implements SphereCamera {
 
   @override
   Future<Uint8List> takePicture() async {
-    final controller = _controller;
-    if (controller == null || !controller.value.isInitialized) {
+    if (_takingPicture) {
       throw CameraException(
-        'not_open',
-        'The camera is not open, so no photograph was taken.',
+        'busy',
+        'A photograph is already being taken.',
       );
     }
-    final file = await controller.takePicture();
+    _takingPicture = true;
     try {
-      return await file.readAsBytes();
-    } finally {
-      // The plugin writes into the cache directory; the accepted JPEG is
-      // written to the station directory by the controller, so the temporary
-      // file is not evidence and must not accumulate.
-      try {
-        await File(file.path).delete();
-      } catch (_) {
-        // Best effort: a leftover cache file is harmless.
+      final controller = _controller;
+      if (controller == null || !controller.value.isInitialized) {
+        throw CameraException(
+          'not_open',
+          'The camera is not open, so no photograph was taken.',
+        );
       }
+      final file = await controller
+          .takePicture()
+          .timeout(const Duration(seconds: 20));
+      try {
+        return await file.readAsBytes();
+      } finally {
+        // The plugin writes into the cache directory; the accepted JPEG is
+        // written to the station directory by the controller, so the temporary
+        // file is not evidence and must not accumulate.
+        try {
+          await File(file.path).delete();
+        } catch (_) {
+          // Best effort: a leftover cache file is harmless.
+        }
+      }
+    } finally {
+      _takingPicture = false;
     }
   }
 
   @override
-  Future<void> close() async {
+  Future<void> close() {
+    // Capture the open future at CALL time. An open queued after this close
+    // must not be awaited from inside the close, or the serialised gate would
+    // wait on itself.
+    final opening = _openFuture;
+    return _serialize(() => _close(opening));
+  }
+
+  Future<void> _close(Future<void>? opening) async {
+    debugPrint('SPHERE_CAMERA: closing');
+    // Never dispose underneath initialize(): the plugin publishes the
+    // controller before initialization finishes, so a close during that window
+    // used to leave a disposed controller in the preview and a half-open
+    // CameraX device behind.
+    if (opening != null) {
+      try {
+        await opening;
+      } catch (_) {
+        // A failed open has no live device to close.
+      }
+    }
     final controller = _controller;
     _controller = null;
-    await controller?.dispose();
+    final closing = controller?.dispose();
+    if (closing != null) {
+      try {
+        await closing.timeout(const Duration(seconds: 10));
+      } catch (_) {
+        // The serialised camera gate must not wait forever on a wedged plugin;
+        // the next open still goes through CameraX's own device arbitration.
+      }
+    }
+    debugPrint('SPHERE_CAMERA: closed');
   }
 
   /// Waits until the platform preview is configured **and** has rendered.

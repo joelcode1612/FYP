@@ -81,22 +81,29 @@ class PersistentTourRepository implements TourRepository {
 
   @override
   Future<VirtualTour?> tourForPropertyDraft(String propertyId) =>
-      _latestPropertyCapture(propertyId, includeReady: false);
+      _latestPropertyCapture(propertyId, const {
+        VirtualTourStatus.draft,
+        VirtualTourStatus.processing,
+      });
 
   Future<VirtualTour?> latestInspectionCapture(String propertyId) =>
-      _latestPropertyCapture(propertyId, includeReady: true);
+      _latestPropertyCapture(propertyId, const {
+        VirtualTourStatus.draft,
+        VirtualTourStatus.processing,
+        VirtualTourStatus.ready,
+      });
+
+  Future<VirtualTour?> latestReadyInspectionCapture(String propertyId) =>
+      _latestPropertyCapture(propertyId, const {VirtualTourStatus.ready});
 
   Future<VirtualTour?> _latestPropertyCapture(
-    String propertyId, {
-    required bool includeReady,
-  }) async {
+    String propertyId,
+    Set<VirtualTourStatus> statuses,
+  ) async {
     final store = await _storeFor(_namespace);
     VirtualTour? best;
     for (final tour in store) {
-      if (tour.propertyId != propertyId ||
-          (tour.status != VirtualTourStatus.draft &&
-              tour.status != VirtualTourStatus.processing &&
-              !(includeReady && tour.status == VirtualTourStatus.ready))) {
+      if (tour.propertyId != propertyId || !statuses.contains(tour.status)) {
         continue;
       }
       if (best == null ||

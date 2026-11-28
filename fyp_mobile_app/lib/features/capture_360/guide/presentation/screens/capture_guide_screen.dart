@@ -3,11 +3,13 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'capture_plan_guide.dart';
 
+import 'package:fyp/features/capture_360/domain/sphere/sphere_target.dart'
+    show kSphereTargetCount;
 import 'package:fyp/features/capture_360/guide/domain/capture_guide_content.dart';
 import 'package:fyp/features/capture_360/guide/presentation/widgets/sphere_plan_painter.dart';
 import 'package:fyp/features/capture_360/presentation/widgets/capture_theme.dart';
 
-/// Four-screen onboarding for the existing 38-target 3DoF sphere capture.
+/// Four-screen onboarding for the adaptive five-ring 3DoF sphere capture.
 ///
 /// Pages 1–4 are documentation only: the camera/sensors are NOT started here.
 /// Page 3 deliberately renders a clean, painted sample room with the real
@@ -77,7 +79,8 @@ class _CaptureGuideScreenState extends State<CaptureGuideScreen> {
     if (widget.showStartAction &&
         (widget.onStartCapture != null || widget.onStartCapturePlan != null)) {
       return CapturePlanGuide(
-        allowEnhanced: widget.allowEnhanced && widget.onStartCapturePlan != null,
+        // SITEWISE_STANDARD_ONLY_20261126
+        allowEnhanced: false,
         onStart: (count) {
           final select = widget.onStartCapturePlan;
           if (select != null) { select(count); } else { _begin(); }
@@ -400,10 +403,11 @@ class _CaptureDirections extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const _GuideText(
-              title: 'Understand the 38 directions',
+            _GuideText(
+              title: 'Understand the $kSphereTargetCount directions',
               subtitle:
-                  'Capture the room from 38 guided angles in a fixed sequence.',
+                  'Capture the room from $kSphereTargetCount guided angles in '
+                  'a fixed sequence.',
             ),
             const SizedBox(height: 14),
             Row(
@@ -703,12 +707,12 @@ class _TargetPreview extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const Text(
-                  'Turn right 31° to target 2.',
+                  'Turn right 30° to the next photo.',
                   style: TextStyle(color: Colors.white, fontSize: 14),
                 ),
                 const SizedBox(height: 7),
                 const Text(
-                  'Target 2 / 38 — Middle ring (30°)',
+                  'Step 2 / $kSphereTargetCount · Middle ring (30°)',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 15,
@@ -845,7 +849,7 @@ class _MiniSpherePainter extends CustomPainter {
     );
     final text = TextPainter(
       text: const TextSpan(
-        text: '2 / 38',
+        text: '2 / $kSphereTargetCount',
         style: TextStyle(
           fontSize: 9,
           color: Colors.white,
@@ -965,9 +969,10 @@ class _ReadyToCapture extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const _GuideText(
+          _GuideText(
             title: 'Ready to capture?',
-            subtitle: 'You’re all set. Start the 38-photo capture now.',
+            subtitle:
+                'You’re all set. Start the $kSphereTargetCount-photo capture now.',
           ),
           const SizedBox(height: 20),
           ClipRRect(

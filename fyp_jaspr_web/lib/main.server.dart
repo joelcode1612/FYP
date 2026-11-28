@@ -122,6 +122,7 @@ class _DocumentShell extends StatelessComponent {
         script(src: 'three_scene.js', defer: true),
         script(src: 'reveal.js', defer: true),
         script(src: 'auth_bundle.js', defer: true),
+        link(rel: 'stylesheet', type: 'text/css', href: '/sitewise_admin_compact_v2.css'),
       ],
       body: Component.fragment([
         const _NoScript(),

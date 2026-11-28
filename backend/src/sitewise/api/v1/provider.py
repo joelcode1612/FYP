@@ -46,6 +46,7 @@ from sitewise.domain import rbac
 from sitewise.services.enquiry_service import EnquiryService
 from sitewise.services.provider_performance_service import ProviderPerformanceService
 from sitewise.services.provider_scope import (
+    agent_id_for_user,
     is_agent_role,
     managed_property_ids,
 )
@@ -148,10 +149,12 @@ def provider_performance(session: DbSession, current: ProviderUser) -> dict:
     Engagement metrics that SiteWise does not collect are returned as
     ``tracked: false`` with their reason; they are never reported as zero.
     """
-    scope = _scope(session, current)
+    is_agent = is_agent_role(current.role)
     return {
         "data": ProviderPerformanceService(session).report(
-            property_ids=scope, is_agent=is_agent_role(current.role)
+            property_ids=[] if is_agent else _scope(session, current),
+            is_agent=is_agent,
+            agent_id=agent_id_for_user(current.user_id) if is_agent else None,
         )
     }
 

@@ -29,6 +29,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy import text
 from sqlmodel import Session
 
 from sitewise.core.logging import logger
@@ -276,6 +277,37 @@ class RecommendationGenerationService:
             min_size=profile.min_floor_area_sqft,
             state=state,
         )
+        # Owner/agent listings without an imported research-catalogue key are
+        # still canonical properties. Include only approved, published rows;
+        # the repository enforces those lifecycle conditions and maps their
+        # geospatial evidence through the same candidate contract. Imported
+        # catalogue-backed rows remain represented by the research view, so
+        # this cannot add a second copy of the same listing.
+        operational_ids = self.analytics_session.execute(
+            text("""
+                SELECT id::text
+                FROM fyp.rental_properties
+                WHERE catalogue_id IS NULL
+                  AND is_published IS TRUE
+                  AND verification_status = 'approved'
+                  AND (:max_rent IS NULL OR rental_price <= :max_rent)
+                  AND (:min_size IS NULL OR size_sqft >= :min_size)
+                  AND (:state IS NULL OR state ILIKE :state)
+                ORDER BY id
+            """),
+            {
+                "max_rent": profile.max_rent_myr,
+                "min_size": profile.min_floor_area_sqft,
+                "state": f"%{state.strip()}%" if state else None,
+            },
+        ).scalars().all()
+        if operational_ids:
+            rows.extend(
+                self.candidates.list_operational_candidates(
+                    [str(pid) for pid in operational_ids],
+                    operational_session=self.analytics_session,
+                )
+            )
         shortlist: set[str] | None = None
         if property_ids is not None:
             shortlist = {str(pid).strip() for pid in property_ids if str(pid).strip()}

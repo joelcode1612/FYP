@@ -86,5 +86,17 @@ class WebApiClient implements ApiClient {
   );
 
   @override
+  Future<Map<String, dynamic>> uploadFileMultipart(
+    String path, {
+    required Map<String, String> fields,
+    required String fileField,
+    required String filename,
+    required String filePath,
+    required String contentType,
+  }) => throw UnsupportedError(
+    'The web client uploads bytes, not local file paths.',
+  );
+
+  @override
   Future<List<int>> downloadBinary(String path) => WebAuth.download(path);
 }

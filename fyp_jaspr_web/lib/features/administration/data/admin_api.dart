@@ -63,6 +63,7 @@ class StaffAgent {
   final String invitationStatus;
 
   final String invitationId;
+  final List<StaffAssignedProperty> assignedProperties;
 
   const StaffAgent({
     required this.userId,
@@ -77,6 +78,7 @@ class StaffAgent {
     required this.createdAt,
     required this.invitationStatus,
     required this.invitationId,
+    this.assignedProperties = const [],
   });
 
   factory StaffAgent.fromJson(Map<String, dynamic> row) {
@@ -103,6 +105,15 @@ class StaffAgent {
       createdAt: '${row['created_at'] ?? ''}',
       invitationStatus: '${row['invitation_status'] ?? ''}',
       invitationId: '${row['invitation_id'] ?? ''}',
+      assignedProperties: [
+        for (final property in (row['assigned_properties'] as List? ?? const [])
+            .whereType<Map<String, dynamic>>())
+          StaffAssignedProperty(
+            '${property['property_id']}',
+            '${property['name'] ?? 'Unnamed property'}',
+            '${property['inspection_status']}',
+          ),
+      ],
     );
   }
 
@@ -110,6 +121,14 @@ class StaffAgent {
   /// same fallback `ApiUserRepository` applies, so headers cannot disagree
   /// with the user directory for the same account.
   String get displayName => fullName.isNotEmpty ? fullName : email;
+}
+
+class StaffAssignedProperty {
+  final String id;
+  final String name;
+  final String status;
+
+  const StaffAssignedProperty(this.id, this.name, this.status);
 }
 
 /// One row of `GET /api/v1/staff/invitations`.
@@ -556,6 +575,9 @@ class AdminApi {
 
   /// One server request, three Supabase reads for the full Agent Management page.
   /// This endpoint uses the same admin + aal2 authorization as the old routes.
+  Future<Map<String, dynamic>> dashboard() async =>
+      _object(await WebAuth.request('/api/v1/staff/dashboard'));
+
   Future<StaffOverviewSnapshot> overview() async {
     final payload = _object(await WebAuth.request('/api/v1/staff/overview'));
     return StaffOverviewSnapshot(

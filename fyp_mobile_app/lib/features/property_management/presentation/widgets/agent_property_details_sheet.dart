@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import 'package:fyp/core/di/service_locator.dart';
+import 'package:fyp/core/theme/sitewise_m3.dart';
 import 'package:fyp/core/theme/sitewise_theme.dart';
 
 /// Collects only the information still absent from an authorized Agent's draft.
@@ -179,6 +180,9 @@ class _AgentPropertyDetailsSheetState extends State<AgentPropertyDetailsSheet> {
         _missing = missing is List ? missing.whereType<String>().toList() : [];
         _savedAny = true;
       });
+      // Saved details change the completeness the dashboard / task counts
+      // report; publish through the shared revision so those screens reload.
+      ServiceLocator.listingsRevision.value++;
       if (_missing.isEmpty) {
         Navigator.of(context).pop(true);
       } else {
@@ -354,6 +358,15 @@ class _AgentPropertyDetailsSheetState extends State<AgentPropertyDetailsSheet> {
                           ),
                           TextButton(
                             onPressed: _readiness,
+                            style: TextButton.styleFrom(
+                              minimumSize: const Size.fromHeight(48),
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(
+                                  SitewiseM3.radiusPill,
+                                ),
+                              ),
+                            ),
                             child: const Text('Retry loading'),
                           ),
                         ],
@@ -372,7 +385,16 @@ class _AgentPropertyDetailsSheetState extends State<AgentPropertyDetailsSheet> {
                     ? null
                     : _save,
                 style: FilledButton.styleFrom(
-                  minimumSize: const Size.fromHeight(48),
+                  minimumSize: const Size.fromHeight(52),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(SitewiseM3.radiusPill),
+                  ),
+                  textStyle: const TextStyle(
+                    fontFamily: kFontFamily,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
                 child: Text(_saving ? 'Saving…' : 'Save collected details'),
               ),

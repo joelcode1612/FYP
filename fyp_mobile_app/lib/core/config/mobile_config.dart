@@ -12,9 +12,8 @@ import 'package:fyp/core/config/mobile_endpoints.dart';
 /// returned, logged or displayed**.
 ///
 /// [supabaseInitialized] and [initializationError] are written once by
-/// `core/bootstrap/app_bootstrap.dart`; all other values come from
-/// compile-time defines and are therefore constant for the lifetime of the
-/// process.
+/// `core/bootstrap/app_bootstrap.dart`; other values come from the
+/// synchronized public asset and remain constant for the process lifetime.
 abstract final class MobileConfig {
   /// Set to true only after `Supabase.initialize()` returned successfully.
   static bool supabaseInitialized = false;

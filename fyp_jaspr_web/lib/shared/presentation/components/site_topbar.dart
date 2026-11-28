@@ -1,6 +1,7 @@
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 
+import 'package:sitewise_jaspr_web/core/routing/landing_routes.dart';
 import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart';
 
 /// The site's primary navigation bar: brand mark + wordmark, section links,
@@ -11,13 +12,12 @@ import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart';
 /// page's global `.topbar` / `.nav` block, which requires the `--lnd-*`
 /// variables — callers outside the landing tree wrap it in `div.lnd`.
 ///
-/// [linkPrefix] is prepended to the section anchors: the landing page keeps the
-/// default (empty) so links scroll in place, while other pages pass `'/'` so
-/// the links navigate back to the landing sections instead of dead-ending.
+/// Every section link is a canonical [LandingRoutes] path. The same links are
+/// used by the desktop `.navlinks` and the small-screen `.mobile-nav`, and all
+/// of them render the single continuous landing page; the active path decides
+/// which section is scrolled into view after navigation.
 class SiteTopbar extends StatefulComponent {
-  final String linkPrefix;
-
-  const SiteTopbar({super.key, this.linkPrefix = ''});
+  const SiteTopbar({super.key});
 
   @override
   State<SiteTopbar> createState() => _SiteTopbarState();
@@ -26,18 +26,10 @@ class SiteTopbar extends StatefulComponent {
 class _SiteTopbarState extends State<SiteTopbar> {
   bool _navOpen = false;
 
-  /// Label + anchor pairs, in the landing page's order.
-  static const _links = <(String, String)>[
-    ('Problem & solution', 'problem'),
-    ('Explore', 'explore'),
-    ('Assessment', 'assessment'),
-    ('Recommendations', 'recommendations'),
-  ];
-
-  Component _link(String label, String anchor) => a(
+  Component _link(String label, String path) => AppLink(
+    to: path,
     classes: 'navlinks-a',
-    href: '${component.linkPrefix}#$anchor',
-    [Component.text(label)],
+    children: [Component.text(label)],
   );
 
   @override
@@ -48,7 +40,10 @@ class _SiteTopbarState extends State<SiteTopbar> {
           classes: 'nav',
           attributes: const {'aria-label': 'Main navigation'},
           [
-            a(classes: 'brand', href: '${component.linkPrefix}#top', [
+            AppLink(
+              to: LandingRoutes.home,
+              classes: 'brand',
+              children: [
               span(classes: 'brand-icon', [
                 Component.element(
                   tag: 'img',
@@ -69,7 +64,8 @@ class _SiteTopbarState extends State<SiteTopbar> {
               ]),
             ]),
             div(classes: 'navlinks', [
-              for (final link in _links) _link(link.$1, link.$2),
+              for (final section in LandingRoutes.sections)
+                _link(section.$1, section.$2),
             ]),
             div(classes: 'nav-actions', [
               AppLink(
@@ -97,7 +93,8 @@ class _SiteTopbarState extends State<SiteTopbar> {
           ],
         ),
         div(classes: 'mobile-nav${_navOpen ? ' open' : ''}', [
-          for (final link in _links) _link(link.$1, link.$2),
+          for (final section in LandingRoutes.sections)
+            _link(section.$1, section.$2),
           AppLink(
             to: '/signup',
             classes: 'mobile-signup',

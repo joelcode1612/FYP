@@ -5,8 +5,10 @@ mode writes them to `fyp_jaspr_web/build/jaspr/`). FastAPI serves them on the
 same origin as the REST API, with a SPA fallback for client-side routes:
 
 * a file that exists under the dist directory is served as-is;
-* an extension-less path (e.g. ``/entrepreneur/explore``) falls back to
-  ``index.html`` so nested routes survive a hard refresh;
+* an extension-less path (e.g. ``/entrepreneur/explore``, or a public landing
+  section such as ``/home``, ``/problem``, ``/explore``, ``/assessment`` or
+  ``/recommendations``) falls back to ``index.html`` so nested routes survive a
+  hard refresh and browser back/forward;
 * a missing path WITH an extension (``/assets/nope.png``) answers 404 — the
   fallback never fabricates JavaScript, CSS or media responses;
 * ``/api/*`` paths are guarded here as a backstop: the real API routes are

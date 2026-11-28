@@ -58,7 +58,7 @@ class _AdminCampaignsPageState extends State<AdminCampaignsPage> {
           onClick: null,
         ),
       ],
-      child: div(classes: 'stack ops-fade', [
+      child: div(classes: 'stack stack--sections ops-fade', [
         OpsHero(
           icon: 'campaign',
           title: 'Research planning is designed but not yet provisioned',
@@ -105,6 +105,7 @@ class _AdminCampaignsPageState extends State<AdminCampaignsPage> {
           ],
           flush: true,
           child: DataTable(
+            scrollLabel: 'Survey campaign capabilities',
             columns: const [
               DataColumn('Capability'),
               DataColumn('Expected endpoint'),

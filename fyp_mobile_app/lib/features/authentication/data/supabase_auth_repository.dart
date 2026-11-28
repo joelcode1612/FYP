@@ -248,10 +248,12 @@ class SupabaseAuthRepository implements AuthRepository {
   static String get _googleWebClientId => MobileRuntimeConfig.value(
     'GOOGLE_WEB_CLIENT_ID',
     fallback: const String.fromEnvironment('GOOGLE_WEB_CLIENT_ID'),
+    fallbackWhenEmpty: false,
   );
   static String get _googleIosClientId => MobileRuntimeConfig.value(
     'GOOGLE_IOS_CLIENT_ID',
     fallback: const String.fromEnvironment('GOOGLE_IOS_CLIENT_ID'),
+    fallbackWhenEmpty: false,
   );
 
   // google_sign_in v7 initialization must complete before authenticate().

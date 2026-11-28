@@ -32,6 +32,9 @@ from sqlmodel import Session
 # 500 m / 1 km are the documented research radii (property_geospatial_features
 # columns); 250 m supports the UI's fine-grained marker view.
 _ALLOWED_RADII_M = (250, 500, 1000)
+# The historical competition dataset includes catchments through 3 km and
+# nearest-outlet observations beyond 1 km. Keep this separate from map radii.
+NEAREST_COMPETITOR_RADIUS_M = 3000
 _M_PER_DEGREE = 111_320.0
 
 # ---------------------------------------------------------------------------
@@ -360,6 +363,24 @@ class FypPropertyRepository:
         ).mappings().all()
         return [dict(r) for r in rows]
 
+    def get_listing_primary_photos(self, property_ids: list[int]) -> dict[int, str]:
+        """Return the first display photo per canonical listing in one query."""
+        if not property_ids:
+            return {}
+        rows = self.session.execute(
+            text(
+                """
+                SELECT DISTINCT ON (property_id) property_id, url
+                FROM fyp.property_photos
+                WHERE property_id = ANY(CAST(:property_ids AS bigint[]))
+                  AND url IS NOT NULL AND btrim(url) <> ''
+                ORDER BY property_id, is_primary DESC NULLS LAST, id
+                """
+            ),
+            {"property_ids": property_ids},
+        ).mappings()
+        return {row["property_id"]: row["url"].strip() for row in rows}
+
     def get_catalogue_photos(self, catalogue_id: str) -> list[dict]:
         """Every display photo of one RESEARCH catalogue property.
 
@@ -549,6 +570,8 @@ class FypPropertyRepository:
                            sf.cafe_count_500m, sf.restaurant_count_500m,
                            sf.fast_food_count_500m,
                            sf.nearest_competitor_distance_m,
+                           sf.other_features ->> 'nearest_competitor_name' AS nearest_competitor_name,
+                           sf.other_features ->> 'nearest_competitor_category' AS nearest_competitor_category,
                            sf.bus_stops_500m_walk, sf.rail_stations_1km_walk,
                            sf.nearest_transit_walk_m, sf.nearest_major_road_m,
                            sf.road_length_density_500m_km_km2,
@@ -703,7 +726,8 @@ class FypPropertyRepository:
         limit: int = 50,
     ) -> list[dict]:
         """Canonical competitor rows for one coordinate, by source mode."""
-        self._validate_radius(radius_m)
+        if radius_m != NEAREST_COMPETITOR_RADIUS_M:
+            self._validate_radius(radius_m)
         if source not in COMPETITOR_SOURCES:
             raise ValueError(f"source must be one of {COMPETITOR_SOURCES}")
         args = _radius_args(lat, lon, radius_m)
@@ -727,9 +751,42 @@ class FypPropertyRepository:
                 WHERE {_overture_radius_sql()}{exclusion}
                 """
             )
-        sql = " UNION ALL ".join(parts) + " ORDER BY distance_m LIMIT :limit"
+        sql = " UNION ALL ".join(parts) + " ORDER BY distance_m, competitor_key LIMIT :limit"
         rows = self.session.execute(text(sql), args).mappings().all()
         return [dict(r) for r in rows]
+
+    def nearest_competitor(self, lat: float, lon: float) -> dict | None:
+        rows = self._competitor_rows(lat, lon, NEAREST_COMPETITOR_RADIUS_M, limit=1)
+        if not rows:
+            return None
+        row = rows[0]
+        return {
+            "distance_m": float(row["distance_m"]),
+            "name": row["name"],
+            "category": row["category"],
+            "outlet_key": row["outlet_key"],
+            "source_snapshot": row["source_snapshot"],
+        }
+
+    def saved_nearest_competitor(
+        self, property_id: int, lat: Any, lon: Any
+    ) -> dict | None:
+        from sitewise.services.property_enrichment_service import (
+            _valid_coordinates,
+            coordinate_hash,
+        )
+
+        if not _valid_coordinates(lat, lon):
+            return None
+        return self.session.execute(
+            text("""
+                SELECT measurement -> 'nearest_competitor'
+                FROM fyp.property_enrichment_category
+                WHERE property_id = :pid AND category = 'fnb_competitors'
+                  AND status = 'current' AND coordinate_hash = :hash
+            """),
+            {"pid": property_id, "hash": coordinate_hash(float(lat), float(lon))},
+        ).scalar_one_or_none()
 
     def list_competitors(
         self,
@@ -744,6 +801,7 @@ class FypPropertyRepository:
         behaviour they had. ``merged`` deduplicates Overture rows already
         MATCHed to an OSM outlet, so a business is never listed twice.
         """
+        self._validate_radius(radius_m)
         coords = self._coords(property_id)
         if coords is None:
             return {
@@ -1588,6 +1646,22 @@ class FypPropertyRepository:
             grouped.setdefault(int(photo["property_id"]), []).append(photo)
         return grouped
 
+    def listing_photo_by_url(self, property_id: int, url: str) -> dict | None:
+        """Find the row for an already-uploaded photo (retry guard).
+
+        The object path is content-addressed, so two attempts with the same
+        bytes produce the same URL. Returning that row avoids a duplicate
+        gallery entry without adding a new table or column.
+        """
+        row = self.session.execute(
+            text(
+                f"{self._PHOTO_SELECT} WHERE property_id = :pid "
+                "AND url = :url ORDER BY id ASC LIMIT 1"
+            ),
+            {"pid": property_id, "url": url},
+        ).mappings().first()
+        return dict(row) if row is not None else None
+
     def add_listing_photo(
         self, property_id: int, url: str, caption: str, is_primary: bool, *, commit: bool = True
     ) -> dict:
@@ -1658,7 +1732,9 @@ class FypPropertyRepository:
         self.session.commit()
         return dict(row)
 
-    def set_primary_listing_photo(self, property_id: int, photo_id: int) -> bool:
+    def set_primary_listing_photo(
+        self, property_id: int, photo_id: int, *, commit: bool = True
+    ) -> bool:
         """Make one photo primary; returns False when it is not this
         listing's photo."""
         owned = self.session.execute(
@@ -1678,7 +1754,8 @@ class FypPropertyRepository:
             ),
             {"pid": property_id, "phid": photo_id},
         )
-        self.session.commit()
+        if commit:
+            self.session.commit()
         return True
 
     # ------------------------------------------------------------ deletion
@@ -1793,7 +1870,9 @@ class FypPropertyRepository:
 
     # ------------------------------------------------- catalogue integration
 
-    def resolve_reference(self, ref: str) -> dict | None:
+    def resolve_reference(
+        self, ref: str, *, include_unpublished: bool = False
+    ) -> dict | None:
         """Resolve a property reference from EITHER id universe.
 
         * numeric string → ``fyp.rental_properties.id`` (operational table)
@@ -1817,10 +1896,11 @@ class FypPropertyRepository:
                                size_sqft, 'fyp' AS source_schema
                         FROM fyp.rental_properties
                         WHERE id = :ref
-                          AND is_published AND verification_status = 'approved'
+                          AND (:include_unpublished OR
+                               (is_published AND verification_status = 'approved'))
                         """
                     ),
-                    {"ref": int(ref)},
+                    {"ref": int(ref), "include_unpublished": include_unpublished},
                 )
                 .mappings()
                 .first()

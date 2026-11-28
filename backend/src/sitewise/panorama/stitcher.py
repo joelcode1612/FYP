@@ -48,6 +48,13 @@ VIEWPORT_GAP_THRESHOLD = 0.25
 _STITCHER_SHORT_SIDE_PX = 720
 _STITCHER_BAND_FEATHER_PX = 40.0
 
+#: Plan versions whose layout has no isolated zenith/nadir photograph: the
+#: adaptive five-ring plan (4), the aligned-ring plans (5, 6), the derived grid
+#: (7, 8) and the 48-target interleaved plans (9, 10). A manifest from one of
+#: these that somehow lacks recorded directions must not be given the 38-target
+#: plan's pole ids, which would apply nadir projection to an oblique frame.
+_OBLIQUE_ONLY_PLAN_VERSIONS = frozenset({"4", "11"})
+
 _TWO_PI = 6.283185307179586
 _HALF_PI = 1.5707963267948966
 
@@ -80,6 +87,21 @@ def _pow6(values):
     return v2 * v2 * v2
 
 
+def _optional_float(value: object) -> float | None:
+    """A float from an optional manifest field, or ``None``.
+
+    A capture manifest is open metadata: a value that is absent, null or not
+    numeric must mean "not recorded", never a silent 0.0 that would be read as
+    "the camera pointed at the horizon".
+    """
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+
+
 @dataclass(frozen=True, slots=True)
 class FrameRecord:
     target_id: int
@@ -91,6 +113,12 @@ class FrameRecord:
     source_height: int
     crop_offset_x: int
     crop_offset_y: int
+    #: The direction this photograph was aimed at, when the manifest carries it
+    #: (every plan from v4 onward does). ``None`` for a legacy manifest that
+    #: only recorded the target id, in which case the caller falls back to the
+    #: historical id tables.
+    target_pitch_deg: float | None = None
+    target_yaw_deg: float | None = None
 
     @staticmethod
     def from_dict(raw: dict) -> "FrameRecord":
@@ -110,6 +138,8 @@ class FrameRecord:
             source_height=int(raw.get("sourceImageHeight") or 0),
             crop_offset_x=int(raw.get("cropOffsetX") or 0),
             crop_offset_y=int(raw.get("cropOffsetY") or 0),
+            target_pitch_deg=_optional_float(raw.get("targetPitchDegrees")),
+            target_yaw_deg=_optional_float(raw.get("targetYawDegrees")),
         )
 
 
@@ -128,6 +158,61 @@ class StitchOutcome:
     elapsed_ms: int = 0
 
 
+def _pole_frames(
+    frame_records: list[FrameRecord], plan_version: str | None
+) -> tuple[set[int], int | None]:
+    """Which frames point at a pole, and which one is the nadir.
+
+    Derived from the CAPTURE GEOMETRY, never from a target id table. The old
+    code hard-coded ``{13, 38}`` for the 38-target plan and ``{19, 56}`` for the
+    56-target one; under the 80-target derived grid that silently treated target
+    38 — an ordinary mid-column frame — as the nadir, applying nadir-specific
+    projection to a photograph pointed 29° down.
+
+    A frame is a pole frame when it actually points at a pole. Every plan from
+    v4 onward records its directions, and none of them has an isolated zenith or
+    nadir frame: the derived grid stops at ±58° and the 48-target plans use
+    oblique ±60° ceiling and floor rings, which is what keeps wall structure in
+    frame for registration.
+
+    The id table is only consulted for manifests that recorded ids and no
+    directions at all (plans 1–3), and then it is keyed by the plan version
+    rather than guessed from the set of ids present — guessing is what made a
+    mid-column frame inherit the nadir's projection.
+    """
+    if any(record.target_pitch_deg is not None for record in frame_records):
+        return (
+            {
+                record.target_id
+                for record in frame_records
+                if record.target_pitch_deg is not None
+                and abs(record.target_pitch_deg) >= 80.0
+            },
+            next(
+                (
+                    record.target_id
+                    for record in frame_records
+                    if record.target_pitch_deg is not None
+                    and record.target_pitch_deg <= -89.999
+                ),
+                None,
+            ),
+        )
+
+    version = str(plan_version or "").strip()
+    if version in _OBLIQUE_ONLY_PLAN_VERSIONS:
+        # Adaptive and interleaved plans: no isolated pole photograph exists.
+        return set(), None
+    if version == "3":
+        return {19, 56}, None
+    if version in {"1", "2"}:
+        return {13, 38}, 38
+    # Unknown legacy manifest. It predates recorded directions, so it can only
+    # be one of the plans that did have isolated poles; keep the 38-target
+    # behaviour rather than inventing a rule for a layout we cannot identify.
+    return {13, 38}, 38
+
+
 def stitch_equirectangular(
     *,
     records: list[dict],
@@ -137,6 +222,7 @@ def stitch_equirectangular(
     vertical_fov_deg: float = 65.0,
     strict_photo_coverage: bool = False,
     enable_cv_stitcher: bool = False,
+    plan_version: str | None = None,
     progress=None,
 ) -> StitchOutcome:
     """Stitches the station's photographs into ``out_dir/panorama.jpg``.
@@ -144,6 +230,10 @@ def stitch_equirectangular(
     ``records`` is the capture manifest — one map per photograph with
     ``targetId``, ``imagePath``, ``cameraOrientation`` [x, y, z, w] and the
     dimension/crop fields, exactly the JSON the mobile app already writes.
+
+    ``plan_version`` only decides how a manifest that recorded target ids but no
+    directions is interpreted (see :func:`_pole_frames`); a manifest that
+    carries its directions is always handled geometrically.
     """
     started = time.monotonic()
 
@@ -229,14 +319,7 @@ def stitch_equirectangular(
     cos_lat = np.cos(lat_table)
 
     frame_records = [FrameRecord.from_dict(r) for r in sorted_records]
-    # Target IDs 13/38 are the zenith/nadir only in the standard v1/v2
-    # capture plan. Version 3 has 56 targets, with poles at 19/56. Use the
-    # complete manifest to identify the plan so lower-ring target 38 is never
-    # treated as the nadir photograph in an enhanced session.
-    target_ids = {record.target_id for record in frame_records}
-    is_enhanced_plan = target_ids == set(range(1, 57))
-    pole_target_ids = {19, 56} if is_enhanced_plan else {13, 38}
-    nadir_target_id = None if is_enhanced_plan else 38
+    pole_target_ids, nadir_target_id = _pole_frames(frame_records, plan_version)
     for frame_index, record in enumerate(frame_records):
         path = record.image_path
         if not path or not Path(path).exists():

@@ -111,6 +111,7 @@ class ApiOwnerListingRepository implements OwnerListingRepository {
     required String city,
     required String state,
     required String postcode,
+    bool forceRefresh = false,
   }) async {
     final response = await _client.post(
       '/api/v1/properties/address-preview',
@@ -119,6 +120,7 @@ class ApiOwnerListingRepository implements OwnerListingRepository {
         'city': city,
         'state': state,
         'postcode': postcode,
+        'refresh': forceRefresh,
       },
     );
     final data = response['data'];

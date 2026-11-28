@@ -1119,6 +1119,9 @@ class LocationFnbFamily {
   final String? competitorStatus;
   final Map<String, double?> competitorBreakdown500m;
   final double? nearestCompetitorM;
+  final String? nearestCompetitorName;
+  final String? nearestCompetitorCategory;
+  final String? nearestCompetitorSource;
   final String? researchAnalysisStatus;
   final double? demandGeneratorCount500m;
   final double? demandGeneratorCount1km;
@@ -1135,6 +1138,9 @@ class LocationFnbFamily {
     this.competitorStatus,
     this.competitorBreakdown500m = const {},
     this.nearestCompetitorM,
+    this.nearestCompetitorName,
+    this.nearestCompetitorCategory,
+    this.nearestCompetitorSource,
     this.researchAnalysisStatus,
     this.demandGeneratorCount500m,
     this.demandGeneratorCount1km,
@@ -1164,6 +1170,9 @@ class LocationFnbFamily {
         competitorStatus: row['competitor_status']?.toString(),
         competitorBreakdown500m: _numMap(row['competitor_breakdown_500m']),
         nearestCompetitorM: _d(row['nearest_competitor_m']),
+        nearestCompetitorName: row['nearest_competitor_name']?.toString(),
+        nearestCompetitorCategory: row['nearest_competitor_category']?.toString(),
+        nearestCompetitorSource: row['nearest_competitor_source']?.toString(),
         researchAnalysisStatus: row['research_analysis_status']?.toString(),
         demandGeneratorCount500m: _d(row['demand_generator_count_500m']),
         demandGeneratorCount1km: _d(row['demand_generator_count_1km']),
@@ -1534,11 +1543,208 @@ class LocationPolicyItem {
       );
 }
 
+/// Whether verification decisions are possible for this property, and why not.
+///
+/// A property that was never submitted is a legitimate directory entry with
+/// no reviewable evidence: it stays visible, but every decision stays disabled.
+class VerificationWorkflow {
+  final bool available;
+  final bool submitted;
+  final bool decisionable;
+  final String? reason;
+
+  const VerificationWorkflow({
+    this.available = false,
+    this.submitted = false,
+    this.decisionable = false,
+    this.reason,
+  });
+
+  static const VerificationWorkflow unavailable = VerificationWorkflow(
+    reason: 'No verification submission exists for this property.',
+  );
+
+  factory VerificationWorkflow.fromJson(Object? raw) {
+    if (raw is! Map<String, dynamic>) return VerificationWorkflow.unavailable;
+    return VerificationWorkflow(
+      available: raw['available'] == true,
+      submitted: raw['submitted'] == true,
+      decisionable: raw['decisionable'] == true,
+      reason: raw['reason'] == null ? null : '${raw['reason']}',
+    );
+  }
+}
+
+/// The six independent status axes of one property.
+///
+/// They are reported separately because collapsing them is what made an
+/// imported catalogue property look "unverified" and an approved-but-
+/// unpublished listing look "Live".
+class PropertyStatusAxes {
+  final String lifecycle;
+  final String listingVerification;
+  final String ownershipVerification;
+  final String agentInspection;
+  final String panoramaVerification;
+
+  /// `published | unpublished` — from `is_published` only.
+  final String publication;
+
+  const PropertyStatusAxes({
+    this.lifecycle = 'unknown',
+    this.listingVerification = 'not_submitted',
+    this.ownershipVerification = 'not_submitted',
+    this.agentInspection = 'not_assigned',
+    this.panoramaVerification = 'none',
+    this.publication = 'unpublished',
+  });
+
+  static const PropertyStatusAxes unknown = PropertyStatusAxes();
+
+  bool get isLive => publication == 'published';
+
+  String get lifecycleLabel => propertyLifecycleLabel(lifecycle);
+  String get agentInspectionLabel => agentStageLabel(agentInspection);
+
+  String get panoramaLabel => switch (panoramaVerification) {
+    'none' => 'No panorama',
+    'pending' => 'Awaiting review',
+    'approved' => 'Approved',
+    'rejected' => 'Rejected',
+    'unknown' => 'Unknown',
+    _ => panoramaVerification,
+  };
+
+  factory PropertyStatusAxes.fromJson(Object? raw) {
+    if (raw is! Map<String, dynamic>) return PropertyStatusAxes.unknown;
+    String pick(String key, String fallback) =>
+        raw[key] == null ? fallback : '${raw[key]}';
+    return PropertyStatusAxes(
+      lifecycle: pick('property_lifecycle', 'unknown'),
+      listingVerification: pick('listing_verification', 'not_submitted'),
+      ownershipVerification: pick('ownership_verification', 'not_submitted'),
+      agentInspection: pick('agent_inspection', 'not_assigned'),
+      panoramaVerification: pick('panorama_verification', 'none'),
+      publication: pick('publication', 'unpublished'),
+    );
+  }
+}
+
+/// Agent inspection progress and its checklist, when an agent is assigned.
+class AgentAssignmentInfo {
+  final bool assigned;
+  final String? agentId;
+  final String? agentName;
+  final String workflowStatus;
+  final String? assignedAt;
+  final String? submittedAt;
+  final Map<String, bool> inspection;
+  final bool inspectionComplete;
+  final String? declineReason;
+
+  const AgentAssignmentInfo({
+    this.assigned = false,
+    this.agentId,
+    this.agentName,
+    this.workflowStatus = 'not_assigned',
+    this.assignedAt,
+    this.submittedAt,
+    this.inspection = const {},
+    this.inspectionComplete = false,
+    this.declineReason,
+  });
+
+  static const AgentAssignmentInfo none = AgentAssignmentInfo();
+
+  String get displayName => agentName ?? (agentId == null ? 'No agent assigned' : 'Agent $agentId');
+  String get stageLabel => agentStageLabel(workflowStatus);
+
+  factory AgentAssignmentInfo.fromJson(Object? raw) {
+    if (raw is! Map<String, dynamic>) return AgentAssignmentInfo.none;
+    return AgentAssignmentInfo(
+      assigned: raw['assigned'] == true,
+      agentId: raw['agent_id'] == null ? null : '${raw['agent_id']}',
+      agentName: raw['agent_name'] == null ? null : '${raw['agent_name']}',
+      workflowStatus: raw['workflow_status'] == null
+          ? 'not_assigned'
+          : '${raw['workflow_status']}',
+      assignedAt: raw['assigned_at'] == null ? null : '${raw['assigned_at']}',
+      submittedAt: raw['submitted_at'] == null ? null : '${raw['submitted_at']}',
+      inspection: {
+        for (final entry
+            in (raw['inspection'] as Map<String, dynamic>? ?? const {}).entries)
+          entry.key: entry.value == true,
+      },
+      inspectionComplete: raw['inspection_complete'] == true,
+      declineReason: raw['decline_reason'] == null
+          ? null
+          : '${raw['decline_reason']}',
+    );
+  }
+}
+
+/// The newest panorama for a property, or an explicit "none".
+class PanoramaSummary {
+  final bool available;
+  final String? panoramaId;
+  final String verificationStatus;
+  final int? width;
+  final int? height;
+
+  /// `null` when unknown; `false` means the stored image is not 2:1.
+  final bool? equirectangular;
+  final String? createdAt;
+
+  const PanoramaSummary({
+    this.available = false,
+    this.panoramaId,
+    this.verificationStatus = 'none',
+    this.width,
+    this.height,
+    this.equirectangular,
+    this.createdAt,
+  });
+
+  static const PanoramaSummary none = PanoramaSummary();
+
+  factory PanoramaSummary.fromJson(Object? raw) {
+    if (raw is! Map<String, dynamic>) return PanoramaSummary.none;
+    return PanoramaSummary(
+      available: raw['available'] == true,
+      panoramaId: raw['panorama_id'] == null ? null : '${raw['panorama_id']}',
+      verificationStatus: raw['verification_status'] == null
+          ? 'none'
+          : '${raw['verification_status']}',
+      width: _wireInt(raw['width']),
+      height: _wireInt(raw['height']),
+      equirectangular: raw['equirectangular'] is bool
+          ? raw['equirectangular'] as bool
+          : null,
+      createdAt: raw['created_at'] == null ? null : '${raw['created_at']}',
+    );
+  }
+}
+
 class VerificationDetail {
   final VerificationProperty property;
   final Map<String, dynamic> finalReview;
   final VerificationOwner? owner;
-  final PropertyVerification verification;
+
+  /// `null` when the property has never been submitted for verification.
+  final PropertyVerification? verification;
+
+  /// Whether decisions are possible, and why not.
+  final VerificationWorkflow workflow;
+
+  /// The six independent status axes.
+  final PropertyStatusAxes statuses;
+
+  /// Agent inspection progress.
+  final AgentAssignmentInfo agentAssignment;
+
+  /// The newest 360° panorama for the property.
+  final PanoramaSummary panorama;
+
   final List<VerificationDocument> documents;
   final List<VerificationReviewEvent> history;
 
@@ -1574,7 +1780,11 @@ class VerificationDetail {
     required this.property,
     this.finalReview = const {},
     this.owner,
-    required this.verification,
+    this.verification,
+    this.workflow = VerificationWorkflow.unavailable,
+    this.statuses = PropertyStatusAxes.unknown,
+    this.agentAssignment = AgentAssignmentInfo.none,
+    this.panorama = PanoramaSummary.none,
     this.documents = const [],
     this.history = const [],
     this.photos = const [],
@@ -1587,6 +1797,9 @@ class VerificationDetail {
     this.locationAnalysis = LocationAnalysis.unavailable,
   });
 
+  /// True when there is any reviewable evidence at all.
+  bool get hasVerification => verification != null;
+
   factory VerificationDetail.fromJson(Map<String, dynamic> row) =>
       VerificationDetail(
         finalReview: (row['final_review'] as Map<String, dynamic>?) ?? const {},
@@ -1596,9 +1809,17 @@ class VerificationDetail {
         owner: row['owner'] is Map<String, dynamic>
             ? VerificationOwner.fromJson(row['owner'] as Map<String, dynamic>)
             : null,
-        verification: PropertyVerification.fromJson(
-          (row['verification'] as Map<String, dynamic>?) ?? const {},
-        ),
+        // Absent, not fabricated: a property without a submission keeps a
+        // null verification record so the UI can say so explicitly.
+        verification: row['verification'] is Map<String, dynamic>
+            ? PropertyVerification.fromJson(
+                row['verification'] as Map<String, dynamic>,
+              )
+            : null,
+        workflow: VerificationWorkflow.fromJson(row['workflow']),
+        statuses: PropertyStatusAxes.fromJson(row['statuses']),
+        agentAssignment: AgentAssignmentInfo.fromJson(row['agent_assignment']),
+        panorama: PanoramaSummary.fromJson(row['panorama']),
         documents: [
           for (final doc
               in (row['documents'] as List? ?? const [])
@@ -1666,6 +1887,18 @@ class VerificationQueueFilters {
   final String? q;
   final PropertyVerificationStatus? listingStatus;
   final PropertyVerificationStatus? ownershipStatus;
+
+  /// Property lifecycle (`published | approved | draft | pending | rejected |
+  /// unknown`) — the listing's own state, independent of verification.
+  final String? lifecycle;
+
+  /// How the property record was created
+  /// (`imported | owner | agent | platform`).
+  final String? source;
+
+  /// Directory scope: `all` (default) or `queue` (only submissions awaiting a
+  /// decision). Applied server-side so counts and pagination agree.
+  final String? scope;
   final String? propertyType;
   final String? state;
   final String? city;
@@ -1674,7 +1907,7 @@ class VerificationQueueFilters {
   final String? submittedFrom;
   final String? submittedTo;
 
-  /// `submitted_at | updated_at | title | monthly_rent`.
+  /// `submitted_at | updated_at | title | monthly_rent | created_at`.
   final String sort;
 
   /// `asc | desc`.
@@ -1686,6 +1919,9 @@ class VerificationQueueFilters {
     this.q,
     this.listingStatus,
     this.ownershipStatus,
+    this.lifecycle,
+    this.source,
+    this.scope,
     this.propertyType,
     this.state,
     this.city,
@@ -1706,6 +1942,12 @@ class VerificationQueueFilters {
     bool clearListingStatus = false,
     PropertyVerificationStatus? ownershipStatus,
     bool clearOwnershipStatus = false,
+    String? lifecycle,
+    bool clearLifecycle = false,
+    String? source,
+    bool clearSource = false,
+    String? scope,
+    bool clearScope = false,
     String? propertyType,
     bool clearPropertyType = false,
     String? state,
@@ -1728,6 +1970,9 @@ class VerificationQueueFilters {
     ownershipStatus: clearOwnershipStatus
         ? null
         : (ownershipStatus ?? this.ownershipStatus),
+    lifecycle: clearLifecycle ? null : (lifecycle ?? this.lifecycle),
+    source: clearSource ? null : (source ?? this.source),
+    scope: clearScope ? null : (scope ?? this.scope),
     propertyType: clearPropertyType
         ? null
         : (propertyType ?? this.propertyType),
@@ -1748,6 +1993,9 @@ class VerificationQueueFilters {
     if (q != null && q!.isNotEmpty) 'q': q!,
     if (listingStatus != null) 'listing_status': listingStatus!.wire,
     if (ownershipStatus != null) 'ownership_status': ownershipStatus!.wire,
+    if (lifecycle != null && lifecycle!.isNotEmpty) 'lifecycle': lifecycle!,
+    if (source != null && source!.isNotEmpty) 'source': source!,
+    if (scope != null && scope!.isNotEmpty) 'scope': scope!,
     if (propertyType != null && propertyType!.isNotEmpty)
       'property_type': propertyType!,
     if (state != null && state!.isNotEmpty) 'state': state!,
@@ -1769,6 +2017,7 @@ class VerificationQueueFilters {
 class VerificationQueueRow {
   final int propertyId;
   final String title;
+  final String? primaryPhotoUrl;
   final String? normalizedAddress;
   final String? propertyType;
   final double? monthlyRent;
@@ -1780,6 +2029,30 @@ class VerificationQueueRow {
   final String? verificationId;
   final PropertyVerificationStatus listingStatus;
   final PropertyVerificationStatus ownershipStatus;
+
+  /// Whether the listing is actually live. This is the AUTHORITATIVE source
+  /// for "Live"; [publicationEligible] only records that the workflow cleared
+  /// the property, which is not the same thing.
+  final bool isPublished;
+
+  /// Derived property lifecycle (`published | approved | draft | pending |
+  /// rejected | unknown`).
+  final String? lifecycle;
+
+  /// Derived creation provenance (`imported | owner | agent | platform`).
+  final String? source;
+
+  /// Agent inspection progress (`not_assigned | requested | accepted |
+  /// submitted | declined`).
+  final String? agentStage;
+
+  /// Owner account name/email, when the property has an owner account.
+  final String? submitterName;
+  final String? submitterEmail;
+  final String? propertyCreatedAt;
+
+  /// Workflow eligibility (both dimensions verified AND evidence approved).
+  /// Never use this to decide whether a listing is live.
   final bool publicationEligible;
   final String? latestNote;
   final String? submittedAt;
@@ -1792,6 +2065,7 @@ class VerificationQueueRow {
   const VerificationQueueRow({
     required this.propertyId,
     required this.title,
+    this.primaryPhotoUrl,
     this.normalizedAddress,
     this.propertyType,
     this.monthlyRent,
@@ -1803,6 +2077,13 @@ class VerificationQueueRow {
     this.verificationId,
     required this.listingStatus,
     required this.ownershipStatus,
+    this.isPublished = false,
+    this.lifecycle,
+    this.source,
+    this.agentStage,
+    this.submitterName,
+    this.submitterEmail,
+    this.propertyCreatedAt,
     required this.publicationEligible,
     this.latestNote,
     this.submittedAt,
@@ -1812,11 +2093,27 @@ class VerificationQueueRow {
 
   String get displayName => title.isNotEmpty ? title : '#$propertyId';
 
+  /// True only when the listing is genuinely live.
+  bool get isLive => isPublished;
+
+  /// A property that was never submitted has no reviewable evidence, so the
+  /// row offers "View details" instead of "Review".
+  bool get hasVerification => verificationId != null;
+
+  /// A submission is actionable while either dimension awaits a decision.
+  bool get isActionable =>
+      hasVerification &&
+      (listingStatus == PropertyVerificationStatus.pending ||
+          listingStatus == PropertyVerificationStatus.underReview ||
+          ownershipStatus == PropertyVerificationStatus.pending ||
+          ownershipStatus == PropertyVerificationStatus.underReview);
+
   factory VerificationQueueRow.fromJson(
     Map<String, dynamic> row,
   ) => VerificationQueueRow(
     propertyId: _wireInt(row['property_id']) ?? 0,
     title: '${row['title'] ?? ''}'.trim(),
+    primaryPhotoUrl: row['primary_photo_url'] as String?,
     normalizedAddress: row['normalized_address'] == null
         ? null
         : '${row['normalized_address']}',
@@ -1840,6 +2137,19 @@ class VerificationQueueRow {
     ownershipStatus:
         verificationStatusFromWire(row['ownership_status']) ??
         PropertyVerificationStatus.notSubmitted,
+    isPublished: row['is_published'] == true,
+    lifecycle: row['lifecycle'] == null ? null : '${row['lifecycle']}',
+    source: row['source'] == null ? null : '${row['source']}',
+    agentStage: row['agent_stage'] == null ? null : '${row['agent_stage']}',
+    submitterName: row['submitter_name'] == null
+        ? null
+        : '${row['submitter_name']}',
+    submitterEmail: row['submitter_email'] == null
+        ? null
+        : '${row['submitter_email']}',
+    propertyCreatedAt: row['property_created_at'] == null
+        ? null
+        : '${row['property_created_at']}',
     publicationEligible: row['publication_eligible'] == true,
     latestNote: row['latest_note'] == null ? null : '${row['latest_note']}',
     submittedAt: row['submitted_at'] == null ? null : '${row['submitted_at']}',
@@ -1848,6 +2158,75 @@ class VerificationQueueRow {
         ? ListingManagement.fromJson(row['management'] as Map<String, dynamic>)
         : null,
   );
+}
+
+/// Human labels for the derived lifecycle axis.
+String propertyLifecycleLabel(String? lifecycle) => switch (lifecycle) {
+  'published' => 'Published',
+  'approved' => 'Approved, not published',
+  'draft' => 'Draft',
+  'pending' => 'Pending',
+  'rejected' => 'Rejected',
+  'unknown' => 'Unknown',
+  null => 'Unknown',
+  _ => lifecycle,
+};
+
+/// Human labels for the derived creation-provenance axis.
+String propertySourceLabel(String? source) => switch (source) {
+  'imported' => 'Imported catalogue',
+  'owner' => 'Owner created',
+  'agent' => 'Agent created',
+  'platform' => 'Unattributed',
+  null => 'Unknown',
+  _ => source,
+};
+
+/// Human labels for agent inspection progress.
+String agentStageLabel(String? stage) => switch (stage) {
+  'not_assigned' => 'Not assigned',
+  'requested' => 'Agent requested',
+  'accepted' => 'Agent accepted',
+  'submitted' => 'Inspection submitted',
+  'declined' => 'Agent declined',
+  null => 'Not assigned',
+  _ => stage,
+};
+
+/// Directory-level counts for the current search/location scope.
+///
+/// These deliberately ignore the status tab: the overview must not collapse
+/// to whichever single status the reviewer happens to be looking at.
+class VerificationQueueSummary {
+  final int total;
+  final int published;
+  final int drafts;
+  final int awaitingReview;
+
+  /// Properties where at least one dimension has left `not_submitted`.
+  /// Distinct from [total], which includes never-submitted properties.
+  final int withSubmission;
+
+  const VerificationQueueSummary({
+    this.total = 0,
+    this.published = 0,
+    this.drafts = 0,
+    this.awaitingReview = 0,
+    this.withSubmission = 0,
+  });
+
+  static const VerificationQueueSummary empty = VerificationQueueSummary();
+
+  factory VerificationQueueSummary.fromJson(Object? raw) {
+    if (raw is! Map<String, dynamic>) return VerificationQueueSummary.empty;
+    return VerificationQueueSummary(
+      total: _wireInt(raw['total']) ?? 0,
+      published: _wireInt(raw['published']) ?? 0,
+      drafts: _wireInt(raw['drafts']) ?? 0,
+      awaitingReview: _wireInt(raw['awaiting_review']) ?? 0,
+      withSubmission: _wireInt(raw['with_submission']) ?? 0,
+    );
+  }
 }
 
 /// One server-computed page of the queue. `counts` holds the faceted
@@ -1860,18 +2239,34 @@ class VerificationQueuePage {
   final int limit;
   final Map<VerificationDimension, Map<PropertyVerificationStatus, int>> counts;
 
+  /// Rows in scope for each dimension with that dimension's status filter
+  /// removed — the honest number behind "All statuses".
+  final Map<VerificationDimension, int> allCounts;
+
+  /// Real states present in scope, keyed by state name. Drives the state
+  /// filter so it can only offer values that exist.
+  final Map<String, int> stateCounts;
+
+  final VerificationQueueSummary summary;
+
   const VerificationQueuePage({
     required this.items,
     required this.total,
     required this.offset,
     required this.limit,
     this.counts = const {},
+    this.allCounts = const {},
+    this.stateCounts = const {},
+    this.summary = VerificationQueueSummary.empty,
   });
 
   int? countOf(
     VerificationDimension dimension,
     PropertyVerificationStatus status,
   ) => counts[dimension]?[status];
+
+  /// The count for "All statuses" in this dimension's scope.
+  int? countAll(VerificationDimension dimension) => allCounts[dimension];
 
   factory VerificationQueuePage.fromJson(Map<String, dynamic> row) {
     Map<PropertyVerificationStatus, int> dimensionCounts(Object? raw) => {
@@ -1880,6 +2275,7 @@ class VerificationQueuePage {
           verificationStatusFromWire(entry.key)!: _wireInt(entry.value) ?? 0,
     };
     final counts = row['counts'] as Map<String, dynamic>? ?? const {};
+    final all = counts['all'] as Map<String, dynamic>? ?? const {};
     return VerificationQueuePage(
       items: [
         for (final item
@@ -1896,6 +2292,17 @@ class VerificationQueuePage {
         if (counts['ownership'] is Map<String, dynamic>)
           VerificationDimension.ownership: dimensionCounts(counts['ownership']),
       },
+      allCounts: {
+        for (final dimension in VerificationDimension.values)
+          if (_wireInt(all[dimension.name]) != null)
+            dimension: _wireInt(all[dimension.name])!,
+      },
+      stateCounts: {
+        for (final entry
+            in (counts['state'] as Map<String, dynamic>? ?? const {}).entries)
+          entry.key: _wireInt(entry.value) ?? 0,
+      },
+      summary: VerificationQueueSummary.fromJson(row['summary']),
     );
   }
 }

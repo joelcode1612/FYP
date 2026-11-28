@@ -19,11 +19,14 @@ Failure semantics:
 
 from __future__ import annotations
 
+import logging
 import time
 
 import httpx
 
 from sitewise.core.config import settings
+
+logger = logging.getLogger("sitewise.address_validation")
 
 ADDRESS_VALIDATION_URL = "https://addressvalidation.googleapis.com/v1:validateAddress"
 
@@ -124,11 +127,44 @@ def validate_address(
         ) from transport_error
 
     if response.status_code in (401, 403):
-        # Confirmed on this project: the key is valid for other Maps APIs, but
-        # the Address Validation API itself is not enabled (PERMISSION_DENIED).
+        # Google uses PERMISSION_DENIED for API-not-enabled, billing, key
+        # restrictions and project policy. Classify the provider's own message
+        # so the preview can tell the operator which one applies, without ever
+        # echoing the request key.
+        try:
+            body = response.json()
+        except ValueError:
+            body = {}
+        error = body.get("error", {}) if isinstance(body, dict) else {}
+        provider_status = error.get("status") if isinstance(error, dict) else None
+        provider_message = (
+            error.get("message") if isinstance(error, dict) else ""
+        ) or ""
+        logger.warning(
+            "Google Address Validation permission denied "
+            "(http_status=%s, provider_status=%s, provider_message=%s)",
+            response.status_code,
+            provider_status,
+            provider_message,
+        )
+        detail = f"{provider_status or ''} {provider_message}".lower()
+        if "billing" in detail:
+            cause = "Google Cloud billing is not enabled for the server project."
+        elif "api key" in detail or "restricted" in detail or "not valid" in detail:
+            cause = "The server key is restricted from calling Address Validation."
+        elif provider_status == "SERVICE_DISABLED" or "not enabled" in detail:
+            cause = "The Address Validation API is not enabled for the server project."
+        else:
+            # Google's observed response here is "The caller does not have
+            # permission" (PERMISSION_DENIED) on a project whose billing is
+            # disabled, so this wording is deliberately not a claim that the
+            # key itself is invalid.
+            cause = (
+                "the server project is not permitted to use Address Validation "
+                "(the API is not enabled or billing is disabled)."
+            )
         raise AddressValidationUnavailable(
-            "Google Address Validation is not enabled for this project. "
-            "Enable 'Address Validation API' in Google Cloud and retry."
+            f"Google Address Validation is unavailable: {cause}"
         )
     if response.status_code == 400:
         detail = ""

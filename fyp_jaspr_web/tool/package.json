@@ -5,8 +5,7 @@
     "build-auth": "esbuild auth_client.js --bundle --platform=browser --format=iife --minify --outfile=../web/auth_bundle.js",
     "gen-auth-config": "node gen_auth_config.js",
     "test-auth": "node test_staff_assurance.js",
-    "test-callbacks": "node test_callback_flows.js",
-    "gen-map-config": "node gen_map_config.js"
+    "test-callbacks": "node test_callback_flows.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.0.0"

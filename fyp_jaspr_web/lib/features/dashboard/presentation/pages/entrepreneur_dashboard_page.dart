@@ -329,7 +329,7 @@ class _DashboardPageState extends State<DashboardPage> {
   /// renders an inline retry scoped to this section only — the KPI row, the
   /// Current Assessment card and Quick Actions remain usable.
   Component _recent() {
-    return section(classes: 'sw-dash-section', styles: Styles(raw: {'margin-top': '0'}), [
+    return section(classes: 'sw-dash-section sw-dash-recent-section', styles: Styles(raw: {'margin-top': '0'}), [
       div(classes: 'sw-dash-section-head', [
         h2([Component.text('Recent Assessments')]),
         AppLink(
@@ -413,90 +413,82 @@ class _DashboardPageState extends State<DashboardPage> {
     ]);
   }
 
-  /// Featured card for the most recently updated assessment.
-  ///
-  /// The assessment API stores one property per assessment, so the rentals
-  /// strip lists only the bound listing. It is driven by that list, not a
-  /// fixed count: a real batch API can supply more rows later.
+  /// The latest saved assessment, using its actual property and progress.
   Component _featuredCard(AssessmentRecord record) {
     final property = record.property;
     final pct = record.progressPercent.clamp(0, 100);
     final href = '/entrepreneur/assessments?id=${record.propertyId}';
+    final place = property == null
+        ? 'Property ${record.propertyId}'
+        : [property.city, property.state]
+            .where((part) => part.trim().isNotEmpty)
+            .join(', ');
     return section(classes: 'sw-dash-featured', [
-      AppLink(
-        to: href,
-        classes: 'sw-dash-featured-head',
-        children: [
-          div(classes: 'sw-dash-featured-ico', [
-            Icon('layers', size: 'lg'),
-          ]),
-          div(classes: 'sw-dash-featured-copy', [
-            strong([
-              Component.text(
-                property?.title ?? 'Listing no longer in the catalogue',
-              ),
-            ]),
-            small([
-              Component.text(
-                'Compare and continue this shared assessment across selected '
-                'rentals.',
-              ),
-            ]),
-          ]),
-          StatusBadge(
-            record.isCompleted ? 'Completed' : 'In progress',
-            tone: record.isCompleted ? 'success' : 'action',
-          ),
-          span(
-            classes: 'sw-dash-featured-track'
-                '${record.isCompleted ? ' sw-dash-featured-track--done' : ''}',
-            [
-              span(styles: Styles(raw: {'width': '$pct%'}), []),
-            ],
-          ),
-          span(classes: 'sw-dash-featured-pct', [Component.text('$pct%')]),
-          Icon('chevron_right', size: 'sm'),
-        ],
-      ),
-      div(classes: 'sw-dash-rentals', [
-        strong(classes: 'sw-dash-rentals-title', [
-          Component.text(
-            'Selected rentals (${property == null ? 0 : 1})',
-          ),
+      div(classes: 'sw-dash-assessment-top', [
+        span(classes: 'sw-dash-assessment-kicker', [
+          Component.text('Most recent assessment'),
         ]),
-        div(classes: 'sw-dash-rentals-grid', [
-          if (property != null) _rentalCell(property),
+        StatusBadge(
+          record.isCompleted ? 'Completed' : 'In progress',
+          tone: record.isCompleted ? 'success' : 'action',
+        ),
+      ]),
+      div(classes: 'sw-dash-assessment-property', [
+        _thumb(property?.imageUrl, property == null),
+        div(classes: 'sw-dash-assessment-copy', [
+          h3([
+            Component.text(
+              property?.title ?? 'Listing no longer in the catalogue',
+            ),
+          ]),
+          if (place.isNotEmpty)
+            p(classes: 'sw-dash-assessment-location', [
+              Icon('location_on', size: 'sm'),
+              Component.text(place),
+            ]),
+          p(classes: 'sw-dash-assessment-description', [
+            Component.text(record.isCompleted
+                ? 'Review your saved assessment results.'
+                : 'Continue where you left off.'),
+          ]),
         ]),
       ]),
-      div(classes: 'sw-dash-featured-actions', [
+      div(classes: 'sw-dash-assessment-progress', [
+        div(classes: 'sw-dash-assessment-progress-label', [
+          span([Component.text('Assessment progress')]),
+          strong([Component.text('$pct%')]),
+        ]),
+        div(
+          classes: 'sw-dash-assessment-track'
+              '${record.isCompleted ? ' sw-dash-assessment-track--done' : ''}',
+          attributes: {
+            'role': 'progressbar',
+            'aria-label': 'Assessment progress',
+            'aria-valuemin': '0',
+            'aria-valuemax': '100',
+            'aria-valuenow': '$pct',
+          },
+          [span(styles: Styles(raw: {'width': '$pct%'}), [])],
+        ),
+      ]),
+      div(classes: 'sw-dash-assessment-actions', [
         AppLink(
           to: '/entrepreneur/my-properties',
-          classes: 'sw-dash-btn',
+          classes: 'sw-dash-assessment-action',
           children: [Component.text('View Rentals')],
         ),
         AppLink(
           to: href,
-          classes: 'sw-dash-btn sw-dash-btn--primary',
+          classes: 'sw-dash-assessment-action sw-dash-assessment-action--primary',
           children: [
-            Component.text('Continue Assessment '),
+            Component.text(record.isCompleted
+                ? 'Review Assessment'
+                : 'Continue Assessment'),
             span(attributes: const {'aria-hidden': 'true'}, [
-              Component.text('→'),
+              Icon('arrow_forward', size: 'sm'),
             ]),
           ],
         ),
-      ]),
-    ]);
-  }
-
-  Component _rentalCell(CommercialProperty property) {
-    final place = [property.city, property.state]
-        .where((part) => part.trim().isNotEmpty)
-        .join(', ');
-    return div(classes: 'sw-dash-rental', [
-      _thumb(property.imageUrl, false),
-      div(classes: 'sw-dash-rental-copy', [
-        strong([Component.text(property.title)]),
-        if (place.isNotEmpty) small([Component.text(place)]),
       ]),
     ]);
   }
@@ -527,7 +519,15 @@ class _DashboardPageState extends State<DashboardPage> {
           record.isCompleted ? 'Completed' : 'In progress',
           tone: record.isCompleted ? 'success' : 'action',
         ),
-        span(classes: 'sw-dash-rrow-track${record.isCompleted ? ' sw-dash-rrow-track--done' : ''}', [
+        span(
+          classes: 'sw-dash-rrow-track${record.isCompleted ? ' sw-dash-rrow-track--done' : ''}',
+          attributes: {
+            'role': 'progressbar',
+            'aria-label': 'Assessment progress',
+            'aria-valuemin': '0',
+            'aria-valuemax': '100',
+            'aria-valuenow': '$pct',
+          }, [
           span(
             styles: Styles(raw: {'width': '$pct%'}),
             [],

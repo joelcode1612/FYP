@@ -25,6 +25,7 @@ abstract class OwnerListingRepository {
     required String city,
     required String state,
     required String postcode,
+    bool forceRefresh = false,
   });
 
   Future<OwnerListing> createDraft(

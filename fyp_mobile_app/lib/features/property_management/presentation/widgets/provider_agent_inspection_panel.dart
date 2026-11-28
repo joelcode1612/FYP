@@ -1,7 +1,10 @@
+import 'dart:typed_data';
+
+import 'package:file_selector/file_selector.dart';
+import 'package:fyp/core/di/service_locator.dart';
 import 'package:fyp/features/property_management/data/provider_workspace_service.dart';
 import 'package:flutter/material.dart';
 import 'package:fyp/core/routing/app_routes.dart';
-import 'package:fyp/features/property_management/presentation/widgets/agent_property_details_sheet.dart'; // SITEWISE_AGENT_DETAILS_COMPLETION_V1
 import 'package:shared_logic/shared_logic.dart';
 
 import 'package:fyp/core/theme/sitewise_theme.dart';
@@ -40,8 +43,12 @@ class _InspectionState extends State<ProviderAgentInspectionPanel>
   String? error;
   bool busy = false, loading = true, saved = false;
   bool canCapture = false;
+  bool _captureOpen = false;
   String? panoramaId;
   List<String> missingPropertyDetails = const [];
+  List<Map<String, dynamic>> ownershipDocuments = const [];
+  bool ownershipDocumentsLoaded = false;
+  final Set<String> openingOwnershipDocuments = <String>{};
   // SITEWISE_READINESS_V1: authoritative prerequisites from FastAPI.
   bool serverReadinessKnown = false;
   List<String> submissionBlockers = const [];
@@ -65,7 +72,8 @@ class _InspectionState extends State<ProviderAgentInspectionPanel>
       !propertyLocked && (status == 'accepted' || status == 'needs_correction');
   int get confirmed => checks.values.where((value) => value).length;
   bool get allConfirmed => confirmed == checks.length;
-  bool get canUseCapture => !propertyLocked && canCapture && !busy && !loading;
+  bool get canUseCapture =>
+      editable && canCapture && !busy && !loading && !_captureOpen;
   // SITEWISE_AGENT_INSPECTION_SUMMARY_V1
   // The four backend-confirmed checks are authoritative; not an eight-item
   // synthetic checklist. A discrepancy is recorded without erasing notes.
@@ -144,6 +152,11 @@ class _InspectionState extends State<ProviderAgentInspectionPanel>
         _loaded = true;
         status = '${data['assignment_status'] ?? ''}';
         canCapture = data['can_capture'] == true;
+        ownershipDocuments = (data['ownership_documents'] as List? ?? const [])
+            .whereType<Map>()
+            .map((document) => Map<String, dynamic>.from(document))
+            .toList(growable: false);
+        ownershipDocumentsLoaded = true;
         updateTourEligibility(data);
         updateSubmissionReadiness(data);
         if (!loadChecklist) return;
@@ -159,12 +172,13 @@ class _InspectionState extends State<ProviderAgentInspectionPanel>
       });
     } catch (e) {
       if (mounted && revision == _refreshRevision) {
-        setState(
-          () => error = readableFailure(
+        setState(() {
+          canCapture = false;
+          error = readableFailure(
             e,
             fallback: 'The inspection status could not be loaded.',
-          ),
-        );
+          );
+        });
       }
     } finally {
       if (mounted && revision == _refreshRevision) {
@@ -197,6 +211,72 @@ class _InspectionState extends State<ProviderAgentInspectionPanel>
       }
     } finally {
       if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<void> editProperty() async {
+    if (!editable || busy || loading) return;
+    await Navigator.of(
+      context,
+    ).pushNamed('/provider/add-property', arguments: '${widget.propertyId}');
+    if (!mounted) return;
+    widget.onEdited?.call();
+    await widget.onSaved?.call();
+    await refresh(loadChecklist: false);
+  }
+
+  Future<void> viewOwnershipDocument(Map<String, dynamic> document) async {
+    final id = document['document_id']?.toString() ?? '';
+    final filename =
+        document['original_filename']?.toString() ?? 'ownership-proof';
+    final mimeType =
+        document['mime_type']?.toString() ?? 'application/octet-stream';
+    if (id.isEmpty || openingOwnershipDocuments.contains(id)) return;
+    setState(() => openingOwnershipDocuments.add(id));
+    try {
+      final bytes = await ServiceLocator.propertyVerification.downloadDocument(
+        id,
+      );
+      if (!mounted || bytes.isEmpty) return;
+      if (mimeType.startsWith('image/')) {
+        await showDialog<void>(
+          context: context,
+          builder: (context) => Dialog(
+            child: SafeArea(
+              child: InteractiveViewer(
+                child: Image.memory(
+                  Uint8List.fromList(bytes),
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+          ),
+        );
+      } else {
+        final location = await getSaveLocation(suggestedName: filename);
+        if (location == null || !mounted) return;
+        await XFile.fromData(
+          Uint8List.fromList(bytes),
+          name: filename,
+          mimeType: mimeType,
+        ).saveTo(location.path);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Saved $filename so you can open it.')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(
+          () => error = readableFailure(
+            e,
+            fallback: 'Ownership evidence could not be opened.',
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => openingOwnershipDocuments.remove(id));
     }
   }
 
@@ -336,19 +416,27 @@ class _InspectionState extends State<ProviderAgentInspectionPanel>
     await save();
   }
 
-  Future<void> openCapture({String? tourId}) async {
+  Future<void> openCapture() async {
     if (!canUseCapture) return;
-    await Navigator.of(context).pushNamed(
-      tourId == null ? '/owner/capture' : '/tour-preview',
-      arguments:
-          tourId ??
-          ArCaptureRequest(
-            propertyId: '${widget.propertyId}',
-            title: widget.listing?.displayTitle,
-          ),
-    );
-    if (!mounted) return;
-    setState(() => tourRevision++);
+    setState(() => _captureOpen = true);
+    try {
+      // The property capture route resumes an unfinished attempt or creates a
+      // separate draft. A completed tour stays available during replacement.
+      await Navigator.of(context).pushNamed(
+        '/owner/capture',
+        arguments: ArCaptureRequest(
+          propertyId: '${widget.propertyId}',
+          title: widget.listing?.displayTitle,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _captureOpen = false;
+          tourRevision++;
+        });
+      }
+    }
   }
 
   void updateSubmissionReadiness(Map<String, dynamic> data) {
@@ -373,19 +461,6 @@ class _InspectionState extends State<ProviderAgentInspectionPanel>
     if (missing is List) {
       missingPropertyDetails = missing.whereType<String>().toList();
     }
-  }
-
-  Future<void> completeMissingDetails() async {
-    if (!editable || busy || loading) return;
-    final savedChanges = await AgentPropertyDetailsSheet.open(
-      context,
-      widget.propertyId,
-      readOnly: propertyLocked,
-    );
-    if (!mounted) return;
-    // The server calculates completeness from fresh canonical property data.
-    if (savedChanges) await refresh(loadChecklist: false);
-    if (savedChanges) await widget.onSaved?.call();
   }
 
   Future<void> submitInspection() async {
@@ -570,12 +645,32 @@ class _InspectionState extends State<ProviderAgentInspectionPanel>
     return Scaffold(
       backgroundColor: providerCanvas,
       appBar: const ProviderPageAppBar(
-        title: 'Property inspection',
+        title: 'Inspect Property',
         eyebrow: 'MANAGED LISTING',
       ),
       body: providerContent(
         children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(providerGutter, 0, providerGutter, 10),
+            child: Text('Verify property information and complete the inspection.'),
+          ),
           _InspectionOverview(listing: listing, detail: detail, status: status),
+          _InspectionWorkflow(
+            detailsDone: missingPropertyDetails.isEmpty,
+            checklistDone: allConfirmed,
+            panoramaDone: panoramaId != null,
+            submitted: status == 'submitted',
+          ),
+          _InspectionStatusCard(
+            status: status,
+            completed: confirmed,
+            total: checks.length,
+            ready: serverReadinessKnown && submissionBlockers.isEmpty,
+            blockers: submissionBlockers,
+            panoramaId: panoramaId,
+          ),
+          ownershipEvidenceCard(),
+          if (editable) ...[const SizedBox(height: 12), propertyDetailsCard()],
           const SizedBox(height: 16),
           checklist(context),
           const SizedBox(height: 16),
@@ -583,9 +678,6 @@ class _InspectionState extends State<ProviderAgentInspectionPanel>
             key: ValueKey(tourRevision),
             propertyId: widget.propertyId,
             onStartCapture: canUseCapture ? openCapture : null,
-            onOpenWorkflow: canUseCapture
-                ? (tourId) => openCapture(tourId: tourId)
-                : null,
             beforeSync: canUseCapture ? () async => canUseCapture : null,
             onSynced: propertyLocked
                 ? null
@@ -597,61 +689,137 @@ class _InspectionState extends State<ProviderAgentInspectionPanel>
       bottomNavigationBar: propertyLocked
           ? null
           : SafeArea(
-        top: false,
-        child: Container(
-          decoration: const BoxDecoration(
-            color: SitewiseM3.surface,
-            border: Border(top: BorderSide(color: SitewiseM3.line)),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: busy || loading || !editable
-                          ? null
-                          : () => save(),
-                      icon: const Icon(Icons.save_outlined, size: 18),
-                      label: const Text('Save draft'),
+              top: false,
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: SitewiseM3.surface,
+                  border: Border(top: BorderSide(color: SitewiseM3.line)),
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: busy || loading || !editable
+                                ? null
+                                : () => save(),
+                            icon: const Icon(Icons.save_outlined, size: 18),
+                            label: const Text('Save draft'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: loading ? null : previewSummary,
+                            icon: const Icon(
+                              Icons.visibility_outlined,
+                              size: 18,
+                            ),
+                            label: const Text('Review'),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: loading ? null : previewSummary,
-                      icon: const Icon(Icons.visibility_outlined, size: 18),
-                      label: const Text('Review'),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed:
+                            busy ||
+                                loading ||
+                                !editable ||
+                                !allConfirmed ||
+                                missingPropertyDetails.isNotEmpty ||
+                                submissionBlockers.isNotEmpty ||
+                                panoramaId == null
+                            ? null
+                            : submitInspection,
+                        icon: const Icon(Icons.send_outlined, size: 18),
+                        label: const Text('Submit inspection to Admin'),
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed:
-                      busy ||
-                          loading ||
-                          !editable ||
-                          !allConfirmed ||
-                          missingPropertyDetails.isNotEmpty ||
-                          submissionBlockers.isNotEmpty ||
-                          panoramaId == null
-                      ? null
-                      : submitInspection,
-                  icon: const Icon(Icons.send_outlined, size: 18),
-                  label: const Text('Submit inspection to Admin'),
+                  ],
                 ),
               ),
-            ],
-          ),
-        ),
-      ),
+            ),
     );
   }
+
+  Widget propertyDetailsCard() => ProviderCard(
+    title: 'Property details',
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          widget.listing?.displayTitle ?? 'Listing L-${widget.propertyId}',
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+        if (widget.listing?.address case final address?) ...[
+          const SizedBox(height: 4),
+          Text(address, style: const TextStyle(color: SitewiseM3.muted)),
+        ],
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed: busy || loading ? null : editProperty,
+            icon: const Icon(Icons.edit_outlined, size: 18),
+            label: const Text('Edit property'),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget ownershipEvidenceCard() => ProviderCard(
+    title: 'Ownership evidence',
+    child: !ownershipDocumentsLoaded
+        ? const Text('Ownership evidence status is not available yet.')
+        : ownershipDocuments.isEmpty
+        ? const Text('No ownership document is available for this request.')
+        : Column(
+            children: [
+              for (final document in ownershipDocuments)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.description_outlined),
+                  title: Text(
+                    document['original_filename']?.toString() ??
+                        'Ownership document',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text(
+                    document['mime_type']?.toString() ?? 'Document',
+                  ),
+                  trailing: IconButton(
+                    tooltip: 'View ownership evidence',
+                    onPressed:
+                        openingOwnershipDocuments.contains(
+                          document['document_id']?.toString(),
+                        )
+                        ? null
+                        : () => viewOwnershipDocument(document),
+                    icon:
+                        openingOwnershipDocuments.contains(
+                          document['document_id']?.toString(),
+                        )
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.open_in_new),
+                  ),
+                ),
+            ],
+          ),
+  );
 
   Widget checklist(BuildContext context) => ProviderCard(
     title: standalone ? 'Inspection checklist' : 'Property verification',
@@ -735,12 +903,8 @@ class _InspectionState extends State<ProviderAgentInspectionPanel>
                     '${missingPropertyDetails.join(', ')}.',
                     style: const TextStyle(color: SitewiseColors.danger),
                   ),
-                  const SizedBox(height: 8),
-                  FilledButton.icon(
-                    onPressed: busy ? null : completeMissingDetails,
-                    icon: const Icon(Icons.edit_note_rounded),
-                    label: const Text('Complete property details'),
-                  ),
+                  const SizedBox(height: 6),
+                  const Text('Use Edit property above to update them.'),
                 ],
                 const SizedBox(height: 12),
                 Row(
@@ -844,12 +1008,79 @@ class _InspectionState extends State<ProviderAgentInspectionPanel>
                   ),
               ],
               if (status == 'submitted')
-                const Text('Submitted for Admin review. Locked.'),
+                const Text(
+                  'Submitted for Admin review. Property details and inspection evidence are locked.',
+                ),
               if (status == 'declined')
                 const Text('Request declined; Owner can reassign.'),
             ],
           ),
   );
+}
+
+class _InspectionWorkflow extends StatelessWidget {
+  const _InspectionWorkflow({required this.detailsDone, required this.checklistDone, required this.panoramaDone, required this.submitted});
+  final bool detailsDone;
+  final bool checklistDone;
+  final bool panoramaDone;
+  final bool submitted;
+
+  @override
+  Widget build(BuildContext context) {
+    final complete = [detailsDone, checklistDone, panoramaDone, submitted];
+    var current = complete.indexWhere((done) => !done);
+    if (current < 0) current = 3;
+    const labels = ['Details', 'Checklist', '360° Capture', 'Submit'];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(providerGutter, 4, providerGutter, 12),
+      child: Row(children: [
+        for (var i = 0; i < labels.length; i++) ...[
+          Expanded(child: Column(children: [
+            CircleAvatar(
+              radius: 14,
+              backgroundColor: complete[i] ? SitewiseM3.green : i == current ? SitewiseColors.action : SitewiseM3.quiet,
+              child: Icon(complete[i] ? Icons.check : Icons.circle, size: complete[i] ? 17 : 9, color: complete[i] || i == current ? Colors.white : SitewiseM3.muted),
+            ),
+            const SizedBox(height: 4),
+            Text(labels[i], textAlign: TextAlign.center, style: TextStyle(fontSize: 10, fontWeight: i == current ? FontWeight.w700 : FontWeight.w500, color: i == current ? SitewiseColors.action : SitewiseM3.muted)),
+          ])),
+          if (i < labels.length - 1) Container(width: 12, height: 2, color: complete[i] ? SitewiseM3.green : SitewiseM3.line),
+        ],
+      ]),
+    );
+  }
+}
+
+class _InspectionStatusCard extends StatelessWidget {
+  const _InspectionStatusCard({required this.status, required this.completed, required this.total, required this.ready, required this.blockers, required this.panoramaId});
+  final String status;
+  final int completed;
+  final int total;
+  final bool ready;
+  final List<String> blockers;
+  final String? panoramaId;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = switch (status) {
+      'requested' => 'Awaiting Inspection',
+      'submitted' => 'Awaiting Administrator Review',
+      'needs_correction' => 'Corrections Required',
+      'accepted' => ready ? 'Ready for Submission' : 'Inspection in Progress',
+      _ => 'Inspection status unavailable',
+    };
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: providerGutter),
+      child: ProviderCard(title: label, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('$completed of $total inspection checks completed'),
+        if (panoramaId != null) const Text('Confirmed 360° panorama available'),
+        if (!ready && blockers.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          for (final blocker in blockers) Text('• $blocker', style: const TextStyle(fontSize: 12, color: SitewiseM3.muted)),
+        ],
+      ])),
+    );
+  }
 }
 
 class _InspectionOverview extends StatelessWidget {

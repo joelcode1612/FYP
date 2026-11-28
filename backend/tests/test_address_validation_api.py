@@ -104,7 +104,7 @@ def test_permission_denied_is_reported_as_unavailable(monkeypatch, with_key):
     )
     with pytest.raises(avs.AddressValidationUnavailable) as exc:
         avs.validate_address(address_lines=["1 Jalan SS15/4"])
-    assert "not enabled" in str(exc.value)
+    assert "unavailable to this server" in str(exc.value)
 
 
 def test_transport_failure_is_unavailable(monkeypatch, with_key):
@@ -164,7 +164,7 @@ def test_endpoint_maps_provider_outage_to_503(client, owner_token, monkeypatch, 
     assert response.status_code == 503
     detail = response.json()["detail"]
     assert detail["code"] == "address_validation_unavailable"
-    assert "not enabled" in detail["message"]
+    assert "unavailable to this server" in detail["message"]
 
 
 def test_endpoint_requires_auth(client, monkeypatch, with_key):

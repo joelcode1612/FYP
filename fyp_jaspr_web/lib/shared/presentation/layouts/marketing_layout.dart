@@ -26,14 +26,11 @@ class MarketingLayout extends StatelessComponent {
 /// Extracted from the marketing layout so standalone pages (e.g. sign-up) can
 /// reuse the real navbar instead of a bespoke top bar.
 ///
-/// [linkPrefix] is prepended to the section anchors. The landing page keeps the
-/// default (empty) so the links scroll in place; any other page passes `'/'`
-/// so the links navigate back to the landing sections instead of being dead
-/// anchors.
+/// Section links are canonical landing-page paths. They navigate to the single
+/// continuous landing page, which then scrolls the matching section without a
+/// URL fragment; the same links work from any marketing surface.
 class Masthead extends StatelessComponent {
-  final String linkPrefix;
-
-  const Masthead({super.key, this.linkPrefix = ''});
+  const Masthead({super.key});
 
   @override
   Component build(BuildContext context) {
@@ -42,11 +39,11 @@ class Masthead extends StatelessComponent {
         const Brand(),
         nav(classes: 'masthead__nav', [
           for (final link in LandingContent.navLinks)
-            // Plain `#anchor` links: the browser handles smooth scrolling via
-            // `scroll-behavior` in CSS, so no JavaScript and no GlobalKeys.
-            a(href: '$linkPrefix#${link.$2}', classes: 'masthead__link', [
-              Component.text(link.$1),
-            ]),
+            AppLink(
+              to: link.$2,
+              classes: 'masthead__link',
+              children: [Component.text(link.$1)],
+            ),
         ]),
         div(classes: 'masthead__actions', [
           const ActionLink('Log In', href: '/login', variant: 'ghost'),
@@ -78,7 +75,7 @@ class _SiteFooter extends StatelessComponent {
             span(classes: 'overline', [Component.text('Explore')]),
             div(classes: 'footer-links', [
               for (final link in LandingContent.navLinks)
-                a(href: '#${link.$2}', [Component.text(link.$1)]),
+                AppLink(to: link.$2, children: [Component.text(link.$1)]),
             ]),
           ]),
           div(classes: 'stack', [

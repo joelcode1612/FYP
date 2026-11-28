@@ -163,3 +163,6 @@ key.properties
 /backend/var/static_pu_migration/
 
 /backend/var/static_pu_migration/
+
+# Local SiteWise patch backups
+.sitewise_patch_backups/

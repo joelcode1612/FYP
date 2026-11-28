@@ -469,6 +469,33 @@ class _TourPreviewMobilePageState extends ConsumerState<TourPreviewMobilePage> {
     }
     final path = tour.panoramaPath;
     if (path == null) {
+      // A handoff that is still uploading or processing is not a missing
+      // panorama: telling the user to "generate" one would invite a second
+      // capture of work that is already running. The state comes from the
+      // session's recorded handoff, so it survives a restart.
+      if (vm.handoffUiState == BackendHandoffUiState.working) {
+        return const Card(
+          child: Padding(
+            padding: EdgeInsets.all(20),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Your photos are saved. The panorama is being created — '
+                    'it will appear here automatically.',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
       return const Card(
         child: Padding(
           padding: EdgeInsets.all(20),

@@ -46,6 +46,68 @@ from sitewise.services.agent_inspection_policy import REQUIRED_INSPECTION
 DECISIONABLE = ("pending", "under_review")
 RESUBMITTABLE = ("not_submitted", "rejected", "information_requested")
 
+#: Property lifecycle, DERIVED from the canonical listing row. ``is_published``
+#: is authoritative for "live": an approved-but-unpublished listing is
+#: ``approved``, never ``published``.
+PROPERTY_LIFECYCLES = (
+    "published",
+    "approved",
+    "draft",
+    "pending",
+    "rejected",
+    "unknown",
+)
+
+#: How the property record came to exist. Derived, never stored: the catalogue
+#: import marker and the owner account are the only creation provenance the
+#: schema records, so an assignment row distinguishes agent-created listings.
+PROPERTY_SOURCES = ("imported", "owner", "agent", "platform")
+
+#: Agent inspection progress. ``not_assigned`` means no assignment row exists.
+AGENT_STAGES = ("not_assigned", "requested", "accepted", "submitted", "declined")
+
+# The derived axes are SQL fragments over the aliases used by ``queue``:
+# ``p`` = fyp.rental_properties, ``a`` = fyp.agent_listing_assignment,
+# ``pv`` = fyp.property_verification. Keeping them in one place means the
+# projection, the filters and the facet counts can never disagree.
+_LIFECYCLE_SQL = """CASE
+        WHEN p.is_published THEN 'published'
+        WHEN p.verification_status IS NULL OR btrim(p.verification_status) = '' THEN 'unknown'
+        WHEN p.verification_status = 'approved' THEN 'approved'
+        WHEN p.verification_status = 'rejected' THEN 'rejected'
+        WHEN p.verification_status = 'draft' THEN 'draft'
+        WHEN p.verification_status = 'pending' THEN 'pending'
+        ELSE p.verification_status
+    END"""
+
+_SOURCE_SQL = """CASE
+        WHEN p.catalogue_id IS NOT NULL THEN 'imported'
+        WHEN p.owner_user_id IS NOT NULL THEN 'owner'
+        WHEN a.listing_id IS NOT NULL THEN 'agent'
+        ELSE 'platform'
+    END"""
+
+_AGENT_STAGE_SQL = """CASE
+        WHEN a.listing_id IS NULL THEN 'not_assigned'
+        WHEN a.workflow_status IS NULL OR btrim(a.workflow_status) = '' THEN 'not_assigned'
+        ELSE a.workflow_status
+    END"""
+
+# A property without a verification row is NOT "pending": it has never been
+# submitted, which is a different state the reviewer must be able to see.
+_LISTING_STATUS_SQL = "COALESCE(pv.listing_status, 'not_submitted')"
+_OWNERSHIP_STATUS_SQL = "COALESCE(pv.ownership_status, 'not_submitted')"
+
+#: Directory scopes. ``all`` is every property; ``queue`` narrows to the ones
+#: that actually have a submission awaiting a decision.
+QUEUE_SCOPES = ("all", "queue")
+
+#: A submission is actionable while either dimension awaits a decision.
+_ACTIONABLE_SQL = (
+    f"({_LISTING_STATUS_SQL} IN ('pending', 'under_review')"
+    f" OR {_OWNERSHIP_STATUS_SQL} IN ('pending', 'under_review'))"
+)
+
 #: The canonical owner-created listings table. The verification tables were
 #: REBOUND to it (migration 0004): owner Add-Property submissions live in
 #: ``fyp.rental_properties`` and ``property_verification.property_id`` now
@@ -83,6 +145,19 @@ def _now() -> datetime:
 
 def _iso(value: datetime | None) -> str | None:
     return value.isoformat() if value else None
+
+
+def _lifecycle_of(listing: dict[str, Any]) -> str:
+    """The property lifecycle, mirroring ``_LIFECYCLE_SQL`` exactly.
+
+    ``is_published`` wins: an approved listing that was never published is
+    ``approved``, never ``published``. An unrecognised stored value is
+    returned as-is instead of being coerced into a known state.
+    """
+    if listing.get("is_published"):
+        return "published"
+    status = (listing.get("verification_status") or "").strip()
+    return status or "unknown"
 
 
 def rental_listing(session: Session, property_id: int) -> dict[str, Any] | None:
@@ -381,9 +456,18 @@ class PropertyVerificationService:
         owned = owner is not None and str(owner) == str(user_id)
         if owned:
             return doc
-        # Inspection files may be read by the current MFA-verified assignee.
-        # Ownership proof is restricted to the Owner and Admin reviewers.
-        if doc.verification_type == "listing" and provider_scope.is_agent_role(agent_role):
+        # The current MFA-verified assignee may view Owner evidence and listing
+        # evidence, but cannot upload or alter ownership documents.
+        if provider_scope.is_agent_role(agent_role):
+            agent_id = provider_scope.agent_id_for_user(user_id)
+            assignment_status = self.session.execute(text("""
+                SELECT workflow_status FROM fyp.agent_listing_assignment
+                 WHERE listing_id=:pid AND agent_id=:aid
+            """), {"pid": doc.property_id, "aid": agent_id}).scalar_one_or_none()
+            if assignment_status not in (
+                "requested", "accepted", "needs_correction", "submitted"
+            ):
+                raise ForbiddenError("Only the current Agent may view this evidence.")
             self.get_property_owned(doc.property_id, user_id, role=agent_role)
             return doc
         raise ForbiddenError("You do not have access to this verification document.")
@@ -543,6 +627,7 @@ class PropertyVerificationService:
                                AND c.property_id = CAST(:pid AS text)
                                AND c.owner_id = :uid
                                AND c.status = 'completed'
+                               AND p.panorama_id = CAST(:panorama_id AS uuid)
                                AND p.verification_status IS DISTINCT FROM 'rejected'
                                AND p.storage_path IS NOT NULL AND btrim(p.storage_path) <> ''
                                AND (CAST(:panorama_id AS text) IS NULL OR CAST(p.panorama_id AS text) = :panorama_id)
@@ -677,6 +762,9 @@ class AdminPropertyReviewService:
         q: str | None = None,
         listing_status: str | None = None,
         ownership_status: str | None = None,
+        lifecycle: str | None = None,
+        source: str | None = None,
+        scope: str | None = None,
         property_type: str | None = None,
         state: str | None = None,
         city: str | None = None,
@@ -687,70 +775,126 @@ class AdminPropertyReviewService:
         offset: int = 0,
         limit: int = 20,
     ) -> dict[str, Any]:
+        """The administrative property directory.
+
+        ``fyp.rental_properties`` is the canonical source: EVERY property
+        appears exactly once, whatever its lifecycle and whether or not it was
+        ever submitted for verification. Verification, agent assignment and
+        ownership are optional LEFT JOINs, so a catalogue or draft property is
+        listed with ``not_submitted`` rather than being filtered out (the
+        previous implementation started from ``fyp.property_verification`` and
+        therefore hid every property that had no verification row).
+
+        The joins cannot duplicate a property: ``property_verification`` has
+        ``UNIQUE (property_id)``, ``agent_listing_assignment`` is keyed by
+        ``listing_id`` and ``public.users`` is keyed by ``user_id``.
+        """
         self._validate_statuses(listing_status, ownership_status)
+        self._validate_lifecycle(lifecycle)
+        self._validate_source(source)
+        self._validate_scope(scope)
         limit = max(1, min(limit, 100))
         offset = max(0, offset)
         order_dir = "ASC" if order.lower() == "asc" else "DESC"
         sort_column = {
             "submitted_at": "pv.created_at",
-            "updated_at": "pv.updated_at",
+            "updated_at": "p.updated_at",
             "title": "p.name",
             "monthly_rent": "p.rental_price",
+            # Legacy alias: older clients still send the old key name.
+            "price": "p.rental_price",
+            "created_at": "p.created_at",
         }.get(sort, "pv.created_at")
 
-        where = ["pv.verification_id IS NOT NULL"]
+        # (key, clause) pairs. The key lets the facet counts drop exactly one
+        # dimension, so an "All statuses" count can never be computed by
+        # string-surgery on the WHERE text.
+        clauses: list[tuple[str, str]] = []
         params: dict[str, Any] = {}
         if q:
-            where.append("(p.name ILIKE :q OR p.address ILIKE :q)")
             params["q"] = f"%{q}%"
+            clauses.append((
+                "q",
+                "(CAST(p.id AS text) ILIKE :q"
+                " OR p.name ILIKE :q"
+                " OR p.address ILIKE :q"
+                " OR p.city ILIKE :q"
+                " OR p.state ILIKE :q"
+                " OR p.postcode ILIKE :q"
+                " OR u.full_name ILIKE :q"
+                " OR u.email ILIKE :q)",
+            ))
         if listing_status:
-            where.append("pv.listing_status = :listing_status")
+            clauses.append(("listing_status", f"{_LISTING_STATUS_SQL} = :listing_status"))
             params["listing_status"] = listing_status
         if ownership_status:
-            where.append("pv.ownership_status = :ownership_status")
+            clauses.append(("ownership_status", f"{_OWNERSHIP_STATUS_SQL} = :ownership_status"))
             params["ownership_status"] = ownership_status
+        if lifecycle:
+            clauses.append(("lifecycle", f"({_LIFECYCLE_SQL}) = :lifecycle"))
+            params["lifecycle"] = lifecycle
+        if source:
+            clauses.append(("source", f"({_SOURCE_SQL}) = :source"))
+            params["source"] = source
+        if scope == "queue":
+            # The queue is a real server-side narrowing, so its counts and its
+            # pagination describe the same set of rows.
+            clauses.append(("scope", _ACTIONABLE_SQL))
         if property_type:
-            where.append("p.property_type = :property_type")
+            clauses.append(("property_type", "p.property_type = :property_type"))
             params["property_type"] = property_type
         if state:
-            where.append("p.state = :state")
+            clauses.append(("state", "p.state = :state"))
             params["state"] = state
         if city:
-            where.append("p.city = :city")
+            clauses.append(("city", "p.city = :city"))
             params["city"] = city
         if submitted_from:
-            where.append("pv.created_at >= :submitted_from")
+            clauses.append(("submitted_from", "pv.created_at >= :submitted_from"))
             params["submitted_from"] = submitted_from
         if submitted_to:
-            where.append("pv.created_at < :submitted_to")
+            clauses.append(("submitted_to", "pv.created_at < :submitted_to"))
             params["submitted_to"] = submitted_to
-        where_sql = " AND ".join(where)
-        # The queue reads the canonical owner-created listing table. The
-        # aliases preserve the exact payload contract the Admin web UI and
-        # shared_logic entities parse.
+        where_sql = (
+            " WHERE " + " AND ".join(clause for _, clause in clauses) if clauses else ""
+        )
         base_from = (
-            f" FROM fyp.property_verification pv"
-            f" JOIN {_LISTING_TABLE} p ON p.id = pv.property_id"
+            f" FROM {_LISTING_TABLE} p"
+            " LEFT JOIN fyp.property_verification pv ON pv.property_id = p.id"
+            " LEFT JOIN fyp.agent_listing_assignment a ON a.listing_id = p.id"
+            " LEFT JOIN public.users u ON u.user_id = p.owner_user_id"
         )
 
         count = self.session.execute(
-            text(f"SELECT count(*){base_from} WHERE {where_sql}"), params
+            text(f"SELECT count(*){base_from}{where_sql}"), params
         ).scalar_one()
 
+        # p.id is the tiebreaker: without a unique secondary key, rows that
+        # share a sort value can swap between pages and a record can be
+        # skipped or repeated across pagination.
         rows = (
             self.session.execute(
                 text(
-                    "SELECT pv.verification_id, pv.property_id, pv.listing_status, "
-                    "pv.ownership_status, pv.publication_eligible, pv.latest_note, "
-                    "pv.created_at AS submitted_at, pv.updated_at, "
+                    "SELECT pv.verification_id, p.id AS property_id, "
+                    f"{_LISTING_STATUS_SQL} AS listing_status, "
+                    f"{_OWNERSHIP_STATUS_SQL} AS ownership_status, "
+                    "COALESCE(pv.publication_eligible, false) AS publication_eligible, "
+                    "pv.latest_note, pv.created_at AS submitted_at, pv.updated_at, "
                     "p.name AS title, p.address AS normalized_address, "
                     "p.property_type AS property_type_normalized, "
                     "p.rental_price AS price, "
                     "COALESCE(p.built_up_sqft, p.size_sqft) AS built_up_area_sqft, "
                     "p.verification_status AS property_status, "
-                    "CAST(NULL AS text) AS company_name, p.city, p.state "
-                    f"{base_from} WHERE {where_sql} "
-                    f"ORDER BY {sort_column} {order_dir} NULLS LAST "
+                    "p.is_published AS is_published, "
+                    f"({_LIFECYCLE_SQL}) AS lifecycle, "
+                    f"({_SOURCE_SQL}) AS source, "
+                    f"({_AGENT_STAGE_SQL}) AS agent_stage, "
+                    "u.full_name AS submitter_name, u.email AS submitter_email, "
+                    "p.catalogue_id AS catalogue_id, "
+                    "p.created_at AS property_created_at, "
+                    "p.city, p.state "
+                    f"{base_from}{where_sql} "
+                    f"ORDER BY {sort_column} {order_dir} NULLS LAST, p.id ASC "
                     "LIMIT :limit OFFSET :offset"
                 ),
                 {**params, "limit": limit, "offset": offset},
@@ -765,49 +909,146 @@ class AdminPropertyReviewService:
         # no valid manager exists.
         from sitewise.services.property_management_service import resolve_listings
 
-        management = resolve_listings(
-            self.session, [int(item["property_id"]) for item in items]
-        )
+        property_ids = [int(item["property_id"]) for item in items]
+        management = resolve_listings(self.session, property_ids)
+        photos = FypPropertyRepository(self.session).get_listing_primary_photos(property_ids)
         for item in items:
-            item["management"] = management.get(int(item["property_id"]))
+            property_id = int(item["property_id"])
+            item["management"] = management.get(property_id)
+            item["primary_photo_url"] = photos.get(property_id)
 
+        listing_facets = self._facet_counts(
+            base_from, clauses, params, _LISTING_STATUS_SQL, "listing_status"
+        )
+        ownership_facets = self._facet_counts(
+            base_from, clauses, params, _OWNERSHIP_STATUS_SQL, "ownership_status"
+        )
         return {
             "items": items,
             "total": count,
             "offset": offset,
             "limit": limit,
             "counts": {
-                "listing": self._facet_counts(base_from, where_sql, params, "listing_status"),
-                "ownership": self._facet_counts(base_from, where_sql, params, "ownership_status"),
+                "listing": listing_facets,
+                "ownership": ownership_facets,
+                # "All statuses" for one dimension means every row in scope for
+                # that dimension — not the currently filtered page total.
+                "all": {
+                    "listing": sum(listing_facets.values()),
+                    "ownership": sum(ownership_facets.values()),
+                },
+                # Real states present in scope, so the state filter offers only
+                # values that exist instead of a hardcoded guess.
+                "state": self._state_counts(base_from, clauses, params),
             },
+            "summary": self._summary_counts(base_from, clauses, params),
         }
 
     def _facet_counts(
-        self, base_from: str, where_sql: str, params: dict[str, Any], column: str
+        self,
+        base_from: str,
+        clauses: list[tuple[str, str]],
+        params: dict[str, Any],
+        expression: str,
+        key: str,
     ) -> dict[str, int]:
         """Counts per status of one dimension over the rows matching every
         filter EXCEPT that dimension's own filter (faceted counts)."""
-        kept = " AND ".join(
-            clause for clause in where_sql.split(" AND ") if not clause.endswith(f"= :{column}")
-        )
+        kept = [clause for clause_key, clause in clauses if clause_key != key]
+        where_sql = (" WHERE " + " AND ".join(kept)) if kept else ""
         rows = (
             self.session.execute(
                 text(
-                    f"SELECT pv.{column} AS status, count(*) AS n{base_from} "
-                    f"WHERE {kept} GROUP BY pv.{column}"
+                    f"SELECT {expression} AS status, count(*) AS n"
+                    f"{base_from}{where_sql} GROUP BY 1"
                 ),
                 params,
             )
             .mappings()
             .all()
         )
-        return {row["status"]: row["n"] for row in rows}
+        return {str(row["status"]): int(row["n"]) for row in rows}
+
+    def _state_counts(
+        self,
+        base_from: str,
+        clauses: list[tuple[str, str]],
+        params: dict[str, Any],
+    ) -> dict[str, int]:
+        """Real states present in scope, so the state filter cannot offer a
+        value that no property has. Its own filter is excluded (faceting)."""
+        kept = [clause for key, clause in clauses if key != "state"]
+        where_sql = (" WHERE " + " AND ".join(kept)) if kept else ""
+        rows = (
+            self.session.execute(
+                text(
+                    "SELECT COALESCE(NULLIF(btrim(p.state), ''), 'Unknown') AS state, "
+                    f"count(*) AS n{base_from}{where_sql} GROUP BY 1 ORDER BY 1"
+                ),
+                params,
+            )
+            .mappings()
+            .all()
+        )
+        return {str(row["state"]): int(row["n"]) for row in rows}
+
+    def _summary_counts(
+        self,
+        base_from: str,
+        clauses: list[tuple[str, str]],
+        params: dict[str, Any],
+    ) -> dict[str, int]:
+        """Directory summary for the current search/location scope.
+
+        The two dimension filters and the lifecycle filter are excluded on
+        purpose: the summary describes the directory, so it must not collapse
+        to the single status tab the reviewer happens to be looking at.
+        """
+        kept = [
+            clause
+            for key, clause in clauses
+            if key not in ("listing_status", "ownership_status", "lifecycle", "scope")
+        ]
+        where_sql = (" WHERE " + " AND ".join(kept)) if kept else ""
+        row = (
+            self.session.execute(
+                text(
+                    "SELECT count(*) AS total, "
+                    "count(*) FILTER (WHERE p.is_published) AS published, "
+                    f"count(*) FILTER (WHERE ({_LIFECYCLE_SQL}) = 'draft') AS drafts, "
+                    "count(*) FILTER (WHERE "
+                    f"{_LISTING_STATUS_SQL} IN ('pending', 'under_review')"
+                    f" OR {_OWNERSHIP_STATUS_SQL} IN ('pending', 'under_review')"
+                    ") AS awaiting_review, "
+                    # A property "is in verification" once EITHER dimension has
+                    # left not_submitted. Distinct from the directory total,
+                    # which now includes properties that were never submitted.
+                    "count(*) FILTER (WHERE NOT ("
+                    f"{_LISTING_STATUS_SQL} = 'not_submitted'"
+                    f" AND {_OWNERSHIP_STATUS_SQL} = 'not_submitted'"
+                    ")) AS with_submission "
+                    f"{base_from}{where_sql}"
+                ),
+                params,
+            )
+            .mappings()
+            .one()
+        )
+        return {key: int(value or 0) for key, value in dict(row).items()}
 
     def detail(self, property_id: int) -> dict[str, Any]:
-        verification = verification_row(self.session, property_id)
+        """Everything the reviewer can legitimately see about one property.
+
+        The listing is the canonical record, so a property that has never been
+        submitted still opens: ``verification`` is then ``null`` and
+        ``workflow.available`` is false, which disables the decisions without
+        hiding the property, its photographs, attributes, location
+        intelligence or ownership/agent assignment.
+        """
         listing = rental_listing(self.session, property_id)
-        if verification is None or listing is None:
-            raise NotFoundError("No verification submission for this property.")
+        if listing is None:
+            raise NotFoundError("Property not found.")
+        verification = verification_row(self.session, property_id)
         owner = None
         owner_id = listing.get("owner_user_id")
         if owner_id is not None:
@@ -833,15 +1074,173 @@ class AdminPropertyReviewService:
             .where(VerificationAudit.property_id == property_id)
             .order_by(VerificationAudit.created_at)  # type: ignore[call-arg]
         ).all()
+        assignment = self._agent_assignment(property_id)
+        panorama = self._panorama_summary(property_id)
         return {
             "property": listing_payload(listing),
             "owner": dict(owner) if owner else None,
-            "verification": verification_payload(verification),
+            "verification": (
+                verification_payload(verification) if verification else None
+            ),
             "documents": [document_payload(d) for d in documents],
             "history": [audit_payload(a) for a in history],
             "management": self._management(property_id),
+            "statuses": self._status_axes(
+                listing, verification, assignment, panorama
+            ),
+            "agent_assignment": assignment,
+            "panorama": panorama,
+            "workflow": self._workflow_state(verification),
             **self._location_context(property_id),
             "location_analysis": self._location_analysis(property_id),
+        }
+
+    @staticmethod
+    def _status_axes(
+        listing: dict[str, Any],
+        verification,
+        assignment: dict[str, Any],
+        panorama: dict[str, Any],
+    ) -> dict[str, Any]:
+        """The six independent status axes, each reported on its own.
+
+        Collapsing them is what made an imported catalogue property look
+        "unverified" and an approved-but-unpublished listing look "Live".
+        ``publication`` comes from ``is_published`` only.
+        """
+        return {
+            "property_lifecycle": _lifecycle_of(listing),
+            "listing_verification": (
+                verification.listing_status if verification else "not_submitted"
+            ),
+            "ownership_verification": (
+                verification.ownership_status if verification else "not_submitted"
+            ),
+            "agent_inspection": assignment["workflow_status"],
+            "panorama_verification": panorama["verification_status"],
+            "publication": "published" if listing.get("is_published") else "unpublished",
+        }
+
+    @staticmethod
+    def _workflow_state(verification) -> dict[str, Any]:
+        """Whether verification decisions are possible, and why not."""
+        if verification is None:
+            return {
+                "available": False,
+                "submitted": False,
+                "decisionable": False,
+                "reason": (
+                    "This property has no verification submission, so there is "
+                    "nothing to approve or reject. It stays visible in the "
+                    "directory with its publication state unchanged."
+                ),
+            }
+        statuses = (verification.listing_status, verification.ownership_status)
+        decisionable = any(status in DECISIONABLE for status in statuses)
+        return {
+            "available": True,
+            "submitted": any(status != "not_submitted" for status in statuses),
+            "decisionable": decisionable,
+            "reason": None
+            if decisionable
+            else "Neither dimension is awaiting a decision right now.",
+        }
+
+    def _agent_assignment(self, property_id: int) -> dict[str, Any]:
+        """Agent inspection progress, or an explicit ``not_assigned``."""
+        row = (
+            self.session.execute(
+                text(
+                    "SELECT agent_id, workflow_status, requested_at, submitted_at, "
+                    "inspection_updated_at, panorama_uploaded_at, decline_reason, "
+                    "inspection_data "
+                    "FROM fyp.agent_listing_assignment WHERE listing_id = :id"
+                ),
+                {"id": property_id},
+            )
+            .mappings()
+            .first()
+        )
+        if row is None:
+            return {
+                "assigned": False,
+                "agent_id": None,
+                "agent_name": None,
+                "workflow_status": "not_assigned",
+                "assigned_at": None,
+                "submitted_at": None,
+                "inspection": {},
+                "inspection_complete": False,
+                "decline_reason": None,
+            }
+        checklist = row["inspection_data"] or {}
+        return {
+            "assigned": True,
+            "agent_id": None if row["agent_id"] is None else str(row["agent_id"]),
+            # The agent's display name lives in the Supabase agent directory,
+            # not in this database. Only assigned listings pay for the lookup,
+            # and a failure reports the id alone rather than a guessed name.
+            "agent_name": self._agent_name(row["agent_id"]),
+            "workflow_status": (row["workflow_status"] or "").strip() or "not_assigned",
+            "assigned_at": _iso(row["requested_at"]),
+            "submitted_at": _iso(row["submitted_at"]),
+            "inspection": {
+                key: checklist.get(key) is True for key in REQUIRED_INSPECTION
+            },
+            "inspection_complete": all(
+                checklist.get(key) is True for key in REQUIRED_INSPECTION
+            ),
+            "decline_reason": row["decline_reason"],
+        }
+
+    @staticmethod
+    def _agent_name(agent_id) -> str | None:
+        if agent_id is None:
+            return None
+        try:
+            from sitewise.core.supabase_admin import SupabaseAdminService
+
+            profile = SupabaseAdminService().get_agent_profile_by_id(int(agent_id))
+        except Exception:  # noqa: BLE001 - a missing name must not break the page
+            return None
+        if not isinstance(profile, dict):
+            return None
+        return profile.get("agent_name") or profile.get("full_name") or None
+
+    def _panorama_summary(self, property_id: int) -> dict[str, Any]:
+        """The newest panorama for this property, or an explicit ``none``."""
+        row = (
+            self.session.execute(
+                text(
+                    "SELECT panorama_id, verification_status, width, height, "
+                    "created_at FROM fyp.panoramas "
+                    "WHERE property_id = CAST(:id AS text) "
+                    "ORDER BY created_at DESC NULLS LAST LIMIT 1"
+                ),
+                {"id": property_id},
+            )
+            .mappings()
+            .first()
+        )
+        if row is None:
+            return {
+                "available": False,
+                "panorama_id": None,
+                "verification_status": "none",
+                "width": None,
+                "height": None,
+                "equirectangular": None,
+                "created_at": None,
+            }
+        width, height = row["width"], row["height"]
+        return {
+            "available": True,
+            "panorama_id": str(row["panorama_id"]),
+            "verification_status": (row["verification_status"] or "").strip() or "unknown",
+            "width": width,
+            "height": height,
+            "equirectangular": bool(height) and width == 2 * height,
+            "created_at": _iso(row["created_at"]),
         }
 
     def _location_analysis(self, property_id: int) -> dict[str, Any]:
@@ -992,6 +1391,27 @@ class AdminPropertyReviewService:
         return blockers
 
     def final_review_state(self, property_id: int, *, check_storage: bool = False) -> dict:
+        listing = rental_listing(self.session, property_id)
+        if listing is None:
+            raise NotFoundError("Property not found.")
+        if verification_row(self.session, property_id) is None:
+            # A property that was never submitted is a legitimate directory
+            # entry with no reviewable evidence. Reporting that explicitly
+            # keeps the detail page open; the absent token is what disables
+            # every decision, so no approval can be recorded by accident.
+            return {
+                "available": False,
+                "token": None,
+                "panorama_id": None,
+                "inspection": {},
+                "inspection_notes": {},
+                "blockers": [
+                    "No verification submission exists for this property, so "
+                    "there is nothing to approve or reject."
+                ],
+                "approved": False,
+                "published": bool(listing.get("is_published")),
+            }
         evidence = self._final_evidence(property_id)
         listing, assignment, verification, panorama, _ = evidence
         digest = self._evidence_digest(evidence)
@@ -1004,6 +1424,7 @@ class AdminPropertyReviewService:
         approval = self._has_final_approval(verification.verification_id, digest)
         checklist = (assignment["inspection_data"] or {}) if assignment else {}
         return {
+            "available": True,
             "token": f"{verification.version}:{digest}",
             "panorama_id": str(panorama["panorama_id"]) if panorama else None,
             "inspection": {key: checklist.get(key) is True for key in REQUIRED_INSPECTION}
@@ -1334,3 +1755,18 @@ class AdminPropertyReviewService:
         for value in (s for s in statuses if s):
             if value not in LISTING_STATUSES:
                 raise ConflictError(f"Unknown verification status '{value}'.")
+
+    @staticmethod
+    def _validate_lifecycle(lifecycle: str | None) -> None:
+        if lifecycle and lifecycle not in PROPERTY_LIFECYCLES:
+            raise ConflictError(f"Unknown property lifecycle '{lifecycle}'.")
+
+    @staticmethod
+    def _validate_source(source: str | None) -> None:
+        if source and source not in PROPERTY_SOURCES:
+            raise ConflictError(f"Unknown property source '{source}'.")
+
+    @staticmethod
+    def _validate_scope(scope: str | None) -> None:
+        if scope and scope not in QUEUE_SCOPES:
+            raise ConflictError(f"Unknown directory scope '{scope}'.")

@@ -8,6 +8,7 @@ import 'package:fyp/core/theme/sitewise_theme.dart';
 import 'package:fyp/shared/presentation/layouts/provider_tab_scope.dart';
 import 'package:fyp/features/property_management/domain/entities/provider_models.dart';
 import 'package:fyp/shared/presentation/components/provider_ui.dart';
+import 'package:fyp/shared/presentation/components/provider_card_actions.dart';
 import 'package:fyp/features/property_management/application/provider_listings_service.dart';
 
 /// My Listings — every record the signed-in provider may manage.
@@ -103,14 +104,15 @@ class _ProviderListingsMobilePageState
     Navigator.of(context).pushNamed(route, arguments: arguments);
   }
 
-  void _openDetail(ProviderListing listing) =>
-      _open('/provider/property-detail', arguments: listing.id);
+  void _openDetail(ProviderListing listing) {
+    _open('/provider/property-detail', arguments: listing.id);
+  }
 
   void _openEditor(ProviderListing listing) {
     // Direct navigation (deep link, shortcut) obeys the same lock as the UI.
     if (!listing.canEdit) return;
     if (ref.read(authNotifierProvider).user?.role == AppRole.agent) {
-      _open('/provider/inspection', arguments: listing.id);
+      _openDetail(listing);
       return;
     }
     // The owner editing workflow is the existing Add Property form resuming
@@ -133,8 +135,10 @@ class _ProviderListingsMobilePageState
       child: FutureBuilder<ProviderWorkspace>(
         future: _future,
         builder: (context, snapshot) {
+          // FutureBuilder retains the previous result while a refresh is
+          // pending. Keep the list mounted so its scroll position survives.
           if (snapshot.connectionState == ConnectionState.waiting &&
-              _future != null) {
+              !snapshot.hasData) {
             return providerLoadingView();
           }
           if (snapshot.hasError) {
@@ -328,7 +332,7 @@ class _HeaderBanner extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            isAgent ? 'Assigned properties' : 'My properties',
+                            isAgent ? 'Assigned Properties' : 'My properties',
                             style: TextStyle(
                               fontFamily: kFontFamily,
                               fontSize: 26,
@@ -390,15 +394,15 @@ class _AddPropertyButton extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
             fontFamily: kFontFamily,
-            fontSize: 12.5,
+            fontSize: 14,
             fontWeight: FontWeight.w800,
           ),
         ),
         style: FilledButton.styleFrom(
           backgroundColor: SitewiseColors.action,
           foregroundColor: SitewiseM3.surface,
-          minimumSize: const Size(0, 44),
-          padding: const EdgeInsets.symmetric(horizontal: 14),
+          minimumSize: const Size(0, 52),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(SitewiseM3.radiusPill),
           ),
@@ -425,7 +429,7 @@ class _StatCards extends StatelessWidget {
           child: _StatCard(
             icon: Icons.layers_rounded,
             value: scope.listings.length,
-            label: 'Total Listings',
+            label: scope.isAgent ? 'Total Properties' : 'Total Listings',
             iconBackground: SitewiseM3.quiet,
             iconColor: SitewiseColors.action,
             cardBackground: const Color(0xFFE9F1FD),
@@ -437,7 +441,7 @@ class _StatCards extends StatelessWidget {
           child: _StatCard(
             icon: Icons.check_circle_rounded,
             value: scope.publishedCount,
-            label: 'Active Listings',
+            label: scope.isAgent ? 'Published Properties' : 'Active Listings',
             iconBackground: const Color(0xFFDCF3E4),
             iconColor: const Color(0xFF16A34A),
             cardBackground: const Color(0xFFEAF7EF),
@@ -796,7 +800,7 @@ class ProviderListingCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(SitewiseM3.radiusCard),
             onTap: onOpen,
             child: Padding(
-              padding: const EdgeInsets.all(14),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -806,6 +810,7 @@ class ProviderListingCard extends StatelessWidget {
                   const SizedBox(height: 12),
                   _ActionsRow(
                     canEdit: canEdit,
+                    isAgentSession: isAgentSession,
                     editHint: editHint,
                     showApprovedLock: listing.stage == ProviderStage.approved,
                     onOpen: onOpen,
@@ -820,11 +825,16 @@ class ProviderListingCard extends StatelessWidget {
     );
   }
 
-  String get _statusText => listing.isActive
-      ? 'Active'
-      : listing.stage == ProviderStage.approved
-      ? 'Approved'
-      : listing.stage.label;
+  String get _statusText {
+    // The assignment workflow says more than the listing stage can: a
+    // requested or declined assignment is not a draft, whatever the
+    // operational status claims.
+    if (listing.isRequestPending) return 'Assignment requested';
+    if (listing.isDeclined) return 'Assignment declined';
+    if (listing.isActive) return 'Active';
+    if (listing.stage == ProviderStage.approved) return 'Approved';
+    return listing.stage.label;
+  }
 }
 
 class _TopSection extends StatelessWidget {
@@ -843,28 +853,24 @@ class _TopSection extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Text(
-                      listing.displayTitle,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontFamily: kFontFamily,
-                        fontSize: 15.5,
-                        height: 1.25,
-                        fontWeight: FontWeight.w800,
-                        color: SitewiseM3.ink,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  _StatusBadge(listing: listing),
-                ],
+              Text(
+                listing.displayTitle,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontFamily: kFontFamily,
+                  fontSize: 15.5,
+                  height: 1.25,
+                  fontWeight: FontWeight.w800,
+                  color: SitewiseM3.ink,
+                ),
               ),
-              const SizedBox(height: 5),
+              const SizedBox(height: 6),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: _StatusBadge(listing: listing),
+              ),
+              const SizedBox(height: 6),
               Row(
                 children: [
                   const Icon(
@@ -1110,31 +1116,53 @@ class _MetricsRow extends StatelessWidget {
           bottom: BorderSide(color: SitewiseM3.line),
         ),
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: _Metric(
-              icon: Icons.visibility_outlined,
-              value: null,
-              label: 'Views',
-              unavailableReason: 'Views are not tracked by SiteWise yet',
-            ),
-          ),
-          const _MetricDivider(),
-          Expanded(
-            child: _Metric(
-              icon: Icons.bookmark_border_rounded,
-              value: null,
-              label: 'Saved',
-              unavailableReason: 'Saved counts are not tracked by SiteWise yet',
-            ),
-          ),
-          const SizedBox(width: 10),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 148),
-            child: _ManagementBlock(listing: listing),
-          ),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final metrics = Row(
+            children: [
+              Expanded(
+                child: _Metric(
+                  icon: Icons.visibility_outlined,
+                  value: null,
+                  label: 'Views',
+                  unavailableReason: 'Views are not tracked by SiteWise yet',
+                ),
+              ),
+              const _MetricDivider(),
+              Expanded(
+                child: _Metric(
+                  icon: Icons.bookmark_border_rounded,
+                  value: null,
+                  label: 'Saved',
+                  unavailableReason:
+                      'Saved counts are not tracked by SiteWise yet',
+                ),
+              ),
+            ],
+          );
+          // On the narrowest cards the management attribution cannot share a
+          // row with the two metric slots without squeezing them; stack it.
+          if (constraints.maxWidth < 320) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                metrics,
+                const SizedBox(height: 10),
+                _ManagementBlock(listing: listing),
+              ],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: metrics),
+              const SizedBox(width: 10),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 148),
+                child: _ManagementBlock(listing: listing),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -1286,6 +1314,7 @@ class _ManagementBlock extends StatelessWidget {
 class _ActionsRow extends StatelessWidget {
   const _ActionsRow({
     required this.canEdit,
+    required this.isAgentSession,
     required this.editHint,
     required this.showApprovedLock,
     required this.onOpen,
@@ -1293,6 +1322,7 @@ class _ActionsRow extends StatelessWidget {
   });
 
   final bool canEdit;
+  final bool isAgentSession;
   final String editHint;
   final bool showApprovedLock;
   final VoidCallback onOpen;
@@ -1300,74 +1330,42 @@ class _ActionsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final viewDetails = FilledButton.icon(
-      onPressed: onOpen,
-      icon: const Icon(Icons.arrow_forward_rounded, size: 17),
-      label: const Text('View details'),
-      style: FilledButton.styleFrom(
-        backgroundColor: SitewiseColors.action,
-        foregroundColor: SitewiseM3.surface,
-        minimumSize: const Size.fromHeight(44),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(SitewiseM3.radiusPill),
-        ),
-        textStyle: const TextStyle(
-          fontFamily: kFontFamily,
-          fontSize: 13,
-          fontWeight: FontWeight.w800,
-        ),
+    // Visibility is unchanged: Edit is simply absent when the record may not
+    // be changed. The shared action bar only sizes and arranges what exists.
+    final actions = <ProviderCardAction>[
+      ProviderCardAction(
+        label: 'View details',
+        icon: Icons.arrow_forward_rounded,
+        onPressed: onOpen,
+        emphasis: ProviderCardActionEmphasis.primary,
       ),
-    );
-    if (!canEdit) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SizedBox(width: double.infinity, child: viewDetails),
-          if (showApprovedLock) ...[
-            const SizedBox(height: 8),
-            const Row(
-              children: [
-                Icon(Icons.lock_outline, size: 14, color: SitewiseM3.muted),
-                SizedBox(width: 6),
-                Text(
+      if (canEdit)
+        ProviderCardAction(
+        label: isAgentSession ? 'Manage property' : 'Edit',
+          icon: Icons.edit_outlined,
+          onPressed: onEdit,
+          tooltip: editHint,
+        ),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ProviderCardActions(actions: actions),
+        if (showApprovedLock) ...[
+          const SizedBox(height: 12),
+          const Row(
+            children: [
+              Icon(Icons.lock_outline, size: 14, color: SitewiseM3.muted),
+              SizedBox(width: 6),
+              Expanded(
+                child: Text(
                   'Approved listing · Read-only',
                   style: TextStyle(fontSize: 12, color: SitewiseM3.muted),
                 ),
-              ],
-            ),
-          ],
-        ],
-      );
-    }
-    // Edit is absent entirely when the record may not be changed.
-    return Row(
-      children: [
-        Expanded(child: viewDetails),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Tooltip(
-            message: editHint,
-            triggerMode: TooltipTriggerMode.longPress,
-            child: OutlinedButton.icon(
-              onPressed: onEdit,
-              icon: const Icon(Icons.edit_outlined, size: 16),
-              label: const Text('Edit'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: SitewiseColors.action,
-                side: BorderSide(color: SitewiseColors.action),
-                minimumSize: const Size.fromHeight(44),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(SitewiseM3.radiusPill),
-                ),
-                textStyle: const TextStyle(
-                  fontFamily: kFontFamily,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                ),
               ),
-            ),
+            ],
           ),
-        ),
+        ],
       ],
     );
   }

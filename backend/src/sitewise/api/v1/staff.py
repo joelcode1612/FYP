@@ -53,6 +53,7 @@ from sitewise.repositories.listing_verification_repository import (
 )
 from sitewise.services.property_management_service import resolve_listings
 from sitewise.services import security_audit_service as security_audit
+from sitewise.services.admin_dashboard_service import dashboard_statistics
 
 router = APIRouter()
 
@@ -378,7 +379,16 @@ def _resolve_assignment(
                 ),
             )
         return int(company["company_id"]), str(company.get("company_name") or "")
-    return service.resolve_company(payload.company_name), (payload.company_name or "").strip()
+    if payload.company_name:
+        return service.resolve_company(payload.company_name), payload.company_name.strip()
+    matches = [
+        row for row in service.list_companies()
+        if str(row.get("company_name") or "").strip().casefold() == "sitewise"
+        and row.get("company_id") is not None
+    ]
+    if len(matches) != 1:
+        raise HTTPException(409, "The SiteWise company could not be verified. No invitation was sent.")
+    return int(matches[0]["company_id"]), str(matches[0]["company_name"])
 
 
 # ---------------------------------------------------------------------------
@@ -444,17 +454,19 @@ def create_agent(
             ),
         )
 
+    if existing is not None and not payload.allow_existing:
+        raise HTTPException(
+            409, "This email already has an account. Confirm that you want to grant it Agent access."
+        )
+    existing_agent = service.get_agent_profile(str(existing["id"])) if existing else None
+    if existing_agent and existing_agent.get("company_id") is not None:
+        company_id = int(existing_agent["company_id"])
+        company_name = str((service.get_company(company_id) or {}).get("company_name") or "")
+    else:
+        company_id, company_name = _resolve_assignment(service, payload)
+
     invited = False
     if existing is not None:
-        if not payload.allow_existing:
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    "This email already belongs to an existing Supabase account. "
-                    "Repeat the request with allow_existing=true to explicitly "
-                    "grant staff access to that account."
-                ),
-            )
         auth_user_id = str(existing["id"])
     else:
         invited_user = service.invite_staff_user(
@@ -487,8 +499,7 @@ def create_agent(
 
     # Agent profile in the existing public.agent table (links auth identity
     # to listing assignments via agent.user_id).
-    company_id, company_name = _resolve_assignment(service, payload)
-    agent_profile = service.create_agent_profile(
+    agent_profile = existing_agent or service.create_agent_profile(
         user_id=auth_user_id,
         agent_name=payload.full_name,
         company_id=company_id,
@@ -1325,6 +1336,7 @@ def staff_summary(
 def staff_overview(
     admin: AdminMfaUser,
     user_service: UserService = Depends(get_user_service),
+    session: Session = Depends(get_db),
 ) -> dict:
     """Agent management snapshot: read each Supabase table only once.
 
@@ -1345,6 +1357,18 @@ def staff_overview(
         company_rows=company_rows,
         invitation_rows=invitation_rows,
     )
+    assignments: dict[int, list[dict]] = {}
+    for row in AgentAssignmentRepository(session).list_all():
+        if not row["property_exists"]:
+            continue
+        assignments.setdefault(row["agent_id"], []).append({
+            "property_id": row["listing_id"],
+            "name": row["name"],
+            "inspection_status": _workload_status(row),
+        })
+    for agent in agents:
+        agent_id = (agent["agent_profile"] or {}).get("agent_id")
+        agent["assigned_properties"] = assignments.get(int(agent_id), []) if agent_id else []
     summary = {
         "total_agents": len(agents),
         "active_agents": sum(
@@ -1375,6 +1399,62 @@ def staff_overview(
         "invitations": invitation_rows,
         "summary": summary,
     }
+
+
+def _workload_status(row: dict) -> str:
+    workflow = row.get("workflow_status")
+    stage = row.get("verification_status")
+    if workflow == "declined":
+        return "declined"
+    if stage == "approved":
+        return "completed"
+    if workflow == "needs_correction" or row.get("task_state") == "corrections":
+        return "needs_correction"
+    if workflow == "submitted" or row.get("task_state") == "awaiting_review" or stage == "under_review":
+        return "pending_review"
+    if workflow == "accepted":
+        return "ongoing"
+    if workflow == "requested":
+        return "requested"
+    return "unknown"
+
+
+@router.get("/dashboard")
+def admin_dashboard(admin: AdminMfaUser, session: Session = Depends(get_db)) -> dict:
+    result = dashboard_statistics(session)
+    counts: dict[int, dict[str, int]] = {}
+    assigned: dict[int, int] = {}
+    for row in AgentAssignmentRepository(session).list_all():
+        if row["property_exists"]:
+            status = _workload_status(row)
+            agent_id = int(row["agent_id"])
+            if status != "declined":
+                assigned[row["listing_id"]] = agent_id
+            workload = counts.setdefault(agent_id, {})
+            workload[status] = workload.get(status, 0) + 1
+
+    names_available = True
+    try:
+        names = {
+            int(row["agent_id"]): row.get("agent_name")
+            for row in _admin_service().list_agent_profiles()
+            if row.get("agent_id") is not None
+        }
+    except SupabaseAdminError:
+        logger.warning("Dashboard agent names unavailable", exc_info=True)
+        names = {}
+        names_available = False
+    result["workload"] = [
+        {"name": names.get(agent_id) or f"Agent {agent_id}", **counts.get(agent_id, {})}
+        for agent_id in sorted(names.keys() | counts.keys())
+    ]
+    result["workload_available"] = names_available or bool(counts)
+    for review in result["reviews"]:
+        agent_id = assigned.get(review["id"])
+        review["agent"] = (
+            names.get(agent_id) or "Name unavailable" if agent_id is not None else None
+        )
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -1632,6 +1712,190 @@ def _agent_profile_or_empty(service: SupabaseAdminService, user_id: uuid.UUID) -
         ) from exc
 
 
+#: Newest confirmed 360° panorama per property, produced by a COMPLETED capture
+#: session owned by this agent. This mirrors the canonical conditions in
+#: ``agent_inspection_policy.completed_agent_panorama`` (the single readiness
+#: classifier) as ONE batched query instead of a call per assignment: the
+#: canonical ``fyp.panoramas`` row written only by the confirmation endpoint is
+#: the evidence, never a client claim. The workflow-status part of that policy
+#: is applied per row in Python (``accepted`` / ``needs_correction`` only).
+_PANORAMA_SQL = """
+SELECT DISTINCT ON (p.property_id)
+       p.property_id, p.panorama_id, p.verification_status, p.created_at
+  FROM fyp.panoramas p
+  JOIN fyp.capture_sessions cs ON cs.id = p.session_id
+ WHERE p.property_id = ANY(:ids)
+   AND cs.property_id = p.property_id
+   AND cs.owner_id = :uid
+   AND cs.status = 'completed'
+   AND p.verification_status IS DISTINCT FROM 'rejected'
+   AND p.storage_path IS NOT NULL AND btrim(p.storage_path) <> ''
+ ORDER BY p.property_id, p.created_at DESC
+"""
+
+
+def _enrich_agent_rows(session: Session, agent_user_id: str, listings: list[dict]) -> None:
+    """Attach the authoritative agent-workflow facts to each assignment row.
+
+    Everything added here is READ from records that already exist — the
+    assignment row's own workflow columns, the single readiness classifier
+    ``agent_submission_readiness`` (reused verbatim, never reimplemented), and
+    the batched canonical-panorama query above. Screens classify tasks from
+    these fields; nothing is derived a second time on the client.
+
+    Rows whose operational property disappeared stay untouched: there is no
+    workflow to report for a property that no longer exists.
+    """
+    from sitewise.services.agent_inspection_policy import (
+        REQUIRED_INSPECTION,
+        agent_submission_readiness,
+    )
+
+    active = [
+        int(r["listing_id"]) for r in listings
+        if r.get("property_exists")
+        and r.get("workflow_status") in ("accepted", "needs_correction")
+    ]
+    panorama_by_property: dict[str, dict] = {}
+    if active:
+        try:
+            for p in session.execute(
+                text(_PANORAMA_SQL),
+                {"ids": [str(i) for i in active], "uid": str(agent_user_id)},
+            ).mappings().all():
+                created = p.get("created_at")
+                panorama_by_property[str(p["property_id"])] = {
+                    "panorama_id": str(p["panorama_id"]),
+                    "verification_status": p.get("verification_status"),
+                    "created_at": created.isoformat()
+                    if created is not None and hasattr(created, "isoformat") else None,
+                }
+        except Exception:  # noqa: BLE001 - evidence display must not void the listing read
+            logger.warning("Panorama batch lookup failed; reporting without it.", exc_info=True)
+
+    for row in listings:
+        if not row.get("property_exists"):
+            continue
+        workflow = row.get("workflow_status")
+        inspection = row.get("inspection_data") or {}
+        row["assignment_status"] = workflow
+        row["inspection_checks_completed"] = sum(
+            1 for key in REQUIRED_INSPECTION if inspection.get(key) is True
+        )
+        row["inspection_checks_total"] = len(REQUIRED_INSPECTION)
+        confirmed = panorama_by_property.get(str(row["listing_id"]))
+        row["panorama_record_id"] = confirmed["panorama_id"] if confirmed else None
+        row["panorama_verification_status"] = (
+            confirmed["verification_status"] if confirmed else None
+        )
+        readiness = None
+        if workflow in ("accepted", "needs_correction"):
+            readiness = agent_submission_readiness(
+                session,
+                int(row["listing_id"]),
+                row,
+                row,
+                confirmed["panorama_id"] if confirmed else None,
+            )
+            row["submission_readiness"] = readiness
+        row["next_action"], row["next_action_owner"] = _next_agent_action(row, readiness)
+
+
+def _next_agent_action(row: dict, readiness: dict | None) -> tuple[str | None, str]:
+    """The single next step the records support, and who owns it.
+
+    Returned as ``(action, owner)`` where owner is ``agent`` | ``owner`` |
+    ``admin`` | ``system`` | ``none``. An agent is never told to upload a
+    document only the property owner can produce, and nothing is offered that
+    the backend would refuse.
+    """
+    workflow = row.get("workflow_status")
+    stage = (row.get("verification_status") or "").strip()
+
+    if workflow == "requested":
+        return "review_request", "agent"
+    if workflow == "declined":
+        return None, "none"
+    if stage in ("pending", "under_review") or workflow == "submitted":
+        return "await_admin_review", "admin"
+    if stage == "rejected" or row.get("task_state") == "corrections" or workflow == "needs_correction":
+        return "review_corrections", "agent"
+    if stage == "approved":
+        return ("view_published", "agent") if row.get("is_published") else (None, "admin")
+
+    if workflow in ("accepted", "needs_correction") and readiness is not None:
+        # Owner responsibility comes first: an agent cannot substitute for the
+        # owner's readable, submitted ownership proof.
+        if not readiness.get("ownership_proof_uploaded") or readiness.get(
+            "ownership_submission_status"
+        ) not in ("pending", "under_review", "verified"):
+            return "await_owner_proof", "owner"
+        if readiness.get("missing_property_fields"):
+            return "complete_details", "agent"
+        if readiness.get("missing_inspection_checks"):
+            return "continue_inspection", "agent"
+        if readiness.get("enrichment_running"):
+            return "wait_enrichment", "system"
+        if not readiness.get("panorama_confirmed"):
+            return "capture_panorama", "agent"
+        if readiness.get("ready"):
+            return "submit_for_review", "agent"
+    return None, "none"
+
+
+def _agent_counts(rows: list[dict]) -> dict:
+    """Workflow counts over the SAME enriched rows the response returns.
+
+    Rules the specification fixes:
+    * a declined assignment is a closed record — never an active inspection;
+    * a property is only "in progress" / "ready" when its assignment is
+      actually accepted (or under correction) and not yet submitted — a draft
+      with no workflow behind it is not actionable inspection work;
+    * "approved" and "published" are separate: an approved-but-unpublished
+      property is not live.
+    """
+    counts = {
+        "total": len(rows),
+        "new_requests": 0,
+        "accepted": 0,
+        "inspections_in_progress": 0,
+        "ready_to_submit": 0,
+        "awaiting_admin_review": 0,
+        "corrections_required": 0,
+        "approved": 0,
+        "published": 0,
+        "declined": 0,
+    }
+    for row in rows:
+        workflow = row.get("workflow_status")
+        stage = (row.get("verification_status") or "").strip()
+        readiness = row.get("submission_readiness") or {}
+        if workflow == "requested":
+            counts["new_requests"] += 1
+        elif workflow == "accepted":
+            counts["accepted"] += 1
+        elif workflow == "declined":
+            counts["declined"] += 1
+        if workflow in ("accepted", "needs_correction") and stage in ("", "draft"):
+            if readiness.get("ready"):
+                counts["ready_to_submit"] += 1
+            else:
+                counts["inspections_in_progress"] += 1
+        if stage in ("pending", "under_review") or workflow == "submitted":
+            counts["awaiting_admin_review"] += 1
+        if (
+            stage == "rejected"
+            or row.get("task_state") == "corrections"
+            or workflow == "needs_correction"
+        ):
+            counts["corrections_required"] += 1
+        if stage == "approved":
+            counts["approved"] += 1
+        if row.get("is_published"):
+            counts["published"] += 1
+    return counts
+
+
 @router.get("/me/listings")
 def my_assigned_listings(
     agent: AgentMfaUser, session: Session = Depends(get_db)
@@ -1651,11 +1915,16 @@ def my_assigned_listings(
     show the real agency name, never the bare id). The join is additive
     display data: a failed lookup leaves ``company_name`` absent rather than
     failing the authorized listing read.
+
+    Each row additionally carries the authoritative workflow facts (see
+    ``_enrich_agent_rows``) and the response carries a ``counts`` block
+    computed from those same rows (see ``_agent_counts``). Both are additive:
+    existing consumers of ``{agent, listings}`` are unaffected.
     """
     service = _admin_service()
     profile = _agent_profile_or_empty(service, agent.user_id)
     if profile is None:
-        return {"agent": None, "listings": []}
+        return {"agent": None, "listings": [], "counts": _agent_counts([])}
     try:
         raw_company_id = profile.get("company_id")
         company = (
@@ -1674,7 +1943,7 @@ def my_assigned_listings(
         # become a 500 here: every other agent-identity reader treats a missing
         # id as "no scope", and a failure on this read blanked the whole Agent
         # workspace rather than reporting an empty one.
-        return {"agent": profile, "listings": []}
+        return {"agent": profile, "listings": [], "counts": _agent_counts([])}
     listings = AgentAssignmentRepository(session).list_for_agent(int(raw_agent_id))
     # The derived management state travels with each row so the workspace never
     # has to assume "I am the manager" — a row reassigned elsewhere, or an
@@ -1684,7 +1953,12 @@ def my_assigned_listings(
     )
     for row in listings:
         row["management"] = management.get(int(row["listing_id"]))
-    return {"agent": profile, "listings": listings}
+    _enrich_agent_rows(session, agent.user_id, listings)
+    return {
+        "agent": profile,
+        "listings": listings,
+        "counts": _agent_counts(listings),
+    }
 
 
 def _require_listing_access(

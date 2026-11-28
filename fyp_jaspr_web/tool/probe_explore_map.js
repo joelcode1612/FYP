@@ -3,7 +3,7 @@
  * `web/sitewise_combined_explore.js` against the BUILT site output, without
  * needing a signed-in session:
  *
- *   1. Static assets exist (vendored Leaflet, cluster plugin, explore JS/CSS).
+ *   1. Static assets exist (local Leaflet, clustering and MapLibre assets).
  *   2. index.html loads them in the documented order, before the app bundle.
  *   3. /entrepreneur/explore is routed (anonymous visitors are redirected to
  *      the login screen with the destination preserved — the app guard).
@@ -96,6 +96,8 @@ const FIXTURE_HTML = `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="/vendor/leaflet/MarkerCluster.css">
+<link rel="stylesheet" href="/vendor/maplibre/maplibre-gl.css">
+<link rel="stylesheet" href="/sitewise_basemap.css">
 <link rel="stylesheet" href="/sitewise_combined_explore.css">
 <style>body{margin:0}#swcx-leaflet{height:550px;width:900px}</style>
 </head><body>
@@ -105,9 +107,12 @@ const FIXTURE_HTML = `<!DOCTYPE html>
      data-nearby='${NEARBY.replace(/'/g, '&#39;')}'></div>
 <button id="swcx-selection-bridge" type="button" tabindex="-1"
         aria-hidden="true" style="display:none"></button>
-<script src="/map-config.js"></script>
 <script src="/vendor/leaflet/leaflet.js"></script>
 <script src="/vendor/leaflet/leaflet.markercluster.js"></script>
+<script src="/vendor/maplibre/maplibre-gl.js"></script>
+<script src="/vendor/maplibre/leaflet-maplibre-gl.js"></script>
+<script src="/sitewise_basemap.js"></script>
+<script>L.Map.addInitHook(function () { window.fixtureLeafletMap = this; });</script>
 <script src="/sitewise_combined_explore.js"></script>
 <script>
   window.__results = {};
@@ -129,8 +134,10 @@ const FIXTURE_HTML = `<!DOCTYPE html>
       !!document.querySelector('#swcx-leaflet .leaflet-pane');
     results.markersRendered =
       document.querySelectorAll('#swcx-leaflet .swcx-pin').length;
-    results.radiusCircleDrawn =
-      !!document.querySelector('#swcx-leaflet path.leaflet-interactive, #swcx-leaflet svg path');
+    results.radiusCircleDrawn = false;
+    window.fixtureLeafletMap.eachLayer(layer => {
+      if (layer instanceof L.Circle && layer.getRadius() === 500) results.radiusCircleDrawn = true;
+    });
     results.selectedMarkerPresent =
       !!document.querySelector('#swcx-leaflet .swcx-pin--selected');
     const pins = [...document.querySelectorAll('#swcx-leaflet .swcx-pin')];
@@ -177,14 +184,14 @@ const FIXTURE_HTML = `<!DOCTYPE html>
     const mount = host.querySelector(':scope > .swcx-map-mount');
     results.mountIsChild = !!mount && mount.classList.contains('leaflet-container');
     results.hostHasNoLeafletClass = !host.classList.contains('leaflet-container');
-    const tileWidth = () => {
-      const t = document.querySelector('#swcx-leaflet img.leaflet-tile');
-      return t ? Math.round(t.getBoundingClientRect().width) : 0;
+    const backgroundWidth = () => {
+      const canvas = mount.querySelector('.leaflet-tile-pane canvas.maplibregl-canvas');
+      return canvas ? Math.round(canvas.getBoundingClientRect().width) : 0;
     };
-    results.tileWidthBeforeRewrite = tileWidth();
+    results.backgroundWidthBeforeRewrite = backgroundWidth();
     host.setAttribute('class', 'swcx-map-canvas');
     await settle(250);
-    results.tileWidthAfterRewrite = tileWidth();
+    results.backgroundWidthAfterRewrite = backgroundWidth();
     results.panesAfterRewrite =
       document.querySelectorAll('#swcx-leaflet .leaflet-pane').length;
    } catch (e) {
@@ -205,6 +212,11 @@ const FIXTURE_HTML = `<!DOCTYPE html>
     '/vendor/leaflet/leaflet.markercluster.js',
     '/vendor/leaflet/leaflet.css',
     '/vendor/leaflet/MarkerCluster.css',
+    '/vendor/maplibre/maplibre-gl.js',
+    '/vendor/maplibre/leaflet-maplibre-gl.js',
+    '/vendor/maplibre/maplibre-gl.css',
+    '/sitewise_basemap.js',
+    '/sitewise_basemap.css',
     '/sitewise_combined_explore.js',
     '/sitewise_combined_explore.css',
   ]) {
@@ -229,11 +241,21 @@ const FIXTURE_HTML = `<!DOCTYPE html>
     'explore script executes before the app bundle',
     pos('/sitewise_combined_explore.js') < pos('/main.client.dart.js'),
   );
+  const mapScripts = [
+    '/vendor/leaflet/leaflet.js',
+    '/vendor/maplibre/maplibre-gl.js',
+    '/vendor/maplibre/leaflet-maplibre-gl.js',
+    '/sitewise_basemap.js',
+    '/sitewise_combined_explore.js',
+  ].map(pos);
+  check('MapLibre and its Leaflet adapter load before Explore',
+    mapScripts.every((offset, index) => offset >= 0 &&
+      (index === 0 || offset > mapScripts[index - 1])));
 
   const browser = await chromium.launch({
     executablePath:
       'C:/Users/Lenovo/AppData/Local/ms-playwright/chromium-1248/chrome-win64/chrome.exe',
-    args: ['--no-proxy-server'],
+    args: ['--no-proxy-server', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
   });
 
   // --- 3. route + anonymous guard -------------------------------------------
@@ -325,14 +347,14 @@ const FIXTURE_HTML = `<!DOCTYPE html>
     );
     check('framework canvas carries no Leaflet class', r.hostHasNoLeafletClass);
     check(
-      'tiles render at full size',
-      r.tileWidthBeforeRewrite === 256,
-      `${r.tileWidthBeforeRewrite}px`,
+      'vector canvas covers the Leaflet map',
+      r.backgroundWidthBeforeRewrite >= 900,
+      `${r.backgroundWidthBeforeRewrite}px`,
     );
     check(
-      'tiles survive a framework class rewrite',
-      r.tileWidthAfterRewrite === 256,
-      `${r.tileWidthAfterRewrite}px`,
+      'vector canvas survives a framework class rewrite',
+      r.backgroundWidthAfterRewrite === r.backgroundWidthBeforeRewrite,
+      `${r.backgroundWidthAfterRewrite}px`,
     );
     check(
       'map panes survive a framework class rewrite',
@@ -365,12 +387,8 @@ const FIXTURE_HTML = `<!DOCTYPE html>
 
     // --- regression: wheel over the map zooms (Google-Maps-like) ------------
     const zoom = await fixturePage.evaluate(async () => {
-      const zoomSet = () => [...new Set(
-        [...document.querySelectorAll('#swcx-leaflet img.leaflet-tile')]
-          .map((t) => Number((t.src.split('light_all/')[1] || '').split('/')[0]))
-          .filter((n) => Number.isFinite(n) && n > 0),
-      )].sort((a, b) => a - b);
-      const before = zoomSet();
+      const map = window.fixtureLeafletMap;
+      const before = map.getZoom();
       const settle = (ms) => new Promise((r) => setTimeout(r, ms));
       document
         .querySelector('#swcx-leaflet .swcx-map-mount')
@@ -379,11 +397,11 @@ const FIXTURE_HTML = `<!DOCTYPE html>
           clientX: 450, clientY: 275,
         }));
       await settle(900);
-      return { before, after: zoomSet() };
+      return { before, after: map.getZoom() };
     });
     check(
       'wheel over the map zooms (Google-Maps-like)',
-      zoom.after.some((z) => !zoom.before.includes(z)),
+      zoom.after > zoom.before,
       `${JSON.stringify(zoom.before)} -> ${JSON.stringify(zoom.after)}`,
     );
   } finally {

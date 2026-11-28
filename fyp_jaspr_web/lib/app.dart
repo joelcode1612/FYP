@@ -6,6 +6,7 @@ import 'package:shared_logic/shared_logic.dart';
 import 'package:sitewise_jaspr_web/core/di/app_locator.dart';
 import 'package:sitewise_jaspr_web/features/authentication/data/auth_service.dart';
 import 'package:sitewise_jaspr_web/features/authentication/data/dev_auth_bypass.dart';
+import 'package:sitewise_jaspr_web/core/routing/landing_routes.dart';
 import 'package:sitewise_jaspr_web/core/routing/ssr_service.dart';
 import 'package:sitewise_jaspr_web/features/authentication/application/workspaces.dart';
 import 'package:sitewise_jaspr_web/features/authentication/presentation/pages/auth_callback_page.dart';
@@ -76,6 +77,7 @@ import 'package:sitewise_jaspr_web/features/administration/presentation/pages/ca
     as a_campaigns;
 import 'package:sitewise_jaspr_web/features/administration/presentation/pages/dashboard_page.dart'
     as a_dashboard;
+import 'package:sitewise_jaspr_web/features/administration/presentation/pages/activity_page.dart';
 import 'package:sitewise_jaspr_web/features/administration/presentation/pages/listing_detail_page.dart'
     as a_listing_detail;
 import 'package:sitewise_jaspr_web/features/administration/presentation/pages/listings_page.dart'
@@ -140,6 +142,14 @@ class SitewiseApp extends StatelessComponent {
       child: Router(
         redirect: (context, state) {
           final path = Uri.parse(state.location).path;
+          // Public landing sections are real paths, not fragments. `/` and the
+          // legacy `/landing` alias are replaced rather than rendered, so the
+          // back stack never holds two addresses for the same page and every
+          // public navigation URL is a clean path. The query string is kept.
+          if (path == '/' || path == '/landing') {
+            final uri = Uri.parse(state.location);
+            return uri.replace(path: LandingRoutes.home).toString();
+          }
           // Retired verification pages (consolidated into Admin Listings and
           // its detail): old links land on the unified review queue, keeping
           // the listing id where one was present.
@@ -216,7 +226,7 @@ class SitewiseApp extends StatelessComponent {
               child: EmptyState(
                 title: 'Page not found',
                 body: 'This address does not match a Sitewise page.',
-                action: ActionLink('Back to home', href: '/'),
+                action: ActionLink('Back to home', href: LandingRoutes.home),
               ),
             ),
             title: 'Page not found — Sitewise',
@@ -225,22 +235,8 @@ class SitewiseApp extends StatelessComponent {
         },
         routes: [
           // --- Public ----------------------------------------------------------
-          Route(
-            path: '/',
-            builder: (context, state) => _page(
-              const LandingPage(),
-              title: 'Sitewise — F&B Location Intelligence',
-              description: kSiteDescription,
-            ),
-          ),
-          Route(
-            path: '/landing',
-            builder: (context, state) => _page(
-              const LandingPage(),
-              title: 'Sitewise — F&B Location Intelligence',
-              description: kSiteDescription,
-            ),
-          ),
+          // One continuous landing page; each section URL is a real path.
+          for (final path in LandingRoutes.paths) _landingRoute(path),
           Route(
             path: '/login',
             builder: (context, state) => _page(
@@ -336,7 +332,10 @@ class SitewiseApp extends StatelessComponent {
           Route(
             path: '/admin/agents',
             builder: (context, state) => _page(
-              const AdminAgentsPage(),
+              AdminAgentsPage(
+                openInvitation:
+                    Uri.parse(state.location).queryParameters['invite'] == '1',
+              ),
               title: 'Agents — Sitewise admin',
               description: 'Issue agent accounts and manage staff access.',
             ),
@@ -396,6 +395,13 @@ class SitewiseApp extends StatelessComponent {
                 title: 'Listing detail — Sitewise admin',
               );
             },
+          ),
+          Route(
+            path: '/admin/activity',
+            builder: (context, state) => _page(
+              const AdminActivityPage(),
+              title: 'System activity — Sitewise admin',
+            ),
           ),
           Route(
             path: '/admin/profile',
@@ -818,6 +824,18 @@ const String kSiteDescription =
     'Sitewise — evidence-based F&B commercial property selection. Compare '
     'locations by population, accessibility, competition and demand before '
     'you commit.';
+
+/// Every public landing path renders the SAME component. No second landing
+/// page and no second router: only the URL path changes, and `LandingPage`
+/// uses it to scroll the matching section of the continuous page.
+Route _landingRoute(String path) => Route(
+      path: path,
+      builder: (context, state) => _page(
+        const LandingPage(),
+        title: 'Sitewise — F&B Location Intelligence',
+        description: kSiteDescription,
+      ),
+    );
 
 /// Wraps [child] with the document head for that route.
 ///

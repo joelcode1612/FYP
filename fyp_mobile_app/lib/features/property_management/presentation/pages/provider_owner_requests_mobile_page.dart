@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'package:fyp/core/di/service_locator.dart';
+import 'package:fyp/features/property_management/data/primary_property_photo_service.dart';
 import 'package:fyp/core/theme/sitewise_m3.dart';
 import 'package:fyp/core/theme/sitewise_theme.dart';
 import 'package:fyp/features/dashboard/application/provider_dashboard_controller.dart';
 import 'package:fyp/features/property_management/domain/entities/provider_models.dart';
 import 'package:fyp/shared/presentation/components/provider_ui.dart';
+import 'package:fyp/shared/presentation/components/provider_card_actions.dart';
 
 /// Owner-only: create an Agent request from a real owned property.
 /// The server validates the Owner, Agent identity and property lifecycle.
@@ -31,6 +33,38 @@ class _OwnerRequestsState
   final Map<int, String> agentNames = {};
   final Map<int, List<String>> missingDetails = {};
   int _refreshRevision = 0;
+  // SITEWISE_PRIMARY_PHOTO_UI_V1
+  final Map<int, PrimaryPropertyPhoto?> _primaryPhotos = {};
+  final Set<int> _photoUnavailable = {};
+  PrimaryPropertyPhotoService get _photoService => PrimaryPropertyPhotoService(ServiceLocator.apiClient);
+  bool _hasPrimaryPhoto(int id) => _primaryPhotos[id] != null && !_photoUnavailable.contains(id);
+
+  /// Read-only readiness checklist above the two-button action bar.
+  ///
+  /// The property photo is added once, in the Add Property wizard's photo
+  /// step; this card only reports whether one exists, because a request
+  /// cannot be sent without it. No upload control lives here: each property
+  /// exposes exactly two actions — Upload proof and Send request.
+  Widget _requestReadiness(ProviderListing property) {
+    final id = property.id;
+    final known = _primaryPhotos.containsKey(id) && !_photoUnavailable.contains(id);
+    final missing = missingDetails[id];
+    final proof = proofStatuses[id];
+    final photoLine = !known
+        ? 'Property photo: Checking'
+        : _hasPrimaryPhoto(id)
+            ? 'Property photo: Uploaded'
+            : 'Property photo: Not added yet — add one from the property details';
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      const Text('Before requesting an Agent', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+      const SizedBox(height: 8),
+      Text(missing == null ? 'Property details: Checking' : missing.isEmpty ? 'Property details: Complete' : 'Property details: Agent can collect remaining information'),
+      const SizedBox(height: 8),
+      Text(photoLine),
+      const SizedBox(height: 8),
+      Text(proof == null ? 'Ownership proof: Not uploaded or not confirmed' : proof == 'active' ? 'Ownership proof: Uploaded' : 'Ownership proof: ${proof.replaceAll('_', ' ')}'),
+    ]);
+  }
 
   @override
   void initState() {
@@ -63,7 +97,7 @@ class _OwnerRequestsState
 
   Future<void> refresh() async {
     final revision = ++_refreshRevision;
-    if (mounted) setState(() => error = null);
+    if (mounted) setState(() { error = null; _primaryPhotos.clear(); _photoUnavailable.clear(); });
     try {
       final rows = await ref.read(providerDashboardProvider.future);
       for (final property in rows.listings) {
@@ -72,6 +106,14 @@ class _OwnerRequestsState
           '/api/v1/provider-flow/properties/${property.id}/assignment',
         );
         if (!mounted || revision != _refreshRevision) return;
+        try {
+          final primary = await _photoService.read('${property.id}');
+          if (!mounted || revision != _refreshRevision) return;
+          setState(() => _primaryPhotos[property.id] = primary);
+        } catch (_) {
+          if (!mounted || revision != _refreshRevision) return;
+          setState(() => _photoUnavailable.add(property.id));
+        }
         final data = r['data'];
         if (r.containsKey('ownership_proof_status')) {
           final proof = r['ownership_proof_status'];
@@ -130,6 +172,10 @@ class _OwnerRequestsState
   }
 
   Future<void> requestAgent(ProviderListing property) async {
+    if (!_hasPrimaryPhoto(property.id)) {
+      if (mounted) setState(() => requestError = 'Upload a property photo before requesting an Agent.');
+      return;
+    }
     if (busy) return; // SITEWISE_AGENT_DETAILS_COMPLETION_V1
     if (proofStatuses[property.id] != 'active' ||
         !const {'pending', 'under_review', 'verified'}.contains(
@@ -158,6 +204,13 @@ class _OwnerRequestsState
       requestError = null;
     });
     try {
+      // Recheck the persisted primary after Agent selection; the API remains authoritative.
+      final primary = await _photoService.read('${property.id}');
+      if (!mounted) return;
+      if (primary == null) {
+        setState(() { _primaryPhotos[property.id] = null; requestError = 'Upload a property photo before requesting an Agent.'; });
+        return;
+      }
       await ServiceLocator.apiClient.post(
         '/api/v1/provider-flow/properties/${property.id}/request-agent',
         {'agent_user_id': selected},
@@ -245,6 +298,10 @@ class _OwnerRequestsState
       );
       if (mounted) {
         setState(() => proofStatuses[property.id] = document.status);
+        // The uploaded proof changes the agent-side readiness (an assigned
+        // agent's dashboard reports "waiting for owner proof"); publish the
+        // change through the shared revision so those screens reload.
+        ServiceLocator.listingsRevision.value++;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Ownership proof uploaded successfully'),
@@ -554,7 +611,7 @@ class _OwnerRequestsState
     if (property.stage == ProviderStage.rejected) {
       return 'Review the feedback and update ownership proof if needed.';
     }
-    return 'Upload and submit ownership proof, then request an inspection.';
+    return 'Upload ownership proof, then send a request to an Agent.';
   }
 
   Widget _nextStepHint(String text) => Container(
@@ -617,6 +674,30 @@ class _OwnerRequestsState
     }
   }
 
+  /// Sends the Agent request. When the uploaded proof has not been submitted
+  /// for verification yet, that submission happens first: the server requires
+  /// an ownership submission status before it accepts a request, and this card
+  /// deliberately exposes only two actions.
+  Future<void> _sendRequest(ProviderListing property) async {
+    if (busy) return;
+    if (proofStatuses[property.id] != 'active') {
+      setState(() => requestError = 'Upload ownership proof first.');
+      return;
+    }
+    final review = ownershipReviewStatuses[property.id] ?? 'not_submitted';
+    if (!const {'pending', 'under_review', 'verified'}.contains(review)) {
+      await _submitOwnership(property);
+      if (!mounted) return;
+      // A failed submission has already published the server's own sentence.
+      if (!const {'pending', 'under_review', 'verified'}.contains(
+        ownershipReviewStatuses[property.id] ?? 'not_submitted',
+      )) {
+        return;
+      }
+    }
+    await requestAgent(property);
+  }
+
   Widget _requestButtons(ProviderListing property) {
     final raw = statuses[property.id]?.trim().toLowerCase() ?? '';
     final outstanding = const <String>{
@@ -624,64 +705,47 @@ class _OwnerRequestsState
       'accepted',
       'submitted',
     }.contains(raw);
-    final uploadButton = OutlinedButton.icon(
-      onPressed: busy ? null : () => uploadOwnershipProof(property),
-      icon: const Icon(Icons.upload_file_outlined, size: 18),
-      label: const Text('Upload proof', maxLines: 1),
-      style: OutlinedButton.styleFrom(
-        minimumSize: const Size.fromHeight(48),
-        foregroundColor: SitewiseColors.action,
-        side: const BorderSide(color: SitewiseColors.action),
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-      ),
-    );
     final missing = missingDetails[property.id];
     final ownershipStatus = ownershipReviewStatuses[property.id] ?? 'not_submitted';
-    final proofActions = Column(
+    final proofUploaded = proofStatuses[property.id] == 'active';
+    final photoReady = _hasPrimaryPhoto(property.id);
+
+    // Exactly two actions per property: upload the proof, then send the
+    // request. Submitting the proof for verification is folded into
+    // Send request, so no third button is needed.
+    final actions = <ProviderCardAction>[
+      if (!outstanding)
+        ProviderCardAction(
+          label: 'Send request',
+          icon: Icons.send_outlined,
+          tooltip: !photoReady
+              ? 'Add a property photo in the property details first.'
+              : !proofUploaded
+                  ? 'Upload ownership proof first.'
+                  : null,
+          onPressed: busy || missing == null || !photoReady || !proofUploaded
+              ? null
+              : () => _sendRequest(property),
+          emphasis: ProviderCardActionEmphasis.primary,
+        ),
+      ProviderCardAction(
+        label: 'Upload proof',
+        icon: Icons.upload_file_outlined,
+        onPressed: busy ? null : () => uploadOwnershipProof(property),
+        emphasis: outstanding
+            ? ProviderCardActionEmphasis.primary
+            : ProviderCardActionEmphasis.secondary,
+      ),
+    ];
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        uploadButton,
-        if (ownershipStatus != 'not_submitted')
+        ProviderCardActions(actions: actions),
+        if (ownershipStatus != 'not_submitted') ...[
+          const SizedBox(height: 12),
           Text('Ownership review: ${ownershipStatus.replaceAll('_', ' ')}'),
-        if (proofStatuses[property.id] == 'active' &&
-            const {'not_submitted', 'rejected', 'information_requested'}.contains(ownershipStatus))
-          OutlinedButton(
-            onPressed: busy ? null : () => _submitOwnership(property),
-            child: const Text('Submit ownership verification'),
-          ),
+        ],
       ],
-    );
-    if (outstanding) return proofActions;
-    final proofReady = proofStatuses[property.id] == 'active' &&
-        const {'pending', 'under_review', 'verified'}.contains(ownershipStatus);
-    final requestButton = FilledButton.icon(
-      onPressed: busy || missing == null || !proofReady
-          ? null
-          : () => requestAgent(property),
-      icon: const Icon(Icons.assignment_ind_outlined, size: 18),
-      label: const Text('Request Agent', maxLines: 1),
-      style: FilledButton.styleFrom(
-        minimumSize: const Size.fromHeight(48),
-        backgroundColor: SitewiseColors.action,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-      ),
-    );
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth < 325) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [proofActions, const SizedBox(height: 8), requestButton],
-          );
-        }
-        return Row(
-          children: [
-            Expanded(child: proofActions),
-            const SizedBox(width: 8),
-            Expanded(child: requestButton),
-          ],
-        );
-      },
     );
   }
 
@@ -706,6 +770,8 @@ class _OwnerRequestsState
             _nextStepHint(next),
           ],
           if (editable) ...[
+            const SizedBox(height: 12),
+            _requestReadiness(property),
             const SizedBox(height: 12),
             _requestButtons(property),
           ],
@@ -785,7 +851,7 @@ class _OwnerRequestsState
               else
                 for (final property in visible) ...[
                   _requestCard(property),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
                 ],
             ],
           );
@@ -984,6 +1050,17 @@ class _AgentSelectionSheetState extends State<_AgentSelectionSheet> {
                                   onPressed: _retry,
                                   icon: const Icon(Icons.refresh_rounded),
                                   label: const Text('Retry'),
+                                  style: OutlinedButton.styleFrom(
+                                    minimumSize: const Size(0, 48),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(
+                                        SitewiseM3.radiusPill,
+                                      ),
+                                    ),
+                                  ),
                                 ),
                               ],
                             ),
@@ -1019,19 +1096,32 @@ class _AgentSelectionSheetState extends State<_AgentSelectionSheet> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
                   FilledButton(
                     style: FilledButton.styleFrom(
                       minimumSize: const Size.fromHeight(52),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(
+                          SitewiseM3.radiusPill,
+                        ),
+                      ),
                     ),
                     onPressed: canSend
                         ? () => Navigator.of(context).pop(_selected)
                         : null,
                     child: const Text('Send request'),
                   ),
+                  const SizedBox(height: 12),
                   TextButton(
                     style: TextButton.styleFrom(
                       minimumSize: const Size.fromHeight(48),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(
+                          SitewiseM3.radiusPill,
+                        ),
+                      ),
                     ),
                     onPressed: () => Navigator.of(context).pop(),
                     child: const Text('Cancel'),

@@ -6,7 +6,7 @@ import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
-import 'package:sitewise_jaspr_web/features/administration/presentation/components/agent_assignment_control.dart';
+// Agent assignment is now rendered in the review summary.
 import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart';
 import 'package:sitewise_jaspr_web/features/property_verification/presentation/components/verification_detail_view.dart';
 import 'package:sitewise_jaspr_web/shared/presentation/layouts/app_layout.dart';
@@ -35,6 +35,12 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
   void initState() {
     super.initState();
     _load(component.id);
+  }
+
+  @override
+  void didUpdateComponent(covariant ListingDetailPage oldComponent) {
+    super.didUpdateComponent(oldComponent);
+    if (oldComponent.id != component.id) _load(component.id);
   }
 
   void _load(String id) {
@@ -67,17 +73,8 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
 
     return _page(
       matches
-          ? div(classes: 'stack stack--sections admin-listing-review-v3 sw-review-polish', [
-              const ActionLink(
-                'Back to listings',
-                href: '/admin/listings',
-                variant: 'ghost',
-                icon: 'arrow_back',
-              ),
+          ? div(classes: 'stack stack--sections admin-listing-review-v3 sw-review-polish sw-review-reference', [
               const VerificationDetailView(showPanorama: true),
-              div(classes: 'sw-review-agent-card', [
-                AgentAssignmentControl(propertyId: _loadedId),
-              ]),
             ])
           : div(classes: 'card stack', [
               if (error != null && !loading) ...[
@@ -98,11 +95,17 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
   Component _page(Component child) {
     return AppLayout(
       role: AppRole.admin,
-      currentRoute: '/admin/listings',
-      title: 'Listing detail',
-      eyebrow: 'Verification',
-      subtitle:
-          'Review property details, inspection evidence and publication status.',
+      currentRoute: '/admin/listing-detail',
+      title: 'Listing review',
+      eyebrow: 'Admin / Property management',
+      actions: const [
+        ActionLink(
+          'Back to listings',
+          href: '/admin/listings',
+          variant: 'secondary',
+          icon: 'arrow_back',
+        ),
+      ],
       child: div(classes: 'sw-admin-review-v2', [child]),
     );
   }
@@ -115,11 +118,6 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
           'No property matches this id. It may have been removed.',
         ),
       ]),
-      const ActionLink(
-        'Back to listings',
-        href: '/admin/listings',
-        variant: 'secondary',
-      ),
     ]);
   }
 }

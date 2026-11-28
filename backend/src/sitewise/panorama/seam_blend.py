@@ -16,7 +16,12 @@ import math
 
 import numpy as np
 
-from .graph_cut_seams import find_seam_labels, seam_pixel_cost_at
+from .graph_cut_seams import (
+    SeamEnergyMaps,
+    build_seam_energy,
+    find_seam_labels,
+    seam_pixel_cost_at,
+)
 
 SEAM_COST_WEIGHT = 2.0
 GHOST_VISIBLE_DELTA = 24.0
@@ -211,6 +216,18 @@ def composite_seams(
         )
 
     label = np.zeros(n, dtype=np.uint8)
+    # The two per-pixel cost maps are identical for the cut and for the
+    # boundary polish, so they are measured once and shared. Building them
+    # twice cost ~6 s per panorama on a 4096×2048 canvas.
+    energy = build_seam_energy(
+        width=width,
+        height=height,
+        best_colour=best_colour,
+        second_colour=second_colour,
+        best_frame=best_frame,
+        second_frame=second_frame,
+        channel_gains=gains,
+    )
     cut = find_seam_labels(
         width=width,
         height=height,
@@ -223,6 +240,7 @@ def composite_seams(
         min_weight=min_weight,
         seam_cost_weight=SEAM_COST_WEIGHT,
         channel_gains=gains,
+        energy=energy,
     )
     cut_used = cut is not None
     if cut is not None:
@@ -240,6 +258,7 @@ def composite_seams(
         second_frame=second_frame,
         min_weight=min_weight,
         channel_gains=gains,
+        energy=energy,
     )
 
     smoothed_spikes = smooth_isolated_seam_spikes(
@@ -414,6 +433,7 @@ def refine_seams(
     second_frame: np.ndarray,
     min_weight: float,
     channel_gains: np.ndarray | None = None,
+    energy: SeamEnergyMaps | None = None,
 ) -> int:
     """Moves ownership boundaries to where the two frames agree better."""
     moved = 0
@@ -421,35 +441,100 @@ def refine_seams(
     sf = second_frame
     bw = best_weight
     sw = second_weight
+    # The seam cost is the same for every candidate shift, so it is measured
+    # once for the canvas instead of once per probe. This was the second
+    # largest cost in the stitch: ~450 000 scalar cost evaluations, each
+    # re-deriving eight neighbour luminances in Python. The caller can hand in
+    # the maps it already built for the cut, so the canvas is measured once.
+    maps = energy
+    if maps is None:
+        maps = build_seam_energy(
+            width=width,
+            height=height,
+            best_colour=best_colour,
+            second_colour=second_colour,
+            best_frame=bf,
+            second_frame=sf,
+            channel_gains=channel_gains,
+        )
     for y in range(height):
         row = y * width
-        for x in range(width):
-            i = row + x
-            prev = row + ((x - 1) % width)
-            owner_prev = bf[prev] if label[prev] == 0 else sf[prev]
-            owner_here = bf[i] if label[i] == 0 else sf[i]
-            if owner_prev < 0 or owner_here < 0 or owner_prev == owner_here:
-                continue
-            if sw[prev] <= min_weight or sw[i] <= min_weight:
-                continue
-            moved += _try_shift_boundary(
+        # Only positions where the owner actually changes can host a boundary.
+        # Scanning all `width` pixels per row in Python cost more than the
+        # shifts themselves.
+        start = 0
+        while True:
+            owners, prev_owners, candidates = _row_boundaries(
                 label=label,
+                row=row,
                 width=width,
-                height=height,
-                row_start=row,
-                boundary=x,
-                left_owner=int(owner_prev),
-                right_owner=int(owner_here),
-                min_weight=min_weight,
                 best_frame=bf,
                 second_frame=sf,
-                best_weight=bw,
                 second_weight=sw,
-                best_colour=best_colour,
-                second_colour=second_colour,
-                channel_gains=channel_gains,
+                min_weight=min_weight,
             )
+            positions = np.nonzero(candidates)[0]
+            positions = positions[positions >= start]
+            if positions.size == 0:
+                break
+            shifted = False
+            for x in positions:
+                x = int(x)
+                step = _try_shift_boundary(
+                    label=label,
+                    width=width,
+                    height=height,
+                    row_start=row,
+                    boundary=x,
+                    left_owner=int(prev_owners[x]),
+                    right_owner=int(owners[x]),
+                    min_weight=min_weight,
+                    best_frame=bf,
+                    second_frame=sf,
+                    best_weight=bw,
+                    second_weight=sw,
+                    best_colour=best_colour,
+                    second_colour=second_colour,
+                    channel_gains=channel_gains,
+                    maps=maps,
+                )
+                if step:
+                    moved += step
+                    # The shift rewrote this row's labels, so the remaining
+                    # candidates are re-derived from the row's new state — the
+                    # sequential semantics of the original loop.
+                    start = x + 1
+                    shifted = True
+                    break
+            if not shifted:
+                break
     return moved
+
+
+def _row_boundaries(
+    *,
+    label: np.ndarray,
+    row: int,
+    width: int,
+    best_frame: np.ndarray,
+    second_frame: np.ndarray,
+    second_weight: np.ndarray,
+    min_weight: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Owner, previous owner and "is a boundary" for one row."""
+    labels = label[row : row + width]
+    owners = np.where(labels == 0, best_frame[row : row + width], second_frame[row : row + width])
+    prev_owners = np.roll(owners, 1)
+    weights = second_weight[row : row + width]
+    prev_weights = np.roll(weights, 1)
+    candidates = (
+        (owners >= 0)
+        & (prev_owners >= 0)
+        & (owners != prev_owners)
+        & (prev_weights > min_weight)
+        & (weights > min_weight)
+    )
+    return owners, prev_owners, candidates
 
 
 def _try_shift_boundary(
@@ -469,6 +554,7 @@ def _try_shift_boundary(
     best_colour: np.ndarray,
     second_colour: np.ndarray,
     channel_gains: np.ndarray | None,
+    maps: SeamEnergyMaps | None = None,
 ) -> int:
     def owner_at(i: int) -> int:
         return int(best_frame[i] if label[i] == 0 else second_frame[i])
@@ -491,6 +577,7 @@ def _try_shift_boundary(
             height=height,
             index=i,
             channel_gains=channel_gains,
+            maps=maps,
         )
         return SEAM_COST_WEIGHT * cost / 255.0
 

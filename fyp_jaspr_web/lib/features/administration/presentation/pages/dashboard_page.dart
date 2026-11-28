@@ -1,42 +1,14 @@
-import 'dart:async';
-
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
-import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
-import 'package:sitewise_jaspr_web/features/administration/presentation/components/admin_ops_kit.dart';
-import 'package:sitewise_jaspr_web/shared/presentation/components/dashboard_kit.dart';
-import 'package:sitewise_jaspr_web/shared/presentation/components/letter_reveal.dart';
-import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart';
-import 'package:sitewise_jaspr_web/features/administration/data/admin_api.dart';
 import 'package:sitewise_jaspr_web/core/di/app_locator.dart';
+import 'package:sitewise_jaspr_web/features/administration/presentation/components/admin_ops_kit.dart';
+import 'package:sitewise_jaspr_web/features/administration/data/admin_api.dart';
+import 'package:sitewise_jaspr_web/shared/presentation/components/dashboard_kit.dart';
+import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart';
 import 'package:sitewise_jaspr_web/shared/presentation/layouts/app_layout.dart';
 
-/// Admin console home, in the bento grid used across the app.
-///
-/// ```text
-/// .bento-head    eyebrow + greeting + actions
-/// .bento-kpis    4 KPI tiles (server-computed verification totals)
-/// .bento         hero (verification health) · wide (audit activity)
-///               · 3 work-queue cards
-/// ```
-///
-/// Every number comes from an authenticated, server-computed source:
-///
-/// * **Verification totals** — `GET /api/v1/staff/properties/` with no filters
-///   and `limit=1`. `total` and both dimensions' status facets are separate SQL
-///   aggregates over `property_verification ⋈ fyp.rental_properties`, so they
-///   cover every operational property regardless of page size. This is the same
-///   projection the Listings queue reads, which is why the two pages agree; the
-///   previous catalogue-filtered queue was a different property-ID universe.
-/// * **Accounts** — `GET /api/v1/users/`.
-/// * **Recent activity** — `GET /api/v1/staff/audit`, fetched by its own
-///   component so an audit failure cannot blank the rest of the dashboard.
-///
-/// No administrator tour-review workflow exists in the schema or the API, so
-/// the dashboard no longer renders a tour queue or KPI. Mobile tour capture and
-/// property-level tours are unaffected.
 @client
 class DashboardPage extends StatefulComponent {
   const DashboardPage({super.key});
@@ -46,590 +18,407 @@ class DashboardPage extends StatefulComponent {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
-  @override
-  void initState() {
-    super.initState();
-    // Deferred out of initState: the first controller publish would otherwise
-    // happen while the tree is still building.
-    Future.microtask(() {
-      if (!mounted) return;
-      final admin = context.read(adminNotifierProvider.notifier);
-      unawaited(admin.loadUsers());
-      unawaited(admin.loadVerificationSummary());
-    });
-  }
+  late Future<Map<String, dynamic>> _statistics = AppLocator.adminApi
+      .dashboard();
+  late Future<List<AuditEvent>> _activity = AppLocator.adminApi.listAudit();
 
   @override
-  Component build(BuildContext context) {
-    return AppLayout(
-      role: AppRole.admin,
-      currentRoute: '/admin',
-      title: 'Dashboard',
-      // The source dashboard has no page header — its first element is
-      // `.bento-head`. Rendering both produced two competing titles, which
-      // the source does not have.
-      showPageHead: false,
-      child: const _Shells(),
-    );
-  }
-}
-
-/// The verification slice the property regions render, selected as one value
-/// so a region rebuilds exactly when the totals or their error change.
-typedef _Summary = ({VerificationQueuePage? page, String? error});
-
-_Summary _summaryOf(AdminState state) =>
-    (page: state.verificationSummary, error: state.summaryError);
-
-/// A facet count. An absent status key means the server's `GROUP BY` matched no
-/// rows, i.e. a real zero — but only once a page has actually arrived. Before
-/// that the number is unknown and must not be rendered as `0`.
-int _facet(
-  VerificationQueuePage page,
-  VerificationDimension dimension,
-  PropertyVerificationStatus status,
-) => page.countOf(dimension, status) ?? 0;
-
-/// Loading shell, shown only while *nothing* has arrived yet. Each region owns
-/// its own error state, so one failed source never replaces the whole page.
-class _Shells extends StatelessComponent {
-  const _Shells();
-
-  @override
-  Component build(BuildContext context) {
-    final slice = context.watch(
-      adminNotifierProvider.select(
-        (state) => (
-          loading: state.loading,
-          hasUsers: state.users.isNotEmpty,
-          hasSummary: state.verificationSummary != null,
-        ),
+  Component build(BuildContext context) => AppLayout(
+    role: AppRole.admin,
+    currentRoute: '/admin',
+    title: 'Dashboard',
+    subtitle: 'Property, account and inspection activity.',
+    actions: const [
+      ActionLink('Review queue', href: '/admin/listings'),
+      ActionLink('Manage agents', href: '/admin/agents', variant: 'secondary'),
+      ActionLink('Manage users', href: '/admin/users', variant: 'secondary'),
+    ],
+    child: div(classes: 'admin-dashboard stack stack--sections', [
+      FutureBuilder<Map<String, dynamic>>(
+        future: _statistics,
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return SectionCard(
+              title: 'Dashboard statistics',
+              child: div(classes: 'stack', [
+                const InlineEmpty('Statistics are unavailable.'),
+                ActionButton(
+                  'Try again',
+                  variant: 'secondary',
+                  onClick: () {
+                    setState(() {
+                      _statistics = AppLocator.adminApi.dashboard();
+                    });
+                  },
+                ),
+              ]),
+            );
+          }
+          final data = snapshot.data;
+          return data == null
+              ? const Skeleton(variant: 'row', count: 4)
+              : _analytics(data);
+        },
       ),
-    );
-    if (slice.loading && !slice.hasUsers && !slice.hasSummary) {
-      return const BentoSkeleton();
-    }
-    return div(classes: 'stack', [
-      const _Head(),
-      const _KpisRegion(),
-      div(classes: 'bento', [
-        const _HealthRegion(),
-        const _RecentActivityCard(),
-        const _ListingQueueRegion(),
-        const _OwnershipQueueRegion(),
-        const _AccountQueueRegion(),
-      ]),
-      p(classes: 'stat-note', [
-        Component.text(
-          'Verification counts cover submitted properties, not the entire published catalogue.',
-        ),
-      ]),
-    ]);
-  }
-}
+      SectionCard(
+        title: 'Recent activity',
+        child: div(classes: 'stack', [
+          FutureBuilder<List<AuditEvent>>(
+            future: _activity,
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return div(classes: 'stack', [
+                  const InlineEmpty('Recent activity is unavailable.'),
+                  ActionButton(
+                    'Try again',
+                    variant: 'secondary',
+                    onClick: () {
+                      setState(() {
+                        _activity = AppLocator.adminApi.listAudit();
+                      });
+                    },
+                  ),
+                ]);
+              }
+              final events = snapshot.data;
+              if (events == null) {
+                return const Skeleton(variant: 'row', count: 3);
+              }
+              return events.isEmpty
+                  ? const InlineEmpty('No activity recorded yet.')
+                  : ol(classes: 'ad-viz-timeline', [
+                      for (final event in events.take(6))
+                        li([
+                          strong([
+                            Component.text(
+                              _label(event.action.split('.').last),
+                            ),
+                          ]),
+                          span(classes: 'muted', [
+                            Component.text(
+                              '${event.performedByEmail.isEmpty ? 'User not recorded' : event.performedByEmail} · ${_when(event.createdAt)}',
+                            ),
+                          ]),
+                        ]),
+                    ]);
+            },
+          ),
+          const ActionLink(
+            'View all activity',
+            href: '/admin/activity',
+            variant: 'secondary',
+          ),
+        ]),
+      ),
+    ]),
+  );
 
-// ------------------------------------------------------- scoped regions
-
-class _KpisRegion extends StatefulComponent {
-  const _KpisRegion();
-
-  @override
-  State<_KpisRegion> createState() => _KpisRegionState();
-}
-
-class _KpisRegionState extends State<_KpisRegion> {
-  StaffSummary? _staff;
-  String? _error;
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    Future.microtask(() { if (mounted) unawaited(_load()); });
-  }
-
-  Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
-    try {
-      final result = await AppLocator.adminApi.summary();
-      if (!mounted) return;
-      setState(() { _staff = result; _loading = false; });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() { _staff = null; _error = AdminApi.message(error); _loading = false; });
-    }
-  }
-
-  @override
-  Component build(BuildContext context) {
-    final summary = context.watch(adminNotifierProvider.select(_summaryOf));
-    final page = summary.page;
-    final note = summary.error == null ? 'Loading…' : 'Unavailable';
-    String count(VerificationDimension dimension, PropertyVerificationStatus status) =>
-        page == null ? '—' : '${_facet(page, dimension, status)}';
-    String pending(VerificationDimension dimension) => page == null ? '—' :
-        '${_facet(page, dimension, PropertyVerificationStatus.pending) + _facet(page, dimension, PropertyVerificationStatus.underReview)}';
-    return div(classes: 'stack', [
+  Component _analytics(Map<String, dynamic> data) {
+    final total = data['total_properties'] as int;
+    final published = data['published'] as int;
+    final verification = _counts(data['verification']);
+    final known = [
+      'not_submitted',
+      'pending',
+      'under_review',
+      'verified',
+      'information_requested',
+      'rejected',
+    ];
+    final other = verification.entries
+        .where((entry) => !known.contains(entry.key))
+        .fold(0, (sum, entry) => sum + entry.value);
+    final states = _counts(data['states']).entries.toList()
+      ..sort((first, second) => second.value.compareTo(first.value));
+    final types = _counts(data['types']).entries.toList()
+      ..sort((first, second) => second.value.compareTo(first.value));
+    return div(classes: 'stack stack--sections', [
       div(classes: 'bento-kpis', [
-        _linkedKpi('Properties in verification', page == null ? '—' : '${page.total}', page == null ? note : 'Verification records', '/admin/listings'),
-        _linkedKpi('Approved listings', count(VerificationDimension.listing, PropertyVerificationStatus.verified), page == null ? note : 'Listing verification completed', '/admin/listings'),
-        _linkedKpi('Listings awaiting review', pending(VerificationDimension.listing), page == null ? note : 'Pending and under review', '/admin/listings'),
-        _linkedKpi('Registered agents', _staff == null || _loading ? '—' : '${_staff!.totalAgents}', _loading ? 'Loading…' : _error != null ? 'Unavailable' : '${_staff!.activeAgents} active', '/admin/agents'),
+        _kpi('Total properties', total, '/admin/listings'),
+        _kpi('Published listings', published, '/admin/listings'),
+        _kpi(
+          'Pending property reviews',
+          data['pending_reviews'] as int,
+          '/admin/listings',
+        ),
+        _kpi(
+          'Registered users',
+          data['registered_users'] as int,
+          '/admin/users',
+        ),
       ]),
-      if (_error != null) ActionButton('Retry agent statistics', variant: 'secondary', onClick: _load),
-    ]);
-  }
-}
-
-Component _linkedKpi(String label, String value, String note, String route) =>
-    AppLink(to: route, classes: 'kpi', children: [
-      span(classes: 'k', [Component.text(label)]),
-      span(classes: 'v', [Component.text(value)]),
-      span(classes: 'n', [Component.text(note)]),
-    ]);
-
-/// Verification-health hero. Depends on the server totals only, so an account
-/// or audit emit never rebuilds it (or restarts the donut transition).
-class _HealthRegion extends StatelessComponent {
-  const _HealthRegion();
-
-  @override
-  Component build(BuildContext context) {
-    final summary = context.watch(adminNotifierProvider.select(_summaryOf));
-    return _healthCard(
-      summary,
-      () => unawaited(
-        context.read(adminNotifierProvider.notifier).loadVerificationSummary(),
+      div(classes: 'ad-viz-grid', [
+        SectionCard(
+          title: 'Publication status',
+          child: _donut([
+            ('Published', published),
+            ('Unpublished', total - published),
+          ]),
+        ),
+        SectionCard(
+          title: 'Verification status',
+          child: _bars([
+            ('Not submitted', verification['not_submitted'] ?? 0),
+            (
+              'Awaiting review',
+              (verification['pending'] ?? 0) +
+                  (verification['under_review'] ?? 0),
+            ),
+            ('Approved', verification['verified'] ?? 0),
+            ('Needs correction', verification['information_requested'] ?? 0),
+            ('Rejected', verification['rejected'] ?? 0),
+            if (other > 0) ('Other status', other),
+          ]),
+        ),
+        SectionCard(
+          title: 'Properties by state',
+          child: div(classes: 'stack', [
+            _bars(
+              states.take(6).map((entry) => (entry.key, entry.value)).toList(),
+            ),
+            if (states.length > 6)
+              details([
+                summary([const Component.text('View remaining states')]),
+                _bars(
+                  states
+                      .skip(6)
+                      .map((entry) => (entry.key, entry.value))
+                      .toList(),
+                  maximum: states.first.value,
+                ),
+              ]),
+          ]),
+        ),
+        SectionCard(
+          title: 'Property type',
+          child: _donut([for (final entry in types) (entry.key, entry.value)]),
+        ),
+        SectionCard(
+          title: 'Registered accounts',
+          child: _bars([
+            for (final entry in _counts(data['roles']).entries)
+              (
+                switch (entry.key) {
+                  'admin' => 'Administrator',
+                  'owner' => 'Property owner',
+                  'unknown' => 'Role not recorded',
+                  _ => _label(entry.key),
+                },
+                entry.value,
+              ),
+          ]),
+        ),
+        SectionCard(
+          title: 'Agent inspection workload',
+          child: _workload(
+            _rows(data['workload']),
+            data['workload_available'] == true,
+          ),
+        ),
+      ]),
+      SectionCard(
+        title: 'Awaiting property review',
+        child: _reviewTable(_rows(data['reviews'])),
       ),
-    );
-  }
-}
-
-class _ListingQueueRegion extends StatelessComponent {
-  const _ListingQueueRegion();
-
-  @override
-  Component build(BuildContext context) {
-    final summary = context.watch(adminNotifierProvider.select(_summaryOf));
-    return _verificationQueueCard(
-      summary,
-      VerificationDimension.listing,
-      'Listing verification',
-      'Review submitted property details and supporting evidence.',
-    );
-  }
-}
-
-class _OwnershipQueueRegion extends StatelessComponent {
-  const _OwnershipQueueRegion();
-
-  @override
-  Component build(BuildContext context) {
-    final summary = context.watch(adminNotifierProvider.select(_summaryOf));
-    return _verificationQueueCard(
-      summary,
-      VerificationDimension.ownership,
-      'Ownership verification',
-      'Review evidence that the submitter is authorised to rent out the property.',
-    );
-  }
-}
-
-class _AccountQueueRegion extends StatelessComponent {
-  const _AccountQueueRegion();
-
-  @override
-  Component build(BuildContext context) {
-    final slice = context.watch(
-      adminNotifierProvider.select(
-        (state) => (users: state.users, error: state.error),
-      ),
-    );
-    final users = slice.users;
-    if (users.isEmpty && slice.error != null) {
-      return div(classes: 'bento-card', [
-        div(classes: 'bento-card__head', [
-          h3([Component.text('Account management')]),
-          span(classes: 'card-note', [Component.text('Unavailable')]),
-        ]),
-        Callout(
-          'The account directory could not be read: ${slice.error}',
-          tone: 'danger',
-          icon: 'error',
-        ),
-        ActionButton(
-          'Try again',
-          variant: 'secondary',
-          onClick: () => unawaited(
-            context.read(adminNotifierProvider.notifier).loadUsers(),
-          ),
-        ),
-      ]);
-    }
-    final pending = users.where((user) => user.status == 'Pending').length;
-    return _queueCard(
-      'Account management',
-      '${users.length}',
-      'View and manage registered user accounts.',
-      '/admin/users',
-      pending: pending,
-    );
-  }
-}
-
-// -------------------------------------------------------------------- head
-
-class _Head extends StatelessComponent {
-  const _Head();
-
-  @override
-  Component build(BuildContext context) {
-    return div(classes: 'bento-head', [
-      div(classes: 'bh-title', [
-        span(classes: 'eyebrow-sm', [
-          Component.text('Staff portal · administrator'),
-        ]),
-        LetterRevealHeading.text('Dashboard', level: 1),
-        p(classes: 'muted', [
-          Component.text(
-            'Manage properties, review submissions and oversee user accounts.',
-          ),
-        ]),
-      ]),
-      div(classes: 'bh-actions', [
-        AppLink(
-          to: '/admin/listings',
-          classes: 'bento-cta',
-          children: [Component.text('Review queue')],
-        ),
-        AppLink(
-          to: '/admin/agents',
-          classes: 'bento-period',
-          children: [Component.text('Manage agents')],
-        ),
-        AppLink(
-          to: '/admin/users',
-          classes: 'bento-period',
-          children: [Component.text('Manage users')],
-        ),
-      ]),
     ]);
   }
 }
 
-// -------------------------------------------------------------------- KPIs
+Map<String, int> _counts(Object? raw) => Map<String, int>.from(raw as Map);
+List<Map<String, dynamic>> _rows(Object? raw) =>
+    (raw as List).cast<Map<String, dynamic>>();
 
-// ----------------------------------------------------- verification health
-
-/// Dark hero card: the share of verification submissions whose listing
-/// dimension is verified, plus the full status breakdown of both dimensions.
-Component _healthCard(_Summary summary, void Function() onRetry) {
-  final page = summary.page;
-
-  if (page == null) {
-    final failed = summary.error != null;
-    return div(classes: 'bento-hero', [
-      div(classes: 'bento-card__head', [
-        h3([Component.text('Property verification overview')]),
-        span(classes: 'hero-badge', [
-          Component.text(failed ? 'Unavailable' : 'Loading'),
-        ]),
-      ]),
-      div(classes: 'stack', [
-        span(classes: 'title', [
-          Component.text(
-            failed
-                ? 'Verification totals unavailable'
-                : 'Reading verification totals…',
-          ),
-        ]),
-        p(classes: 'hero-cap', [
-          Component.text(
-            failed
-                ? summary.error!
-                : 'Approval health appears here once the verification backend '
-                      'answers.',
-          ),
-        ]),
-        if (failed)
-          ActionButton('Try again', variant: 'secondary', onClick: onRetry),
-      ]),
-    ]);
-  }
-
-  final total = page.total;
-  if (total == 0) {
-    return div(classes: 'bento-hero', [
-      div(classes: 'bento-card__head', [
-        h3([Component.text('Property verification overview')]),
-        span(classes: 'hero-badge', [Component.text('No data')]),
-      ]),
-      div(classes: 'stack', [
-        span(classes: 'title', [Component.text('No submissions yet')]),
-        p(classes: 'hero-cap', [
-          Component.text(
-            'Approval health appears here once an owner submits a property '
-            'for verification.',
-          ),
-        ]),
-      ]),
-    ]);
-  }
-
-  final approved = _facet(
-    page,
-    VerificationDimension.listing,
-    PropertyVerificationStatus.verified,
-  );
-  final inFlight = total - approved;
-  final pct = approved * 100 ~/ total;
-
-  String breakdown(VerificationDimension dimension) => [
-    for (final status in PropertyVerificationStatus.values)
-      '${status.label} ${_facet(page, dimension, status)}',
-  ].join(' · ');
-
-  return div(classes: 'bento-hero', [
-    div(classes: 'bento-card__head', [
-      h3([Component.text('Property verification overview')]),
-      span(classes: 'hero-badge', [Component.text('$total submissions')]),
-    ]),
-    div(classes: 'donut-wrap', [
-      div(classes: 'donut', styles: Styles(raw: {'--pct': '$pct'}), [
-        div(classes: 'donut-center', [
-          div(classes: 'dc-v', [Component.text('$pct%')]),
-          div(classes: 'dc-k', [Component.text('approved')]),
-        ]),
-      ]),
-    ]),
-    div(classes: 'hero-legend', [
-      span(classes: 'lg', [
-        span(classes: 'dot a', []),
-        Component.text('$approved listing verified'),
-      ]),
-      span(classes: 'lg', [
-        span(classes: 'dot b', []),
-        Component.text('$inFlight not yet verified'),
-      ]),
-    ]),
-    p(classes: 'hero-cap', [
-      Component.text(
-        'Listing status: ${breakdown(VerificationDimension.listing)}.',
-      ),
-    ]),
-    p(classes: 'hero-cap', [
-      Component.text(
-        'Ownership status: ${breakdown(VerificationDimension.ownership)}.',
-      ),
-    ]),
-    AppLink(
-      to: '/admin/listings',
-      classes: 'bento-cta',
-      children: [Component.text('Open verification queue')],
-    ),
-  ]);
-}
-
-// ------------------------------------------------------------ work queues
-
-/// One dimension's work queue: everything the backend considers decisionable
-/// (`pending` + `under_review`), with both facet values spelled out so the card
-/// cannot be read as a different metric from the Listings status tabs.
-Component _verificationQueueCard(
-  _Summary summary,
-  VerificationDimension dimension,
-  String title,
-  String body,
-) {
-  final page = summary.page;
-  if (page == null) {
-    return _queueCard(
-      title,
-      '—',
-      body,
-      '/admin/listings',
-      pending: 0,
-      note: summary.error == null ? 'Loading' : 'Unavailable',
-    );
-  }
-  final pending = _facet(page, dimension, PropertyVerificationStatus.pending);
-  final underReview = _facet(
-    page,
-    dimension,
-    PropertyVerificationStatus.underReview,
-  );
-  return _queueCard(
-    title,
-    '${pending + underReview}',
-    '$body ${PropertyVerificationStatus.pending.label}: $pending · '
-        '${PropertyVerificationStatus.underReview.label}: $underReview.',
-    '/admin/listings',
-    pending: pending + underReview,
-  );
-}
-
-Component _queueCard(
-  String title,
-  String count,
-  String body,
-  String href, {
-  required int pending,
-  String? note,
-}) => AppLink(
-  to: href,
-  classes: 'bento-card',
+Component _kpi(String label, int value, String route) => AppLink(
+  to: route,
+  classes: 'kpi',
   children: [
-    div(classes: 'bento-card__head', [
-      h3([Component.text(title)]),
-      span(classes: 'card-note', [
-        Component.text(note ?? (pending > 0 ? 'Action needed' : 'Queue clear')),
-      ]),
-    ]),
-    p(classes: 'muted', [Component.text(body)]),
-    p(classes: 'queue-count', [Component.text(count)]),
+    span(classes: 'k', [Component.text(label)]),
+    span(classes: 'v', [Component.text('$value')]),
   ],
 );
 
-// -------------------------------------------------------- audit activity
-
-/// Recent privileged actions, straight from `GET /api/v1/staff/audit`.
-///
-/// Self-contained on purpose: the audit table lives in the Supabase identity
-/// database and is reached over HTTPS, so it can fail while the rest of the
-/// dashboard is perfectly healthy. Its loading, empty, denied and failure
-/// states render inside this card only.
-class _RecentActivityCard extends StatefulComponent {
-  const _RecentActivityCard();
-
-  @override
-  State<_RecentActivityCard> createState() => _RecentActivityCardState();
+Component _bars(List<(String, int)> rows, {int? maximum}) {
+  if (rows.isEmpty) return const InlineEmpty('No records yet.');
+  final scale =
+      maximum ?? rows.fold<int>(0, (max, row) => row.$2 > max ? row.$2 : max);
+  return ul(classes: 'ad-viz-bars', [
+    for (final (label, count) in rows)
+      li([
+        span([Component.text(label)]),
+        strong([Component.text('$count')]),
+        div(
+          classes: 'ad-viz-track',
+          attributes: const {'aria-hidden': 'true'},
+          [
+            if (scale > 0 && count > 0)
+              span(attributes: {'style': 'width: ${count / scale * 100}%'}, []),
+          ],
+        ),
+      ]),
+  ]);
 }
 
-class _RecentActivityCardState extends State<_RecentActivityCard> {
-  static const _limit = 6;
+const _colors = [
+  'var(--action)',
+  '#64cfc6',
+  'var(--warning)',
+  '#a295e0',
+  '#78a4a7',
+  '#97a4bf',
+];
 
-  bool _loading = true;
-  String? _error;
-  List<AuditEvent> _events = const [];
-
-  @override
-  void initState() {
-    super.initState();
-    unawaited(_load());
+Component _donut(List<(String, int)> rows) {
+  final total = rows.fold(0, (sum, row) => sum + row.$2);
+  var offset = 0;
+  final segments = <String>[];
+  for (final (index, row) in rows.indexed) {
+    if (row.$2 == 0) continue;
+    final start = offset / total * 100;
+    offset += row.$2;
+    segments.add(
+      '${_colors[index % _colors.length]} $start% ${offset / total * 100}%',
+    );
   }
-
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final events = await AppLocator.adminApi.listAudit();
-      if (!mounted) return;
-      setState(() {
-        _events = events.take(_limit).toList(growable: false);
-        _loading = false;
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _error = AdminApi.message(error);
-        _loading = false;
-      });
-    }
-  }
-
-  @override
-  Component build(BuildContext context) {
-    return div(classes: 'bento-card bento-wide', [
-      div(classes: 'bento-card__head', [
-        h3([Component.text('Recent administrative activity')]),
-        span(classes: 'card-note', [
-          Component.text(_loading ? 'Loading' : 'Server audit trail'),
-        ]),
-      ]),
-      if (_loading)
-        const Skeleton(variant: 'row', count: 3)
-      else if (_error != null)
-        div(classes: 'stack', [
-          Callout(
-            'The audit feed could not be read: $_error',
-            tone: 'danger',
-            icon: 'error',
-          ),
-          p(classes: 'small muted', [
-            Component.text(
-              'An unreadable feed does not mean nothing happened. The rest of '
-              'the dashboard is unaffected; retrying is safe because this is '
-              'a read.',
-            ),
-          ]),
-          ActionButton('Try again', variant: 'secondary', onClick: _load),
-        ])
-      else if (_events.isEmpty)
-        const InlineEmpty(
-          'The audit table returned no events yet: no privileged action has '
-          'been recorded for this deployment.',
-        )
-      else ...[
-        div(classes: 'ops-ev-list', [
-          for (final event in _events)
-            TimelineEntry(
-              icon: event.group == 'listing' ? 'business' : 'shield',
-              title: event.action,
-              subject: event.subject,
-              meta: [
-                if (event.performedByEmail.isNotEmpty) event.performedByEmail,
-                _when(event.createdAt),
-                if (event.newStatus != null)
-                  '${event.previousStatus ?? '—'} → ${event.newStatus!}',
-                if (event.newRole != null)
-                  '${event.previousRole ?? '—'} → ${event.newRole!}',
-              ].join(' · '),
-              badge: StatusBadge(_groupLabel(event.group), tone: _tone(event)),
-            ),
-        ]),
-        p(classes: 'small muted', [
-          Component.text(
-            'Showing ${_events.length} recent events.',
-          ),
+  return div(classes: 'ad-viz-donut-layout', [
+    div(
+      classes: 'ad-viz-donut',
+      attributes: {
+        'aria-hidden': 'true',
+        if (segments.isNotEmpty)
+          'style': 'background: conic-gradient(${segments.join(', ')})',
+      },
+      [
+        div([
+          strong([Component.text('$total')]),
+          const Component.text('Total properties'),
         ]),
       ],
+    ),
+    ul(classes: 'ad-viz-legend', [
+      for (final (index, (label, count)) in rows.indexed)
+        _legend(label, _colors[index % _colors.length], count: count),
+      if (rows.isEmpty) li([const Component.text('No properties yet.')]),
+    ]),
+  ]);
+}
+
+Component _legend(String label, String color, {int? count}) => li([
+  span(classes: 'ad-viz-key', attributes: {'style': 'background: $color'}, []),
+  span([Component.text(label)]),
+  if (count != null) strong([Component.text('$count')]),
+]);
+
+Component _workload(List<Map<String, dynamic>> rows, bool available) {
+  if (!available) return const InlineEmpty('Agent workload is unavailable.');
+  if (rows.isEmpty) return const InlineEmpty('No Agents registered yet.');
+  int count(Map<String, dynamic> row, String key) => row[key] as int? ?? 0;
+  List<int> active(Map<String, dynamic> row) => [
+    count(row, 'requested'),
+    count(row, 'ongoing') + count(row, 'needs_correction'),
+    count(row, 'pending_review'),
+  ];
+  int sum(List<int> values) => values.fold(0, (total, value) => total + value);
+  rows = [
+    ...rows,
+  ]..sort((first, second) => sum(active(second)).compareTo(sum(active(first))));
+  final max = sum(active(rows.first));
+  const labels = [
+    'Pending requests',
+    'Inspections in progress',
+    'Awaiting Admin review',
+  ];
+  Component item(Map<String, dynamic> row) {
+    final counts = active(row);
+    return li([
+      span([Component.text('${row['name']}')]),
+      strong([Component.text('${count(row, 'completed')} completed')]),
+      div(
+        classes: 'ad-viz-track ad-viz-stacked',
+        attributes: const {'aria-hidden': 'true'},
+        [
+          for (final (index, value) in counts.indexed)
+            if (max > 0 && value > 0)
+              span(
+                attributes: {
+                  'style':
+                      'width: ${value / max * 100}%; background: ${_colors[index]}',
+                },
+                [],
+              ),
+        ],
+      ),
+      small([
+        Component.text(
+          '${counts[0]} requested · ${counts[1]} in progress · ${counts[2]} awaiting review',
+        ),
+      ]),
     ]);
   }
 
-  /// `2026-11-06T10:24:31+00:00` → `6 Nov · 10:24`. Unparseable stamps pass
-  /// through verbatim rather than being shown as the epoch.
-  static String _when(String iso) {
-    final parsed = DateTime.tryParse(iso);
-    if (parsed == null) return iso.isEmpty ? 'Time not recorded' : iso;
-    final local = parsed.toLocal();
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', //
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-    ];
-    final hh = local.hour.toString().padLeft(2, '0');
-    final mm = local.minute.toString().padLeft(2, '0');
-    return '${local.day} ${months[local.month - 1]} · $hh:$mm';
-  }
+  return div(classes: 'stack', [
+    ul(classes: 'ad-viz-legend ad-viz-inline', [
+      for (final (index, label) in labels.indexed)
+        _legend(label, _colors[index]),
+    ]),
+    ul(classes: 'ad-viz-bars', [for (final row in rows.take(6)) item(row)]),
+    if (rows.length > 6)
+      details([
+        summary([const Component.text('View remaining Agents')]),
+        ul(classes: 'ad-viz-bars', [for (final row in rows.skip(6)) item(row)]),
+      ]),
+  ]);
+}
 
-  static String _tone(AuditEvent event) {
-    if (event.action.contains('suspend')) return 'danger';
-    if (event.action.contains('invite') || event.action.contains('granted')) {
-      return 'action';
-    }
-    if (event.action.contains('reset') || event.action.contains('assigned')) {
-      return 'warning';
-    }
-    return 'neutral';
-  }
+Component _reviewTable(List<Map<String, dynamic>> rows) => rows.isEmpty
+    ? const InlineEmpty('No properties are awaiting review.')
+    : DataTable(
+        scrollLabel: 'Pending property reviews',
+        columns: const [
+          DataColumn('Property'),
+          DataColumn('Location'),
+          DataColumn('Assigned Agent'),
+          DataColumn('Verification status'),
+          DataColumn('Actions', actions: true),
+        ],
+        rows: [
+          for (final row in rows)
+            [
+              Component.text(row['name'] as String? ?? 'Unnamed property'),
+              Component.text(_location(row)),
+              Component.text(row['agent'] as String? ?? 'Unassigned'),
+              StatusBadge(
+                row['status'] == 'under_review'
+                    ? 'Under review'
+                    : 'Awaiting review',
+                tone: 'warning',
+              ),
+              ActionLink(
+                'Review',
+                href: '/admin/listing-detail?id=${row['id']}',
+              ),
+            ],
+        ],
+      );
 
-  static String _groupLabel(String group) => switch (group) {
-    'staff' => 'Staff access',
-    'listing' => 'Listings',
-    'role' => 'Roles',
-    'status' => 'Status',
-    'mfa' => 'MFA',
-    _ => 'System',
-  };
+String _location(Map<String, dynamic> row) {
+  final parts = [row['city'], row['state']]
+      .whereType<String>()
+      .map((value) => value.trim())
+      .where((value) => value.isNotEmpty)
+      .toSet();
+  return parts.isEmpty ? 'Location not recorded' : parts.join(', ');
+}
+
+String _label(String raw) {
+  final value = raw.replaceAll('_', ' ').trim();
+  return value.isEmpty
+      ? 'Event not recorded'
+      : '${value[0].toUpperCase()}${value.substring(1)}';
+}
+
+String _when(String raw) {
+  final date = DateTime.tryParse(raw)?.toLocal();
+  if (date == null) return 'Time not recorded';
+  String two(int value) => value.toString().padLeft(2, '0');
+  return '${two(date.day)}/${two(date.month)}/${date.year} · ${two(date.hour)}:${two(date.minute)}';
 }

@@ -1,0 +1,360 @@
+/* Admin workspace sizing, shared by the directory, review and operations pages. */
+.app-shell.app-shell--admin {
+  --content-max: 1200px;
+  --page-gutter: 24px;
+  --content-band: calc(var(--content-max) + 2 * var(--page-gutter));
+  --admin-gap: 14px;
+  --admin-pad: 16px;
+  --admin-radius: 12px;
+  --admin-body: 14px;
+  --admin-label: 13px;
+  --admin-small: 12px;
+  --admin-section: 18px;
+  --admin-title: 24px;
+  --admin-control: 44px;
+  --admin-nav-height: 54px;
+  --admin-nav-top: 10px;
+  --muted: #c4cada;
+  --overline: #c4cada;
+  --overline-text: #c4cada;
+  --border: #50596f;
+  --admin-focus: #a8d3ff;
+  padding-top: calc(var(--admin-nav-height) + var(--admin-nav-top) + 12px);
+  font-size: var(--admin-body);
+  line-height: 1.5;
+}
+
+.app-shell.app-shell--admin .app-content__inner {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: var(--content-band);
+  margin-inline: auto;
+  padding: var(--page-gutter);
+}
+
+.app-shell.app-shell--admin .app-pill {
+  box-sizing: border-box;
+  width: min(var(--content-band), calc(100% - var(--page-gutter)));
+  min-height: var(--admin-nav-height);
+  top: var(--admin-nav-top);
+  padding: 4px 8px;
+  gap: 6px;
+}
+
+.app-shell.app-shell--admin .app-pill__link {
+  font-size: var(--admin-label);
+  font-weight: 650;
+  min-height: var(--admin-control);
+  padding: 8px 12px;
+}
+
+.app-shell.app-shell--admin .app-pill .brand__mark { width: 32px; height: 32px; }
+.app-shell.app-shell--admin .app-pill .brand__mark-img { width: 100%; height: 100%; object-fit: contain; }
+.app-shell.app-shell--admin .app-pill .brand__name { font-size: 16px; }
+.app-shell.app-shell--admin .app-pill .brand__sub { font-size: 10px; }
+
+.app-shell.app-shell--admin .app-pill :is(.icon-btn,.topbar__burger,.avatar-menu__trigger) {
+  min-width: var(--admin-control);
+  min-height: var(--admin-control);
+  flex-shrink: 0;
+}
+
+.app-shell.app-shell--admin .sidebar :is(a,button) {
+  min-height: var(--admin-control);
+  font-size: var(--admin-body);
+}
+
+.app-shell.app-shell--admin :is(a,button,input,select,textarea,summary,[tabindex]):focus-visible {
+  outline: 3px solid var(--admin-focus);
+  outline-offset: 2px;
+}
+
+.app-shell.app-shell--admin .app-crumbs { margin-bottom: 10px; }
+.app-shell.app-shell--admin .app-crumbs__list { gap: 4px 8px; flex-wrap: wrap; overflow: visible; }
+.app-shell.app-shell--admin :is(.app-crumbs__link,.app-crumbs__current) { font-size: var(--admin-small); line-height: 1.4; }
+
+.app-shell.app-shell--admin .page-head { gap: var(--admin-gap); margin-bottom: 16px; }
+.app-shell.app-shell--admin .page-head__main { min-width: 0; }
+.app-shell.app-shell--admin .page-head__title { font-size: var(--admin-title); font-weight: 750; line-height: 1.2; }
+.app-shell.app-shell--admin .page-head__desc { font-size: var(--admin-body); line-height: 1.5; }
+.app-shell.app-shell--admin .page-head .eyebrow { font-size: var(--admin-small); }
+.app-shell.app-shell--admin :is(.page-head__actions,.actions-row,.btn-row) { flex-wrap: wrap; gap: 8px; }
+
+.app-shell.app-shell--admin .app-main :is(h1,h2,h3,.title,.panel__title) { text-wrap: balance; overflow-wrap: anywhere; }
+.app-shell.app-shell--admin .app-main :is(p,.page-head__desc) { text-wrap: pretty; overflow-wrap: anywhere; }
+.app-shell.app-shell--admin .app-main :is(.title,.panel__title,.ops-card__title,.ops-hero__title,.ops-subhead,.al2-directory-header h2,.sa-heading-copy h2) {
+  font-size: var(--admin-section);
+  line-height: 1.3;
+}
+
+.app-shell.app-shell--admin .app-main :is(.body,.ops-card__meta,.ops-hero__body,.al2-muted,.sa-heading-copy p) { font-size: var(--admin-body); line-height: 1.5; }
+.app-shell.app-shell--admin .app-main :is(.small,.field__label,.stat-note,.field__hint,.hint) { font-size: var(--admin-label); line-height: 1.45; overflow-wrap: anywhere; }
+
+.app-shell.app-shell--admin .app-main :is(.stack--sections,.bento,.bento-kpis,.ops-grid,.ops-stats,.ops-split,.ag-filters,.ag-columns,.al2-review,.sa-page) {
+  gap: var(--admin-gap);
+  min-width: 0;
+}
+
+.app-shell.app-shell--admin .app-main :is(.card,.panel,.bento-card,.bento-hero,.ops-card,.ops-hero,.kpi,.stat-card,.filters,.sa-panel,.al2-directory,.al2-filter-shell) {
+  min-width: 0;
+  border-radius: var(--admin-radius);
+}
+
+.app-shell.app-shell--admin .app-main :is(.card,.bento-card,.bento-hero,.ops-card,.ops-hero,.kpi,.stat-card,.filters):not(.panel--flush,.vd-side,.vd-panel,.vd-hero) {
+  padding: var(--admin-pad);
+}
+
+.app-shell.app-shell--admin .app-main .panel { padding: 0; }
+.app-shell.app-shell--admin .app-main :is(.panel__head,.panel__body,.al2-toolbar,.al2-filter-shell,.al2-directory-header,.al2-pager,.sa-panel-head,.sa-filter-area,.sa-notes,.sa-pager) { padding: var(--admin-pad); }
+.app-shell.app-shell--admin .app-main .panel__body--flush { padding: 0; }
+.app-shell.app-shell--admin .app-main :is(.panel__head,.ops-hero,.ops-card__head) { flex-wrap: wrap; gap: 8px; }
+.app-shell.app-shell--admin .app-main :is(.grid-2,.grid-3,.ops-split) { align-items: start; }
+.app-shell.app-shell--admin .app-main :is(.grid-2,.grid-3,.ops-split) > * { min-width: 0; }
+
+.app-shell.app-shell--admin .app-main :is(.btn,.al2-nav,.sa-tab,.al2-segment,.auu-manage,.al2-page,.sa-page-current) {
+  box-sizing: border-box;
+  font-size: var(--admin-label);
+  min-height: var(--admin-control);
+  height: auto;
+  line-height: 1.35;
+  white-space: normal;
+}
+
+.app-shell.app-shell--admin .app-main :is(.btn,.auu-manage) { padding: 8px 14px; font-weight: 650; }
+.app-shell.app-shell--admin .app-main :is(.badge,.st,.pill,.chip,.auu-role,.al2-status,.sa-source-status) { font-size: var(--admin-small); line-height: 1.4; }
+.app-shell.app-shell--admin .app-main :is(.al2-property__name,.auu-person__name,.ag-agent .who,.sa-person-primary) { font-size: var(--admin-body); }
+.app-shell.app-shell--admin .app-main :is(.auu-person__email,.ag-agent .sub,.al2-property__id,.al2-cell-sub,.sa-person-muted) { font-size: var(--admin-small); }
+
+.app-shell.app-shell--admin .app-main :is(input:not([type=checkbox],[type=radio],[type=range],[type=hidden],[type=file],[type=color]),select,textarea) {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  min-height: var(--admin-control);
+  font-size: var(--admin-body);
+  line-height: 1.45;
+}
+
+.app-shell.app-shell--admin .app-main :is(.table-scroll,.al2-table-scroll,.sa-table-scroll) {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.app-shell.app-shell--admin .app-main :is(.table-scroll,.al2-table-scroll,.sa-table-scroll):focus-visible { outline-offset: -3px; }
+.app-shell.app-shell--admin .app-main :is(.audit-table,.al2-table,.sa-table) :is(th,td) { padding: 10px 12px; vertical-align: middle; line-height: 1.45; }
+.app-shell.app-shell--admin .app-main :is(.audit-table,.al2-table,.sa-table) th { font-size: var(--admin-small); }
+.app-shell.app-shell--admin .app-main :is(.audit-table,.al2-table,.sa-table) td { font-size: var(--admin-label); font-variant-numeric: tabular-nums; }
+.app-shell.app-shell--admin .app-main :is(.ag-actions,.al2-pager,.sa-pager,.al2-navigation,.sa-tabs) { flex-wrap: wrap; }
+.app-shell.app-shell--admin .app-main :is(.ag-actions,.auu-actions) { gap: 6px; }
+
+/* Operations pages and account details. */
+.app-shell.app-shell--admin .admin-dashboard :is(.bento-kpis,.bento) { margin-bottom: 0; }
+.app-shell.app-shell--admin .admin-dashboard .bento-kpis { grid-template-columns: repeat(4,minmax(0,1fr)); }
+.app-shell.app-shell--admin .admin-dashboard .bento-kpis .kpi {
+  align-content: start;
+  gap: 4px;
+  background: #1d202e;
+  border: 1px solid var(--border);
+  box-shadow: none;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.app-shell.app-shell--admin .admin-dashboard .kpi .k { font-size: var(--admin-label); font-weight: 650; text-transform: none; letter-spacing: normal; }
+.app-shell.app-shell--admin .admin-dashboard .kpi .n { color: var(--muted); font-size: var(--admin-small); line-height: 1.45; }
+.app-shell.app-shell--admin .admin-dashboard .kpi .v,
+.app-shell.app-shell--admin .app-main :is(.al2-stat__value,.sa-overview-value,.ops-stat__value) {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-shell.app-shell--admin .admin-dashboard :is(.bento-card,.bento-hero) h3 { font-size: var(--admin-section); font-weight: 700; line-height: 1.3; }
+.app-shell.app-shell--admin .admin-dashboard :is(.bento-card p,.hero-cap,.hero-legend,.ops-ev__subject) { font-size: var(--admin-body); line-height: 1.5; }
+.app-shell.app-shell--admin .admin-dashboard .bento-card__head { flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.app-shell.app-shell--admin .admin-dashboard .bento-hero { grid-column: span 5; }
+.app-shell.app-shell--admin .admin-dashboard__work { grid-column: span 7; }
+.app-shell.app-shell--admin .admin-dashboard__queues {
+  display: grid;
+  grid-template-columns: repeat(auto-fit,minmax(min(100%,11rem),1fr));
+  align-items: start;
+  gap: var(--admin-gap);
+}
+.app-shell.app-shell--admin .admin-dashboard__queues > .bento-card { grid-column: auto; }
+.app-shell.app-shell--admin .admin-dashboard .donut { width: min(10rem,100%); height: auto; aspect-ratio: 1; }
+.app-shell.app-shell--admin .admin-dashboard .donut::after { background: #1d202e; }
+.app-shell.app-shell--admin .admin-dashboard :is(a.kpi,a.bento-card):hover { border-color: var(--admin-focus); background: #272b3b; }
+.app-shell.app-shell--admin .admin-dashboard :is(a.kpi,a.bento-card):hover :is(.k,h3) { text-decoration: underline; }
+
+.app-shell.app-shell--admin .admin-user-detail :is(.admin-user-detail__actions,.admin-user-detail__identity) { flex-wrap: wrap; gap: 10px; }
+.app-shell.app-shell--admin .admin-user-detail__actions { justify-content: space-between; }
+.app-shell.app-shell--admin .admin-user-detail__identity > .grow { min-width: min(100%,12rem); }
+.app-shell.app-shell--admin .admin-user-detail__field {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) minmax(0,1.5fr);
+  gap: 4px 12px;
+  padding-block: 8px;
+  border-bottom: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+.app-shell.app-shell--admin .admin-profile { width: 100%; max-width: 38rem; }
+.app-shell.app-shell--admin .admin-profile .card { gap: var(--admin-gap); }
+.app-shell.app-shell--admin .app-main .ag-roster-panel { gap: var(--admin-gap); }
+.app-shell.app-shell--admin .app-main .ag .table-scroll { border-radius: var(--admin-radius); box-shadow: none; }
+
+/* Listings directory and filters. */
+.app-shell.app-shell--admin .app-main .al2-navigation { gap: 16px; margin-bottom: 16px; }
+.app-shell.app-shell--admin .app-main .al2-nav { padding: 8px 4px; }
+.app-shell.app-shell--admin .app-main :is(.al2-summary,.al2-stats,.al2-workspace) { gap: var(--admin-gap); }
+.app-shell.app-shell--admin .app-main .al2-summary__intro h2 { font-size: var(--admin-section); }
+.app-shell.app-shell--admin .app-main .al2-stat { padding: var(--admin-pad); gap: 8px; }
+.app-shell.app-shell--admin .app-main .al2-property__name { text-decoration: underline; text-underline-offset: .15em; }
+
+/* Shared dialog shell, topbar results and agent detail form. */
+.app-shell.app-shell--admin .overlay:not(.overlay--menu) {
+  padding: max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right))
+    max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));
+  align-items: center;
+}
+
+.app-shell.app-shell--admin .overlay--menu {
+  padding: calc(var(--admin-nav-height) + var(--admin-nav-top) + 8px)
+    max(var(--page-gutter),calc((100% - var(--content-band)) / 2)) 12px;
+}
+
+.app-shell.app-shell--admin .app-main .dialog {
+  box-sizing: border-box;
+  border-radius: var(--admin-radius);
+  min-width: 0;
+  max-height: min(760px,calc(100dvh - 24px));
+}
+
+.app-shell.app-shell--admin .menu { max-height: calc(100dvh - 86px); overflow: auto; }
+.app-shell.app-shell--admin .menu__item { min-height: var(--admin-control); font-size: var(--admin-label); }
+.app-shell.app-shell--admin .app-main .dialog > :is(.dialog__title,.dialog__head,.btn-row) { padding: 12px var(--admin-pad); flex: none; }
+.app-shell.app-shell--admin .app-main .dialog__title { font-size: var(--admin-section); line-height: 1.3; overflow-wrap: anywhere; }
+.app-shell.app-shell--admin .app-main .dialog > :is(.stack,.ag-review,.sa-dv-body) { min-height: 0; overflow: auto; overscroll-behavior: contain; padding: var(--admin-pad); gap: var(--admin-gap); }
+.app-shell.app-shell--admin .app-main .dialog .result-list { padding: 6px; }
+.app-shell.app-shell--admin .app-main .dialog .result-list__item { min-height: var(--admin-control); padding: 8px 10px; gap: 8px; }
+.app-shell.app-shell--admin .app-main .dialog .result-list__item > .grow { min-width: 0; }
+.app-shell.app-shell--admin .app-main .dialog .result-list__title { font-size: var(--admin-body); overflow-wrap: anywhere; }
+.app-shell.app-shell--admin .app-main .ag-details-dialog { width: min(580px,100%); }
+.app-shell.app-shell--admin .ag-details-dialog > .ag-review {
+  display: grid;
+  grid-template-columns: repeat(auto-fit,minmax(min(100%,13rem),1fr));
+  align-content: start;
+  border: 0;
+  border-radius: 0;
+}
+.app-shell.app-shell--admin .ag-details-dialog .ops-info { border: 0; padding: 6px 0; }
+.app-shell.app-shell--admin .ag-workload { grid-column: 1 / -1; min-width: 0; }
+
+.admin-dashboard .ad-viz-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--admin-gap);
+}
+.admin-dashboard .ad-viz-grid > * { min-width: 0; }
+.admin-dashboard :is(.ad-viz-bars,.ad-viz-legend,.ad-viz-timeline) {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.admin-dashboard :is(.ad-viz-bars,.ad-viz-legend) li {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto;
+  align-items: center;
+  gap: 4px 10px;
+  font-size: var(--admin-label);
+  overflow-wrap: anywhere;
+}
+.admin-dashboard .ad-viz-track {
+  grid-column: 1 / -1;
+  display: flex;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--alt-surface);
+}
+.admin-dashboard .ad-viz-track > span { height: 100%; background: var(--action); }
+.admin-dashboard .ad-viz-bars small { grid-column: 1 / -1; color: var(--muted); }
+.admin-dashboard .ad-viz-donut-layout {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+}
+.admin-dashboard .ad-viz-donut {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 8rem;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--alt-surface);
+}
+.admin-dashboard .ad-viz-donut > div {
+  width: 76%;
+  aspect-ratio: 1;
+  display: grid;
+  place-content: center;
+  border-radius: 50%;
+  background: var(--surface);
+  text-align: center;
+  font-size: var(--admin-small);
+  line-height: 1.3;
+}
+.admin-dashboard .ad-viz-donut strong { font-size: 1.4rem; }
+.admin-dashboard .ad-viz-legend { flex: 1 1 9rem; }
+.admin-dashboard .ad-viz-legend li { grid-template-columns: auto minmax(0,1fr) auto; }
+.admin-dashboard .ad-viz-key { width: 8px; height: 8px; border-radius: 2px; }
+.admin-dashboard .ad-viz-inline { display: flex; flex-wrap: wrap; }
+.admin-dashboard .ad-viz-timeline li {
+  display: grid;
+  gap: 2px;
+  border-inline-start: 2px solid var(--action);
+  padding-inline-start: 10px;
+  font-size: var(--admin-label);
+  overflow-wrap: anywhere;
+}
+.admin-dashboard details > summary { cursor: pointer; padding-block: 6px; }
+@media (max-width: 760px) {
+  .admin-dashboard .ad-viz-grid { grid-template-columns: minmax(0, 1fr); }
+}
+.app-shell.app-shell--admin .app-main .ag-details-dialog .ops-info > * { min-width: 0; overflow-wrap: anywhere; }
+.app-shell.app-shell--admin .app-main .ops-info__label { font-size: var(--admin-small); }
+.app-shell.app-shell--admin .app-main .ops-info__value { font-size: var(--admin-body); }
+
+@media (max-width: 1050px) {
+  .app-shell.app-shell--admin { --page-gutter: 18px; --admin-gap: 12px; }
+  .app-shell.app-shell--admin .admin-dashboard .bento-kpis { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .app-shell.app-shell--admin .admin-dashboard .bento > * { grid-column: 1 / -1; }
+}
+
+@media (max-width: 900px) {
+  .app-shell.app-shell--admin .app-pill .app-pill__right { margin-inline-start: auto; }
+  .app-shell.app-shell--admin .sidebar--open {
+    display: block;
+    overflow-y: auto;
+    z-index: 80;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-shell.app-shell--admin { --page-gutter: 12px; --admin-pad: 12px; --admin-title: 22px; }
+  .app-shell.app-shell--admin .app-pill .brand__sub { display: none; }
+  .app-shell.app-shell--admin .app-pill .topbar__controls { gap: 2px; }
+  .app-shell.app-shell--admin .app-main :is(.page-head,.ops-hero) { align-items: flex-start; }
+  .app-shell.app-shell--admin .app-main .page-head__actions { width: auto; }
+  .app-shell.app-shell--admin .app-main .page-head__actions > * { flex: 0 1 auto; }
+  .app-shell.app-shell--admin .app-main .ag-columns { grid-template-columns: minmax(0,1fr); }
+  .app-shell.app-shell--admin .app-main .al2-stats { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell.app-shell--admin :is(.kpi,.bento-card,.btn,.app-pill__link) { transition: none; animation: none; }
+}

@@ -32,6 +32,7 @@ class _AgentAssignmentControlState extends State<AgentAssignmentControl> {
   Map<String, dynamic>? _assignment;
   String _selectedUserId = '';
   bool _loading = true;
+  bool _referenceExpanded = false;
   bool _busy = false;
   String? _error;
   String? _status;
@@ -150,12 +151,25 @@ class _AgentAssignmentControlState extends State<AgentAssignmentControl> {
         .map((agent) => agent.fullName)
         .cast<String?>()
         .firstWhere((_) => true, orElse: () => null);
-    return div(classes: 'card card-pad stack', [
+    return div(classes: 'sw-r4-assignment', [
+      div(classes: 'sw-r4-person', [
+        const Icon('badge', size: 'sm'),
+        div(classes: 'sw-r4-assignment-name', [
+          span(classes: 'small muted', [Component.text('Assigned agent')]),
+          strong([Component.text(_loading ? 'Loading…' : _error != null && _assignment == null ? 'Assignment unavailable' : _assignment == null ? 'Not assigned' : assignedName ?? 'Agent #$assignedAgentId')]),
+        ]),
+      ]),
+      button(classes: 'sw-r4-assignment-toggle',
+        attributes: {'type': 'button', 'aria-expanded': '$_referenceExpanded'},
+        events: events(onClick: () => setState(() => _referenceExpanded = !_referenceExpanded)),
+        [Component.text(_referenceExpanded ? 'Close assignment options' : 'Assignment exceptions')]),
+      if (_referenceExpanded)
+        div(classes: 'card card-pad stack sw-r4-assignment-panel', [
       span(classes: 'title', [Component.text('Agent assignment')]),
       p(classes: 'body muted', [
         Component.text(
-          'Assign this operational property to an agent. The agent can then '
-          'manage only this listing and submit change requests for review.',
+          'Owners normally request an Agent in the mobile app. Use these '
+          'options only when an assignment needs an administrator’s help.',
         ),
       ]),
       if (_loading)
@@ -227,6 +241,7 @@ class _AgentAssignmentControlState extends State<AgentAssignmentControl> {
           ]),
         ],
       ],
+        ]),
     ]);
   }
 }

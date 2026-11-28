@@ -30,7 +30,9 @@ _MAX_ATTEMPTS = 3
 _RETRY_BACKOFF_SECONDS = (0.6, 1.8)
 
 
-def lookup_malaysian_address(address: str) -> dict | None:
+def lookup_malaysian_address(
+    address: str, *, bypass_cache: bool = False
+) -> dict | None:
     """Resolve one submitted address; never runs on typing/autocomplete.
 
     Returns None if the provider found no Malaysian result. Coordinates are
@@ -46,7 +48,7 @@ def lookup_malaysian_address(address: str) -> dict | None:
     global _last_request
     with _lock:
         hit = _cache.get(key)
-        if hit and time.monotonic() < hit[0]:
+        if not bypass_cache and hit and time.monotonic() < hit[0]:
             return hit[1]
         if len(_cache) >= 256:
             _cache.clear()
@@ -120,5 +122,10 @@ def lookup_malaysian_address(address: str) -> dict | None:
                 'source': 'openstreetmap_nominatim',
                 'accuracy': 'approximate',
             }
-        _cache[key] = (time.monotonic() + 86400, result)
+        # Don't keep a no-result response: a later explicit retry should ask
+        # Nominatim again in case its index has changed or recovered.
+        if result is not None:
+            _cache[key] = (time.monotonic() + 86400, result)
+        else:
+            _cache.pop(key, None)
         return result

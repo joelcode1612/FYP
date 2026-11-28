@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:shared_logic/shared_logic.dart';
+import 'package:fyp/features/listing/presentation/pages/entrepreneur_property_detail_mobile_page.dart';
+import 'package:fyp/features/property_management/presentation/widgets/provider_panorama_tour_section.dart';
 
 import 'package:fyp/core/di/service_locator.dart';
 import 'package:fyp/core/theme/sitewise_m3.dart';
@@ -8,8 +12,31 @@ import 'package:fyp/core/theme/sitewise_theme.dart';
 import 'package:fyp/features/property_management/domain/entities/provider_models.dart';
 import 'package:fyp/features/property_management/presentation/widgets/provider_agent_inspection_panel.dart';
 import 'package:fyp/shared/presentation/components/provider_ui.dart';
+import 'package:fyp/shared/presentation/components/provider_card_actions.dart';
 import 'package:fyp/features/property_management/data/provider_workspace_service.dart';
 import 'package:fyp/features/property_management/application/provider_listings_service.dart';
+
+/// Existing provider detail route resolver. Agents see the shared listing
+/// details presentation; Owners keep their management details page. The
+/// inspection route bypasses this resolver and remains its own workflow.
+class ProviderListingDetailRoute extends ConsumerWidget {
+  const ProviderListingDetailRoute({super.key, required this.listingId});
+
+  final int listingId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final role = ref.watch(authNotifierProvider.select((state) => state.user?.role)) ??
+        ref.watch(appNotifierProvider.select((state) => state.role));
+    if (role == AppRole.agent) {
+      return EntrepreneurPropertyDetailMobilePage(
+        propertyId: '$listingId',
+        agentView: true,
+      );
+    }
+    return ProviderPropertyDetailMobilePage(listingId: listingId);
+  }
+}
 
 /// One provider listing: facts, status, media actions and the workflow step
 /// that is legal for the signed-in role.
@@ -36,7 +63,10 @@ class ProviderPropertyDetailMobilePage extends ConsumerStatefulWidget {
 class _ProviderPropertyDetailMobilePageState
     extends ConsumerState<ProviderPropertyDetailMobilePage> {
   Future<_DetailData>? _future;
+  Future<LocationAnalysis>? _locationFuture;
   bool _busy = false;
+  int _selectedTab = 0;
+  int _radiusMetres = 500;
 
   @override
   void initState() {
@@ -47,6 +77,9 @@ class _ProviderPropertyDetailMobilePageState
   Future<void> _load() async {
     final role = ref.read(authNotifierProvider).user?.role ?? AppRole.owner;
     final request = _loadDetail(role);
+    _locationFuture = ServiceLocator.recommendations.analysis(
+      '${widget.listingId}',
+    );
     if (!mounted) return;
     // A block body is required: an arrow-bodied assignment returns the Future
     // itself, and Flutter's setState rejects that with a red error screen.
@@ -189,12 +222,13 @@ class _ProviderPropertyDetailMobilePageState
               propertyId: data.listing.id,
               listing: data.listing,
               inspectionDetail: agent,
+              readOnly: data.listing.lockedForEditing,
             );
           }
           final error = snapshot.error;
           return Scaffold(
             appBar: const ProviderPageAppBar(
-              title: 'Property inspection',
+              title: 'Inspect Property',
               eyebrow: 'MANAGED LISTING',
             ),
             body: snapshot.connectionState != ConnectionState.done
@@ -214,8 +248,11 @@ class _ProviderPropertyDetailMobilePageState
     }
     return Scaffold(
       backgroundColor: providerCanvas,
-      appBar: const ProviderPageAppBar(
-        title: 'Property details',
+      appBar: ProviderPageAppBar(
+        title: widget.inspectionFirst ? 'Inspect Property' : 'Manage Property',
+        subtitle: widget.inspectionFirst
+            ? 'Verify property information and complete the inspection.'
+            : 'Manage property information, photographs and listing status.',
         eyebrow: 'MANAGED LISTING',
       ),
       body: RefreshIndicator(
@@ -244,208 +281,274 @@ class _ProviderPropertyDetailMobilePageState
             }
             final data = snapshot.data!;
             final listing = data.listing;
+            final location = data.owner;
             return providerContent(
               children: [
-                // SiteWise property-details-first design (2026-11-21).
                 _propertyHero(listing),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _metricTile(
-                        'MONTHLY RENT',
-                        listing.rentDisplay,
-                        Icons.payments_outlined,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _metricTile(
-                        'BUILT-UP AREA',
-                        listing.sizeDisplay,
-                        Icons.square_foot_outlined,
-                      ),
-                    ),
+                _photoGallery(data),
+                if (data.agent != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: _section('Property management', [
+                      _factRow('Property status', _listingStatus(listing)),
+                      _factRow('Photographs', listing.photoCount == null ? 'Count unavailable' : '${listing.photoCount} uploaded'),
+                      _factRow('Rental availability', data.agent!.facts?.availability ?? 'Not provided'),
+                      _factRow('Inspection', listing.inspectionProgressDisplay),
+                      _factRow('Panorama', listing.panoramaConfirmed == true ? 'Confirmed' : 'Not confirmed'),
+                      if (listing.lockedForEditing)
+                        const Row(children: [Icon(Icons.lock_outline, size: 18), SizedBox(width: 8), Expanded(child: Text('This property is read-only while protected by its current review or approval status.'))]),
+                    ]),
+                  ),
+                const SizedBox(height: 12),
+                SegmentedButton<int>(
+                  segments: const [
+                    ButtonSegment(value: 0, label: Text('Basic')),
+                    ButtonSegment(value: 1, label: Text('Extra')),
                   ],
+                  selected: {_selectedTab},
+                  onSelectionChanged: (value) =>
+                      setState(() => _selectedTab = value.first),
+                  style: const ButtonStyle(
+                    visualDensity: VisualDensity.compact,
+                  ),
                 ),
-                const SizedBox(height: 16),
-                _section('Property information', [
-                  _factRow(
-                    'Property type',
-                    listing.propertyType ?? 'Not provided',
+                const SizedBox(height: 12),
+                if (_selectedTab == 0) ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _metricTile(
+                          'MONTHLY RENT',
+                          listing.rentDisplay,
+                          Icons.payments_outlined,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _metricTile(
+                          'BUILT-UP AREA',
+                          listing.sizeDisplay,
+                          Icons.square_foot_outlined,
+                        ),
+                      ),
+                    ],
                   ),
-                  if (listing.psfDisplay.isNotEmpty)
-                    _factRow('Rental rate', listing.psfDisplay),
-                  _factRow(
-                    'Publication',
-                    listing.isPublished ? 'Published' : 'Not published',
-                  ),
-                  _factRow('Management', data.management.display),
-                  if (data.agent?.owner != null)
+                  const SizedBox(height: 12),
+                  _section('Property information', [
                     _factRow(
-                      'Property owner',
-                      data.agent!.owner!.displayName.isEmpty
-                          ? 'Not recorded'
-                          : data.agent!.owner!.displayName,
+                      'Property type',
+                      listing.propertyType ?? 'Not provided',
                     ),
-                  _factRow('Built-up area', listing.sizeDisplay),
-                  _factRow(
-                    'Floor level',
-                    data.owner?.floorDescription ??
-                        data.agent?.facts?.floorDescription ??
-                        'Not provided',
-                  ),
-                  _factRow(
-                    'Unit position',
-                    data.owner?.unitPosition ??
-                        data.agent?.facts?.unitPosition ??
-                        'Not provided',
-                  ),
-                  _factRow(
-                    'Shop frontage',
-                    _feet(
-                      data.owner?.frontageFt ?? data.agent?.facts?.frontageFt,
-                    ),
-                  ),
-                  _factRow(
-                    'Furnishing',
-                    data.owner?.furnishing ??
-                        data.agent?.facts?.furnishing ??
-                        'Not provided',
-                  ),
-                  _factRow(
-                    'Owner-declared parking',
-                    _ownerParking(
-                      data.owner?.hasParking ?? data.agent?.facts?.hasParking,
-                    ),
-                  ),
-                  _factRow(
-                    'Availability',
-                    data.owner?.availability ??
-                        data.agent?.facts?.availability ??
-                        'Not provided',
-                  ),
-                  _factRow(
-                    'Minimum rental period',
-                    _lease(
-                      data.owner?.leaseDurationMonths ??
-                          data.agent?.facts?.leaseDurationMonths,
-                      data.owner?.leaseDurationNegotiable ??
-                          data.agent?.facts?.leaseDurationNegotiable,
-                    ),
-                  ),
-                  _factRow(
-                    'Available from',
-                    data.owner?.availableFrom ??
-                        data.agent?.facts?.availableFrom ??
-                        'Not provided',
-                  ),
-                  _factRow(
-                    'Rental deposit',
-                    _money(
-                      data.owner?.rentalDepositMyr ??
-                          data.agent?.facts?.rentalDepositMyr,
-                    ),
-                  ),
-                  _factRow(
-                    'Land tenure',
-                    data.owner?.tenure ??
-                        data.agent?.facts?.tenure ??
-                        'Not provided',
-                  ),
-                  _factRow(
-                    'Property title type',
-                    data.owner?.titleType ??
-                        data.agent?.facts?.titleType ??
-                        'Not provided',
-                  ),
-                  _factRow(
-                    'Landlord F&B permission (owner-declared)',
-                    data.owner?.landlordFnbPermission ??
-                        data.agent?.facts?.landlordFnbPermission ??
-                        'Not provided',
-                  ),
-                  if (data.agent?.photos.isNotEmpty ?? false)
+                    if (listing.psfDisplay.isNotEmpty)
+                      _factRow('Rental rate', listing.psfDisplay),
                     _factRow(
-                      'Photographs',
-                      '${data.agent!.photos.length} available',
+                      'Publication',
+                      listing.isPublished ? 'Published' : 'Not published',
                     ),
-                ]),
-                if ((data.owner?.description ?? '').trim().isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  _section('Description', [
-                    Text(
-                      data.owner!.description!,
-                      style: const TextStyle(
-                        fontFamily: kFontFamily,
-                        fontSize: 14,
-                        height: 1.55,
-                        color: SitewiseM3.ink,
+                    _factRow('Management', data.management.display),
+                    if (data.agent?.owner != null)
+                      _factRow(
+                        'Property owner',
+                        data.agent!.owner!.displayName.isEmpty
+                            ? 'Not recorded'
+                            : data.agent!.owner!.displayName,
+                      ),
+                    _factRow('Built-up area', listing.sizeDisplay),
+                    _factRow(
+                      'Floor level',
+                      data.owner?.floorDescription ??
+                          data.agent?.facts?.floorDescription ??
+                          'Not provided',
+                    ),
+                    _factRow(
+                      'Unit position',
+                      data.owner?.unitPosition ??
+                          data.agent?.facts?.unitPosition ??
+                          'Not provided',
+                    ),
+                    _factRow(
+                      'Shop frontage',
+                      _feet(
+                        data.owner?.frontageFt ?? data.agent?.facts?.frontageFt,
                       ),
                     ),
+                    _factRow(
+                      'Furnishing',
+                      data.owner?.furnishing ??
+                          data.agent?.facts?.furnishing ??
+                          'Not provided',
+                    ),
+                    _factRow(
+                      'Owner-declared parking',
+                      _ownerParking(
+                        data.owner?.hasParking ?? data.agent?.facts?.hasParking,
+                      ),
+                    ),
+                    _factRow(
+                      'Availability',
+                      data.owner?.availability ??
+                          data.agent?.facts?.availability ??
+                          'Not provided',
+                    ),
+                    _factRow(
+                      'Minimum rental period',
+                      _lease(
+                        data.owner?.leaseDurationMonths ??
+                            data.agent?.facts?.leaseDurationMonths,
+                        data.owner?.leaseDurationNegotiable ??
+                            data.agent?.facts?.leaseDurationNegotiable,
+                      ),
+                    ),
+                    _factRow(
+                      'Available from',
+                      data.owner?.availableFrom ??
+                          data.agent?.facts?.availableFrom ??
+                          'Not provided',
+                    ),
+                    _factRow(
+                      'Rental deposit',
+                      _money(
+                        data.owner?.rentalDepositMyr ??
+                            data.agent?.facts?.rentalDepositMyr,
+                      ),
+                    ),
+                    _factRow(
+                      'Land tenure',
+                      data.owner?.tenure ??
+                          data.agent?.facts?.tenure ??
+                          'Not provided',
+                    ),
+                    _factRow(
+                      'Property title type',
+                      data.owner?.titleType ??
+                          data.agent?.facts?.titleType ??
+                          'Not provided',
+                    ),
+                    _factRow(
+                      'Landlord F&B permission (owner-declared)',
+                      data.owner?.landlordFnbPermission ??
+                          data.agent?.facts?.landlordFnbPermission ??
+                          'Not provided',
+                    ),
+                    if (data.agent?.photos.isNotEmpty ?? false)
+                      _factRow(
+                        'Photographs',
+                        '${data.agent!.photos.length} available',
+                      ),
                   ]),
-                ],
-                if ((listing.imageUrl ?? '').trim().isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  _propertyPhoto(listing.imageUrl!),
+                  if ((data.owner?.description ?? '').trim().isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    _section('Description', [
+                      Text(
+                        data.owner!.description!,
+                        style: const TextStyle(
+                          fontFamily: kFontFamily,
+                          fontSize: 14,
+                          height: 1.55,
+                          color: SitewiseM3.ink,
+                        ),
+                      ),
+                    ]),
+                  ],
+                  if (location?.latitude != null &&
+                      location?.longitude != null) ...[
+                    const SizedBox(height: 12),
+                    _propertyMap(location!.latitude!, location.longitude!),
+                  ],
+                ] else ...[
+                  SegmentedButton<int>(
+                    segments: const [
+                      ButtonSegment(value: 500, label: Text('500 m')),
+                      ButtonSegment(value: 1000, label: Text('1 km')),
+                    ],
+                    selected: {_radiusMetres},
+                    onSelectionChanged: (value) =>
+                        setState(() => _radiusMetres = value.first),
+                    style: const ButtonStyle(
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  FutureBuilder<LocationAnalysis>(
+                    future: _locationFuture,
+                    builder: (context, result) => result.hasError
+                        ? const ProviderCard(
+                            title: 'Location intelligence',
+                            child: Text(
+                              'Location analysis is unavailable right now.',
+                            ),
+                          )
+                        : result.connectionState != ConnectionState.done
+                        ? const ProviderCard(
+                            title: 'Location intelligence',
+                            child: LinearProgressIndicator(),
+                          )
+                        : _locationDashboard(result.data!),
+                  ),
+                  const SizedBox(height: 12),
+                  if (data.agent != null)
+                    ProviderPanoramaTourSection(
+                      key: ValueKey(listing.id),
+                      propertyId: listing.id,
+                      onStartCapture: null,
+                      readOnly: true,
+                    ),
                 ],
                 const SizedBox(height: 20),
-                if (data.agent case final agent?) ...[
-                  FilledButton.icon(
-                    onPressed: () async {
-                      await Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => ProviderAgentInspectionPanel(
-                            propertyId: listing.id,
-                            listing: listing,
-                            inspectionDetail: agent,
-                            readOnly: listing.lockedForEditing,
-                          ),
-                        ),
-                      );
-                      if (mounted) await _load();
-                    },
-                    icon: const Icon(Icons.fact_check_outlined),
-                    label: Text(
-                      listing.lockedForEditing
-                          ? 'View inspection'
-                          : 'Inspect property',
-                    ),
-                  ),
-                  if (listing.canEdit) ...[
-                    const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                      onPressed: _busy ? null : _requestChange,
-                      icon: const Icon(Icons.edit_note_rounded),
-                      label: const Text('Propose a change'),
-                    ),
-                  ],
-                ] else if (listing.canEdit)
-                  FilledButton.icon(
-                    onPressed: _busy
-                        ? null
-                        : () => Navigator.of(context)
-                              .pushNamed(
-                                '/provider/add-property',
-                                arguments: '${widget.listingId}',
-                              )
-                              .then((_) {
-                                if (mounted) _load();
-                              }),
-                    icon: const Icon(Icons.edit_outlined),
-                    label: const Text('Edit listing'),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: SitewiseColors.action,
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size.fromHeight(52),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(13),
+                if (data.agent case final agent?)
+                  ProviderCardActions(
+                    actions: [
+                      ProviderCardAction(
+                        label: listing.lockedForEditing
+                            ? 'View inspection'
+                            : 'Inspect property',
+                        icon: Icons.fact_check_outlined,
+                        onPressed: () async {
+                          await Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => ProviderAgentInspectionPanel(
+                                propertyId: listing.id,
+                                listing: listing,
+                                inspectionDetail: agent,
+                                readOnly: listing.lockedForEditing,
+                              ),
+                            ),
+                          );
+                          if (mounted) await _load();
+                        },
+                        emphasis: ProviderCardActionEmphasis.primary,
                       ),
-                    ),
+                      if (listing.canEdit)
+                        ProviderCardAction(
+                          label: 'Propose a change',
+                          icon: Icons.edit_note_rounded,
+                          onPressed: _busy ? null : _requestChange,
+                        ),
+                    ],
+                  )
+                else if (listing.canEdit)
+                  ProviderCardActions(
+                    actions: [
+                      ProviderCardAction(
+                        label: 'Edit listing',
+                        icon: Icons.edit_outlined,
+                        onPressed: _busy
+                            ? null
+                            : () => Navigator.of(context)
+                                  .pushNamed(
+                                    '/provider/add-property',
+                                    arguments: '${widget.listingId}',
+                                  )
+                                  .then((_) {
+                                    if (mounted) _load();
+                                  }),
+                        emphasis: ProviderCardActionEmphasis.primary,
+                      ),
+                    ],
                   ),
                 if (listing.lockedForEditing) ...[
                   const SizedBox(height: 12),
-                  const Row(
+                  Row(
                     children: [
                       Icon(
                         Icons.lock_outline,
@@ -453,9 +556,16 @@ class _ProviderPropertyDetailMobilePageState
                         color: SitewiseM3.muted,
                       ),
                       SizedBox(width: 6),
-                      Text(
-                        'Approved listing · Read-only',
-                        style: TextStyle(fontSize: 12, color: SitewiseM3.muted),
+                      Expanded(
+                        child: Text(
+                          listing.agentInspectionActive
+                              ? 'Agent request active · Editing locked'
+                              : 'Approved listing · Read-only',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: SitewiseM3.muted,
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -596,6 +706,176 @@ class _ProviderPropertyDetailMobilePageState
           ),
         ),
       ),
+    ),
+  );
+
+  Widget _photoGallery(_DetailData data) {
+    final urls = <String>[
+      if (data.owner != null) ...data.owner!.photos.map((photo) => photo.url),
+      if (data.agent != null) ...data.agent!.photos.map((photo) => photo.url),
+      if (data.listing.imageUrl?.trim().isNotEmpty == true)
+        data.listing.imageUrl!,
+    ].where((url) => url.trim().isNotEmpty).toSet().toList();
+    if (urls.isEmpty) {
+      return const ProviderCard(
+        title: 'Property photographs',
+        child: SizedBox(height: 120, child: Center(child: Text('No photographs are available yet.'))),
+      );
+    }
+    return SizedBox(
+      height: 210,
+      child: PageView.builder(
+        itemCount: urls.length,
+        itemBuilder: (context, index) => ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: Image.network(
+            urls[index],
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) =>
+                const Center(child: Text('Photo unavailable')),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _listingStatus(ProviderListing listing) {
+    if (listing.isPublished && listing.stage == ProviderStage.approved) return 'Published';
+    return switch (listing.stage) {
+      ProviderStage.draft => 'Draft',
+      ProviderStage.pending => 'Under Review',
+      ProviderStage.rejected => 'Corrections Required',
+      ProviderStage.approved => 'Approved · not published',
+      ProviderStage.unknown => 'Status unavailable',
+    };
+  }
+
+  Widget _propertyMap(double lat, double lon) => ProviderCard(
+    title: 'Property location',
+    child: SizedBox(
+      height: 220,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: FlutterMap(
+          options: MapOptions(initialCenter: LatLng(lat, lon), initialZoom: 15),
+          children: [
+            TileLayer(
+              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              userAgentPackageName: 'com.sitewise.app',
+            ),
+            CircleLayer(
+              circles: [
+                CircleMarker(
+                  point: LatLng(lat, lon),
+                  useRadiusInMeter: true,
+                  radius: _radiusMetres.toDouble(),
+                  color: SitewiseColors.action.withValues(alpha: .10),
+                  borderColor: SitewiseColors.action,
+                  borderStrokeWidth: 1,
+                ),
+              ],
+            ),
+            MarkerLayer(
+              markers: [
+                Marker(
+                  point: LatLng(lat, lon),
+                  width: 48,
+                  height: 48,
+                  child: const Icon(
+                    Icons.location_on,
+                    color: SitewiseColors.action,
+                    size: 40,
+                  ),
+                ),
+              ],
+            ),
+            RichAttributionWidget(
+              attributions: [
+                TextSourceAttribution('© OpenStreetMap contributors'),
+              ],
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  Widget _locationDashboard(LocationAnalysis analysis) {
+    final score = analysis.measuredScore;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ProviderCard(
+          title: 'Location suitability',
+          child: Row(
+            children: [
+              SizedBox(
+                width: 92,
+                height: 92,
+                child: CircularProgressIndicator(
+                  value: score == null
+                      ? 0
+                      : (score <= 1 ? score : score / 100).clamp(0, 1),
+                  strokeWidth: 9,
+                  backgroundColor: SitewiseM3.line,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      score == null
+                          ? 'Score unavailable'
+                          : '${(score <= 1 ? score * 100 : score).toStringAsFixed(1)} / 100',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const Text(
+                      'A relative location suitability measure, not a success probability.',
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        for (final group in analysis.measurementGroups)
+          ProviderCard(
+            title: group.title,
+            child: Column(
+              children: [
+                for (final item in group.rows.where((row) => row.measured))
+                  _visualMeasure(item.label, item.display, item.value!),
+                if (!group.available)
+                  const Text('Information is not available yet.'),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _visualMeasure(String label, String value, double amount) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 7),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(child: Text(label)),
+            Text(value),
+          ],
+        ),
+        const SizedBox(height: 5),
+        LinearProgressIndicator(
+          value: (amount.abs() / (amount.abs() + 10)).clamp(0, 1),
+          minHeight: 6,
+        ),
+      ],
     ),
   );
 

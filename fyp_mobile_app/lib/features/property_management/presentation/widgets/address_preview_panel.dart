@@ -11,26 +11,26 @@ class AddressPreviewPanel extends StatelessWidget {
     required this.status,
     required this.pending,
     required this.verified,
+    required this.locationAvailable,
     required this.confirmed,
     required this.retry,
     this.preview,
     this.formattedAddress,
     this.errorText,
     this.onVerify,
-    this.onConfirm,
     this.mapHeight = 160,
   });
 
   final String status;
   final bool pending;
   final bool verified;
+  final bool locationAvailable;
   final bool confirmed;
   final bool retry;
   final AddressPreview? preview;
   final String? formattedAddress;
   final String? errorText;
   final VoidCallback? onVerify;
-  final VoidCallback? onConfirm;
 
   /// Compact height for the Review step's read-before-save preview.
   final double mapHeight;
@@ -38,6 +38,7 @@ class AddressPreviewPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final data = preview;
+    final precision = locationAvailable ? data?.precision : null;
     return Container(
       margin: const EdgeInsets.only(top: 16),
       padding: const EdgeInsets.all(12),
@@ -66,7 +67,12 @@ class AddressPreviewPanel extends StatelessWidget {
           if (errorText case final String message)
             Text(message, style: const TextStyle(color: SitewiseM3.muted)),
           if (formattedAddress case final String address) Text(address),
-          if (verified && data != null && data.hasLocation) ...[
+          if (precision case final String value)
+            Text(
+              'Location confidence: $value',
+              style: const TextStyle(color: SitewiseM3.muted),
+            ),
+          if (locationAvailable && data != null && data.hasLocation) ...[
             const SizedBox(height: 8),
             ClipRRect(
               borderRadius: BorderRadius.circular(9),
@@ -89,11 +95,6 @@ class AddressPreviewPanel extends StatelessWidget {
             ),
           ],
           if (confirmed) const Text('Location confirmed'),
-          if (onConfirm != null)
-            FilledButton(
-              onPressed: onConfirm,
-              child: const Text('Confirm location'),
-            ),
           if (onVerify != null)
             Align(
               alignment: Alignment.centerLeft,

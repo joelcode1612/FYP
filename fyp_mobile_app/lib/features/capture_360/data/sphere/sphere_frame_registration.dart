@@ -442,6 +442,7 @@ SphereRegistrationOutcome registerSphereFrames({
       if (!File(frame.imagePath).existsSync()) continue;
       cv.Mat? colour;
       cv.Mat? gray;
+      cv.Mat? mask;
       try {
         colour = cv.imread(
           frame.imagePath,
@@ -471,10 +472,8 @@ SphereRegistrationOutcome registerSphereFrames({
         if (projection == null) continue;
         projections[i] = projection;
 
-        final (detected, description) = orb.detectAndCompute(
-          gray,
-          cv.Mat.empty(),
-        );
+        mask = cv.Mat.empty();
+        final (detected, description) = orb.detectAndCompute(gray, mask);
         final detectedCount = detected.length;
         if (detectedCount < kSphereRegistrationMinInliers ||
             description.isEmpty) {
@@ -493,6 +492,7 @@ SphereRegistrationOutcome registerSphereFrames({
         featureTotal += detectedCount;
         usable[i] = true;
       } finally {
+        mask?.dispose();
         gray?.dispose();
         colour?.dispose();
       }

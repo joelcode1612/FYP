@@ -10,20 +10,7 @@ import 'package:fyp/shared/presentation/components/provider_ui.dart';
 import 'package:fyp/features/property_management/data/provider_workspace_service.dart';
 import 'package:fyp/features/dashboard/presentation/widgets/owner_performance_compact.dart';
 
-/// Shared performance report for Property Owners and Agents.
-///
-/// Two kinds of number appear here and they are never mixed:
-///
-/// * **Measured** — arithmetic over the listings the signed-in account manages.
-///   They come from the same authorized scope as the dashboard, so no two
-///   screens can disagree.
-/// * **Not tracked** — impressions, views and contact clicks. SiteWise logs no
-///   event for any of them, so they are listed with the reason. Reporting them
-///   as `0` would be indistinguishable from "measured, and it was zero".
-///
-/// The Enquiries figures the backend still computes are deliberately not
-/// rendered: the Enquiries feature was removed from the mobile Provider
-/// workspace. The server payload is untouched.
+/// Portfolio performance for Property Owners and Agents.
 class ProviderPerformanceMobilePage extends ConsumerStatefulWidget {
   const ProviderPerformanceMobilePage({super.key});
 
@@ -76,14 +63,13 @@ class _ProviderPerformanceMobilePageState
                     title: 'Your performance report could not be loaded',
                     body: error is AppFailure
                         ? error.userMessage
-                        : 'The backend did not answer. Please retry.',
+                        : 'Please try again.',
                     onRetry: _load,
                   ),
               ],
             );
           }
           final report = snapshot.data!;
-          // Owner-only compact view; preserve the Agent report unchanged.
           if (!report.isAgent) {
             return providerContent(
               children: [OwnerPerformanceCompact(report: report)],
@@ -95,36 +81,17 @@ class _ProviderPerformanceMobilePageState
                 eyebrow: 'Portfolio report',
                 title: 'Performance.',
                 lead:
-                    'Measured from the listings this account is authorized '
-                    'to manage.',
+                    'Rent, floor area and progress for your assigned properties.',
               ),
               if (report.total == 0) ...[
                 const M3SectionRow(title: 'Overview'),
                 ProviderMessage(
                   icon: Icons.insights_outlined,
                   title: 'Nothing to measure yet',
-                  body: report.isAgent
-                      ? 'No property is assigned to this agent account, so '
-                            'there is no portfolio to report on.'
-                      : 'No property is registered to this account yet. '
-                            'Create a listing to start a portfolio.',
+                  body: 'Assigned properties will appear here.',
                 ),
               ] else ...[
-                M3SectionRow(
-                  title: 'Your overview',
-                  overline: 'MEASURED',
-                ),
-                Text(
-                  report.isAgent
-                      ? 'Across the ${report.total} listings assigned to you.'
-                      : 'Across the ${report.total} listings you registered.',
-                  style: const TextStyle(
-                    fontFamily: kFontFamily,
-                    fontSize: 12,
-                    height: 1.5,
-                    color: SitewiseM3.muted,
-                  ),
-                ),
+                const M3SectionRow(title: 'Your overview'),
                 const SizedBox(height: 14),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -133,7 +100,7 @@ class _ProviderPerformanceMobilePageState
                       child: M3MetricTile(
                         label: 'Managed properties',
                         value: '${report.managedProperties}',
-                        caption: 'In this authorized scope',
+                        caption: 'Assigned to you',
                         icon: Icons.storefront_outlined,
                       ),
                     ),
@@ -149,18 +116,10 @@ class _ProviderPerformanceMobilePageState
                     ),
                   ],
                 ),
-                M3DataNote(
-                  text:
-                      'Figures are computed from stored listing records. '
-                      'Metrics SiteWise does not capture are listed as '
-                      '"Not tracked" below, never as zero.',
-                ),
                 const M3SectionRow(title: 'Property details'),
                 _ManagedProperties(report: report),
                 const SizedBox(height: 14),
-                _Listings(report: report),
-                const SizedBox(height: 14),
-                _Engagement(report: report),
+                _ListingStatusChart(report: report),
               ],
             ],
           );
@@ -182,21 +141,21 @@ class _ManagedProperties extends StatelessWidget {
       children: [
         Expanded(
           child: _Stat(
-            label: 'Median rent',
+            label: 'Median monthly rent',
             value: report.medianRentDisplay,
             note: report.medianRent == null
                 ? 'No rental recorded'
-                : 'Across this portfolio',
+                : 'Properties with a recorded value',
           ),
         ),
         const SizedBox(width: 10),
         Expanded(
           child: _Stat(
-            label: 'Average floor area',
+            label: 'Average built-up area',
             value: report.averageSizeDisplay,
             note: report.averageSizeSqft == null
                 ? 'No floor area recorded'
-                : 'Across this portfolio',
+                : 'Properties with a recorded value',
           ),
         ),
       ],
@@ -204,179 +163,90 @@ class _ManagedProperties extends StatelessWidget {
   );
 }
 
-class _Listings extends StatelessWidget {
-  const _Listings({required this.report});
+class _ListingStatusChart extends StatelessWidget {
+  const _ListingStatusChart({required this.report});
 
   final ProviderPerformance report;
 
-  /// The server's own `verification_status` vocabulary, in lifecycle order.
-  static const List<(String, String)> _states = [
-    ('draft', 'Draft'),
-    ('pending', 'Pending verification'),
-    ('under_review', 'Under review'),
-    ('approved', 'Approved'),
-    ('rejected', 'Rejected'),
-  ];
+  static const _inspectionLabels = {
+    'requested': 'Awaiting acceptance',
+    'accepted': 'Accepted',
+    'checklist_saved': 'Checklist saved',
+    'needs_correction': 'Needs correction',
+    'submitted': 'Submitted to Admin',
+    'declined': 'Declined',
+  };
 
   @override
   Widget build(BuildContext context) {
-    final rows = [
-      for (final (wire, label) in _states)
-        if (report.stateCount(wire) > 0) (label, report.stateCount(wire)),
-      if (report.otherState > 0) ('Unrecognised state', report.otherState),
-    ];
+    final inspection = report.byInspection;
+    final other = inspection.entries
+        .where((entry) => !_inspectionLabels.containsKey(entry.key))
+        .fold<int>(0, (total, entry) => total + entry.value);
     return ProviderCard(
-      title: 'Listings by review state',
+      title: 'Inspection and publication',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (final (label, count) in rows)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 9),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      label,
-                      style: const TextStyle(
-                        fontFamily: kFontFamily,
-                        fontSize: 12.5,
-                        color: SitewiseM3.ink,
-                      ),
-                    ),
-                  ),
-                  Text(
-                    '$count',
-                    style: const TextStyle(
-                      fontFamily: kFontFamily,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                      color: SitewiseM3.ink,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          const SizedBox(height: 3),
-          Text(
-            'Publication is separate from approval: '
-            '${report.published} of ${report.total} listings are live on the '
-            'public site.',
-            style: const TextStyle(
-              fontFamily: kFontFamily,
-              fontSize: 11,
-              height: 1.5,
-              color: SitewiseM3.muted,
-            ),
+          const _ChartHeading('Inspection'),
+          if (inspection.isEmpty)
+            const Text('Inspection status unavailable.')
+          else ...[
+            for (final entry in _inspectionLabels.entries)
+              if ((inspection[entry.key] ?? 0) > 0)
+                _bar(entry.value, inspection[entry.key]!, SitewiseM3.primary),
+            if (other > 0) _bar('Other', other, SitewiseM3.primary),
+          ],
+          const SizedBox(height: 8),
+          const _ChartHeading('Publication'),
+          _bar('Published', report.published, SitewiseM3.green),
+          _bar(
+            'Unpublished',
+            report.total - report.published,
+            SitewiseM3.muted,
           ),
         ],
       ),
     );
   }
-}
 
-/// The engagement funnel. Every stage is declared NOT CAPTURED rather than
-/// zero, because a zero would read as a measurement.
-class _Engagement extends StatelessWidget {
-  const _Engagement({required this.report});
-
-  final ProviderPerformance report;
-
-  @override
-  Widget build(BuildContext context) => ProviderCard(
-    title: 'Engagement',
+  Widget _bar(String label, int count, Color color) => Padding(
+    padding: const EdgeInsets.only(bottom: 9),
     child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            const Expanded(
-              child: Text(
-                'Not tracked',
-                style: TextStyle(
-                  fontFamily: kFontFamily,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  color: SitewiseM3.amber,
-                ),
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: SitewiseM3.amberWash,
-                borderRadius: BorderRadius.circular(SitewiseM3.radiusPill),
-              ),
-              child: const Text(
-                'No events stored',
-                style: TextStyle(
-                  fontFamily: kFontFamily,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  color: SitewiseM3.amber,
-                ),
-              ),
-            ),
+            Expanded(child: Text(label)),
+            const SizedBox(width: 8),
+            Text('$count', style: const TextStyle(fontWeight: FontWeight.w700)),
           ],
         ),
-        const SizedBox(height: 9),
-        Text(
-          report.engagementReason,
-          style: const TextStyle(
-            fontFamily: kFontFamily,
-            fontSize: 11.5,
-            height: 1.5,
-            color: SitewiseM3.muted,
+        const SizedBox(height: 4),
+        ExcludeSemantics(
+          child: LinearProgressIndicator(
+            value: (count / report.total).clamp(0.0, 1.0),
+            color: color,
+            backgroundColor: SitewiseM3.line,
+            borderRadius: BorderRadius.circular(3),
+            minHeight: 6,
           ),
         ),
-        const SizedBox(height: 12),
-        for (final metric in report.untrackedMetrics)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 11),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(
-                  width: 30,
-                  child: Text(
-                    '—',
-                    style: TextStyle(
-                      fontFamily: kFontFamily,
-                      fontSize: 13,
-                      color: SitewiseM3.muted,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        metric.label,
-                        style: const TextStyle(
-                          fontFamily: kFontFamily,
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                          color: SitewiseM3.ink,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        metric.reason,
-                        style: const TextStyle(
-                          fontFamily: kFontFamily,
-                          fontSize: 11,
-                          height: 1.45,
-                          color: SitewiseM3.muted,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
       ],
+    ),
+  );
+}
+
+class _ChartHeading extends StatelessWidget {
+  const _ChartHeading(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Text(
+      label,
+      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
     ),
   );
 }

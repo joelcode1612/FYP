@@ -88,11 +88,13 @@ class ProviderPageAppBar extends StatelessWidget
   const ProviderPageAppBar({
     super.key,
     required this.title,
+    this.subtitle,
     this.eyebrow = 'SITEWISE PROVIDER',
     this.leading,
   });
 
   final String title;
+  final String? subtitle;
   final String eyebrow;
   final Widget? leading;
 
@@ -134,6 +136,11 @@ class ProviderPageAppBar extends StatelessWidget
           overflow: TextOverflow.ellipsis,
           style: SitewiseM3Type.h2,
         ),
+        if (subtitle != null) ...[
+          const SizedBox(height: 2),
+          Text(subtitle!, maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 11, color: SitewiseM3.muted)),
+        ],
       ],
     ),
   );

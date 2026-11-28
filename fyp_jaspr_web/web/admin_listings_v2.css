@@ -133,11 +133,12 @@
 }
 .app-shell.app-shell--admin .al2-toolbar {
   display: grid;
-  grid-template-columns: minmax(220px, 1.3fr) minmax(255px, 1fr) auto;
-  gap: 18px;
+  grid-template-columns: minmax(0, 1.4fr) repeat(2, minmax(0, 1fr));
+  padding: 14px 16px;
+  gap: 10px 12px;
   align-items: end;
-  padding: 22px 24px 19px;
 }
+.app-shell.app-shell--admin .al2-toolbar > * { min-width: 0; }
 .app-shell.app-shell--admin .al2-field-label {
   display: block;
   margin: 0 0 9px;
@@ -153,7 +154,7 @@
   min-width: 0;
 }
 .app-shell.app-shell--admin .al2-search-control {
-  height: 44px;
+  min-height: var(--admin-control);
   gap: 0;
   padding-left: 12px;
   border: 1px solid #3f4b63;
@@ -166,8 +167,8 @@
   border: 0 !important;
   outline: 0;
   min-height: 0;
-  height: 42px;
   min-width: 0;
+  width: 0;
   flex: 1;
   padding: 0 10px;
   background: transparent;
@@ -181,13 +182,14 @@
   box-shadow: 0 0 0 3px rgba(77,163,255,.14);
 }
 .app-shell.app-shell--admin .al2-search-control .btn {
-  height: 36px;
+  flex: none;
   margin-right: 4px;
   padding: 0 17px;
   border-radius: 7px;
   font-size: 12px;
 }
-.app-shell.app-shell--admin .al2-sort-control select {
+.app-shell.app-shell--admin .al2-sort-control :is(select, input) {
+  width: 100%;
   flex: 1;
   min-width: 0;
   height: 44px;
@@ -290,7 +292,7 @@
   justify-content: space-between;
   gap: 16px;
   align-items: center;
-  padding: 25px 24px 19px;
+  padding: 12px 16px;
 }
 .app-shell.app-shell--admin .al2-directory-header h2 {
   margin: 5px 0 3px;
@@ -307,13 +309,14 @@
 }
 .app-shell.app-shell--admin .al2-table {
   width: 100%;
-  min-width: 995px;
+  min-width: 1120px;
+  table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
   text-align: left;
 }
 .app-shell.app-shell--admin .al2-table thead th {
-  padding: 13px 15px;
+  padding: 9px 10px;
   border-top: 1px solid var(--al2-line);
   border-bottom: 1px solid var(--al2-line);
   background: #222b3c;
@@ -325,29 +328,51 @@
   white-space: nowrap;
 }
 .app-shell.app-shell--admin .al2-table th:first-child,
-.app-shell.app-shell--admin .al2-table td:first-child { padding-left: 24px; width: 29%; }
+.app-shell.app-shell--admin .al2-table td:first-child { width: 22%; }
 .app-shell.app-shell--admin .al2-table th:last-child,
-.app-shell.app-shell--admin .al2-table td:last-child { padding-right: 24px; text-align: right; }
+.app-shell.app-shell--admin .al2-table td:last-child { width: 106px; text-align: end; }
 .app-shell.app-shell--admin .al2-table tbody tr { transition: background .13s ease; }
 .app-shell.app-shell--admin .al2-table tbody tr:hover { background: rgba(77,163,255,.055); }
 .app-shell.app-shell--admin .al2-table tbody tr + tr td { border-top: 1px solid var(--al2-line); }
 .app-shell.app-shell--admin .al2-table tbody td {
-  padding: 17px 15px;
+  padding: 12px 16px;
   vertical-align: middle;
   color: #d2dbe9;
   font-size: 12px;
 }
+.app-shell.app-shell--admin .al2-table th { padding: 12px 16px; white-space: normal; letter-spacing: .035em; }
+.app-shell.app-shell--admin .al2-table th:nth-child(1), .app-shell.app-shell--admin .al2-table td:nth-child(1) { width: 36%; }
+.app-shell.app-shell--admin .al2-table th:nth-child(2), .app-shell.app-shell--admin .al2-table td:nth-child(2) { width: 17%; }
+.app-shell.app-shell--admin .al2-table th:nth-child(3), .app-shell.app-shell--admin .al2-table td:nth-child(3) { width: 13%; }
+.app-shell.app-shell--admin .al2-table th:nth-child(4), .app-shell.app-shell--admin .al2-table td:nth-child(4), .app-shell.app-shell--admin .al2-table th:nth-child(5), .app-shell.app-shell--admin .al2-table td:nth-child(5) { width: 13%; }
+.app-shell.app-shell--admin .al2-table th:nth-child(6), .app-shell.app-shell--admin .al2-table td:nth-child(6) { width: 120px; }
+.app-shell.app-shell--admin .al2-property__name, .app-shell.app-shell--admin .al2-cell-value { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+.app-shell.app-shell--admin .al2-property__meta, .app-shell.app-shell--admin .al2-property__submitter { color: #9daac1; font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+.app-shell.app-shell--admin .al2-rent-area { font-variant-numeric: tabular-nums; }
+.app-shell.app-shell--admin .al2-rent-area strong, .app-shell.app-shell--admin .al2-rent-area span { display: block; }
+.app-shell.app-shell--admin .al2-rent-area strong { color: #f3f6fe; font-size: 14px; }
+.app-shell.app-shell--admin .al2-rent-area span { margin-top: 4px; color: #a4b6ce; }
+.app-shell.app-shell--admin .al2-table td:last-child .btn { min-width: 110px; white-space: nowrap; }
 .app-shell.app-shell--admin .al2-property { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .app-shell.app-shell--admin .al2-property__icon {
   flex: none;
   display: grid;
   place-items: center;
-  width: 39px;
-  height: 39px;
+  width: 36px;
+  height: 36px;
+  position: relative;
+  overflow: hidden;
   border: 1px solid rgba(94,157,230,.19);
   border-radius: 10px;
   background: rgba(77,163,255,.10);
   color: #89c4ff;
+}
+.app-shell.app-shell--admin .al2-property__icon img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .app-shell.app-shell--admin .al2-property__copy { display: grid; gap: 5px; min-width: 0; }
 .app-shell.app-shell--admin a.al2-property__name {
@@ -360,23 +385,22 @@
   overflow-wrap: anywhere;
 }
 .app-shell.app-shell--admin a.al2-property__name:hover { color: var(--al2-blue); text-decoration: underline; }
-.app-shell.app-shell--admin .al2-property__id,
-.app-shell.app-shell--admin .al2-cell-sub {
-  display: block;
-  color: #889bb7;
+.app-shell.app-shell--admin .al2-property__id {
+  color: #9daac1;
   font-size: 10.8px;
-  line-height: 1.5;
+  line-height: 1.3;
 }
-.app-shell.app-shell--admin .al2-property__id { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.app-shell.app-shell--admin .al2-live {
-  color: #87c3ff;
-  font-size: 9px;
-  font-weight: 900;
-  letter-spacing: .025em;
+.app-shell.app-shell--admin .al2-property__name,
+.app-shell.app-shell--admin .al2-cell-value {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.app-shell.app-shell--admin .al2-live::before { content:'●'; margin-right: 4px; font-size: 8px; }
-.app-shell.app-shell--admin .al2-cell-main { display: block; color: #cbd7e8; font-weight: 650; }
-.app-shell.app-shell--admin .al2-rent { color: #f3f7ff; font-weight: 850; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.app-shell.app-shell--admin .al2-table .al2-number {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
 .app-shell.app-shell--admin .al2-table .pill {
   display: inline-flex;
   align-items: center;
@@ -385,8 +409,8 @@
   line-height: 1.3;
   font-weight: 800;
   text-align: center;
-  white-space: normal;
-  padding: 5px 8px;
+  white-space: nowrap;
+  padding: 3px 6px;
   border-radius: 7px;
 }
 .app-shell.app-shell--admin .al2-table td:last-child .btn {
@@ -418,34 +442,33 @@
 .app-shell.app-shell--admin .al2-pager .btn { min-height: 34px; font-size: 11.5px; }
 
 /* Separate agent-change workflow uses the same restrained hierarchy. */
-.app-shell.app-shell--admin .al2-agent-workspace { max-width: 1250px; }
-.app-shell.app-shell--admin .al2-agent-workspace > .stack > .row {
-  padding-bottom: 17px;
-  border-bottom: 1px solid var(--al2-line);
-  align-items: flex-end;
-  gap: 20px;
-}
-.app-shell.app-shell--admin .al2-agent-workspace .card {
-  background: #1c2433;
-  border: 1px solid var(--al2-line);
-  border-radius: 13px;
-  box-shadow: none;
-}
-.app-shell.app-shell--admin .al2-agent-workspace .card > .row { gap: 16px; }
-.app-shell.app-shell--admin .al2-agent-workspace .actions-row { flex-wrap: wrap; gap: 8px; }
 
 @media (max-width: 1240px) {
   .app-shell.app-shell--admin .al2-summary { grid-template-columns: 1fr; gap: 17px; }
   .app-shell.app-shell--admin .al2-toolbar { grid-template-columns: minmax(0,1.25fr) minmax(0,1fr); }
   .app-shell.app-shell--admin .al2-clear { grid-column: 1 / -1; }
 }
+@media (max-width: 1100px) {
+  .app-shell.app-shell--admin .al2-table { min-width: 530px; }
+  .app-shell.app-shell--admin .al2-table .al2-secondary { display: none; }
+  .app-shell.app-shell--admin .al2-table :is(th, td):first-child { width: 32%; }
+}
 @media (max-width: 760px) {
+  .app-shell.app-shell--admin .al2-table { min-width: 355px; }
+  .app-shell.app-shell--admin .al2-table .al2-location { display: none; }
+  .app-shell.app-shell--admin .al2-table :is(th, td) { padding-inline: 6px; }
+  .app-shell.app-shell--admin .al2-table :is(th, td):first-child { width: auto; }
+  .app-shell.app-shell--admin .al2-table :is(th, td):last-child { width: 83px; }
+  .app-shell.app-shell--admin .al2-table td:last-child .btn { padding-inline: 7px; }
+  .app-shell.app-shell--admin .al2-property { gap: 6px; }
+  .app-shell.app-shell--admin .al2-property__icon { width: 27px; height: 27px; }
+  .app-shell.app-shell--admin .al2-table .pill { white-space: normal; }
   .app-shell.app-shell--admin .al2-navigation { gap: 18px; margin-bottom: 20px; }
   .app-shell.app-shell--admin .al2-nav { font-size: 12px; padding-bottom: 14px; }
   .app-shell.app-shell--admin .al2-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .app-shell.app-shell--admin .al2-stat:nth-child(3) { border-left: 0; border-top: 1px solid var(--al2-line); }
   .app-shell.app-shell--admin .al2-stat:nth-child(4) { border-top: 1px solid var(--al2-line); }
-  .app-shell.app-shell--admin .al2-toolbar { grid-template-columns: 1fr; gap: 15px; padding: 18px; }
+  .app-shell.app-shell--admin .al2-toolbar { grid-template-columns: minmax(0, 1fr); }
   .app-shell.app-shell--admin .al2-clear { grid-column: auto; }
   .app-shell.app-shell--admin .al2-filter-shell { padding: 17px 18px; }
   .app-shell.app-shell--admin .al2-filter-line { grid-template-columns: 1fr; gap: 8px; }

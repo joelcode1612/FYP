@@ -10,27 +10,26 @@ database passwords, and paid API keys in the backend
 environment. The separate Express test service uses `test/.env.example`.
 
 Flutter bundles `fyp_mobile_app/assets/config/sitewise_dev.json`. On a new
-checkout, worktree or branch switch, that asset is absent because it is
-git-ignored; run
+checkout or worktree, the ignored asset is generated from `backend/.env` by
+running
 
     node fyp_mobile_app/tool/ensure_sitewise_dev_config.js
 
-which writes it from the authorised public defaults in
-`fyp_mobile_app/config/sitewise_dev.defaults.json` (Supabase project URL,
-publishable key, public Google OAuth web client ID, and the
-`adb-reverse` / `http://127.0.0.1:8090` development origin). Both
-`Start-SiteWise-All*.ps1` launchers run it before the Flutter build, so no
-manual step is needed there. An existing valid file is never overwritten.
-Use a Supabase publishable key and public Google OAuth client IDs. The JSON is
-distributed in the app, so keep server credentials out of it.
-The existing mobile `config/sitewise_dev.env` can still be used for public
-Dart defines.
+which updates public Supabase values and platform-specific Google client IDs
+from that environment while preserving existing device networking settings.
+The defaults file supplies networking defaults only; its auth values are
+ignored. Project launchers run the synchronizer automatically. Missing
+required variables are named and stop startup rather than selecting another
+project. The generated JSON is bundled into the app, so it may contain public
+client identifiers only, never server credentials. Use
+`fyp_mobile_app/config/sitewise_dev.env` only for device networking and the
+local development switch; do not duplicate auth settings there.
 
-Jaspr generates its browser assets with `npm run gen-auth-config` and
-`npm run gen-map-config` from `fyp_jaspr_web/tool`. The generators accept
-process environment variables or read the matching public values from
-`backend/.env`. The generated browser assets are ignored by Git. Use the
-browser-scoped CARTO basemap key for the map generator.
+Jaspr generates its ignored browser auth config with `npm run gen-auth-config`
+from `fyp_jaspr_web/tool`. It reads public Supabase values from `backend/.env`;
+`/auth-config.json` remains the runtime source used by the JS auth bridge.
+Jaspr uses Supabase-hosted Google OAuth and does not need a Google client ID in
+browser code. Use the browser-scoped CARTO basemap key for the map generator.
 
 ## Commit guard
 

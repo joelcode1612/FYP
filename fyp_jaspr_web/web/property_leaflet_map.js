@@ -1,5 +1,5 @@
 /* First-party reusable map for the SiteWise property detail and analysis pages.
- * Leaflet + CARTO Voyager / OpenStreetMap. Reference markers are research
+ * Leaflet + OpenFreeMap Positron. Reference markers are research
  * rental properties (U), NOT F&B competitors. Not a road-network catchment.
  *
  * Two radius modes, chosen by the ?radius query parameter:
@@ -43,15 +43,10 @@
   const recenterBtn = document.getElementById('recenter');
   const fullscreenBtn = document.getElementById('fullscreen');
   const showAlert = message => { alertEl.textContent = message; alertEl.hidden = false; };
-  // Two independent notices share one bar: a tile failure must not erase the
-  // explanation of why a layer has no pins, and vice versa.
-  const notices = { layers: '', tiles: '' };
-  const paintNotice = () => {
-    const parts = [notices.layers, notices.tiles].filter(Boolean);
-    alertEl.textContent = parts.join(' ');
-    alertEl.hidden = parts.length === 0;
+  const paintNotice = message => {
+    alertEl.textContent = message;
+    alertEl.hidden = !message;
   };
-  const clearAlert = () => { alertEl.hidden = true; alertEl.textContent = ''; };
   const valid = Number.isFinite(lat) && Number.isFinite(lon) &&
     lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180 &&
     !(lat === 0 && lon === 0);
@@ -60,14 +55,6 @@
     nearbyLabel.textContent = 'Map unavailable';
     return;
   }
-  // The CARTO key is OPTIONAL. `basemaps.cartocdn.com` serves the Voyager
-  // raster tiles without one (rate-limited, no SLA), so a deployment that never
-  // generated map-config.js still gets a usable basemap instead of a dead
-  // panel. Refusing to draw when the key was absent is what produced
-  // "The map is unavailable right now." on every property page whose
-  // CARTO_BASEMAPS_KEY was blank. A configured key is appended as before, and
-  // a genuine tile failure is still reported by the tileerror handler below.
-  const cartoKey = (window.SITEWISE_MAP_CONFIG?.cartoBasemapsKey || '').trim();
   document.getElementById('location-id').textContent = ` · ${propertyId}`;
 
   // -- layers ---------------------------------------------------------------
@@ -190,22 +177,9 @@
   const zoomFor = { '500': 15, '1000': 14, '2000': 13, '3000': 12, 'both': 14.5 };
 
   const map = L.map('map', { zoomControl: true, preferCanvas: true, minZoom: 5, maxZoom: 19 });
-  // `?key=` with an empty value is rejected by the tile endpoint, so the
-  // parameter is omitted entirely when no key is configured.
-  const tileUrl = 'https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png' +
-    (cartoKey ? '?key=' + encodeURIComponent(cartoKey) : '');
-  const tile = L.tileLayer(tileUrl, {
-    maxZoom: 20,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/" target="_blank" rel="noopener">CARTO</a>'
-  }).addTo(map);
-  let tileErrors = 0;
-  tile.on('tileerror', () => {
-    if (++tileErrors < 3) return;
-    notices.tiles = 'The map background could not load. Some location markers may still appear.';
-    paintNotice();
-  });
   const origin = [lat, lon];
   map.setView(origin, zoomFor[radius] ?? 14.5);
+  window.SitewiseBasemap.mount(map);
 
   // The selected property is the subject of the page, so it is drawn larger
   // than any reference marker and is never clustered.
@@ -529,8 +503,7 @@
         'locations shown on the map come from different sources, so the two ' +
         'numbers may differ. The map chips show both.');
     }
-    notices.layers = parts.join(' ');
-    paintNotice();
+    paintNotice(parts.join(' '));
   };
 
   const drawPlaces = () => {

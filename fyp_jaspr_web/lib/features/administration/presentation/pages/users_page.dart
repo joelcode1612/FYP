@@ -12,20 +12,6 @@ import 'package:universal_web/web.dart' as web;
 import 'package:sitewise_jaspr_web/core/di/app_locator.dart';
 import 'package:sitewise_jaspr_web/features/administration/data/admin_api.dart';
 
-/// Web user management, ported to the source `admin/users.html` structure: a
-/// `.filters` bar (Search + Status + Role, in a `.grid-3`) above an
-/// `.audit-table` whose Account cell uses `.who`/`.sub` and whose Status cell
-/// uses `.st`.
-///
-/// Records are live: the user repository reads the authenticated FastAPI
-/// `/users` API (administrator + aal2 enforced server-side), not demo data.
-/// Existing account roles remain read-only. New owner accounts are issued
-/// only through the administrator invitation endpoint; status and role are
-/// decided by the trusted backend, never by this page. Account
-/// status is managed on the User Detail page, so no change is ever
-/// simulated here. A failed load surfaces an error state rather than an
-/// empty directory. The Listings column is the backend's per-owner count of
-/// operational listings; Joined is the user's `joinedAt`.
 @client
 class UsersPage extends StatefulComponent {
   const UsersPage({super.key});
@@ -246,8 +232,7 @@ class _UsersPageState extends State<UsersPage> {
       ),
       Callout(
         'The account remains pending until the recipient accepts the '
-        'invitation and completes account setup. No password is created '
-        'or displayed by the administrator.',
+        'invitation and completes account setup.',
         tone: 'info',
         icon: 'info',
       ),
@@ -290,17 +275,17 @@ class _UsersPageState extends State<UsersPage> {
     return AppLayout(
       role: AppRole.admin,
       currentRoute: '/admin/users',
-      // The page header is rendered by `AppLayout`; a page must not render
-      // its own `PageHead` or the title appears twice.
-      title: 'Users',
-      eyebrow: 'Accounts',
-      subtitle:
-          'Manage registered accounts and invite property owners. '
-          'Administrator sign-in with MFA is required.',
+      title: 'User management',
       actions: [
-        ActionButton(
-          'Invite Property Owner',
+        const ActionLink(
+          'Invite agent',
+          href: '/admin/agents?invite=1',
           icon: 'person_add',
+        ),
+        ActionButton(
+          'Invite property owner',
+          icon: 'person_add',
+          variant: 'secondary',
           onClick: _openOwnerInvite,
         ),
       ],
@@ -389,6 +374,9 @@ class _Directory extends StatefulComponent {
 }
 
 class _DirectoryState extends State<_Directory> {
+  static const _pageSize = 20;
+  int _page = 0;
+  bool _newestFirst = true;
   String query = '';
   String statusFilter = 'all';
 
@@ -412,7 +400,7 @@ class _DirectoryState extends State<_Directory> {
     ('All statuses', 'all'),
     ('Pending', 'pending'),
     ('Active', 'active'),
-    ('Suspended', 'suspended'),
+    ('Blocked', 'suspended'),
   ];
 
   List<SitewiseUser> _filtered(List<SitewiseUser> users) {
@@ -426,10 +414,16 @@ class _DirectoryState extends State<_Directory> {
       final matchesRole =
           roleFilter == 'all' || _roleValue(user.role) == roleFilter;
       return matchesQ && matchesStatus && matchesRole;
-    }).toList();
+    }).toList()..sort((first, second) {
+      final date = _newestFirst
+          ? second.joinedAt.compareTo(first.joinedAt)
+          : first.joinedAt.compareTo(second.joinedAt);
+      return date != 0 ? date : first.id.compareTo(second.id);
+    });
   }
 
   String _joined(SitewiseUser user) {
+    if (user.joinedAt.year <= 1970) return 'Not provided';
     final m = user.joinedAt.month.toString().padLeft(2, '0');
     final d = user.joinedAt.day.toString().padLeft(2, '0');
     return '${user.joinedAt.year}-$m-$d';
@@ -447,6 +441,7 @@ class _DirectoryState extends State<_Directory> {
     // `events<String>` signature never matched that delivery, so the Status
     // and Role filters silently never fired.
     child: select(
+      attributes: {'aria-label': labelText},
       events: events<List<String>>(
         onInput: (selected) {
           if (selected.isNotEmpty) onChanged(selected.first);
@@ -467,31 +462,63 @@ class _DirectoryState extends State<_Directory> {
   Component build(BuildContext context) {
     // One watch for the whole directory: the filters bar is cheap to re-render
     // and the layout chrome above it stays out of every rebuild.
-    final users = _filtered(
-      context.watch(adminNotifierProvider.select((state) => state.users)),
+    final all = context.watch(
+      adminNotifierProvider.select((state) => state.users),
     );
-    return div(classes: 'stack stack--sections', [
-      div(classes: 'filters', [
-        div(classes: 'grid-3', [
-          SearchInput(
-            label: 'Search',
-            placeholder: 'Name or email',
-            ariaLabel: 'Search users by name or email',
-            onInput: (value) => setState(() => query = value),
+    final users = _filtered(all);
+    final pageCount = (users.length / _pageSize).ceil();
+    final page = pageCount == 0 ? 0 : _page.clamp(0, pageCount - 1);
+    final start = page * _pageSize;
+    final visible = users.skip(start).take(_pageSize);
+    return div(classes: 'auu-directory stack', [
+      div(classes: 'auu-stats', [
+        _stat('Registered', all.length),
+        for (final (label, status) in _statusOptions.skip(1))
+          _stat(
+            label,
+            all.where((user) => user.status.toLowerCase() == status).length,
           ),
-          _selectField(
-            labelText: 'Status',
-            value: statusFilter,
-            options: _statusOptions,
-            onChanged: (v) => setState(() => statusFilter = v),
-          ),
-          _selectField(
-            labelText: 'Role',
-            value: roleFilter,
-            options: _roleOptions,
-            onChanged: (v) => setState(() => roleFilter = v),
-          ),
-        ]),
+      ]),
+      div(classes: 'filters auu-toolbar', [
+        SearchInput(
+          label: 'Search',
+          placeholder: 'Name or email',
+          ariaLabel: 'Search users by name or email',
+          onInput: (value) => setState(() {
+            query = value;
+            _page = 0;
+          }),
+        ),
+        _selectField(
+          labelText: 'Status',
+          value: statusFilter,
+          options: _statusOptions,
+          onChanged: (v) => setState(() {
+            statusFilter = v;
+            _page = 0;
+          }),
+        ),
+        _selectField(
+          labelText: 'Role',
+          value: roleFilter,
+          options: _roleOptions,
+          onChanged: (v) => setState(() {
+            roleFilter = v;
+            _page = 0;
+          }),
+        ),
+        _selectField(
+          labelText: 'Registration order',
+          value: _newestFirst ? 'newest' : 'oldest',
+          options: const [
+            ('Newest first', 'newest'),
+            ('Oldest first', 'oldest'),
+          ],
+          onChanged: (value) => setState(() {
+            _newestFirst = value == 'newest';
+            _page = 0;
+          }),
+        ),
       ]),
 
       if (users.isEmpty)
@@ -505,96 +532,83 @@ class _DirectoryState extends State<_Directory> {
               '${users.length} '
               '${users.length == 1 ? 'account' : 'accounts'}',
           flush: true,
-          child: div(classes: 'table-scroll', [
-            table(classes: 'audit-table auu-table', [
-              thead([
-                tr([
-                  th([Component.text('User')]),
-                  th([Component.text('Role')]),
-                  th([Component.text('Account status')]),
-                  th([Component.text('Listings')]),
-                  th([Component.text('Joined')]),
-                  th([Component.text('Action')]),
-                ]),
-              ]),
-              tbody([
-                for (final user in users)
+          child: TableScroll(
+            label: 'User directory',
+            children: [
+              table(classes: 'audit-table auu-table', [
+                thead([
                   tr([
-                    td([
-                      div(classes: 'auu-person', [
-                        span(
-                          classes: 'auu-avatar',
-                          attributes: const {'aria-hidden': 'true'},
-                          [
-                            Component.text(
-                              user.name.trim().isEmpty
-                                  ? 'U'
-                                  : user.name
-                                        .trim()
-                                        .substring(0, 1)
-                                        .toUpperCase(),
-                            ),
-                          ],
-                        ),
-                        div(classes: 'auu-person__info', [
-                          AppLink(
-                            to: '/admin/user-detail?id=${Uri.encodeComponent(user.id)}',
-                            classes: 'auu-person__name',
-                            children: [
+                    th([Component.text('User')]),
+                    th([Component.text('Account role')]),
+                    th([Component.text('Account status')]),
+                    th(classes: 'auu-registration', [
+                      Component.text('Registered'),
+                    ]),
+                    th([Component.text('Action')]),
+                  ]),
+                ]),
+                tbody([
+                  for (final user in visible)
+                    tr([
+                      td([
+                        div(classes: 'auu-person', [
+                          span(
+                            classes: 'auu-avatar',
+                            attributes: const {'aria-hidden': 'true'},
+                            [
                               Component.text(
                                 user.name.trim().isEmpty
-                                    ? 'Unnamed account'
-                                    : user.name,
+                                    ? 'U'
+                                    : user.name
+                                          .trim()
+                                          .substring(0, 1)
+                                          .toUpperCase(),
                               ),
                             ],
                           ),
-                          span(classes: 'auu-person__email', [
-                            Component.text(user.email),
+                          div(classes: 'auu-person__info', [
+                            AppLink(
+                              to: '/admin/user-detail?id=${Uri.encodeComponent(user.id)}',
+                              classes: 'auu-person__name',
+                              children: [
+                                Component.text(
+                                  user.name.trim().isEmpty
+                                      ? 'Unnamed account'
+                                      : user.name,
+                                ),
+                              ],
+                            ),
+                            span(classes: 'auu-person__email', [
+                              Component.text(user.email),
+                            ]),
                           ]),
                         ]),
                       ]),
-                    ]),
-                    td([
-                      span(classes: 'auu-role auu-role--${user.role.name}', [
-                        Component.text(_roleLabel(user.role)),
+                      td([
+                        span(classes: 'auu-role auu-role--${user.role.name}', [
+                          Component.text(_roleLabel(user.role)),
+                        ]),
+                      ]),
+                      td([StatusBadge.forText(user.status)]),
+                      td(classes: 'auu-registration', [
+                        span(classes: 'auu-date', [
+                          Component.text(_joined(user)),
+                        ]),
+                      ]),
+                      td([
+                        div(classes: 'auu-actions', [
+                          AppLink(
+                            to: '/admin/user-detail?id=${Uri.encodeComponent(user.id)}',
+                            classes: 'auu-manage',
+                            children: [Component.text('View details')],
+                          ),
+                        ]),
                       ]),
                     ]),
-                    td([StatusBadge.forText(user.status)]),
-                    td([
-                      span(classes: 'auu-count', [
-                        Component.text(
-                          user.listingCount == null
-                              ? '—'
-                              : '${user.listingCount}',
-                        ),
-                      ]),
-                    ]),
-                    td([
-                      span(classes: 'auu-date', [
-                        Component.text(_joined(user)),
-                      ]),
-                    ]),
-                    td([
-                      div(classes: 'auu-actions', [
-                        AppLink(
-                          to: '/admin/user-detail?id=${Uri.encodeComponent(user.id)}',
-                          classes: 'auu-manage',
-                          children: [
-                            Component.text('Manage'),
-                            Icon('arrow_forward', size: 'sm'),
-                          ],
-                        ),
-                        if (user.role == AppRole.admin)
-                          span(classes: 'auu-protected', [
-                            Icon('lock', size: 'sm'),
-                            Component.text('Protected'),
-                          ]),
-                      ]),
-                    ]),
-                  ]),
+                ]),
               ]),
-            ]),
-          ]),
+            ],
+          ),
         ),
       p(classes: 'stat-note', [
         Component.text(
@@ -603,8 +617,33 @@ class _DirectoryState extends State<_Directory> {
           'Passwords and other private credentials are never exposed.',
         ),
       ]),
+      if (pageCount > 1)
+        div(classes: 'row auu-pager', [
+          span(classes: 'small muted grow', [
+            Component.text(
+              'Showing ${start + 1}–${start + visible.length} of ${users.length}',
+            ),
+          ]),
+          ActionButton(
+            'Previous',
+            variant: 'secondary',
+            onClick: page > 0 ? () => setState(() => _page = page - 1) : null,
+          ),
+          ActionButton(
+            'Next',
+            variant: 'secondary',
+            onClick: page + 1 < pageCount
+                ? () => setState(() => _page = page + 1)
+                : null,
+          ),
+        ]),
     ]);
   }
+
+  Component _stat(String label, int count) => div(classes: 'auu-stat', [
+    span(classes: 'small muted', [Component.text(label)]),
+    strong([Component.text('$count')]),
+  ]);
 }
 
 /// The stored role id, matching `rbac.ALL_ROLES` and the filter option values.

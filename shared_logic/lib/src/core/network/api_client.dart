@@ -29,6 +29,21 @@ abstract class ApiClient {
     required String contentType,
   });
 
+  /// Multipart upload from a file path, streamed by the transport.
+  ///
+  /// Optional so existing test fakes and non-mobile transports do not need a
+  /// new member; the mobile client implements it for capture photographs.
+  Future<Map<String, dynamic>> uploadFileMultipart(
+    String path, {
+    required Map<String, String> fields,
+    required String fileField,
+    required String filename,
+    required String filePath,
+    required String contentType,
+  }) => throw UnsupportedError(
+    'This transport does not support streamed file uploads.',
+  );
+
   /// Authenticated binary GET (used by the verification-document download
   /// endpoint); a non-2xx response throws with the backend's message.
   Future<List<int>> downloadBinary(String path);

@@ -1,84 +1,22 @@
-/* SiteWise admin accessibility — loaded after the legacy styles. */
-.app-shell.app-shell--admin {
-  --muted: #c4cada;
-  --overline: #c4cada;
-  --overline-text: #c4cada;
-  --border: #50596f;
-  --admin-focus: #a8d3ff;
-  font-size: 1rem;
-  line-height: 1.6;
+/* Contrast and readability for Admin-specific dashboard and directory elements. */
+.app-shell.app-shell--admin .bento-kpis .kpi :is(.k,.v,.n) { text-shadow: none; }
+.app-shell.app-shell--admin :is(.bento-card,.bento-hero) { box-shadow: none; overflow-wrap: anywhere; }
+.app-shell.app-shell--admin :is(.card-note,.hero-badge) {
+  font-size: var(--admin-small);
+  line-height: 1.45;
+  white-space: normal;
+  height: auto;
+  color: #e7e9f2;
 }
-.app-shell.app-shell--admin .app-content__inner { padding: clamp(1rem, 2.5vw, 2rem); }
-.app-shell.app-shell--admin .app-pill__link { font-size: 1rem; min-height: 48px; line-height: 1.35; }
-.app-shell.app-shell--admin .app-pill :is(.icon-btn,.avatar-menu__trigger,.topbar__burger) { min-width: 48px; min-height: 48px; }
-.app-shell.app-shell--admin .sidebar :is(a,button) { min-height: 48px; font-size: 1rem; }
-.app-shell.app-shell--admin :is(a,button,input,select,textarea,summary,[tabindex]):focus-visible {
-  outline: 3px solid var(--admin-focus) !important;
-  outline-offset: 3px;
+.app-shell.app-shell--admin .hero-badge { padding: 4px 8px; background: #34394a; }
+.app-shell.app-shell--admin .donut-center .dc-k {
+  font-size: var(--admin-small);
+  text-transform: none;
+  letter-spacing: normal;
+  color: #e7e9f2;
 }
-.app-shell.app-shell--admin .app-main :is(.btn,.bento-cta,.bento-period) {
-  font-size: 1rem; min-height: 48px; height: auto; line-height: 1.4;
-  padding: .65rem 1rem; white-space: normal; justify-content: center;
-}
-.app-shell.app-shell--admin .app-main :is(input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=hidden]):not([type=file]):not([type=color]),select,textarea) { font-size: 1rem; min-height: 48px; line-height: 1.5; }
-.app-shell.app-shell--admin .app-main :is(.field__label,.field > label,.field__hint,.stat-note,.small,.eyebrow-sm) { font-size: .9375rem; line-height: 1.55; letter-spacing: normal; }
-.app-shell.app-shell--admin .app-main :is(.body,.muted) { line-height: 1.6; }
-.app-shell.app-shell--admin .app-main :is(.table-scroll,.al2-table-scroll,.sa-table-scroll) { max-width: 100%; overflow-x: auto; }
-.app-shell.app-shell--admin .app-main :is(.audit-table,.al2-table,.sa-table) :is(th,td) { font-size: 1rem; line-height: 1.5; padding-block: .85rem; }
-.app-shell.app-shell--admin .app-main :is(.audit-table,.al2-table,.sa-table) :is(.pill,.st) { font-size: .9375rem; line-height: 1.4; white-space: normal; }
-/* Dashboard: flat high-contrast cards rather than white on bright gradients. */
-.app-shell.app-shell--admin .bento-head { margin-bottom: .5rem; align-items: flex-start; gap: 1rem; }
-.app-shell.app-shell--admin .bento-head h1 { font-size: clamp(2rem, 3vw, 2.5rem); line-height: 1.2; letter-spacing: -.025em; }
-.app-shell.app-shell--admin .bh-title p { font-size: 1.0625rem; line-height: 1.6; color: var(--muted); }
-.app-shell.app-shell--admin .bento-kpis { gap: 1rem; margin-bottom: 0; grid-template-columns: repeat(4,minmax(0,1fr)); }
-.app-shell.app-shell--admin .bento-kpis .kpi:nth-child(n) {
-  background: #1d202e; border: 1px solid #50596f; border-radius: 12px;
-  box-shadow: none; padding: 1.25rem; gap: .5rem; min-width: 0;
-  text-decoration: none; align-content: start; overflow-wrap: anywhere;
-}
-.app-shell.app-shell--admin .bento-kpis .kpi :is(.k,.v,.n) { text-shadow: none; color: #f9f9fd; }
-.app-shell.app-shell--admin .bento-kpis .kpi .k { font-size: 1rem; line-height: 1.45; font-weight: 650; text-transform: none; letter-spacing: 0; }
-.app-shell.app-shell--admin .bento-kpis .kpi .v { font-size: 2.25rem; line-height: 1.15; font-variant-numeric: tabular-nums; }
-.app-shell.app-shell--admin .bento-kpis .kpi .n { font-size: .9375rem; color: #c4cada; line-height: 1.5; }
-.app-shell.app-shell--admin :is(a.kpi,a.bento-card):hover { border-color: #a8d3ff; background: #272b3b; }
-.app-shell.app-shell--admin :is(a.kpi,a.bento-card):hover :is(.k,h3) { text-decoration: underline; text-underline-offset: .2em; }
-.app-shell.app-shell--admin .bento { gap: 1rem; }
-.app-shell.app-shell--admin :is(.bento-card,.bento-hero) { padding: clamp(1rem, 2vw, 1.5rem); min-width: 0; border: 1px solid #50596f; border-radius: 12px; box-shadow: none; overflow-wrap: anywhere; }
-.app-shell.app-shell--admin .bento-hero { grid-column: span 5; }
-.app-shell.app-shell--admin .bento-wide { grid-column: span 7; }
-.app-shell.app-shell--admin .bento-card__head { flex-wrap: wrap; gap: .5rem; align-items: flex-start; }
-.app-shell.app-shell--admin :is(.bento-card,.bento-hero) h3 { color: #f9f9fd; font-size: 1.25rem; line-height: 1.4; }
-.app-shell.app-shell--admin .bento-card p { font-size: 1rem; line-height: 1.6; }
-.app-shell.app-shell--admin :is(.card-note,.hero-badge) { font-size: .9375rem; line-height: 1.45; white-space: normal; height: auto; color: #e7e9f2; }
-.app-shell.app-shell--admin .hero-badge { padding: .3rem .65rem; background: #34394a; }
-.app-shell.app-shell--admin .bento-card .queue-count { font-size: 2rem; line-height: 1.2; }
-.app-shell.app-shell--admin :is(.hero-cap,.hero-legend) { font-size: 1rem; line-height: 1.6; color: #e7e9f2; }
-.app-shell.app-shell--admin .donut { width: min(10rem,100%); height: auto; aspect-ratio: 1; }
-.app-shell.app-shell--admin .donut::after { background: #1d202e; }
-.app-shell.app-shell--admin .donut-center .dc-v { font-size: 2rem; }
-.app-shell.app-shell--admin .donut-center .dc-k { font-size: .9375rem; text-transform: none; letter-spacing: 0; color: #e7e9f2; }
-.app-shell.app-shell--admin .ops-ev__title { font-size: 1.0625rem; }
-.app-shell.app-shell--admin .ops-ev__subject { font-size: 1rem; }
-.app-shell.app-shell--admin .ops-ev__meta { font-size: .9375rem; }
-/* Existing directory and audit UI, including smaller legacy overrides. */
-.app-shell.app-shell--admin .app-main :is(.al2-overline,.al2-muted,.al2-stat__top,.al2-field-label,.al2-property__id,.al2-cell-sub,.al2-live,.al2-pager__caption,.al-stat__label,.al-toolbar__label,.al-filters__label,.al-queue-item__id,.al-pager__info,.auu-person__email,.auu-date,.auu-role,.auu-protected,.sa-eyebrow,.sa-overview-label,.sa-overview-note,.sa-coverage-detail,.sa-coverage-subtitle,.sa-coverage-summary,.sa-source-status,.sa-person-muted,.sa-pager-summary,.sa-dialog-kicker,.sa-dialog-description,.sa-dialog-footnote) { font-size: .9375rem; line-height: 1.5; letter-spacing: normal; overflow-wrap: anywhere; }
-.app-shell.app-shell--admin .app-main :is(.al2-nav,.al-filter,.sa-tab,.auu-manage,.al2-table td:last-child .btn,.al2-pager .btn,.sa-pager .btn) { font-size: 1rem; min-height: 48px; line-height: 1.4; white-space: normal; }
-.app-shell.app-shell--admin .app-main a.al2-property__name { font-size: 1rem; line-height: 1.5; text-decoration: underline; text-underline-offset: .15em; }
-.app-shell.app-shell--admin .app-main :is(.al2-navigation,.sa-tabs,.al2-pager,.sa-pager) { flex-wrap: wrap; }
-/* Listing verification and panorama review, using their existing class names. */
-.app-shell.app-shell--admin .app-main :is(.vd--review-v3,.sw-admin-review-v2,.sw-review-polish) :is(.vd-hero__label,.vd-fact__label,.vd-fact__note,.vd-row__label,.vd-row__value,.vd-description,.vd-hero__address,.vd-section-head p,.vd-doc p,.vd-event p,.vd-event strong,.vd-side p,.vd-side .small,.vd-publication strong,.vd-decision-line h4,.admin-pano-review__eyebrow,.sw64-evidence p,.sw64-group,.sw64-row) { font-size: 1rem; line-height: 1.55; overflow-wrap: anywhere; }
-.app-shell.app-shell--admin .app-main :is(.vd--review-v3,.sw-admin-review-v2,.sw-review-polish) :is(.vd-tab,.vd-side .btn,.sw-review-agent-card .btn,.sw64-group) { min-height: 48px; font-size: 1rem; white-space: normal; }
-.app-shell.app-shell--admin .app-main .sw64-source { font-size: .9375rem !important; line-height: 1.5; }
-@media (max-width: 1100px) {
-  .app-shell.app-shell--admin .bento-kpis { grid-template-columns: repeat(2,minmax(0,1fr)); }
-  .app-shell.app-shell--admin :is(.bento-card,.bento-hero,.bento-wide) { grid-column: 1 / -1; }
-}
-@media (max-width: 600px) {
-  .app-shell.app-shell--admin .bento-kpis { grid-template-columns: minmax(0,1fr); }
-  .app-shell.app-shell--admin .bento-head .bh-actions { width: 100%; }
-  .app-shell.app-shell--admin .bento-head .bh-actions > a { flex: 1 1 100%; }
-  .app-shell.app-shell--admin .app-main .al2-stats { grid-template-columns: minmax(0,1fr); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .app-shell.app-shell--admin :is(.kpi,.bento-card,.bento-cta,.bento-period,.btn,.app-pill__link) { transition: none; animation: none; }
+.app-shell.app-shell--admin .app-main :is(.al2-field-label,.al2-stat__top,.al2-overline,.al2-pager__caption,.auu-date,.auu-protected,.sa-event-meta) {
+  font-size: var(--admin-small);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }

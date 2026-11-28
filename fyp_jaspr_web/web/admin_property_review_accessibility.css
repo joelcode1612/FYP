@@ -1,98 +1,397 @@
-/* Property verification detail: stacked labels and decisions; no workflow changes. */
-.app-shell.app-shell--admin .sw-review-polish:has(> .vd) {
-  display: grid !important; grid-template-columns: minmax(0,1fr) !important;
-  grid-template-rows: auto !important; gap: 1.25rem; min-width: 0;
+/* Readable review cards and decisions inside the common Admin content band. */
+.app-shell.app-shell--admin .sw-admin-review-v2 .sw-review-reference {
+  --sw-review-gap: var(--admin-gap);
+  gap: var(--admin-gap);
+  min-width: 0;
 }
-.app-shell.app-shell--admin .sw-review-polish:has(> .vd) > * {
-  grid-column: 1 / -1 !important; grid-row: auto !important; min-width: 0;
-}
-.app-shell.app-shell--admin .sw-review-polish:has(> .vd) > .sw-review-agent-card {
-  width: 100%; max-width: none; margin: 0; justify-self: stretch;
-}
+
 .app-shell.app-shell--admin .vd {
-  --vd-readable-text: #f9f9fd; --vd-readable-muted: #c4cada; --vd-readable-line: #596378;
-  display: grid !important; grid-template-columns: minmax(0,1fr); gap: 1.25rem;
-  min-width: 0; font-size: 1rem; line-height: 1.6;
+  --vd-readable-text: #f9f9fd;
+  --vd-readable-muted: #c4cada;
+  --vd-readable-line: #596378;
+  min-width: 0;
+  font-size: var(--admin-body);
+  line-height: 1.5;
 }
-.app-shell.app-shell--admin .vd .vd-layout {
-  display: grid !important; grid-template-columns: minmax(0,1fr) !important;
-  grid-template-rows: auto !important; gap: 1.25rem; min-width: 0;
+
+.app-shell.app-shell--admin .sw-admin-review-v2 .sw-review-reference .vd-layout {
+  grid-template-columns: minmax(0,1.85fr) minmax(290px,1fr);
+  align-items: start;
+  gap: var(--admin-gap);
 }
-.app-shell.app-shell--admin .vd .vd-layout > :is(.vd-main,.vd-side) {
-  grid-column: 1 / -1 !important; grid-row: auto !important; min-width: 0;
-  width: 100%; box-sizing: border-box;
+
+.app-shell.app-shell--admin .vd :is(.vd-main,.vd-side,.vd-panel) { min-width: 0; max-width: 100%; }
+
+.app-shell.app-shell--admin .sw-admin-review-v2 .sw-review-reference :is(.vd-hero,.vd-main,.vd-panel,.vd-side,.admin-pano-review) {
+  box-sizing: border-box;
+  border-radius: var(--admin-radius);
 }
-.app-shell.app-shell--admin .vd .vd-side {
-  position: static !important; max-height: none !important; overflow: visible !important;
-  border: 1px solid var(--vd-readable-line); border-radius: 12px; box-shadow: none;
+
+.app-shell.app-shell--admin .sw-admin-review-v2 .sw-review-reference :is(.vd-hero,.vd-panel,.admin-pano-review) {
+  padding: var(--admin-pad);
+  gap: var(--admin-gap);
 }
-.app-shell.app-shell--admin .vd :is(.vd-panel,.vd-hero) {
-  min-width: 0; box-sizing: border-box; border-radius: 12px;
-  padding: clamp(1rem,2vw,1.5rem); gap: 1rem;
+
+.app-shell.app-shell--admin .sw-admin-review-v2 .sw-review-reference .vd-hero__title {
+  font-size: 22px;
+  font-weight: 750;
+  overflow-wrap: anywhere;
 }
-.app-shell.app-shell--admin .vd #vd-panel-overview .vd-overview-grid {
-  grid-template-columns: minmax(0,1fr) !important; gap: 1.25rem;
+
+.app-shell.app-shell--admin .sw-admin-review-v2 .sw-review-reference .vd-main > .vd-panel { padding: var(--admin-pad); }
+.app-shell.app-shell--admin .sw-admin-review-v2 .sw-review-reference .vd-side { padding: 0; }
+.app-shell.app-shell--admin .sw-admin-review-v2 .sw-review-reference .vd-side :is(.vd-side__top,.vd-side__body) { padding: var(--admin-pad); }
+.app-shell.app-shell--admin .vd .admin-pano-review__empty { min-height: 0; padding: var(--admin-pad); }
+
+.app-shell.app-shell--admin .vd :is(.vd-hero__label,.vd-fact__label,.vd-fact__note) { font-size: var(--admin-small); }
+.app-shell.app-shell--admin .vd .vd-fact__value { font-variant-numeric: tabular-nums; }
+.app-shell.app-shell--admin .sw-admin-review-v2 .sw-review-reference .vd-fact { min-height: 0; }
+.app-shell.app-shell--admin .sw-admin-review-v2 .sw-review-reference .vd-fact__note { font-size: var(--admin-small); }
+
+.app-shell.app-shell--admin .sw-admin-review-v2 .sw-review-reference .vd-tabs { padding-inline: var(--admin-pad); }
+.app-shell.app-shell--admin .sw-admin-review-v2 .sw-review-reference .vd-tab {
+  flex: 0 1 auto;
+  min-height: var(--admin-control);
+  font-size: var(--admin-label);
+  line-height: 1.35;
 }
-.app-shell.app-shell--admin .vd #vd-panel-overview .vd-overview-grid > * {
-  min-width: 0; max-width: 100%; grid-row: auto !important;
+
+.app-shell.app-shell--admin .vd .vd-section-head { gap: 8px; flex-wrap: wrap; }
+.app-shell.app-shell--admin .vd :is(.vd-section-head h3,.vd-side__top h3,.sw-admin-evidence h3,.admin-pano-review__title) {
+  font-size: var(--admin-section);
+  line-height: 1.3;
+  font-weight: 700;
 }
-/* At most two readable columns; each field itself always reads vertically. */
-.app-shell.app-shell--admin .vd :is(.vd-info,.vd-info--two),
-.app-shell.app-shell--admin .vd #vd-panel-overview :is(.vd-info,.vd-info--two) {
-  display: grid !important; grid-template-columns: repeat(auto-fit,minmax(min(100%,max(20rem,45%)),1fr)) !important;
-  gap: .75rem 1rem !important; min-width: 0; width: 100%; box-sizing: border-box;
+.app-shell.app-shell--admin .vd .vd-group-title { font-size: var(--admin-body); font-weight: 700; }
+
+.app-shell.app-shell--admin .vd :is(.vd-description,.vd-section-head p,.vd-side p,.vd-side .small,.vd-event p,.vd-note,.vd-source,.vd-notes) {
+  font-size: var(--admin-label);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
-.app-shell.app-shell--admin .vd .vd-row,
-.app-shell.app-shell--admin .vd #vd-panel-overview .vd-row {
-  display: flex !important; flex-direction: column !important; align-items: stretch !important;
-  justify-content: flex-start !important; gap: .35rem !important;
-  min-width: 0 !important; width: auto !important; max-width: 100%; height: auto;
-  min-height: 0; padding: .85rem 1rem !important; box-sizing: border-box;
-  background: #181b29; border: 1px solid var(--vd-readable-line) !important; border-radius: 8px;
+
+.app-shell.app-shell--admin .vd .vd-info { min-width: 0; }
+.app-shell.app-shell--admin .vd .vd-info > *,
+.app-shell.app-shell--admin .vd #vd-panel-overview .vd-overview-grid > * { min-width: 0; }
+
+.app-shell.app-shell--admin .sw-admin-review-v2 .sw-review-reference .vd-row {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) minmax(0,1.35fr);
+  align-items: start;
+  gap: 4px 10px;
+  min-width: 0;
+  min-height: 0;
+  padding: 8px 0;
+  box-sizing: border-box;
 }
-.app-shell.app-shell--admin .vd .vd-row :is(.vd-row__label,.vd-row__value),
-.app-shell.app-shell--admin .vd #vd-panel-overview .vd-row :is(.vd-row__label,.vd-row__value) {
-  display: block !important; flex: 0 1 auto !important; min-width: 0 !important;
-  width: 100% !important; max-width: 100% !important; text-align: start !important;
-  white-space: normal !important; writing-mode: horizontal-tb !important;
-  word-break: normal !important; overflow-wrap: break-word !important;
-  box-sizing: border-box; font-size: 1rem !important; line-height: 1.55 !important;
+.app-shell.app-shell--admin .vd .vd-row :is(.vd-row__label,.vd-row__value) {
+  min-width: 0;
+  max-width: 100%;
+  text-align: start;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
 }
-.app-shell.app-shell--admin .vd .vd-row .vd-row__label { color: var(--vd-readable-muted); font-weight: 500; }
-.app-shell.app-shell--admin .vd .vd-row .vd-row__value { color: var(--vd-readable-text); font-weight: 650; }
-.app-shell.app-shell--admin .vd :is(.vd-group-title,.vd-section-head h3,.vd-side__top h3) {
-  font-size: 1.25rem !important; line-height: 1.4; font-weight: 650; text-transform: none !important;
-  letter-spacing: normal !important; color: var(--vd-readable-text); margin-block: 0 .5rem;
+.app-shell.app-shell--admin .vd .vd-row__label { font-size: var(--admin-label); color: var(--vd-readable-muted); }
+.app-shell.app-shell--admin .vd .vd-row__value { font-size: var(--admin-body); color: var(--vd-readable-text); font-weight: 650; }
+
+.app-shell.app-shell--admin .vd .vd-metric { min-width: 0; min-height: 0; padding: 12px; }
+.app-shell.app-shell--admin .vd .vd-metric__value { font-size: var(--admin-section); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.app-shell.app-shell--admin .vd :is(.vd-metric__label,.vd-metric__note) { font-size: var(--admin-small); }
+
+.app-shell.app-shell--admin .sw-admin-review-v2 .sw-review-reference .vd-side:not(.sw-r4-side) {
+  position: static;
+  max-height: none;
+  overflow: visible;
 }
-.app-shell.app-shell--admin .vd :is(.vd-description,.vd-section-head p,.vd-side p,.vd-side .small,.vd-event p,.vd-event strong,.vd-hero__address,.vd-fact__label,.vd-fact__note,.vd-source,.vd-notes) {
-  font-size: 1rem !important; line-height: 1.6 !important; overflow-wrap: break-word;
-  color: var(--vd-readable-muted);
-}
-.app-shell.app-shell--admin .vd :is(.vd-side__top,.vd-side__body,.vd-activity) { padding: clamp(1rem,2vw,1.5rem); gap: .85rem; min-width: 0; }
+.app-shell.app-shell--admin .vd :is(.vd-side__body,.vd-activity,.vd-doc) { min-width: 0; gap: 8px; }
+.app-shell.app-shell--admin .vd .vd-doc { flex-wrap: wrap; }
+.app-shell.app-shell--admin .vd .vd-doc .grow { min-width: 0; overflow-wrap: anywhere; }
+
 .app-shell.app-shell--admin .vd .vd-check {
-  display: flex !important; align-items: center; gap: .75rem; min-height: 48px;
-  font-size: 1rem !important; line-height: 1.5; color: var(--vd-readable-text);
-  border: 1px solid var(--vd-readable-line); border-radius: 8px; padding: .75rem; box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--admin-control);
+  padding: 5px 8px;
+  font-size: var(--admin-label);
+  line-height: 1.45;
+  border: 1px solid var(--vd-readable-line);
+  border-radius: 8px;
+  color: var(--vd-readable-text);
 }
-.app-shell.app-shell--admin .vd .vd-check input { width: 24px !important; height: 24px !important; flex: 0 0 24px; margin: 0; accent-color: #a8d3ff; }
-.app-shell.app-shell--admin .vd .vd-check span { min-width: 0; overflow-wrap: break-word; }
+.app-shell.app-shell--admin .vd .vd-check input { width: 20px; height: 20px; flex: 0 0 20px; margin: 0; accent-color: var(--admin-focus); }
+.app-shell.app-shell--admin .vd .vd-check span { min-width: 0; overflow-wrap: anywhere; }
 .app-shell.app-shell--admin .vd .vd-check:has(input:disabled) { cursor: default; }
-.app-shell.app-shell--admin .vd .vd-side__body > p.small { background: #262b3b; padding: .7rem .85rem; border-left: 3px solid #e8c17b; border-radius: 4px; margin: 0; }
-.app-shell.app-shell--admin .vd :is(.vd-side .btn,.vd-history-toggle,.vd-side summary,.vd-tab) {
-  min-height: 48px !important; height: auto; font-size: 1rem !important; line-height: 1.5;
-  white-space: normal !important; padding: .75rem 1rem; border-radius: 8px; box-sizing: border-box;
+
+.app-shell.app-shell--admin .vd :is(.vd-side .btn,.vd-history-toggle,.vd-side summary) {
+  min-height: var(--admin-control);
+  font-size: var(--admin-label);
+  white-space: normal;
 }
-.app-shell.app-shell--admin .vd .vd-side :is(.btn,.vd-history-toggle) { width: 100%; max-width: 100%; }
 .app-shell.app-shell--admin .vd .vd-history-toggle {
-  display: flex; align-items: center; justify-content: space-between; gap: .75rem;
-  background: #262b3b !important; color: var(--vd-readable-text) !important;
-  border: 1px solid var(--vd-readable-line) !important; font-weight: 600; text-align: start; cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  text-align: start;
+  cursor: pointer;
 }
-.app-shell.app-shell--admin .vd .vd-side :is(.btn:disabled,button:disabled) { opacity: 1; background: #303546; color: #c4cada; cursor: not-allowed; }
-.app-shell.app-shell--admin .vd .vd-side :is(select,textarea) { min-height: 48px; width: 100%; max-width: 100%; font-size: 1rem; box-sizing: border-box; }
-.app-shell.app-shell--admin .vd .vd-tabs { flex-wrap: wrap; gap: .5rem; min-width: 0; }
-.app-shell.app-shell--admin .vd :is(button,a,input,select,textarea,summary,[tabindex]):focus-visible { outline: 3px solid #a8d3ff !important; outline-offset: 3px; }
+.app-shell.app-shell--admin .vd .vd-side :is(.btn:disabled,button:disabled) { background: #303546; color: #c4cada; cursor: not-allowed; }
 .app-shell.app-shell--admin .vd #vd-review-history[hidden] { display: none !important; }
-@media (prefers-reduced-motion: reduce) {
-  .app-shell.app-shell--admin .vd :is(button,a,input,select,textarea) { transition: none; animation: none; }
+
+/* Location intelligence shares the Admin spacing and controls. */
+.app-shell--admin .li-panel {
+  width: min(100%, 64rem);
+  min-width: 0;
+  margin-inline: auto;
+  padding: var(--admin-pad);
+  gap: var(--admin-gap);
+}
+
+.app-shell--admin .li-section {
+  min-width: 0;
+  padding: var(--admin-pad);
+  border: 1px solid var(--border);
+  border-radius: var(--admin-radius);
+  background: var(--surface);
+  gap: 10px;
+}
+
+.app-shell--admin .li-dashboard-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--admin-gap);
+}
+.app-shell--admin .li-dashboard-head h2 { margin: 0; font-size: 1.25rem; }
+.app-shell--admin .li-dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--admin-gap);
+}
+.app-shell--admin .li-dashboard-grid > .li-section { justify-content: start; }
+.app-shell--admin .li-radius-switch {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--admin-radius);
+  background: var(--alt-surface);
+}
+.app-shell--admin .li-radius-switch button {
+  min-height: 36px;
+  padding: 4px 12px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--muted);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+.app-shell--admin .li-radius-switch button[aria-pressed="true"] {
+  border-color: var(--action);
+  color: var(--ink);
+  background: var(--surface);
+}
+.app-shell--admin .li-radius-switch button:focus-visible {
+  outline: 2px solid var(--admin-focus);
+  outline-offset: 2px;
+}
+.app-shell--admin .li-stat-grid.li-overview-stats {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.app-shell--admin .li-overview-stats strong { font-size: 1.15rem; }
+.app-shell--admin .li-detail .li-group > summary { font-size: var(--admin-body); }
+.app-shell--admin .li-income-values strong { font-size: 1rem; }
+@media (max-width: 760px) {
+  .app-shell--admin .li-dashboard-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+.app-shell--admin .li-section :is(h3, h4, h5, p, dl, dd) { margin: 0; }
+.app-shell--admin .li-section h3,
+.app-shell--admin .li-detail summary {
+  color: var(--ink);
+  font-size: var(--admin-section);
+  font-weight: 700;
+  line-height: 1.3;
+}
+.app-shell--admin .li-section :is(h4, h5) { font-size: var(--admin-body); line-height: 1.4; }
+.app-shell--admin .li-section p,
+.app-shell--admin .li-section dt { color: var(--muted); font-size: var(--admin-label); }
+.app-shell--admin .li-score-layout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--admin-gap);
+}
+.app-shell--admin .li-score-layout p { flex: 1 1 15rem; }
+
+.app-shell--admin .li-score {
+  display: grid;
+  place-items: center;
+  inline-size: 8rem;
+  aspect-ratio: 1;
+  padding: 7px;
+  border-radius: 50%;
+  background: conic-gradient(var(--action) var(--li-score-fill), var(--alt-surface) 0);
+}
+.app-shell--admin .li-score > div {
+  display: grid;
+  place-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 8px;
+  border-radius: 50%;
+  background: var(--surface);
+  text-align: center;
+  color: var(--muted);
+  font-size: var(--admin-small);
+}
+.app-shell--admin .li-score strong {
+  color: var(--ink);
+  font-size: 1.125rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.app-shell--admin .li-factor-legend {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto minmax(0,1fr);
+  align-items: end;
+  gap: 6px;
+  font-size: var(--admin-label);
+  font-weight: 650;
+}
+.app-shell--admin .li-factor-legend :last-child { text-align: end; }
+.app-shell--admin .li-positive { color: var(--action); }
+.app-shell--admin .li-negative { color: var(--warning); }
+.app-shell--admin .li-factors { display: grid; gap: 10px; list-style: none; padding: 0; margin: 0; }
+.app-shell--admin .li-factor-label {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px 12px;
+  font-size: var(--admin-label);
+  margin-bottom: 5px;
+}
+.app-shell--admin .li-factor-label strong { font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.app-shell--admin .li-factor-track {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  height: 10px;
+  border-radius: 3px;
+  background: var(--alt-surface);
+}
+.app-shell--admin .li-factor-track::after {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: calc(50% - .5px);
+  border-inline-start: 1px solid var(--muted);
+}
+.app-shell--admin .li-factor-half { display: flex; min-width: 0; }
+.app-shell--admin .li-factor-half:first-child { justify-content: flex-end; }
+.app-shell--admin .li-factor-bar { display: block; background: currentColor; border-radius: 2px; }
+.app-shell--admin .li-factor { position: relative; min-width: 0; }
+.app-shell--admin .li-factor:focus-visible { outline: 2px solid var(--admin-focus); outline-offset: 3px; }
+.app-shell--admin .li-factor-note {
+  display: none;
+  position: absolute;
+  z-index: 2;
+  inset-inline: 0;
+  top: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--alt-surface);
+  color: var(--ink);
+  font-size: var(--admin-small);
+}
+.app-shell--admin .li-factor:is(:hover, :focus) .li-factor-note { display: block; }
+.app-shell--admin .li-comparison-track {
+  height: 7px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--alt-surface);
+}
+.app-shell--admin .li-comparison-track > span {
+  display: block;
+  height: 100%;
+  background: var(--action);
+}
+.app-shell--admin .li-radius {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  color: var(--muted);
+  font-size: var(--admin-label);
+}
+.app-shell--admin .li-radius select { padding-inline: 10px; }
+.app-shell--admin .li-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
+  gap: 8px;
+}
+.app-shell--admin .li-stat {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--alt-surface);
+}
+.app-shell--admin .li-stat > .ms { flex: none; color: var(--action); }
+.app-shell--admin .li-stat > div { min-width: 0; overflow-wrap: anywhere; }
+.app-shell--admin .li-stat h4 { color: var(--muted); font-weight: 550; }
+.app-shell--admin .li-stat strong { display: block; font-variant-numeric: tabular-nums; }
+
+.app-shell--admin .li-income {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  gap: 8px var(--admin-gap);
+}
+.app-shell--admin .li-section dd { color: var(--ink); font-weight: 650; font-variant-numeric: tabular-nums; }
+.app-shell--admin .li-income > div { min-width: 0; padding-block: 5px; }
+.app-shell--admin .li-detail { padding-block: 0; }
+.app-shell--admin .li-detail > summary {
+  min-height: var(--admin-control);
+  padding-block: 12px;
+  cursor: pointer;
+}
+.app-shell--admin .li-measurements { padding-bottom: var(--admin-pad); gap: var(--admin-gap); }
+.app-shell--admin .li-group { min-width: 0; gap: 8px; }
+.app-shell--admin .li-group + .li-group { border-top: 1px solid var(--border); padding-top: var(--admin-gap); }
+.app-shell--admin .li-data-list > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 4px 10px;
+  padding-block: 6px;
+}
+.app-shell--admin .li-data-list > div + div { border-top: 1px solid var(--border); }
+.app-shell--admin .li-section :is(dt,dd) { overflow-wrap: anywhere; }
+
+@media (max-width: 1050px) {
+  .app-shell.app-shell--admin .sw-admin-review-v2 .sw-review-reference .vd-layout { grid-template-columns: minmax(0,1fr); }
+}
+@media (min-width: 1251px) {
+  .app-shell.app-shell--admin .sw-admin-review-v2 .sw-review-reference .vd-hero {
+    grid-template-columns: minmax(125px,.85fr) minmax(260px,2fr) minmax(170px,1.1fr) minmax(0,2.1fr);
+  }
+}
+@media (max-width: 640px) {
+  .app-shell.app-shell--admin .sw-admin-review-v2 .sw-review-reference .vd-tab { flex: 1 1 45%; }
+  .app-shell.app-shell--admin .sw-admin-review-v2 .sw-review-reference .vd-hero__title { font-size: 20px; }
+  .app-shell.app-shell--admin .sw-review-reference .sw-r4-people { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .app-shell.app-shell--admin .sw-review-reference .sw-r4-people:has(.sw-r4-assignment-panel) { grid-template-columns: minmax(0,1fr); }
+  .app-shell.app-shell--admin .sw-admin-review-v2 .sw-review-reference :is(.vd-row,#vd-panel-overview .vd-row) {
+    grid-template-columns: minmax(0,1fr);
+  }
 }

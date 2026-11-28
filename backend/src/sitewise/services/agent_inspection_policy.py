@@ -103,6 +103,7 @@ def completed_agent_panorama(
            AND cs.owner_id = :uid
            AND cs.status = 'completed'
            AND a.workflow_status IN ('accepted', 'needs_correction')
+           AND a.panorama_id = p.panorama_id
            AND (CAST(:panorama_id AS text) IS NULL OR CAST(p.panorama_id AS text) = :panorama_id)
            AND p.verification_status IS DISTINCT FROM 'rejected'
            AND p.storage_path IS NOT NULL AND btrim(p.storage_path) <> ''
@@ -286,6 +287,7 @@ def agent_submission_readiness(
         'missing_inspection_checks': missing_checks,
         'ownership_proof_uploaded': proof_available,
         'ownership_proof_record_count': proof_count,
+        'ownership_submission_status': ownership_status,
         'panorama_confirmed': bool(panorama_id),
         'enrichment_running': running,
         'population_acknowledgement_required': population_ack,

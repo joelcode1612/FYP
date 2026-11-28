@@ -517,9 +517,6 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
       subtitle: _hasSearched
           ? _subtitle(state)
           : 'Choose your preferences to find a suitable commercial property.',
-      actions: const [
-        ActionLink('AI recommendations', href: '/entrepreneur/ai-recommendations'),
-      ],
       child: div(classes: _hasSearched ? 'rec2' : 'rec2 rec2--presearch', [
         div(classes: 'rec2__main', [
           if (_saveError case final error?)
@@ -991,23 +988,35 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
           attributes: const {'id': 'rec2-location-controls'},
           [
       p(classes: 'rec2-location__intro', [
-        Component.text('Choose a point on the map, look up an address in Malaysia, '
-            'or enter latitude and longitude. Applying the point filters eligible '
-            'properties by straight-line distance.'),
+        Component.text('Use your current location or search for an address. '
+            'Drag the map to place the pin at the correct location, then apply '
+            'your search radius.'),
       ]),
       div(classes: 'rec2-location__methods', [
         div(classes: 'rec2-location__field rec2-location__field--full', [
-          span(classes: 'rec2-location__label', [Component.text('Pick on a map')]),
-          button(
-            classes: 'rec2-location__btn',
+          // SITEWISE_INLINE_LOCATION_V3: Leaflet owns the empty map host.
+          div(classes: 'rec2-location__map-toolbar', [
+            span(classes: 'rec2-location__label', [
+              Component.text('Set the location on map'),
+            ]),
+            button(
+              classes: 'rec2-location__btn rec2-location__gps',
+              attributes: const {
+                'type': 'button',
+                'data-sitewise-current-location': 'true',
+                'aria-label': 'Use current location',
+              },
+              [Icon('my_location', size: 'sm'), Component.text(' Use current location')],
+            ),
+          ]),
+          div(
+            classes: 'rec2-location__map-host',
             attributes: {
-              'type': 'button',
-              'data-sitewise-location-picker': 'true',
+              'data-sitewise-inline-location': 'true',
               'data-lat': _nearbyLatitudeText,
               'data-lon': _nearbyLongitudeText,
-              'aria-label': 'Open interactive map to pick a search location',
             },
-            [Icon('map', size: 'sm'), Component.text(' Open map picker')],
+            [],
           ),
           input(
             attributes: const {'id': 'rec2-location-pick-value', 'type': 'hidden'},
@@ -1252,18 +1261,29 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
     _ => null,
   };
 
-  // The population bands are contextual to the actual measured records.
-  // Use relative labels only when the backend supplies exactly three bands;
-  // keep the actual resident ranges visible to avoid invented thresholds.
+  // SITEWISE_RELATIVE_POPULATION_LABELS_V1
+  // Labels describe relative resident counts in the current facet, not fixed
+  // population thresholds. Preserve each backend range key unchanged.
   List<(String, String)> _friendlyPopulationRanges(
     List<FacetRangeOption> ranges,
   ) {
-    if (ranges.length != 3) return _rangePairs(ranges);
-    final ordered = [...ranges]..sort((left, right) => left.min.compareTo(right.min));
-    const levels = ['Lower', 'Moderate', 'Higher'];
+    if (ranges.isEmpty) return [];
+    final ordered = [...ranges]
+      ..sort((left, right) => left.min.compareTo(right.min));
+    final levels = switch (ordered.length) {
+      1 => const ['Only available range'],
+      2 => const ['Low', 'High'],
+      3 => const ['Low', 'Moderate', 'High'],
+      4 => const ['Low', 'Moderate', 'High', 'Very high'],
+      5 => const ['Very low', 'Low', 'Moderate', 'High', 'Very high'],
+      _ => List<String>.generate(
+        ordered.length,
+        (i) => 'Population level ${i + 1} of ${ordered.length}',
+      ),
+    };
     return [
       for (var i = 0; i < ordered.length; i++)
-        (ordered[i].key, '${levels[i]} — ${ordered[i].label}'),
+        (ordered[i].key, levels[i]),
     ];
   }
 
@@ -1674,15 +1694,13 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
     final hasRent = request.minRentalRm != null || request.maxRentalRm != null;
     return EmptyState(
       title: browseOnly
-          ? 'No PU-eligible properties'
+          ? 'No scored properties available'
           : 'No properties match all your current filters.',
       body: browseOnly
-          ? 'No property in the catalogue has a PU research score above 50, so '
-                'there is nothing eligible to recommend. That is a data '
-                'condition, not a filter problem.'
-          : 'Nothing in the catalogue satisfies every constraint AND has a PU '
-                'score above 50. Remove a restrictive filter or clear them all '
-                'and search again.',
+          ? 'No catalogue property currently has a usable location score. '
+                'That is a data condition, not a filter problem.'
+          : 'Nothing in the catalogue satisfies every constraint. Remove a '
+                'restrictive filter or clear them all and search again.',
       action: div(classes: 'rec2__empty-actions', [
         if (hasRent)
           ActionButton(
@@ -1820,20 +1838,59 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
           ),
         ]),
       ]),
-      div(classes: 'rec2-card__score', [
-        strong([
-          Component.text(
-            match.verifiableCount == 0
-                ? '—'
-                : '${match.matchedCount}/${match.verifiableCount}',
-          ),
-        ]),
-        span([
-          Component.text(
-            match.verifiableCount == 0 ? 'No criteria' : 'Requirements met',
-          ),
-        ]),
+      _requirementStatus(match),
+    ]);
+  }
+
+  /// Compact requirement status for the right-hand column of a ranked card.
+  ///
+  /// Every count comes from the backend match payload. This component only
+  /// formats it — it never recomputes the match or influences ranking.
+  Component _requirementStatus(RecommendationMatch match) {
+    final total = match.verifiableCount;
+    final matched = match.matchedCount;
+    final hasCriteria = total > 0;
+    final fullyMatched = hasCriteria && matched >= total;
+    final remaining = hasCriteria ? total - matched : 0;
+
+    final value = hasCriteria ? '$matched/$total matched' : '—';
+    final support = !hasCriteria
+        ? 'No criteria selected'
+        : fullyMatched
+            ? 'Fully matches your selected criteria'
+            : match.unverified.isNotEmpty && match.unmatched.isEmpty
+                ? '$remaining not verified yet'
+                : '$remaining of $total not met';
+    final chipLabel = !hasCriteria
+        ? 'Not set'
+        : fullyMatched
+            ? 'Match'
+            : matched == 0
+                ? 'No match'
+                : 'Partial';
+    final chipState = !hasCriteria
+        ? 'is-neutral'
+        : fullyMatched
+            ? 'is-match'
+            : matched == 0
+                ? 'is-none'
+                : 'is-partial';
+
+    return div(classes: 'rec2-card__score', [
+      span(classes: 'req-card__title', [Component.text('Requirements')]),
+      strong(classes: 'req-card__value', [Component.text(value)]),
+      span(classes: 'req-card__support', [Component.text(support)]),
+      span(classes: 'req-card__chip $chipState', [
+        if (fullyMatched) Icon('check', size: 'sm'),
+        Component.text(chipLabel),
       ]),
+      if (total > 1 && match.matched.isNotEmpty)
+        div(classes: 'req-card__mini-list', [
+          for (final requirement in match.matched.take(2))
+            span(classes: 'req-card__mini', [
+              Component.text(requirement.label),
+            ]),
+        ]),
     ]);
   }
 

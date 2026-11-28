@@ -986,6 +986,24 @@
       <excludeFolder url="file://$MODULE_DIR$/fyp_mobile_app/third_party/dchs_motion_sensors/.dart_tool" />
       <excludeFolder url="file://$MODULE_DIR$/fyp_mobile_app/third_party/dchs_motion_sensors/.pub" />
       <excludeFolder url="file://$MODULE_DIR$/fyp_mobile_app/third_party/dchs_motion_sensors/build" />
+      <excludeFolder url="file://$MODULE_DIR$/fyp_mobile_app/linux/flutter/ephemeral/.plugin_symlinks/geolocator_linux/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/fyp_mobile_app/linux/flutter/ephemeral/.plugin_symlinks/geolocator_linux/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/fyp_mobile_app/linux/flutter/ephemeral/.plugin_symlinks/geolocator_linux/build" />
+      <excludeFolder url="file://$MODULE_DIR$/fyp_mobile_app/linux/flutter/ephemeral/.plugin_symlinks/geolocator_linux/example/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/fyp_mobile_app/linux/flutter/ephemeral/.plugin_symlinks/geolocator_linux/example/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/fyp_mobile_app/linux/flutter/ephemeral/.plugin_symlinks/geolocator_linux/example/build" />
+      <excludeFolder url="file://$MODULE_DIR$/fyp_mobile_app/linux/flutter/ephemeral/.plugin_symlinks/package_info_plus/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/fyp_mobile_app/linux/flutter/ephemeral/.plugin_symlinks/package_info_plus/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/fyp_mobile_app/linux/flutter/ephemeral/.plugin_symlinks/package_info_plus/build" />
+      <excludeFolder url="file://$MODULE_DIR$/fyp_mobile_app/linux/flutter/ephemeral/.plugin_symlinks/package_info_plus/example/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/fyp_mobile_app/linux/flutter/ephemeral/.plugin_symlinks/package_info_plus/example/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/fyp_mobile_app/linux/flutter/ephemeral/.plugin_symlinks/package_info_plus/example/build" />
+      <excludeFolder url="file://$MODULE_DIR$/fyp_mobile_app/windows/flutter/ephemeral/.plugin_symlinks/package_info_plus/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/fyp_mobile_app/windows/flutter/ephemeral/.plugin_symlinks/package_info_plus/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/fyp_mobile_app/windows/flutter/ephemeral/.plugin_symlinks/package_info_plus/build" />
+      <excludeFolder url="file://$MODULE_DIR$/fyp_mobile_app/windows/flutter/ephemeral/.plugin_symlinks/package_info_plus/example/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/fyp_mobile_app/windows/flutter/ephemeral/.plugin_symlinks/package_info_plus/example/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/fyp_mobile_app/windows/flutter/ephemeral/.plugin_symlinks/package_info_plus/example/build" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="library" name="Python 3.11 (Python311) interpreter library" level="application" />

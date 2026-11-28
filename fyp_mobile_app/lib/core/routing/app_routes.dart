@@ -245,10 +245,16 @@ abstract final class AppRoutes {
           initialDraftId: settings.arguments as String?,
         ),
       ),
-      '/provider/property-detail' || '/provider/inspection' => (
+      '/provider/property-detail' => (
+        RouteAccess.workspace,
+        () => ProviderListingDetailRoute(
+          listingId: int.tryParse('${settings.arguments ?? ''}') ?? 0,
+        ),
+      ),
+      '/provider/inspection' => (
         RouteAccess.workspace,
         () => ProviderPropertyDetailMobilePage(
-          inspectionFirst: settings.name == '/provider/inspection',
+          inspectionFirst: true,
           listingId: int.tryParse('${settings.arguments ?? ''}') ?? 0,
         ),
       ),

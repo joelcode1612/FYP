@@ -162,8 +162,10 @@ def owner_assignment(property_id: int, session: Db, user: Provider) -> dict:
     try:
         profile = SupabaseAdminService().get_agent_profile_by_id(int(data['agent_id']))
         data['agent_name'] = (profile or {}).get('agent_name')
+        data['agent_user_id'] = (profile or {}).get('user_id')
     except Exception:
         data['agent_name'] = None
+        data['agent_user_id'] = None
     return {'data': data, **summary}
 
 
@@ -181,11 +183,29 @@ def request_agent(property_id: int, payload: AgentRequest, session: Db, user: Pr
     # Lock the listing before checking the assignment, matching the owner edit path.
     _require_requestable_listing(_owner_property(session, property_id, user, for_update=True))
     require_submitted_ownership_proof(session, property_id)
+    primary_photo = session.execute(text("""
+        SELECT 1
+          FROM fyp.property_photos
+         WHERE property_id = :pid
+           AND is_primary IS TRUE
+           AND NULLIF(BTRIM(url), '') IS NOT NULL
+         LIMIT 1
+    """), {'pid': property_id}).first()
+    if primary_photo is None:
+        raise HTTPException(
+            status_code=422,
+            detail='Upload a property photo before requesting an Agent.',
+        )
     current = session.execute(text("""
         SELECT workflow_status, agent_id FROM fyp.agent_listing_assignment
          WHERE listing_id=:pid FOR UPDATE
     """), {'pid': property_id}).mappings().first()
-    if current and current['workflow_status'] in ('requested', 'accepted', 'submitted'):
+    if current and current['workflow_status'] == 'requested':
+        if int(current['agent_id']) == int(agent['agent_id']):
+            return {'data': {'property_id': property_id, 'assignment_status': 'requested',
+                             'agent_name': agent['display_name'], 'already_requested': True}}
+        raise HTTPException(status_code=409, detail="A different Agent request is already active for this property.")
+    if current and current['workflow_status'] in ('accepted', 'submitted'):
         raise HTTPException(status_code=409, detail="A live Agent request already exists for this property.")
     if current and current['workflow_status'] == 'needs_correction':
         raise HTTPException(status_code=409, detail="The assigned Agent must complete the open correction.")
@@ -240,21 +260,6 @@ class AgentMissingDetails(BaseModel):
     size_sqft: float | None = Field(default=None, gt=0, le=10_000_000)
 
 
-_AGENT_MISSING_FIELDS = {
-    'name': 'name',
-    'property type': 'property_type',
-    'address': 'address',
-    'city': 'city',
-    'state': 'state',
-    'postcode': 'postcode',
-    'rental price': 'rental_price',
-    'a rental price greater than zero': 'rental_price',
-    'size sqft': 'size_sqft',
-    'a built-up area greater than zero': 'size_sqft',
-}
-_AGENT_ALLOWED_TYPES = {'Shoplot', 'Retail Space'}
-
-
 def _agent_missing_detail_view(session: Session, property_id: int, agent) -> dict:
     row = agent_assignment(session, property_id, agent)
     listing = rental_listing(session, property_id)
@@ -268,7 +273,8 @@ def _agent_missing_detail_view(session: Session, property_id: int, agent) -> dic
             listing, require_availability=False),
         'editable': row['workflow_status'] in ('accepted', 'needs_correction')
                     and not row['is_published']
-                    and row['verification_status'] in ('draft', 'rejected'),
+                    and row['verification_status'] in (
+                        'draft', 'rejected', 'information_requested'),
     }}
 
 
@@ -282,85 +288,17 @@ def agent_missing_details(property_id: int, session: Db, agent: Agent) -> dict:
 def complete_agent_missing_details(
     property_id: int, payload: AgentMissingDetails, session: Db, agent: Agent,
 ) -> dict:
-    # Lock canonical property before assignment (same lock order as owner edit).
-    listing_row = session.execute(text('''
-        SELECT id FROM fyp.rental_properties WHERE id=:pid FOR UPDATE
-    '''), {'pid': property_id}).first()
-    if listing_row is None:
-        raise HTTPException(status_code=404, detail='Property not found.')
-    assignment = agent_assignment(session, property_id, agent, writable=True)
-    current = session.execute(text('''
-        SELECT workflow_status FROM fyp.agent_listing_assignment
-        WHERE listing_id=:pid AND agent_id=:aid FOR UPDATE
-    '''), {'pid': property_id, 'aid': assignment['agent_id']}).scalar_one_or_none()
-    if current not in ('accepted', 'needs_correction'):
-        raise HTTPException(status_code=409, detail='Agent assignment is no longer editable.')
-    listing = rental_listing(session, property_id)
-    if listing is None:
-        raise HTTPException(status_code=404, detail='Property not found.')
-    missing_names = listing_completeness_errors(listing, require_availability=False)
-    missing_keys = {_AGENT_MISSING_FIELDS.get(name) for name in missing_names}
     updates = payload.model_dump(exclude_unset=True)
     if not updates:
-        raise HTTPException(status_code=422, detail='Provide at least one missing field.')
-    for key, value in list(updates.items()):
-        if key not in missing_keys:
-            raise HTTPException(
-                status_code=409,
-                detail=f'{key} already has an owner-provided value. Use the change proposal workflow.',
-            )
-        if value is None or (isinstance(value, str) and not value.strip()):
-            raise HTTPException(status_code=422, detail=f'{key} cannot be blank.')
-        if isinstance(value, str):
-            updates[key] = value.strip()
-    if 'property_type' in updates and updates['property_type'] not in _AGENT_ALLOWED_TYPES:
-        raise HTTPException(status_code=422, detail='Choose a supported property type.')
+        raise HTTPException(status_code=422, detail='Provide at least one property detail to update.')
+    # Keep this compatibility route on the canonical listing update path. It
+    # applies the same field validation, assignment authorization, audit,
+    # location refresh and inspection-evidence invalidation as the full form.
+    from sitewise.api.v1.properties import OwnerDraftRequest, update_own_listing
 
-    # Fixed server allowlist, with bound values only. No lifecycle, owner, or
-    # verification columns can ever be edited from this endpoint.
-    expressions = [f'{key} = :{key}' for key in updates]
-    arguments = {'pid': property_id, **updates}
-    if 'rental_price' in updates or 'size_sqft' in updates:
-        expressions.append('''psf = CASE
-            WHEN COALESCE(:price, rental_price) > 0 AND
-                 COALESCE(:area, size_sqft) > 0
-            THEN ROUND(COALESCE(:price, rental_price)::numeric /
-                       COALESCE(:area, size_sqft)::numeric, 2)
-            ELSE psf END''')
-        arguments['price'] = updates.get('rental_price')
-        arguments['area'] = updates.get('size_sqft')
-    session.execute(text(
-        'UPDATE fyp.rental_properties SET ' + ', '.join(expressions) +
-        ', updated_at=now() WHERE id=:pid'
-    ), arguments)
-    # A completed physical inspection must be re-confirmed when facts change.
-    # Preserve the uploaded tour and its original photo assets.
-    # Bind the JSON object: text() would read ':false' inside a JSON string
-    # literal as a bind parameter and fail before reaching PostgreSQL.
-    session.execute(text('''
-        UPDATE fyp.agent_listing_assignment
-           SET inspection_data = COALESCE(inspection_data, '{}'::jsonb) ||
-                 CAST(:reset_checks AS jsonb),
-               inspection_updated_at = NULL, updated_at=now()
-         WHERE listing_id=:pid AND agent_id=:aid
-    '''), {
-        'pid': property_id,
-        'aid': assignment['agent_id'],
-        'reset_checks': json.dumps({key: False for key in REQUIRED_INSPECTION}),
-    })
-    # The audit explicitly identifies the Agent; it is never recorded as an
-    # administrator decision and does not create a verification submission.
-    session.execute(text('''
-        INSERT INTO fyp.verification_audit
-            (audit_id, property_id, verification_id, verification_type,
-             previous_status, new_status, action, reason, created_at)
-        VALUES (gen_random_uuid(), :pid, NULL, NULL, NULL, NULL,
-                'agent_completed_property_details', :reason, now())
-    '''), {'pid': property_id,
-           'reason': f'Agent {agent.user_id} supplied previously missing fields: '
-                     + ', '.join(sorted(updates))})
-    session.commit()
-    return _agent_missing_detail_view(session, property_id, agent)
+    return update_own_listing(
+        property_id, OwnerDraftRequest(**updates), session, agent
+    )
 
 def _respond(property_id: int, session: Session, user: AuthenticatedUser,
              *, accept: bool, reason: str | None = None) -> dict:
@@ -414,8 +352,23 @@ def inspection_status(property_id: int, session: Db, agent: Agent) -> dict:
                AND status='active'
         )
     """), {'pid': property_id}).scalar())
+    ownership_documents = session.execute(text("""
+        SELECT document_id, original_filename, mime_type, file_size, uploaded_at
+          FROM fyp.verification_document
+         WHERE property_id=:pid AND verification_type='ownership'
+           AND status='active'
+         ORDER BY uploaded_at DESC
+    """), {'pid': property_id}).mappings().all() if row['workflow_status'] in (
+        'requested', 'accepted', 'needs_correction', 'submitted'
+    ) else []
     return {'data': {
       'ownership_proof_available': ownership_proof,
+      'ownership_documents': [
+          {**dict(document), 'document_id': str(document['document_id']),
+           'uploaded_at': document['uploaded_at'].isoformat()
+               if document.get('uploaded_at') else None}
+          for document in ownership_documents
+      ],
       'assignment_status': row['workflow_status'],
       'submission_readiness': readiness,
       'checklist': row['inspection_data'] or {},

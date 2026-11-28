@@ -37,6 +37,142 @@ def _gains_for(channel_gains: np.ndarray | None, frame_id: int) -> np.ndarray:
     return channel_gains[frame_id]
 
 
+def _gain_rows(channel_gains: np.ndarray | None, frame_ids: np.ndarray) -> np.ndarray:
+    """Per-pixel channel gains, shaped ``(n, 3)``.
+
+    The scalar :func:`_gains_for` returns ones for a pixel with no contributing
+    frame, for an out-of-range id, and when the caller supplied no gains at
+    all. The vectorised form has to reproduce all three cases exactly, because
+    these weights are summed over hundreds of thousands of pixels.
+    """
+    ids = np.asarray(frame_ids, dtype=np.int64).ravel()
+    rows = np.ones((ids.shape[0], 3), dtype=np.float32)
+    if channel_gains is None or len(channel_gains) == 0:
+        return rows
+    valid = (ids >= 0) & (ids < len(channel_gains))
+    if valid.any():
+        rows[valid] = np.asarray(channel_gains, dtype=np.float32)[ids[valid]]
+    return rows
+
+
+class SeamEnergyMaps:
+    """The two per-pixel seam costs, computed once for the whole canvas.
+
+    The scalar helpers below are called hundreds of thousands of times per
+    panorama, and each call re-derived the same eight neighbour luminances in
+    Python. On a 4096×2048 canvas that was 15 million interpreted lookups —
+    more than half the stitching time. These maps hold exactly the same
+    numbers, computed with NumPy.
+    """
+
+    __slots__ = ("delta", "edge")
+
+    def __init__(self, delta: np.ndarray, edge: np.ndarray) -> None:
+        self.delta = delta
+        self.edge = edge
+
+    def pixel_cost(self, index: int) -> float:
+        return float(self.delta[index]) + 6.0 * float(self.edge[index])
+
+
+def build_seam_energy(
+    *,
+    width: int,
+    height: int,
+    best_colour: np.ndarray,
+    second_colour: np.ndarray,
+    best_frame: np.ndarray,
+    second_frame: np.ndarray,
+    channel_gains: np.ndarray | None = None,
+) -> SeamEnergyMaps:
+    """Per-pixel colour difference and Sobel edge energy.
+
+    ``delta`` is :func:`_delta` for every pixel; ``edge`` is
+    :func:`seam_sobel_edge_energy_at` for every pixel. Both are float32, one
+    value per pixel, so the caller can index them directly.
+    """
+    count = width * height
+    best_rgb = np.asarray(best_colour, dtype=np.float32).reshape(count, 3)
+    second_rgb = np.asarray(second_colour, dtype=np.float32).reshape(count, 3)
+    best_gain = _gain_rows(channel_gains, best_frame)
+    second_gain = _gain_rows(channel_gains, second_frame)
+
+    delta = np.abs(best_rgb * best_gain - second_rgb * second_gain).sum(axis=1) / 3.0
+    edge = _sobel_map(best_rgb, best_gain, best_frame, width, height)
+    edge += _sobel_map(second_rgb, second_gain, second_frame, width, height)
+    return SeamEnergyMaps(delta.astype(np.float32), edge.astype(np.float32))
+
+
+_LUMA_WEIGHTS = np.array([0.299, 0.587, 0.114], dtype=np.float32)
+#: Rows per block when building the Sobel map. The full canvas would need
+#: ~250 MB of temporaries at 4096×2048; blocking keeps it near 20 MB.
+_SOBEL_ROW_BLOCK = 128
+
+
+def _sobel_map(
+    rgb: np.ndarray,
+    gains: np.ndarray,
+    frame_ids: np.ndarray,
+    width: int,
+    height: int,
+) -> np.ndarray:
+    """The scalar Sobel response for every pixel, in one pass.
+
+    Mirrors :func:`_sobel_at` exactly: neighbours that belong to another frame
+    (or fall outside the canvas) are replaced by the centre pixel's luminance,
+    so a frame's own edges never borrow contrast from its neighbour.
+    """
+    luma = (rgb * gains * _LUMA_WEIGHTS).sum(axis=1).astype(np.float32)
+    luma = luma.reshape(height, width)
+    ids = np.asarray(frame_ids, dtype=np.int64).ravel().reshape(height, width)
+    out = np.zeros((height, width), dtype=np.float32)
+    if height < 1 or width < 1:
+        return out.ravel()
+
+    for block_start in range(0, height, _SOBEL_ROW_BLOCK):
+        block_end = min(height, block_start + _SOBEL_ROW_BLOCK)
+        centre = luma[block_start:block_end]
+        centre_ids = ids[block_start:block_end]
+
+        def sample(dy: int, dx: int) -> np.ndarray:
+            # A neighbour outside the canvas is the centre pixel's own value,
+            # exactly as the scalar helper returns. Replicating the border
+            # would not do: for a pixel on the top row the *diagonal* upper
+            # neighbours would then read their in-row neighbours instead of
+            # themselves.
+            values = centre.copy()
+            neighbour_ids = centre_ids.copy()
+            row_lo = max(block_start, -dy)
+            row_hi = min(block_end, height - dy)
+            col_lo = max(0, -dx)
+            col_hi = min(width, width - dx)
+            if row_lo < row_hi and col_lo < col_hi:
+                values[row_lo - block_start : row_hi - block_start, col_lo:col_hi] = (
+                    luma[row_lo + dy : row_hi + dy, col_lo + dx : col_hi + dx]
+                )
+                neighbour_ids[
+                    row_lo - block_start : row_hi - block_start, col_lo:col_hi
+                ] = ids[row_lo + dy : row_hi + dy, col_lo + dx : col_hi + dx]
+            same = (neighbour_ids == centre_ids) & (centre_ids >= 0)
+            return np.where(same, values, centre)
+
+        tl = sample(-1, -1)
+        top = sample(0, -1)
+        tr = sample(1, -1)
+        left = sample(-1, 0)
+        right = sample(1, 0)
+        bl = sample(-1, 1)
+        bottom = sample(0, 1)
+        br = sample(1, 1)
+        gx = (-tl - 2 * left - bl + tr + 2 * right + br) / 4.0
+        gy = (-tl - 2 * top - tr + bl + 2 * bottom + br) / 4.0
+        magnitude = np.sqrt(gx * gx + gy * gy)
+        np.clip(magnitude, 0.0, 255.0, out=magnitude)
+        magnitude[centre_ids < 0] = 0.0
+        out[block_start:block_end] = magnitude
+    return out.ravel()
+
+
 def _delta(
     best_colour: np.ndarray,
     second_colour: np.ndarray,
@@ -88,7 +224,10 @@ def seam_pixel_cost_at(
     height: int,
     index: int,
     channel_gains: np.ndarray | None = None,
+    maps: SeamEnergyMaps | None = None,
 ) -> float:
+    if maps is not None:
+        return maps.pixel_cost(index)
     return _delta(
         best_colour, second_colour, best_frame, second_frame, index, channel_gains
     ) + 6.0 * seam_sobel_edge_energy_at(
@@ -238,6 +377,7 @@ def find_seam_labels(
     seam_cost_weight: float,
     scale: int = SEAM_CUT_SCALE,
     channel_gains: np.ndarray | None = None,
+    energy: SeamEnergyMaps | None = None,
 ) -> np.ndarray | None:
     """Runs the min-cut and returns a full-resolution ownership label map.
 
@@ -267,80 +407,94 @@ def find_seam_labels(
     best_frame_list = best_frame
     second_frame_list = second_frame
 
-    for gy in range(gh):
-        for gx in range(gw):
-            cell = gy * gw + gx
-            count = 0
-            active_count = 0
-            best_cost = 0.0
-            second_cost = 0.0
-            delta = 0.0
-            y1 = min(height, (gy + 1) * scale)
-            x1 = min(width, (gx + 1) * scale)
-            for y in range(gy * scale, y1):
-                row = y * width
-                for x in range(gx * scale, x1):
-                    i = row + x
-                    count += 1
-                    if second_weight_list[i] <= min_weight or second_frame_list[i] < 0:
-                        continue
-                    active_count += 1
-                    best_cost += -math.log(best_weight_list[i] + 1e-6)
-                    second_cost += -math.log(second_weight_list[i] + 1e-6)
-                    delta += _delta(
-                        best_colour,
-                        second_colour,
-                        best_frame_list,
-                        second_frame_list,
-                        i,
-                        channel_gains,
-                    )
-            if count == 0:
-                continue
-            if active_count == 0:
-                data_best[cell] = 0.0
-                data_second[cell] = math.inf
-                active[cell] = 0
-                continue
-            data_best[cell] = best_cost / active_count
-            data_second[cell] = second_cost / active_count
+    # One vectorised pass over the canvas, then a blocked reduction into the
+    # cell grid. The per-cell Python loop this replaces summed five values for
+    # every one of ~8 million pixels and re-derived the Sobel response for each
+    # cell centre — the largest single cost in the whole stitch.
+    if energy is None:
+        energy = build_seam_energy(
+            width=width,
+            height=height,
+            best_colour=best_colour,
+            second_colour=second_colour,
+            best_frame=best_frame_list,
+            second_frame=second_frame_list,
+            channel_gains=channel_gains,
+        )
+    best_w = np.asarray(best_weight_list, dtype=np.float64).ravel()
+    second_w = np.asarray(second_weight_list, dtype=np.float64).ravel()
+    pixel_active = (second_w > min_weight) & (
+        np.asarray(second_frame_list).ravel() >= 0
+    )
+    counted = pixel_active.astype(np.float64)
+    cost_best_px = np.where(pixel_active, -np.log(best_w + 1e-6), 0.0)
+    cost_second_px = np.where(pixel_active, -np.log(second_w + 1e-6), 0.0)
+    delta_px = np.where(pixel_active, energy.delta, 0.0).astype(np.float64)
 
-            centre_x = min(width - 1, gx * scale + scale // 2)
-            centre_y = min(height - 1, gy * scale + scale // 2)
-            sample_index = centre_y * width + centre_x
-            if (
-                second_frame_list[sample_index] < 0
-                or second_weight_list[sample_index] <= min_weight
-            ):
-                sample_index = -1
-                for yy in range(gy * scale, y1):
-                    if sample_index >= 0:
-                        break
-                    for xx in range(gx * scale, x1):
-                        candidate = yy * width + xx
-                        if (
-                            second_frame_list[candidate] >= 0
-                            and second_weight_list[candidate] > min_weight
-                        ):
-                            sample_index = candidate
-                            break
-            edge_energy = (
-                0.0
-                if sample_index < 0
-                else seam_sobel_edge_energy_at(
-                    best_colour=best_colour,
-                    second_colour=second_colour,
-                    best_frame=best_frame,
-                    second_frame=second_frame,
-                    width=width,
-                    height=height,
-                    index=sample_index,
-                    channel_gains=channel_gains,
-                )
-            )
-            color_diff = delta / active_count
-            delta_sum[cell] = color_diff + 6.0 * edge_energy
-            active[cell] = 1
+    padded_h = gh * scale
+    padded_w = gw * scale
+
+    def reduce_to_cells(values: np.ndarray) -> np.ndarray:
+        block = np.zeros((padded_h, padded_w), dtype=np.float64)
+        block[:height, :width] = np.asarray(values, dtype=np.float64).reshape(
+            height, width
+        )
+        return block.reshape(gh, scale, gw, scale).sum(axis=(1, 3))
+
+    count_cells = reduce_to_cells(np.ones(width * height, dtype=np.float64))
+    active_cells = reduce_to_cells(counted)
+    best_cost_cells = reduce_to_cells(cost_best_px)
+    second_cost_cells = reduce_to_cells(cost_second_px)
+    delta_cells = reduce_to_cells(delta_px)
+
+    # The cell's representative pixel for the edge term: the centre when it is
+    # active, otherwise the first active pixel in raster order.
+    active_block = np.zeros((padded_h, padded_w), dtype=bool)
+    active_block[:height, :width] = pixel_active.reshape(height, width)
+    ordered = (
+        active_block.reshape(gh, scale, gw, scale)
+        .transpose(0, 2, 1, 3)
+        .reshape(gh, gw, scale * scale)
+    )
+    has_active = ordered.any(axis=2)
+    first = ordered.argmax(axis=2)
+    first_row = first // scale
+    first_col = first % scale
+    fallback_index = (np.arange(gh)[:, None] * scale + first_row) * width + (
+        np.arange(gw)[None, :] * scale + first_col
+    )
+    # The centre pixel is preferred when it is active — the same choice the
+    # scalar loop made before falling back to the first active pixel.
+    centre_y = np.minimum(
+        height - 1, np.arange(gh)[:, None] * scale + scale // 2
+    )
+    centre_x = np.minimum(
+        width - 1, np.arange(gw)[None, :] * scale + scale // 2
+    )
+    centre_index = centre_y * width + centre_x
+    centre_active = pixel_active.reshape(height, width)[centre_y, centre_x]
+    sample_index = np.where(centre_active, centre_index, fallback_index)
+    sample_index = np.where(has_active, sample_index, -1)
+    edge_energy = np.where(
+        has_active,
+        energy.edge[np.maximum(sample_index, 0)],
+        0.0,
+    ).astype(np.float64)
+
+    populated = count_cells > 0
+    usable = populated & (active_cells > 0)
+    safe_active = np.where(active_cells > 0, active_cells, 1.0)
+    # Flat, cell-major order — the edge builder indexes these by `cell`.
+    data_best = np.where(usable, best_cost_cells / safe_active, 0.0).ravel()
+    data_second = np.where(
+        usable,
+        second_cost_cells / safe_active,
+        np.where(populated, np.inf, 0.0),
+    ).ravel()
+    delta_sum = np.where(
+        usable, delta_cells / safe_active + 6.0 * edge_energy, 0.0
+    ).ravel()
+    active = usable.astype(np.uint8).ravel()
 
     max_edges = cells * 12 + 16
     edge_capacity = np.zeros(max_edges, dtype=np.float64)

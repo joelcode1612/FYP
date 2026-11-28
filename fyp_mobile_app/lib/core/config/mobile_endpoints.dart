@@ -5,9 +5,8 @@ import 'package:fyp/core/config/mobile_runtime_config.dart';
 ///
 /// Separate from [AppConfig.apiBaseUrl] on purpose: that flag also decides
 /// whether the property screens use demo data, and it must not flip just
-/// because real sign-in was configured. Supabase credentials themselves come
-/// from [AppConfig] (`--dart-define SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`)
-/// and only ever the publishable key.
+/// because real sign-in was configured. Public Supabase settings come from
+/// the synchronized runtime asset; device networking stays locally editable.
 ///
 /// Nothing here is secret — these are the same addresses the web app uses.
 ///

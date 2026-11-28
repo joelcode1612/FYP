@@ -27,11 +27,12 @@ Deliberate distinctions
 * Missing rental/size is impossible in this dataset (100 % coverage), but the
   SQL still refuses rows without them: a listing with no rent cannot be
   evaluated against a budget.
-* Every returned property passed the strict PU eligibility gate
-  (``suitability_score > 50`` on the verified 0-100 scale) BEFORE
-  requirement-fit ranking. The threshold is never lowered to fill a result
-  page, the score is reported per card, and it remains a research association
-  index — not a probability of business success.
+* Every returned property has an AVAILABLE live PU score, but there is no
+  minimum score: the research association index is uncalibrated, so a numeric
+  pass mark would exclude properties without evidence that they are worse.
+  Availability is still enforced — an unresolved feature vector is never
+  fabricated into a score. The score remains a research P-vs-U association
+  index, not a probability of business success.
 * The catalogue is the product's published property catalogue — the same id
   space (``EP-``/``MD-``) that saved-properties, assessments, property detail
   and the PU model use. Those 955 research rows are the SAME canonical
@@ -124,20 +125,14 @@ def _expanded_model_token() -> str:
     return f"expanded64:{model_name}:{digest}"
 
 # ---------------------------------------------------------------------------
-# PU eligibility gate
+# PU eligibility
 # ---------------------------------------------------------------------------
 #
-#: Strict PU eligibility threshold on the verified 0-100 scale. A property is
-#: eligible only when its PU score is STRICTLY greater than this value, so a
-#: score of exactly 50.0 is excluded.
-#:
-#: Operational25 reassessment (2026-11-25, shadow mode): 905 eligible canonical
-#: properties scored, median 37.34, mean 38.65, 111/905 (12.3%) exceeded 50;
-#: 11/916 had no measurable required input. The supplied artifact reports mean
-#: holdout AUC 0.704 and supplies no per-property held-out scores, so there is
-#: no evidence for changing the gate. It remains 50 for BOTH variants; do not
-#: lower it merely to increase recommendation volume.
-PU_ELIGIBILITY_THRESHOLD = 50.0
+#: Eligibility requires an available live score only. There is deliberately no
+#: numeric threshold: the P-vs-U index is uncalibrated, and the previous
+#: ``> 50`` cut excluded most of the catalogue without evidence that those
+#: properties are worse. A lower or zero cut would be equally arbitrary.
+PU_ELIGIBILITY_THRESHOLD = None
 PU_SCORE_SCALE = "0-100"
 
 # ---------------------------------------------------------------------------
@@ -456,9 +451,9 @@ def _number(value: float) -> str:
 def _pu_eligibility() -> dict[str, Any]:
     """The gate every facet count already respects."""
     return {
-        "threshold": PU_ELIGIBILITY_THRESHOLD,
+        "threshold": None,
         "scale": PU_SCORE_SCALE,
-        "comparison": "strictly_greater_than",
+        "comparison": "none",
         "column": "live_expanded64_inference",
         "score_meaning": (
             "Uncalibrated P-vs-U research association index, not a probability "
@@ -824,16 +819,15 @@ class RecommendationSearchService:
                 "property_source": "catalog",
                 "criteria": criteria.cache_payload(),
                 "cached": self._last_cache_hit,
-                # Eligibility provenance: every result passed this gate BEFORE
-                # requirement-fit ranking. The threshold is never relaxed to
-                # reach a target count. Under expanded64 the gate runs on LIVE
-                # model scores after feature resolution (properties whose
-                # vector does not resolve are excluded with their missing
-                # fields reported), not on the stored catalogue column.
+                # Eligibility provenance: every result has an AVAILABLE live
+                # model score after feature resolution (properties whose vector
+                # does not resolve are excluded with their missing fields
+                # reported). There is no numeric pass mark, so no threshold is
+                # relaxed or tightened to reach a target count.
                 "pu_eligibility": {
-                    "threshold": PU_ELIGIBILITY_THRESHOLD,
+                    "threshold": None,
                     "scale": PU_SCORE_SCALE,
-                    "comparison": "strictly_greater_than",
+                    "comparison": "none",
                     "column": "live_expanded64_inference",
                     "score_meaning": (
                         "Uncalibrated P-vs-U research association index, not a "
@@ -1112,12 +1106,10 @@ class RecommendationSearchService:
                 if not result.get("available"):
                     continue  # unavailable features: excluded, never fabricated
                 score = float(result["score"])
-                # Same strictly-above threshold on the 0-100 scale, applied to
-                # the LIVE score. The threshold was reviewed against the
-                # expanded model's own score distribution (47.7% of its
-                # training rows pass) before being applied here.
-                if not (score * 100.0 > PU_ELIGIBILITY_THRESHOLD):
-                    continue
+                # Availability was checked above; no numeric cut is applied.
+                # The research index is uncalibrated, so treating any value as
+                # a pass mark would exclude properties without evidence that
+                # they are worse. Ranking still uses the live score.
                 row.expanded_score = score
                 row.suitability_score = None  # the stored value is a DIFFERENT model's output
                 row.expanded_model_version = version
@@ -1426,9 +1418,9 @@ def _rank_key(row: _Row) -> tuple:
     """Deterministic requirement-fit ordering with PU tie-breaks.
 
     Most requirements met first, fewest contradicted second, then HIGHER PU
-    score (all rows already passed the strict >50 eligibility gate), then the
-    largest budget headroom, then the largest size headroom, then the catalogue
-    id.
+    score (all rows have an available live score; there is no numeric cut), then
+    the largest budget headroom, then the largest size headroom, then the
+    catalogue id.
 
     Requirement fit stays the primary ranking signal — an existing preference
     outcome is never overridden by a research score, and no undocumented weight

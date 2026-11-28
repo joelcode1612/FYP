@@ -3,9 +3,12 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import 'package:fyp/core/di/service_locator.dart';
+import 'package:fyp/features/property_management/data/primary_property_photo_service.dart';
+import 'package:fyp/features/property_management/presentation/widgets/primary_property_photo_panel.dart';
 import 'package:fyp/core/config/mobile_config.dart';
 import 'package:fyp/core/theme/sitewise_m3.dart';
 import 'package:fyp/core/theme/sitewise_theme.dart';
@@ -13,6 +16,110 @@ import 'package:fyp/features/property_management/presentation/widgets/address_pr
 import 'package:fyp/shared/presentation/layouts/mobile_app_shell.dart';
 import 'package:fyp/core/routing/mobile_navigation.dart';
 import 'package:fyp/shared/presentation/layouts/provider_tab_scope.dart';
+
+/// A full address pasted into the single street field, split into the form's
+/// four existing fields. Nothing is invented: the postcode must belong to the
+/// detected city in the Malaysian location dataset.
+class _SplitAddress {
+  const _SplitAddress({
+    required this.street,
+    required this.state,
+    required this.city,
+    required this.postcode,
+  });
+
+  final String street;
+  final String state;
+  final String city;
+  final String postcode;
+}
+
+/// Split a pasted full Malaysian address into street / city / state / postcode.
+///
+/// Returns null for ordinary street-only typing, so this never fights the
+/// owner while they are filling the field character by character. It only
+/// engages when the text already contains a five-digit postcode AND a known
+/// state (or its common W.P. spelling) — the shape of a copied full address.
+_SplitAddress? _splitPastedAddress(String raw) {
+  final text = raw.replaceAll(RegExp(r'\s+'), ' ').trim();
+  if (text.isEmpty) return null;
+
+  final postcodeMatch = RegExp(r'\b(\d{5})\b').firstMatch(text);
+  if (postcodeMatch == null) return null;
+  final postcode = postcodeMatch.group(1)!;
+
+  final aliases = <String, String>{
+    for (final name in MalaysiaLocations.stateNames) name.toLowerCase(): name,
+    'w.p. kuala lumpur': 'Kuala Lumpur',
+    'wp kuala lumpur': 'Kuala Lumpur',
+    'wilayah persekutuan kuala lumpur': 'Kuala Lumpur',
+    'w.p. labuan': 'Labuan',
+    'wp labuan': 'Labuan',
+    'w.p. putrajaya': 'Putrajaya',
+    'wp putrajaya': 'Putrajaya',
+  };
+  final lowered = text.toLowerCase();
+  final keys = aliases.keys.toList()
+    ..sort((a, b) => b.length.compareTo(a.length));
+  String? state;
+  String? stateToken;
+  for (final key in keys) {
+    if (lowered.contains(key)) {
+      state = aliases[key];
+      stateToken = key;
+      break;
+    }
+  }
+  if (state == null || stateToken == null) return null;
+
+  // Prefer the city named in the text; otherwise derive it from the postcode.
+  // A locality such as "Kota Damansara" is deliberately left in the street
+  // line — it is not a dropdown city and dropping it would lose detail.
+  String? city;
+  for (final candidate in MalaysiaLocations.citiesFor(state)) {
+    final needle = RegExp.escape(candidate.toLowerCase());
+    final wholeName = RegExp('(^|[^a-z0-9])$needle([^a-z0-9]|\$)');
+    if (wholeName.hasMatch(lowered) &&
+        (city == null || candidate.length > city.length)) {
+      city = candidate;
+    }
+  }
+  if (city == null ||
+      !MalaysiaLocations.postcodesFor(state, city).contains(postcode)) {
+    for (final candidate in MalaysiaLocations.citiesFor(state)) {
+      if (MalaysiaLocations.postcodesFor(state, candidate).contains(postcode)) {
+        city = candidate;
+        break;
+      }
+    }
+  }
+  if (city == null ||
+      !MalaysiaLocations.postcodesFor(state, city).contains(postcode)) {
+    return null;
+  }
+
+  var street = text;
+  for (final token in <String>[stateToken, city, postcode, 'Malaysia']) {
+    street = street.replaceAll(
+      RegExp(RegExp.escape(token), caseSensitive: false),
+      ' ',
+    );
+  }
+  street = street
+      .replaceAll(RegExp(r'\s*,\s*'), ', ')
+      .replaceAll(RegExp(r'(,\s*)+'), ', ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .replaceAll(RegExp(r'^[\s,]+|[\s,]+$'), '')
+      .trim();
+  if (street.isEmpty) return null;
+
+  return _SplitAddress(
+    street: street,
+    state: state,
+    city: city,
+    postcode: postcode,
+  );
+}
 
 /// Holds the live form's exit guard for the Provider shell's system-back
 /// handler. Only one Add wizard is interactive at a time; the form clears its
@@ -84,17 +191,17 @@ class _SitewiseAddPropertyMobilePageState
   static const List<String> _stepNames = <String>[
     'Property details',
     'Location & extras',
-    'Agent verification',
+    'Property photo',
     'Review',
-    'Confirmation',
+    'Submit to Agent',
   ];
 
   static const List<String> _stepDescriptions = <String>[
     'Enter the basic details of your commercial unit.',
     'Add the address and any optional property details.',
-    'An authorized Agent will inspect the property and capture its 360° tour.',
-    'Check the details and confirm the location before saving.',
-    'Your property stays a draft until the existing verification workflow completes.',
+    'Add clear interior and exterior photos of the property.',
+    'Check the property details, rental terms, location and photographs.',
+    'Submit ownership proof and choose an Agent for the inspection.',
   ];
 
   // The one Agent/Owner Add Property form offers only two property types.
@@ -175,7 +282,6 @@ class _SitewiseAddPropertyMobilePageState
   (String, String, String, String)? _confirmedKey;
   String? _confirmedLabel;
   (String, String, String, String)? _previewAddressKey;
-  String? _savedAddressStatus;
   String? _savedFormattedAddress;
   DateTime? _previewExpiresAt;
 
@@ -186,8 +292,459 @@ class _SitewiseAddPropertyMobilePageState
   final Map<String, String> _fieldErrors = <String, String>{};
 
   // Server state: the persisted PostgreSQL draft and its lifecycle.
+  // SITEWISE_PRIMARY_PHOTO_UI_V1
+  SelectedPropertyPhoto? _selectedPropertyPhoto;
+  bool _photoPicking = false;
+  String? _photoMessage;
+  final List<SelectedPropertyPhoto> _ownerPhotoQueue = [];
+  final List<Map<String, dynamic>> _savedOwnerPhotos = [];
+  final Map<String, dynamic> _agentChoices = {};
+  XFile? _ownershipProofFile;
+  String? _selectedAgentUserId;
+  bool _loadingAgentChoices = false;
+  bool _submittingToAgent = false;
+  bool _submissionComplete = false;
+  String _submissionTitle = 'Request sent to Agent';
+  double _photoUploadProgress = 0;
+  int _photoUploadCompleted = 0;
+  int _photoUploadTotal = 0;
+  String? _submissionMessage;
+  String? _submissionError;
+  bool get _photoEditingEnabled {
+    final role = ref.read(authNotifierProvider).user?.role;
+    return _live && (role == AppRole.owner || role == AppRole.agent);
+  }
+
+  PrimaryPropertyPhotoService get _photoService =>
+      PrimaryPropertyPhotoService(ServiceLocator.apiClient);
+
+  Future<bool> _uploadSelectedPropertyPhoto() async {
+    final selected = _selectedPropertyPhoto;
+    final id = _draftId;
+    if (selected == null || !_photoEditingEnabled) return true;
+    if (id == null) return false;
+    try {
+      await _photoService.upload(id, selected);
+      if (!mounted) return false;
+      setState(() {
+        _selectedPropertyPhoto = null;
+        _photoMessage = null;
+      });
+      ServiceLocator.listingsRevision.value++;
+      return true;
+    } catch (_) {
+      if (mounted)
+        setState(
+          () => _photoMessage =
+              'Property saved as a draft. The photo could not be confirmed. Check the connection and saved photo before retrying.',
+        );
+      return false;
+    }
+  }
+
+  Future<void> _pickOwnerGalleryPhotos() async {
+    if (_photoPicking || _saving || _saveInFlight || !_editable) return;
+    setState(() {
+      _photoPicking = true;
+      _photoMessage = null;
+    });
+    try {
+      final files = await openFiles(
+        acceptedTypeGroups: [
+          const XTypeGroup(
+            label: 'Property photos',
+            extensions: ['jpg', 'jpeg', 'png', 'webp'],
+          ),
+        ],
+      );
+      for (final file in files) {
+        final name = file.name.toLowerCase();
+        final type = name.endsWith('.png')
+            ? 'image/png'
+            : name.endsWith('.webp')
+            ? 'image/webp'
+            : 'image/jpeg';
+        final bytes = await file.readAsBytes();
+        if (bytes.isEmpty) continue;
+        if (mounted) {
+          setState(() {
+            _ownerPhotoQueue
+              ..clear()
+              ..add(SelectedPropertyPhoto(file.name, bytes, type));
+          });
+          break;
+        }
+      }
+    } catch (e) {
+      if (mounted)
+        setState(() => _photoMessage = 'Could not select photos: $e');
+    } finally {
+      if (mounted) setState(() => _photoPicking = false);
+    }
+  }
+
+  Future<void> _takeOwnerPhoto() async {
+    if (_photoPicking || _saving || _saveInFlight || !_editable) return;
+    setState(() {
+      _photoPicking = true;
+      _photoMessage = null;
+    });
+    try {
+      final photo = await choosePrimaryPropertyPhoto(context);
+      if (mounted && photo != null) {
+        setState(() {
+          _ownerPhotoQueue
+            ..clear()
+            ..add(photo);
+        });
+      }
+    } on Object catch (e) {
+      if (mounted)
+        setState(() => _photoMessage = 'Could not take the photo: $e');
+    } finally {
+      if (mounted) setState(() => _photoPicking = false);
+    }
+  }
+
+  Future<void> _uploadOwnerPhotoQueue() async {
+    final id = _draftId;
+    if (_ownerPhotoQueue.isEmpty) return;
+    if (id == null || id.trim().isEmpty) {
+      throw StateError('Save the property before uploading its photo.');
+    }
+    final pending = List<SelectedPropertyPhoto>.of(_ownerPhotoQueue);
+    if (mounted) {
+      setState(() {
+        _photoUploadCompleted = 0;
+        _photoUploadTotal = pending.length;
+        _photoUploadProgress = 0;
+      });
+    }
+    for (var i = 0; i < pending.length; i++) {
+      final photo = pending[i];
+      final row = await _photoService.addPhoto(
+        id,
+        photo,
+        // This step selects the one current reference image. The backend
+        // promotes it and keeps any earlier photo records intact.
+        isPrimary: i == 0,
+      );
+      if (!mounted) return;
+      setState(() {
+        _savedOwnerPhotos.add(row);
+        _ownerPhotoQueue.remove(photo);
+        _photoUploadCompleted = i + 1;
+        _photoUploadProgress = (i + 1) / pending.length;
+      });
+    }
+    ServiceLocator.listingsRevision.value++;
+  }
+
+  Future<void> _chooseOwnershipProof() async {
+    try {
+      final file = await openFile(
+        acceptedTypeGroups: [
+          const XTypeGroup(
+            label: 'Ownership evidence',
+            extensions: ['pdf', 'jpg', 'jpeg', 'png'],
+          ),
+        ],
+      );
+      if (file != null && mounted) setState(() => _ownershipProofFile = file);
+    } catch (e) {
+      if (mounted)
+        setState(
+          () => _submissionError = 'Could not select ownership proof: $e',
+        );
+    }
+  }
+
+  Future<void> _loadAgentChoices() async {
+    if (_loadingAgentChoices || _agentChoices.isNotEmpty) return;
+    setState(() => _loadingAgentChoices = true);
+    try {
+      final response = await ServiceLocator.apiClient.get(
+        '/api/v1/provider-flow/agents',
+      );
+      final rows = response['data'];
+      if (rows is! List)
+        throw StateError('The Agent directory is unavailable.');
+      for (final row in rows.whereType<Map>()) {
+        final id = row['user_id']?.toString() ?? '';
+        final name = row['name']?.toString() ?? '';
+        if (id.isNotEmpty && name.isNotEmpty) _agentChoices[id] = name;
+      }
+    } catch (e) {
+      if (mounted)
+        setState(
+          () => _submissionError = readableFailure(
+            e,
+            fallback: 'Could not load available Agents.',
+          ),
+        );
+    } finally {
+      if (mounted) setState(() => _loadingAgentChoices = false);
+    }
+  }
+
+  Future<void> _loadExistingAssignment(String propertyId) async {
+    if (ref.read(authNotifierProvider).user?.role != AppRole.owner) return;
+    try {
+      final response = await ServiceLocator.apiClient.get(
+        '/api/v1/provider-flow/properties/$propertyId/assignment',
+      );
+      final assignment = response['data'];
+      if (!mounted || assignment is! Map) return;
+      _applyAssignmentSummary(Map<String, dynamic>.from(assignment));
+    } catch (_) {
+      // The saved property remains available if assignment status is offline.
+    }
+  }
+
+  void _applyAssignmentSummary(Map<String, dynamic> assignment) {
+    final status = assignment['workflow_status']?.toString();
+    if (!const {
+      'requested',
+      'accepted',
+      'submitted',
+      'needs_correction',
+    }.contains(status)) {
+      return;
+    }
+    final agentId = assignment['agent_user_id']?.toString();
+    final agentName = assignment['agent_name']?.toString();
+    if (agentId != null && agentId.isNotEmpty) {
+      _selectedAgentUserId = agentId;
+      if (agentName != null && agentName.isNotEmpty) {
+        _agentChoices[agentId] = agentName;
+      }
+    }
+    _submissionTitle = switch (status) {
+      'accepted' => 'Agent accepted the request',
+      'submitted' => 'Inspection submitted for Admin review',
+      'needs_correction' => 'Agent is completing requested corrections',
+      _ => 'Request sent to Agent',
+    };
+    _submissionMessage = switch (status) {
+      'accepted' => 'The Agent accepted and is inspecting this property.',
+      'submitted' =>
+        'The inspection was submitted. Property details and evidence are locked during Admin review.',
+      'needs_correction' =>
+        'The assigned Agent is updating the property and inspection as requested.',
+      _ =>
+        'Your property and ownership proof were submitted. The selected Agent has been asked to inspect it.',
+    };
+    _submissionComplete = true;
+    _agentInspectionActive = true;
+  }
+
+  Future<bool> _saveOwnerDraft() async {
+    if (_propertyName.trim().isEmpty) {
+      setState(
+        () => _serverError = 'Enter a property title before saving this draft.',
+      );
+      return false;
+    }
+    final ok = await _persistProperty();
+    if (!ok || !mounted) return false;
+    await _uploadOwnerPhotoQueue();
+    return mounted;
+  }
+
+  Future<void> _saveDraft() async {
+    if (_saving || _saveInFlight) return;
+    setState(() {
+      _saveInFlight = true;
+      _serverError = null;
+    });
+    try {
+      if (await _saveOwnerDraft() && mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Draft saved.')));
+      }
+    } catch (e) {
+      if (mounted)
+        setState(
+          () => _serverError = readableFailure(
+            e,
+            fallback: 'The draft could not be saved.',
+          ),
+        );
+    } finally {
+      if (mounted) setState(() => _saveInFlight = false);
+    }
+  }
+
+  Future<void> _continueFromPhotos() async {
+    if (_saving || _saveInFlight || _photoPicking) return;
+    if (_ownerPhotoQueue.any((photo) => photo.bytes.length > 8 * 1024 * 1024)) {
+      setState(
+        () => _photoMessage =
+            'Photos must be 8 MB or smaller. Replace this image with a smaller photo.',
+      );
+      return;
+    }
+    setState(() {
+      _saveInFlight = true;
+      _serverError = null;
+    });
+    try {
+      if (_savedOwnerPhotos.isEmpty && _ownerPhotoQueue.isEmpty) {
+        setState(() => _photoMessage = 'Add one property photo to continue.');
+        return;
+      }
+      if (await _saveOwnerDraft()) {
+        if (_ownerPhotoQueue.isNotEmpty) await _uploadOwnerPhotoQueue();
+        if (_ownerPhotoQueue.isNotEmpty ||
+            (_savedOwnerPhotos.isEmpty && _photoUploadCompleted == 0)) {
+          return;
+        }
+        if (mounted) setState(() => _step = 4);
+      }
+    } catch (e) {
+      if (mounted)
+        setState(
+          () => _photoMessage = readableFailure(
+            e,
+            fallback:
+                'The photo could not be uploaded. Your selected photo is ready to retry.',
+          ),
+        );
+    } finally {
+      if (mounted) setState(() => _saveInFlight = false);
+    }
+  }
+
+  Future<void> _submitToAgent() async {
+    if (_submittingToAgent) return;
+    if (_draftId == null) {
+      setState(
+        () => _submissionError = 'Save the property draft before submitting.',
+      );
+      return;
+    }
+    setState(() {
+      _submittingToAgent = true;
+      _submissionError = null;
+    });
+    final id = _draftId!;
+    try {
+      final existingResponse = await ServiceLocator.apiClient.get(
+        '/api/v1/provider-flow/properties/$id/assignment',
+      );
+      final existing = existingResponse['data'];
+      if (existing is Map &&
+          const {
+            'requested',
+            'accepted',
+            'submitted',
+            'needs_correction',
+          }.contains(existing['workflow_status'])) {
+        _applyAssignmentSummary(Map<String, dynamic>.from(existing));
+        ServiceLocator.listingsRevision.value++;
+        if (mounted) setState(() {});
+        return;
+      }
+      if (_selectedAgentUserId == null) {
+        setState(
+          () => _submissionError = 'Choose an available Agent to continue.',
+        );
+        return;
+      }
+      if (!await _saveOwnerDraft()) return;
+      await _uploadOwnerPhotoQueue();
+      var verification = await ServiceLocator.propertyVerification
+          .statusForProperty(id);
+      var hasOwnershipProof = verification.documents.any(
+        (doc) =>
+            doc.verificationType == VerificationDimension.ownership &&
+            doc.isActive,
+      );
+      if (!hasOwnershipProof) {
+        final file = _ownershipProofFile;
+        if (file == null)
+          throw StateError(
+            'Choose ownership or authorisation evidence to continue.',
+          );
+        final filename = file.name;
+        final lower = filename.toLowerCase();
+        final contentType = lower.endsWith('.pdf')
+            ? 'application/pdf'
+            : lower.endsWith('.png')
+            ? 'image/png'
+            : 'image/jpeg';
+        final bytes = await file.readAsBytes();
+        if (bytes.isEmpty)
+          throw StateError('The selected ownership document is empty.');
+        await ServiceLocator.propertyVerification.uploadDocument(
+          propertyId: id,
+          upload: VerificationDocumentUpload(
+            dimension: VerificationDimension.ownership,
+            documentType: 'ownership_proof',
+            filename: filename,
+            bytes: bytes,
+            contentType: contentType,
+          ),
+        );
+        verification = await ServiceLocator.propertyVerification
+            .statusForProperty(id);
+        hasOwnershipProof = verification.documents.any(
+          (doc) =>
+              doc.verificationType == VerificationDimension.ownership &&
+              doc.isActive,
+        );
+      }
+      if (!hasOwnershipProof)
+        throw StateError('Ownership proof upload could not be confirmed.');
+      final ownershipStatus = verification.verification?.ownershipStatus.wire;
+      if (!const {
+        'pending',
+        'under_review',
+        'verified',
+      }.contains(ownershipStatus)) {
+        await ServiceLocator.propertyVerification.submit(
+          id,
+          scope: 'ownership',
+        );
+      }
+
+      await ServiceLocator.apiClient.post(
+        '/api/v1/provider-flow/properties/$id/request-agent',
+        {'agent_user_id': _selectedAgentUserId},
+      );
+      final confirmed = await ServiceLocator.apiClient.get(
+        '/api/v1/provider-flow/properties/$id/assignment',
+      );
+      final confirmedAssignment = confirmed['data'];
+      if (confirmedAssignment is! Map ||
+          confirmedAssignment['workflow_status'] != 'requested') {
+        throw StateError('The Agent request was not confirmed by the server.');
+      }
+      ServiceLocator.listingsRevision.value++;
+      setState(() {
+        _submissionComplete = true;
+        _submissionTitle = 'Request sent to Agent';
+        _submissionMessage =
+            'Your property and ownership proof were submitted. The selected Agent has been asked to inspect it.';
+      });
+    } catch (e) {
+      if (mounted)
+        setState(
+          () => _submissionError = readableFailure(
+            e,
+            fallback:
+                'Submission could not be completed. Your saved draft and completed uploads have been kept.',
+          ),
+        );
+    } finally {
+      if (mounted) setState(() => _submittingToAgent = false);
+    }
+  }
+
   String? _draftId;
   String _serverStatus = 'draft';
+  bool _agentInspectionActive = false;
   String? _rejectionReason;
   bool _saving = false;
   String? _serverError;
@@ -201,6 +758,10 @@ class _SitewiseAddPropertyMobilePageState
   bool _savedInSession = false;
 
   late final Future<bool> Function() _leaveGuard = _confirmDiscardIfUnsaved;
+
+  /// Read during initState (reading is safe there); kept so the deferred
+  /// unregister in dispose never touches a ref that has already been disposed.
+  late final AddPropertyLeaveGuard _leaveGuardNotifier;
 
   String get _propertyName => _nameController.text.trim();
   String get _monthlyRent => _rentController.text.trim();
@@ -242,9 +803,42 @@ class _SitewiseAddPropertyMobilePageState
   /// (draft, rejected or corrections-requested). The backend enforces the
   /// same rule; this only disables the UI honestly.
   bool get _editable =>
-      _draftId == null ||
-      _serverStatus == 'draft' ||
-      _serverStatus == 'rejected';
+      !(ref.read(authNotifierProvider).user?.role == AppRole.owner &&
+          _agentInspectionActive) &&
+      (_draftId == null ||
+          _serverStatus == 'draft' ||
+          _serverStatus == 'rejected' ||
+          _serverStatus == 'information_requested');
+
+  bool get _isAgentEdit =>
+      _draftId != null &&
+      ref.read(authNotifierProvider).user?.role == AppRole.agent;
+  int get _stepCount => _isAgentEdit ? 4 : _stepNames.length;
+
+  static const Set<String> _agentEditableFields = {
+    'name',
+    'property_type',
+    'description',
+    'address',
+    'city',
+    'state',
+    'postcode',
+    'size_sqft',
+    'floor_level',
+    'floor_description',
+    'frontage_ft',
+    'furnishing',
+    'unit_position',
+    'has_parking',
+    'rental_price',
+    'availability',
+    'lease_duration_months',
+    'lease_duration_negotiable',
+    'available_from',
+    'rental_deposit_myr',
+    'tenure',
+    'title_type',
+  };
 
   bool get _live => MobileConfig.usesLiveApi;
 
@@ -257,8 +851,16 @@ class _SitewiseAddPropertyMobilePageState
   void initState() {
     super.initState();
     // The persistent Provider shell asks this guard before its system-back
-    // handler switches away from the Add tab.
-    ref.read(addPropertyLeaveGuardProvider.notifier).register(_leaveGuard);
+    // handler switches away from the Add tab. Writing provider state inside
+    // initState is illegal in Riverpod — initState runs while the widget tree
+    // is being built — so capture the notifier now and install the guard in a
+    // microtask, after the frame has finished building.
+    _leaveGuardNotifier = ref.read(addPropertyLeaveGuardProvider.notifier);
+    unawaited(
+      Future<void>(() {
+        if (mounted) _leaveGuardNotifier.register(_leaveGuard);
+      }),
+    );
     if (!_live) return;
     final id = widget.initialDraftId;
     if (id != null && id.isNotEmpty) {
@@ -286,7 +888,14 @@ class _SitewiseAddPropertyMobilePageState
     _frontageController.dispose();
     _leaseMonthsController.dispose();
     _depositController.dispose();
-    ref.read(addPropertyLeaveGuardProvider.notifier).unregister(_leaveGuard);
+    // dispose is also part of the build phase, so clear the guard after the
+    // frame. The identity check inside unregister() means a late clear cannot
+    // remove a guard that a newly opened Add page has since registered.
+    unawaited(
+      Future<void>(() {
+        _leaveGuardNotifier.unregister(_leaveGuard);
+      }),
+    );
     super.dispose();
   }
 
@@ -309,6 +918,25 @@ class _SitewiseAddPropertyMobilePageState
       final listing = await load();
       if (!mounted || listing == null) return;
       _applyListing(listing);
+      try {
+        final photoResponse = await ServiceLocator.apiClient.get(
+          '/api/v1/properties/listings/${listing.id}/photos',
+        );
+        final photos = photoResponse['data'];
+        if (photos is List && mounted) {
+          _savedOwnerPhotos
+            ..clear()
+            ..addAll(
+              photos.whereType<Map>().map(
+                (row) => Map<String, dynamic>.from(row),
+              ),
+            );
+        }
+      } catch (_) {
+        if (mounted)
+          setState(() => _photoMessage = 'Saved photos could not be loaded.');
+      }
+      await _loadExistingAssignment(listing.id);
       if (storageKey != null) await _forgetCreation(storageKey);
     } catch (error) {
       if (!mounted) return;
@@ -359,6 +987,7 @@ class _SitewiseAddPropertyMobilePageState
   void _applyListing(OwnerListing listing) {
     _draftId = listing.id;
     _serverStatus = listing.verificationStatus;
+    _agentInspectionActive = listing.agentInspectionActive;
     _rejectionReason = listing.rejectionReason;
     String text(TextEditingController c, String? v) {
       c.text = v ?? '';
@@ -448,7 +1077,6 @@ class _SitewiseAddPropertyMobilePageState
         listing.addressValidationStatus == 'validated' &&
         listing.latitude != null &&
         listing.longitude != null;
-    _savedAddressStatus = valid ? 'Address verified' : 'Address not verified';
     _savedFormattedAddress = valid ? listing.addressFormatted : null;
     _confirmedKey = valid ? _currentAddressKey : null;
     _confirmedLabel = _savedFormattedAddress;
@@ -555,8 +1183,10 @@ class _SitewiseAddPropertyMobilePageState
           );
     // Confirmed location evidence rides every save (create AND update); the
     // backend re-verifies the signature and the address hash server-side.
-    if (_confirmationCurrent && _confirmedToken != null) {
-      fields['address_confirmation_token'] = _confirmedToken;
+    // The final Save itself is the confirmation — no separate button is needed.
+    final token = _effectiveConfirmationToken;
+    if (token != null) {
+      fields['address_confirmation_token'] = token;
     }
     return fields;
   }
@@ -568,7 +1198,17 @@ class _SitewiseAddPropertyMobilePageState
   /// cannot create two properties, and advances to Confirmation only after the
   /// backend has acknowledged the save.
   Future<void> _saveProperty() async {
-    if (_saveInFlight || _saving || _draftLoadFailed || !_editable) return;
+    if (_photoPicking ||
+        _saveInFlight ||
+        _saving ||
+        _draftLoadFailed ||
+        !_editable) {
+      return;
+    }
+    if (_isAgentEdit) {
+      await _saveAgentDraftChanges();
+      return;
+    }
     setState(() => _saveInFlight = true);
     try {
       FocusManager.instance.primaryFocus?.unfocus();
@@ -581,20 +1221,97 @@ class _SitewiseAddPropertyMobilePageState
         setState(() {
           _step = 2;
           _fieldErrors['address'] =
-              'Confirm the verified property location before saving.';
-          _validationMessage =
-              'Confirm the verified property location before saving.';
+              'Verify the property address before saving.';
+          _validationMessage = 'Verify the property address before saving.';
         });
         return;
       }
       final saved = await _persistProperty();
       if (!mounted || !saved) return;
+      // Upload only after the existing idempotent draft save supplies its ID.
+      if (!await _uploadSelectedPropertyPhoto() || !mounted) return;
       setState(() {
         _savedInSession = true;
         _step = 5;
       });
     } finally {
       if (mounted) setState(() => _saveInFlight = false);
+    }
+  }
+
+  /// Agents save only the fields they changed. The backend independently
+  /// checks assignment status and the writable field allowlist.
+  Future<void> _saveAgentDraftChanges() async {
+    if (_draftId == null ||
+        _photoPicking ||
+        _saveInFlight ||
+        _saving ||
+        _draftLoadFailed ||
+        !_editable) {
+      return;
+    }
+    final snapshot = _draftFields();
+    final patch = Map<String, dynamic>.of(snapshot)
+      ..removeWhere(
+        (key, value) =>
+            !_agentEditableFields.contains(key) || _draftBaseline[key] == value,
+      );
+    final addressChanged = patch.keys.any(
+      const {'address', 'city', 'state', 'postcode'}.contains,
+    );
+    final confirmation = _effectiveConfirmationToken;
+    if ((addressChanged || confirmation != null) && !_confirmationCurrent) {
+      setState(() {
+        _step = 2;
+        _fieldErrors['address'] = 'Verify the updated address before saving.';
+        _validationMessage = 'Verify the updated address before saving.';
+      });
+      return;
+    }
+    if (confirmation != null && _confirmationCurrent) {
+      patch['address_confirmation_token'] = confirmation;
+    }
+    if (patch.isEmpty && _selectedPropertyPhoto == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('There are no property changes to save.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _saveInFlight = true;
+      _saving = true;
+      _serverError = null;
+    });
+    try {
+      if (patch.isNotEmpty) {
+        final saved = await ServiceLocator.ownerListings.updateDraft(
+          _draftId!,
+          patch,
+        );
+        if (!mounted) return;
+        _applyListing(saved);
+      }
+      if (!await _uploadSelectedPropertyPhoto() || !mounted) return;
+      ServiceLocator.listingsRevision.value++;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Property changes saved.')));
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _serverError = _readableError(
+          error,
+          fallback: 'Could not save the property changes.',
+        );
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _saveInFlight = false;
+        });
+      }
     }
   }
 
@@ -616,6 +1333,7 @@ class _SitewiseAddPropertyMobilePageState
     final savedAddressKey = _currentAddressKey;
     final changed = Map<String, dynamic>.of(fields)
       ..removeWhere((key, value) => _draftBaseline[key] == value);
+    if (_draftId != null && changed.isEmpty) return true;
     setState(() {
       _saving = true;
       _serverError = null;
@@ -639,9 +1357,7 @@ class _SitewiseAddPropertyMobilePageState
         // A retried create replays only changed fields, but confirmation
         // evidence must ride EVERY attempt: the first attempt may have failed
         // before the server applied it.
-        if (previous != null &&
-            _confirmationCurrent &&
-            _confirmedToken != null) {
+        if (previous != null && _effectiveConfirmationToken != null) {
           _pendingReplayFields.add('address_confirmation_token');
         }
         final replayPatch = previous == null
@@ -701,7 +1417,10 @@ class _SitewiseAddPropertyMobilePageState
     _fieldErrors.clear();
     if (!_editable) {
       _validationMessage =
-          'This record is awaiting review — its details can no longer be edited.';
+          ref.read(authNotifierProvider).user?.role == AppRole.owner &&
+              _agentInspectionActive
+          ? 'Editing is locked while the assigned Agent is inspecting this property.'
+          : 'This property is awaiting review or has been approved, so its details are locked.';
       return false;
     }
     if (_step == 1) _collectDetailsErrors();
@@ -850,11 +1569,55 @@ class _SitewiseAddPropertyMobilePageState
     if (message != null) _fieldErrors[key] = message;
   }
 
-  void _goNext() {
-    // Review has no Continue action: its only action is _saveProperty, which
-    // opens Confirmation after the backend confirms the write.
-    if (_step >= 4 || _saving || _saveInFlight || _draftLoadFailed) return;
+  Future<void> _goNext() async {
+    if (_step >= _stepCount || _saving || _saveInFlight || _draftLoadFailed)
+      return;
     FocusManager.instance.primaryFocus?.unfocus();
+    if (_isAgentEdit) {
+      setState(() {
+        _step += 1;
+        _fieldErrors.clear();
+        _validationMessage = null;
+      });
+      return;
+    }
+    if (_step == 4 && !_isAgentEdit) {
+      if (!_validateCurrentStep()) {
+        if (mounted) setState(() {});
+        return;
+      }
+      if (!_confirmationCurrent) {
+        setState(() {
+          _step = 2;
+          _fieldErrors['address'] =
+              'Verify the property address before continuing.';
+          _validationMessage = 'Verify the property address before continuing.';
+        });
+        return;
+      }
+      setState(() => _saveInFlight = true);
+      try {
+        if (await _saveOwnerDraft()) {
+          if (!mounted) return;
+          setState(() {
+            _step = 5;
+            _validationMessage = null;
+          });
+          unawaited(_loadAgentChoices());
+        }
+      } catch (e) {
+        if (mounted)
+          setState(
+            () => _serverError = readableFailure(
+              e,
+              fallback: 'The property draft could not be saved.',
+            ),
+          );
+      } finally {
+        if (mounted) setState(() => _saveInFlight = false);
+      }
+      return;
+    }
     if (!_validateCurrentStep()) {
       if (mounted) setState(() {});
       return;
@@ -894,6 +1657,7 @@ class _SitewiseAddPropertyMobilePageState
   /// Ask before abandoning a brand-new, unsaved registration. A saved
   /// property or an existing draft being edited is never treated as unsaved.
   Future<bool> _confirmDiscardIfUnsaved() async {
+    if (_photoPicking || _saveInFlight || _saving) return false;
     if (!_hasUnsavedNewProperty) return true;
     if (_saving || _saveInFlight) return false;
     final discard = await showDialog<bool>(
@@ -924,6 +1688,8 @@ class _SitewiseAddPropertyMobilePageState
   /// confirms discarding, so returning to Add starts a blank form even when
   /// the persistent Provider tab kept this page alive.
   void _discardForm() {
+    _selectedPropertyPhoto = null;
+    _photoMessage = null;
     _previewTimer?.cancel();
     for (final controller in <TextEditingController>[
       _nameController,
@@ -967,7 +1733,6 @@ class _SitewiseAddPropertyMobilePageState
     _confirmedToken = null;
     _confirmedKey = null;
     _confirmedLabel = null;
-    _savedAddressStatus = null;
     _savedFormattedAddress = null;
     _draftBaseline = _draftFields();
     setState(() {
@@ -1179,15 +1944,15 @@ class _SitewiseAddPropertyMobilePageState
   }
 
   Widget _buildStepper() {
-    final step = _step.clamp(1, _stepNames.length).toInt();
+    final step = _step.clamp(1, _stepCount).toInt();
     return Semantics(
-      label: 'Step $step of ${_stepNames.length}: ${_stepNames[step - 1]}',
+      label: 'Step $step of $_stepCount: ${_stepNames[step - 1]}',
       excludeSemantics: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           Text(
-            'STEP $step OF ${_stepNames.length}',
+            'STEP $step OF $_stepCount',
             style: const TextStyle(
               color: _brandStrong,
               fontSize: 12,
@@ -1197,11 +1962,11 @@ class _SitewiseAddPropertyMobilePageState
           ),
           const SizedBox(height: 10),
           Row(
-            children: List<Widget>.generate(_stepNames.length, (index) {
+            children: List<Widget>.generate(_stepCount, (index) {
               return Expanded(
                 child: Padding(
                   padding: EdgeInsets.only(
-                    right: index == _stepNames.length - 1 ? 0 : 5,
+                    right: index == _stepCount - 1 ? 0 : 5,
                   ),
                   child: Container(
                     height: 5,
@@ -1234,7 +1999,7 @@ class _SitewiseAddPropertyMobilePageState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          if (_step < 5) ...<Widget>[
+          if (_step <= _stepCount && !_submissionComplete) ...<Widget>[
             Padding(
               padding: const EdgeInsets.fromLTRB(18, 19, 18, 16),
               child: Column(
@@ -1277,7 +2042,7 @@ class _SitewiseAddPropertyMobilePageState
                 children: <Widget>[
                   Expanded(
                     child: Text(
-                      'Step $_step of 5',
+                      'Step $_step of $_stepCount',
                       style: const TextStyle(
                         color: _muted,
                         fontSize: 11,
@@ -1300,38 +2065,111 @@ class _SitewiseAddPropertyMobilePageState
                     ),
                     const SizedBox(width: 8),
                   ],
-                  // Flexible keeps the narrow-phone footer overflow-free:
-                  // the label may shrink/ellipsize instead of pushing the
-                  // row past the 390dp viewport.
-                  Flexible(
-                    child: FilledButton(
-                      onPressed: _saving || _saveInFlight
-                          ? null
-                          : _step == 4
-                          ? _saveProperty
-                          : _goNext,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: _brand,
-                        foregroundColor: Colors.white,
-                        minimumSize: const Size(0, 46),
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(11),
+                  // Agents can save from any form section without completing
+                  // the rest of the listing or inspection.
+                  if (_isAgentEdit) ...[
+                    Flexible(
+                      child: FilledButton(
+                        onPressed:
+                            !_editable ||
+                                _photoPicking ||
+                                _saving ||
+                                _saveInFlight
+                            ? null
+                            : _saveProperty,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: _brand,
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(0, 46),
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(11),
+                          ),
+                        ),
+                        child: const Text(
+                          'Save changes',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontWeight: FontWeight.w800),
                         ),
                       ),
-                      child: Text(
-                        _step == 4 ? 'Save property' : 'Continue →',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    if (_step < 4) ...[
+                      const SizedBox(width: 6),
+                      OutlinedButton(
+                        onPressed: _photoPicking || _saving || _saveInFlight
+                            ? null
+                            : _goNext,
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(0, 46),
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                        ),
+                        child: const Text('Next'),
+                      ),
+                    ],
+                  ] else if (_step == 4) ...<Widget>[
+                    Flexible(
+                      child: OutlinedButton(
+                        onPressed: !_editable || _saving || _saveInFlight
+                            ? null
+                            : _saveDraft,
+                        child: const Text('Save as Draft'),
                       ),
                     ),
-                  ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: FilledButton(
+                        onPressed:
+                            !_editable ||
+                                _photoPicking ||
+                                _saving ||
+                                _saveInFlight
+                            ? null
+                            : _goNext,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: _brand,
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(0, 46),
+                        ),
+                        child: const Text('Next: Submit to Agent'),
+                      ),
+                    ),
+                  ] else
+                    Flexible(
+                      child: FilledButton(
+                        onPressed:
+                            !_editable ||
+                                _photoPicking ||
+                                _saving ||
+                                _saveInFlight
+                            ? null
+                            : _step == 3
+                            ? _continueFromPhotos
+                            : _step == 5
+                            ? _submitToAgent
+                            : _goNext,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: _brand,
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(0, 46),
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(11),
+                          ),
+                        ),
+                        child: Text(
+                          _step == 5 ? 'Submit to Agent' : 'Continue →',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
           ] else
-            _buildConfirmation(),
+            _buildSubmitToAgent(),
         ],
       ),
     );
@@ -1344,12 +2182,284 @@ class _SitewiseAddPropertyMobilePageState
       case 2:
         return _buildLocation();
       case 3:
-        return _buildAgentHandoff();
+        return _buildPropertyPhotos();
       case 4:
         return _buildReview();
+      case 5:
+        return _buildSubmitToAgent();
       default:
         return const SizedBox.shrink();
     }
+  }
+
+  Widget _buildPropertyPhotos() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      const Text(
+        'Property photo',
+        style: TextStyle(fontWeight: FontWeight.w700),
+      ),
+      const SizedBox(height: 6),
+      const Text(
+        'Add a clear photo of the property entrance or exterior to help the assigned Agent recognize the property before inspection.',
+      ),
+      const SizedBox(height: 12),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          OutlinedButton.icon(
+            onPressed: !_editable || _photoPicking || _saving || _saveInFlight
+                ? null
+                : _takeOwnerPhoto,
+            icon: const Icon(Icons.camera_alt_outlined),
+            label: Text(
+              _savedOwnerPhotos.isEmpty && _ownerPhotoQueue.isEmpty
+                  ? 'Take photo'
+                  : 'Replace photo',
+            ),
+          ),
+          OutlinedButton.icon(
+            onPressed: !_editable || _photoPicking || _saving || _saveInFlight
+                ? null
+                : _pickOwnerGalleryPhotos,
+            icon: const Icon(Icons.photo_library_outlined),
+            label: Text(
+              _savedOwnerPhotos.isEmpty && _ownerPhotoQueue.isEmpty
+                  ? 'Choose photo'
+                  : 'Replace photo',
+            ),
+          ),
+        ],
+      ),
+      if (_photoUploadTotal > 0) ...[
+        const SizedBox(height: 10),
+        LinearProgressIndicator(value: _photoUploadProgress),
+        const SizedBox(height: 4),
+        Text('Uploaded $_photoUploadCompleted of $_photoUploadTotal photos'),
+      ],
+      if (_photoMessage case final message?) ...[
+        const SizedBox(height: 8),
+        Text(message, style: const TextStyle(color: SitewiseColors.danger)),
+      ],
+      const SizedBox(height: 14),
+      if (_savedOwnerPhotos.isEmpty && _ownerPhotoQueue.isEmpty)
+        const Text('No property photo selected yet.'),
+      for (final photo in _savedOwnerPhotos) _savedPhotoTile(photo),
+      for (var i = 0; i < _ownerPhotoQueue.length; i++)
+        _queuedPhotoTile(_ownerPhotoQueue[i], i),
+    ],
+  );
+
+  Widget _queuedPhotoTile(SelectedPropertyPhoto photo, int index) => Card(
+    clipBehavior: Clip.antiAlias,
+    child: Padding(
+      padding: const EdgeInsets.all(10),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Image.memory(
+              photo.bytes,
+              width: 104,
+              height: 92,
+              fit: BoxFit.cover,
+            ),
+          ),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text(
+              'Cover photo',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Remove photo',
+            onPressed: _saving || _saveInFlight
+                ? null
+                : () => setState(() => _ownerPhotoQueue.removeAt(index)),
+            icon: const Icon(Icons.delete_outline),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _savedPhotoTile(Map<String, dynamic> photo) => Card(
+    clipBehavior: Clip.antiAlias,
+    child: Padding(
+      padding: const EdgeInsets.all(10),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Image.network(
+              '${photo['url'] ?? ''}',
+              width: 104,
+              height: 92,
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => const SizedBox(
+                width: 104,
+                height: 92,
+                child: Icon(Icons.broken_image_outlined),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              photo['is_primary'] == true ? 'Cover photo' : 'Property photo',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+          if (photo['is_primary'] != true)
+            IconButton(
+              tooltip: 'Make cover photo',
+              onPressed: !_editable || _saving || _saveInFlight
+                  ? null
+                  : () => _setCoverPhoto(photo),
+              icon: const Icon(Icons.star_outline),
+            ),
+          if (!_isAgentEdit)
+            IconButton(
+              tooltip: 'Remove photo',
+              onPressed: !_editable || _saving || _saveInFlight
+                  ? null
+                  : () => _removeSavedPhoto(photo),
+              icon: const Icon(Icons.delete_outline),
+            ),
+        ],
+      ),
+    ),
+  );
+
+  Future<void> _setCoverPhoto(Map<String, dynamic> photo) async {
+    if (_draftId == null) return;
+    final photoId = '${photo['id'] ?? ''}';
+    if (photoId.isEmpty) return;
+    try {
+      await ServiceLocator.apiClient.post(
+        '/api/v1/properties/listings/$_draftId/photos/$photoId/primary',
+        {},
+      );
+      setState(() {
+        for (final row in _savedOwnerPhotos) {
+          row['is_primary'] = row['id']?.toString() == photoId;
+        }
+      });
+    } catch (e) {
+      if (mounted)
+        setState(
+          () => _photoMessage = readableFailure(
+            e,
+            fallback: 'Could not select the cover photo.',
+          ),
+        );
+    }
+  }
+
+  Future<void> _removeSavedPhoto(Map<String, dynamic> photo) async {
+    if (_draftId == null) return;
+    try {
+      await _photoService.removePhoto(_draftId!, '${photo['id']}');
+      if (mounted) setState(() => _savedOwnerPhotos.remove(photo));
+    } catch (e) {
+      if (mounted)
+        setState(
+          () => _photoMessage = readableFailure(
+            e,
+            fallback: 'Could not remove this photo.',
+          ),
+        );
+    }
+  }
+
+  Widget _buildSubmitToAgent() {
+    if (_submissionComplete) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Icon(
+            Icons.check_circle_outline,
+            color: SitewiseColors.success,
+            size: 48,
+          ),
+          const SizedBox(height: 10),
+          Text(
+            _submissionTitle,
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _submissionMessage ??
+                'The Agent will review the property and respond to the inspection request.',
+          ),
+          const SizedBox(height: 16),
+          FilledButton(
+            onPressed: _goToListings,
+            child: const Text('Back to My Properties'),
+          ),
+        ],
+      );
+    }
+    final agents = _agentChoices.entries.toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Ownership proof',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'Upload a readable ownership or authorisation document. It is stored separately from property photos.',
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: _submittingToAgent ? null : _chooseOwnershipProof,
+          icon: const Icon(Icons.description_outlined),
+          label: Text(_ownershipProofFile?.name ?? 'Choose ownership proof'),
+        ),
+        const SizedBox(height: 18),
+        const Text(
+          'Choose an available Agent',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 8),
+        if (_loadingAgentChoices) const LinearProgressIndicator(),
+        DropdownButtonFormField<String>(
+          value: _selectedAgentUserId,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            hintText: 'Select an Agent',
+          ),
+          items: [
+            for (final entry in agents)
+              DropdownMenuItem(value: entry.key, child: Text('${entry.value}')),
+          ],
+          onChanged: _submittingToAgent
+              ? null
+              : (value) => setState(() => _selectedAgentUserId = value),
+        ),
+        const SizedBox(height: 12),
+        const Text(
+          'The Agent will check the property details, take an official 360° tour and submit the inspection to the Administrator.',
+        ),
+        if (_submissionError case final error?) ...[
+          const SizedBox(height: 10),
+          Text(error, style: const TextStyle(color: SitewiseColors.danger)),
+        ],
+        if (_submittingToAgent) ...[
+          const SizedBox(height: 12),
+          const LinearProgressIndicator(),
+          const SizedBox(height: 6),
+          const Text(
+            'Saving property, photographs, ownership proof and Agent request…',
+          ),
+        ],
+      ],
+    );
   }
 
   Widget _buildPropertyDetails() {
@@ -1649,8 +2759,9 @@ class _SitewiseAddPropertyMobilePageState
           requiredField: true,
           hint: 'Building name, unit number and street.',
           helper:
-              'Include the unit or lot number — Google checks the address '
-              'exactly as written.',
+              'Paste a full Malaysian address and it will be split into the '
+              'fields below, or type the building, unit and street directly. '
+              'Google checks the address exactly as written.',
           error: _fieldErrors['address'],
           onChanged: _onAddressChanged,
         ),
@@ -1697,7 +2808,7 @@ class _SitewiseAddPropertyMobilePageState
         _addressPreviewPanel(),
         _buildInfoNotice(
           'Your address is checked through the existing server workflow. '
-          'Confirm the verified location here; its signed evidence is sent '
+          'Saving confirms the located address; its signed evidence is sent '
           'with the final save so the stored coordinates cannot drift.',
         ),
       ],
@@ -1740,7 +2851,7 @@ class _SitewiseAddPropertyMobilePageState
     );
   }
 
-  Widget _dateField() => Column(
+  Widget _dateField({bool enabled = true}) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       _fieldLabel('Available-from date', requiredField: true),
@@ -1748,7 +2859,7 @@ class _SitewiseAddPropertyMobilePageState
       SizedBox(
         height: 50,
         child: OutlinedButton.icon(
-          onPressed: _editable ? _pickAvailableDate : null,
+          onPressed: _editable && enabled ? _pickAvailableDate : null,
           icon: const Icon(Icons.calendar_today_outlined, size: 18),
           label: Text(
             _availableFrom == null
@@ -1791,6 +2902,29 @@ class _SitewiseAddPropertyMobilePageState
   }
 
   void _onAddressChanged(String value) {
+    // A pasted full address is split into the four fields the verifier needs.
+    // Controller writes do not re-fire TextField.onChanged, so this runs once
+    // per user edit and cannot recurse.
+    final split = _splitPastedAddress(value);
+    if (split != null &&
+        (split.street != value ||
+            _stateName != split.state ||
+            _district != split.city ||
+            _postcode != split.postcode)) {
+      setState(() {
+        _addressController.text = split.street;
+        _stateController.text = split.state;
+        _districtController.text = split.city;
+        _postcodeController.text = split.postcode;
+        _fieldErrors.remove('address');
+        _fieldErrors.remove('state');
+        _fieldErrors.remove('city');
+        _fieldErrors.remove('postcode');
+        _validationMessage = null;
+      });
+      _onAddressFieldsChanged();
+      return;
+    }
     final removedError = _fieldErrors.remove('address') != null;
     if (removedError || _validationMessage != null) {
       setState(() => _validationMessage = null);
@@ -1814,9 +2948,26 @@ class _SitewiseAddPropertyMobilePageState
 
   bool get _previewFresh => _previewExpiresAt?.isAfter(DateTime.now()) == true;
 
-  bool get _confirmationCurrent =>
-      _confirmedKey == _currentAddressKey &&
-      (_confirmedToken == null || _previewFresh);
+  /// The final Save step is the only confirmation the owner performs. A
+  /// freshly located preview already carries a signed token bound to the exact
+  /// current address, so no intermediate "Confirm location" tap is required.
+  /// A previously saved verified row keeps its token-less confirmation.
+  String? get _effectiveConfirmationToken {
+    if (_confirmedKey == _currentAddressKey &&
+        _confirmedToken != null &&
+        _previewFresh) {
+      return _confirmedToken;
+    }
+    if (!_previewFresh || _lastRequestedKey != _currentAddressKey) return null;
+    return _addressPreview?.confirmation?.token;
+  }
+
+  bool get _confirmationCurrent {
+    if (_confirmedKey == _currentAddressKey && _confirmedToken == null) {
+      return true;
+    }
+    return _effectiveConfirmationToken != null;
+  }
 
   void _onAddressFieldsChanged() {
     final key = _currentAddressKey;
@@ -1841,7 +2992,10 @@ class _SitewiseAddPropertyMobilePageState
     }
   }
 
-  Future<void> _runPreview((String, String, String, String) key) async {
+  Future<void> _runPreview(
+    (String, String, String, String) key, {
+    bool forceRefresh = false,
+  }) async {
     if (!mounted ||
         !_live ||
         !_editable ||
@@ -1870,6 +3024,7 @@ class _SitewiseAddPropertyMobilePageState
         city: key.$2,
         state: key.$3,
         postcode: key.$4,
+        forceRefresh: forceRefresh,
       );
       if (!mounted || seq != _previewSeq || key != _currentAddressKey) return;
       setState(() {
@@ -1892,32 +3047,14 @@ class _SitewiseAddPropertyMobilePageState
     }
   }
 
-  void _confirmLocation() {
-    final preview = _addressPreview;
-    if (_lastRequestedKey != _currentAddressKey ||
-        preview == null ||
-        !preview.isPrecise ||
-        !preview.confirmable) {
-      return;
-    }
-    if (!_previewFresh) {
-      unawaited(_runPreview(_currentAddressKey));
-      return;
-    }
-    setState(() {
-      _confirmedToken = preview.confirmation!.token;
-      _confirmedKey = _currentAddressKey;
-      _confirmedLabel = preview.formattedAddress;
-    });
-  }
-
   Widget _addressPreviewPanel({bool compact = false}) {
     final preview = _addressPreview;
-    final confirmed = _confirmationCurrent;
-    final verified =
-        preview?.isPrecise == true &&
-        preview?.confirmable == true &&
-        _previewFresh;
+    final savedConfirmation =
+        _confirmedKey == _currentAddressKey && _confirmedToken == null;
+    // `confirmable` means the server returned coordinates plus a signed token
+    // bound to this exact address — true for precise Google matches and the
+    // approximate Nominatim fallback. Final Save is the only confirmation.
+    final located = preview?.confirmable == true && _previewFresh;
     final failed =
         _previewError != null ||
         preview?.matchClass == AddressMatchClass.notFound ||
@@ -1926,17 +3063,32 @@ class _SitewiseAddPropertyMobilePageState
     final status = switch ((
       _addressComplete,
       _previewPending,
-      confirmed || verified,
+      savedConfirmation,
+      located,
       failed,
       preview,
     )) {
-      (false, _, _, _, _) => 'Complete all address fields.',
-      (_, true, _, _, _) => 'Verifying your address…',
-      (_, _, true, _, _) => 'Address verified',
-      (_, _, _, true, _) => 'Unable to verify address.',
-      (_, _, _, _, final result?) when !result.isPrecise =>
+      (false, _, _, _, _, _) => 'Complete all address fields.',
+      (_, true, _, _, _, _) => 'Verifying your address…',
+      (_, _, true, _, _, _) => 'Address verified',
+      (_, _, _, true, _, final result?)
+          when result.matchClass == AddressMatchClass.ambiguous =>
+        'Location found, but address details differ. Check the map and postcode.',
+      (_, _, _, true, _, final result?)
+          when result.matchClass == AddressMatchClass.approximate =>
+        'Approximate location found. Check that the map shows your property.',
+      (_, _, _, true, _, _) =>
+        'Address located. It will be confirmed when you save.',
+      (_, _, _, _, _, final result?)
+          when result.matchClass == AddressMatchClass.serviceUnavailable =>
+        'Address service temporarily unavailable. Try again shortly.',
+      (_, _, _, _, _, final result?)
+          when result.matchClass == AddressMatchClass.notFound =>
+        'Could not locate this address. Check the street and building details.',
+      (_, _, _, _, true, _) => 'Unable to verify address.',
+      (_, _, _, _, _, final result?) when !result.confirmable =>
         'Please provide a more specific address.',
-      (_, _, _, _, final result?) when result.isPrecise =>
+      (_, _, _, _, _, final result?) when result.confirmable =>
         'Address verification expired. Verify again.',
       _ =>
         _live
@@ -1945,28 +3097,40 @@ class _SitewiseAddPropertyMobilePageState
     };
     return AddressPreviewPanel(
       status: status,
-      preview: verified || confirmed ? preview : null,
+      preview: located || savedConfirmation ? preview : null,
       pending: _previewPending,
-      verified: verified || confirmed,
-      confirmed: confirmed,
-      formattedAddress: confirmed
+      verified:
+          savedConfirmation ||
+          (located && preview?.matchClass == AddressMatchClass.precise),
+      locationAvailable: located || savedConfirmation,
+      confirmed: savedConfirmation,
+      formattedAddress: savedConfirmation
           ? _confirmedLabel
-          : verified
+          : located
           ? preview?.formattedAddress
           : null,
-      errorText: _previewError ?? (failed ? preview?.notes.firstOrNull : null),
+      errorText:
+          _previewError ??
+          (preview != null &&
+                  (failed || preview.matchClass == AddressMatchClass.ambiguous)
+              ? preview.notes.join(' ')
+              : null),
       onVerify:
           _live &&
               _editable &&
               _addressComplete &&
               !_saving &&
               !_previewPending &&
-              !confirmed &&
-              !verified
-          ? () => unawaited(_runPreview(_currentAddressKey))
+              !savedConfirmation &&
+              !(located && preview?.matchClass == AddressMatchClass.precise)
+          ? () => unawaited(
+              _runPreview(
+                _currentAddressKey,
+                forceRefresh: _lastRequestedKey == _currentAddressKey,
+              ),
+            )
           : null,
       retry: _lastRequestedKey != null,
-      onConfirm: verified && !confirmed && !_saving ? _confirmLocation : null,
       mapHeight: compact ? 104 : 160,
     );
   }
@@ -2079,114 +3243,6 @@ class _SitewiseAddPropertyMobilePageState
     onSelected(picked);
   }
 
-  // SITEWISE_COMPACT_AGENT_VERIFICATION_V1
-  Widget _buildAgentHandoff() => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      const Row(
-        children: [
-          Icon(Icons.verified_user_outlined, color: _brand, size: 24),
-          SizedBox(width: 9),
-          Expanded(
-            child: Text(
-              'How it works',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                color: _ink,
-              ),
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 12),
-      _handoffRole(
-        1,
-        Icons.description_outlined,
-        'Owner request',
-        'Submit ownership proof and request an inspection.',
-      ),
-      const SizedBox(height: 8),
-      _handoffRole(
-        2,
-        Icons.camera_alt_outlined,
-        'Agent inspection',
-        'Check the property and capture its 360° tour.',
-      ),
-      const SizedBox(height: 8),
-      _handoffRole(
-        3,
-        Icons.assignment_turned_in_outlined,
-        'Admin review',
-        'Review the evidence and make the final decision.',
-      ),
-      const SizedBox(height: 12),
-      _buildInfoNotice(
-        'Only Agents capture tours. Ownership proof alone does not complete verification.',
-      ),
-    ],
-  );
-
-  Widget _handoffRole(
-    int step,
-    IconData icon,
-    String heading,
-    String details,
-  ) => Semantics(
-    container: true,
-    label: 'Step $step of 3',
-    child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFD),
-        border: Border.all(color: _border),
-        borderRadius: BorderRadius.circular(11),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ExcludeSemantics(
-            child: Container(
-              width: 40,
-              height: 40,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: const Color(0xFFE8F0FD),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(icon, size: 23, color: _brand),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '$step. $heading',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: _ink,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  details,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    height: 1.4,
-                    color: _muted,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-
   Widget _buildReview() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2291,25 +3347,26 @@ class _SitewiseAddPropertyMobilePageState
         _addressPreviewPanel(compact: true),
         const SizedBox(height: 18),
         _buildReviewSection(
-          title: 'Agent verification requirements',
+          title: 'Property photos',
           step: 3,
-          rows: const <_ReviewRow>[
+          rows: <_ReviewRow>[
+            _ReviewRow('Uploaded photos', '${_savedOwnerPhotos.length}'),
+            _ReviewRow('Photos ready to upload', '${_ownerPhotoQueue.length}'),
             _ReviewRow(
-              'Owner action',
-              'Submit ownership or authorization proof and request an Agent',
+              'Cover photo',
+              _savedOwnerPhotos
+                      .where((row) => row['is_primary'] == true)
+                      .map((row) => '${row['url'] ?? 'Selected'}')
+                      .firstOrNull ??
+                  (_ownerPhotoQueue.isEmpty
+                      ? 'Not selected'
+                      : _ownerPhotoQueue.first.name),
             ),
-            _ReviewRow(
-              'Agent action',
-              'Inspect physical facts, capture and preview a 360° panorama, then submit to Admin',
-            ),
-            _ReviewRow('Final decision', 'Administrator review'),
           ],
         ),
         const SizedBox(height: 16),
         _buildInfoNotice(
-          'Review all required details and confirm the location before '
-          'saving. The property remains Draft · Not published until the '
-          'existing verification workflow is completed.',
+          'Review the details and confirmed map location. The property stays unpublished while the Agent completes the inspection and the Administrator reviews it.',
         ),
       ],
     );
@@ -2363,104 +3420,6 @@ class _SitewiseAddPropertyMobilePageState
     );
   }
 
-  Widget _buildConfirmation() {
-    final saved = _draftId != null;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 28, 18, 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          Icon(
-            saved ? Icons.check_circle_outline_rounded : Icons.error_outline,
-            color: saved ? const Color(0xFF087443) : _errorInk,
-            size: 52,
-          ),
-          const SizedBox(height: 14),
-          Text(
-            saved ? 'Property saved as draft' : 'Property not saved yet',
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: _ink,
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            saved
-                ? 'Your listing is now in My listings. Ownership proof and '
-                      'Agent requests are separate next steps.'
-                : 'Please save the property before leaving this page.',
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: _muted, fontSize: 15, height: 1.5),
-          ),
-          const SizedBox(height: 22),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border.all(color: _border),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                const Text('Property', style: TextStyle(color: _muted)),
-                const SizedBox(height: 4),
-                Text(
-                  _display(_propertyName),
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const Divider(height: 1),
-                const SizedBox(height: 12),
-                const Text(
-                  'Draft · Not published',
-                  style: TextStyle(color: _muted, fontSize: 14),
-                ),
-                const SizedBox(height: 8),
-                Text(_savedAddressStatus ?? 'Address not verified'),
-                if (_savedFormattedAddress case final String address)
-                  Text(address),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          FilledButton.icon(
-            onPressed: saved && !_saving ? _viewSavedProperty : null,
-            icon: const Icon(Icons.open_in_new_rounded),
-            label: const Text('View property details'),
-            style: FilledButton.styleFrom(
-              backgroundColor: _brand,
-              foregroundColor: Colors.white,
-              minimumSize: const Size.fromHeight(52),
-            ),
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            onPressed: saved && !_saving ? _goToListings : null,
-            icon: const Icon(Icons.list_alt_outlined),
-            label: const Text('Back to My Listings'),
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size.fromHeight(52),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _viewSavedProperty() {
-    final propertyId = int.tryParse(_draftId ?? '');
-    if (propertyId == null) return;
-    Navigator.of(
-      context,
-    ).pushNamed('/provider/property-detail', arguments: propertyId);
-  }
-
   Widget _buildServerBanner(String message, {required bool success}) {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -2504,6 +3463,7 @@ class _SitewiseAddPropertyMobilePageState
     required String label,
     required TextEditingController controller,
     bool requiredField = false,
+    bool enabled = true,
     TextInputType? keyboardType,
     String? hint,
     String? helper,
@@ -2522,7 +3482,7 @@ class _SitewiseAddPropertyMobilePageState
           maxLines: maxLines,
           // The scaffold already keeps the scroll viewport above the keyboard.
           scrollPadding: const EdgeInsets.all(20),
-          enabled: _editable,
+          enabled: _editable && enabled,
           onChanged: onChanged ?? _onTextChanged,
           style: const TextStyle(color: _ink, fontSize: 13),
           decoration: InputDecoration(

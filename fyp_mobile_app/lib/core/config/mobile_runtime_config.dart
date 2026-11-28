@@ -26,9 +26,13 @@ abstract final class MobileRuntimeConfig {
   }
 
   /// Returns a configuration string, or its fallback.
+  ///
+  /// Set [fallbackWhenEmpty] to false when an explicitly blank authoritative
+  /// value must suppress a stale compile-time fallback.
   static String value(
       String key, {
         String fallback = '',
+        bool fallbackWhenEmpty = true,
       }) {
     final result = _values[key];
 
@@ -38,7 +42,7 @@ abstract final class MobileRuntimeConfig {
 
     final text = result.toString().trim();
 
-    return text.isEmpty ? fallback : text;
+    return text.isEmpty && fallbackWhenEmpty ? fallback : text;
   }
 
   /// Accepts either JSON true/false or "true"/"false".

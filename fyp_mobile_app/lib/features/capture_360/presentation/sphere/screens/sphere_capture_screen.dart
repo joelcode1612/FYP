@@ -1,110 +1,106 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
-import 'package:fyp/features/capture_360/domain/sphere/sphere_capture_session.dart';
-import 'package:fyp/features/capture_360/domain/services/panorama_stitcher.dart';
-import 'package:fyp/features/capture_360/application/sphere/sphere_platform_ports.dart';
 import 'package:fyp/features/capture_360/application/sphere/sphere_capture_controller.dart';
-import 'package:fyp/features/capture_360/domain/quality/frame_quality_analyzer.dart';
+import 'package:fyp/features/capture_360/data/sphere/jpeg_normalizer.dart';
+import 'package:fyp/features/capture_360/data/sphere/platform/rotation_sensor.dart';
+import 'package:fyp/features/capture_360/data/sphere/platform/sphere_camera.dart';
+import 'package:fyp/features/capture_360/domain/repositories/capture_repository.dart';
+import 'package:fyp/features/capture_360/domain/sphere/sphere_capture_session.dart';
 import 'package:fyp/features/capture_360/domain/sphere/sphere_projection.dart';
 import 'package:fyp/features/capture_360/domain/sphere/sphere_target.dart';
-import 'package:fyp/features/capture_360/data/repositories/capture_repository_impl.dart';
-import 'package:fyp/features/capture_360/data/sphere/opencv_native_probe.dart';
-import 'package:fyp/features/capture_360/capture_composition.dart';
-import 'package:fyp/features/capture_360/presentation/sphere/screens/sphere_panorama_screen.dart';
+import 'package:fyp/features/capture_360/domain/virtual_tour/math/vectors.dart';
+import 'package:fyp/features/capture_360/guide/presentation/screens/capture_guide_screen.dart';
 import 'package:fyp/features/capture_360/presentation/sphere/widgets/sphere_overlay_painter.dart';
 import 'package:fyp/features/capture_360/presentation/sphere/widgets/sphere_progress_map.dart';
 import 'package:fyp/features/capture_360/presentation/sphere/widgets/sphere_ring_palette.dart';
-import 'package:fyp/features/capture_360/domain/virtual_tour/math/vectors.dart';
 import 'package:fyp/features/capture_360/presentation/widgets/capture_theme.dart';
 
-/// SiteWise 360° Capture — the 38-target, sphere-follows-phone flow.
+/// SiteWise 360° Capture — the reference sphere-follows-phone flow, running
+/// the canonical adaptive five-ring capture plan.
 ///
-/// Start screen → live camera with 38 projected targets → automatic shutter
-/// inside 5° → completion modal with the stitched 360° panorama.
+/// Start screen → live camera with the plan's projected targets → automatic
+/// shutter inside the alignment cone → completion hand-off to the host, which
+/// uploads the photographs and drives the backend panorama job.
 ///
 /// The sphere's centre is the phone at all times: there is no AR session, no
 /// plane detection and no world anchor, so walking cannot leave a target
 /// behind and there is no position estimate to drift.
+///
+/// This screen is the reference implementation's capture surface adapted to
+/// SiteWise: the target geometry comes from the session's capture plan, the
+/// photographs are handed to the host's upload queue the moment they are
+/// durable, and everything after the last photograph (backend panorama job,
+/// candidate review) belongs to [ArCaptureMobilePage]. No stitching, no
+/// gallery export and no per-frame analysis runs on this screen.
 class SphereCaptureScreen extends StatefulWidget {
   const SphereCaptureScreen({
     super.key,
     this.autoStart = false,
-    this.requiredTargetCount = kSphereTargetCount,
+    this.planVersion = kSphereCapturePlanVersion,
     this.camera,
     this.rotation,
-    this.repository,
-    this.stitcher,
-    this.motionStream,
-    this.gyroscopeStream,
+    required this.repository,
     this.sessions,
-    this.sessionId,
+    required this.sessionId,
     this.userId,
     this.propertyId,
-    this.backendProcessing = false,
-    this.onCaptureComplete,
-    this.onPanoramaReady,
-    this.onFrameSaved,
-    this.qualityAnalyzer,
+    this.motionStream,
+    this.gyroscopeStream,
+    required this.onFrameSaved,
+    required this.onCaptureComplete,
+    this.onStartNewCapture,
   });
 
-  /// True only when entered after completing the SiteWise guide.
-  /// The camera starts after the first frame, using the same _start() flow.
+  /// Start the capture as soon as the first frame renders. The host sets this
+  /// after the guide screen so the photographer never taps Start twice.
   final bool autoStart;
-  final int requiredTargetCount;
 
-  /// Injection points for tests and for callers that already hold a station.
+  /// The capture plan this session runs under. New sessions pass the
+  /// canonical adaptive five-ring plan; a resumed session passes the version
+  /// it was captured with, so its photographs are never reinterpreted.
+  final int planVersion;
+
+  /// Overridable for tests. Production uses the hardened [PluginSphereCamera].
   final SphereCamera? camera;
+
+  /// Overridable for tests. Production uses [NativeRotationSource].
   final RotationSource? rotation;
-  final CaptureRepository? repository;
-  final PanoramaStitcher? stitcher;
-  final Stream<Vec3>? motionStream;
 
-  /// Raw angular rate, rad/s. Injected in tests; defaults to `sensors_plus`.
-  final Stream<Vec3>? gyroscopeStream;
+  /// The frame/record repository. The host always supplies the SiteWise
+  /// repository bound to the tour and frame store.
+  final CaptureRepository repository;
 
-  /// The local session store. SiteWise supplies the tour-scoped JSON store;
-  /// `null` keeps the capture local-only with no resume metadata.
+  /// The local-first session store. The host supplies the SiteWise store.
   final CaptureSessionStore? sessions;
 
-  /// Resumes this exact session. When omitted, the newest unfinished session is
-  /// resumed, and a new one is created only if there is none.
-  final String? sessionId;
+  /// The station directory and session id. Also the station id the repository
+  /// and the upload queue key their files by.
+  final String sessionId;
 
-  /// The signed-in account, when the caller already has one.
   final String? userId;
-
-  /// The capture specification's numeric property id, when the caller has one.
-  /// SiteWise draft identifiers are strings and stay on the tour record, so the
-  /// SiteWise host leaves this `null`.
   final int? propertyId;
 
-  /// When true, completion sends saved frames to FastAPI without local stitching.
-  final bool backendProcessing;
+  /// Overridable accelerometer/gyroscope streams for tests. The accelerometer
+  /// pauses the shutter while the viewpoint is moving; the gyroscope feeds the
+  /// angular freeze gate.
+  final Stream<Vec3>? motionStream;
+  final Stream<Vec3>? gyroscopeStream;
 
-  /// Fired once when all 38 original photographs have been saved.
-  final VoidCallback? onCaptureComplete;
+  /// Fired after each photograph is safely on disk. The host enqueues the
+  /// upload; this callback returns immediately.
+  final void Function(CapturedFrame frame) onFrameSaved;
 
-  /// Fired once when the stitched panorama exists on disk, so the host page
-  /// can attach it to the SiteWise tour, upload it through its own API and
-  /// open the existing tour preview.
-  final void Function(String panoramaPath)? onPanoramaReady;
+  /// Fired once when every planned photograph is on disk. The host owns the
+  /// backend handoff from here.
+  final VoidCallback onCaptureComplete;
 
-  /// Fired after each photograph is safely on disk, so the host page can
-  /// queue it for Supabase upload immediately — the per-frame upload queue
-  /// starts during capture, never after stitching.
-  final void Function(CapturedFrame frame)? onFrameSaved;
-
-  /// The per-photograph quality verifier. Its findings are recorded as
-  /// per-frame diagnostic metadata and logged; they are deliberately NOT
-  /// surfaced in the capture UI, where they would be an alarm the agent
-  /// cannot act on. Nothing is ever deleted, re-shot, or auto-retaken.
-  final FrameQualityAnalyzer? qualityAnalyzer;
+  /// Explicit recovery for an unreadable session: the host archives the old
+  /// station (keeping every photograph) and rebuilds this screen fresh.
+  final VoidCallback? onStartNewCapture;
 
   @override
   State<SphereCaptureScreen> createState() => _SphereCaptureScreenState();
@@ -112,75 +108,24 @@ class SphereCaptureScreen extends StatefulWidget {
 
 class _SphereCaptureScreenState extends State<SphereCaptureScreen>
     with WidgetsBindingObserver {
-  static const _screenChannel = MethodChannel('adaptive360/screen');
-
   SphereCaptureController? _controller;
   SphereCamera? _camera;
   bool _starting = false;
   String? _startError;
 
-  /// The panorama revision the host has already been notified about. A
-  /// retake that re-stitches produces a NEW panorama; the revision counter
-  /// is what fires a second notification for it (a one-shot bool could not).
-  int _notifiedPanoramaRevision = 0;
-
-  /// One-shot guard for the backend-processing completion callback, which
-  /// has no local panorama (and therefore no revision) behind it.
-  bool _captureCompleteNotified = false;
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    final lifecycle = WidgetsBinding.instance.lifecycleState;
-    if (defaultTargetPlatform != TargetPlatform.iOS ||
-        lifecycle == null ||
-        lifecycle == AppLifecycleState.resumed ||
-        lifecycle == AppLifecycleState.inactive) {
-      _setKeepScreenOn(true);
-    }
     if (widget.autoStart) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) unawaited(_start());
+        if (mounted) _start();
       });
-    }
-  }
-
-  void _setKeepScreenOn(bool enabled) {
-    if (kIsWeb) return;
-    if (defaultTargetPlatform != TargetPlatform.android &&
-        defaultTargetPlatform != TargetPlatform.iOS) {
-      return;
-    }
-    unawaited(_updateScreenTimeout(enabled));
-  }
-
-  Future<void> _updateScreenTimeout(bool enabled) async {
-    try {
-      await _screenChannel.invokeMethod<void>('setKeepScreenOn', enabled);
-    } on MissingPluginException {
-      if (enabled) {
-        debugPrint(
-          '360 capture requires a rebuilt app to keep the screen awake.',
-        );
-      }
-    } on PlatformException catch (error) {
-      debugPrint('360 capture screen timeout: ${error.code}');
     }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Android keeps the flag with the capture window. Losing focus briefly
-    // must not turn it off, and Android handles timeout when hidden.
-    if (state == AppLifecycleState.resumed) {
-      _setKeepScreenOn(true);
-    } else if (defaultTargetPlatform == TargetPlatform.iOS &&
-        (state == AppLifecycleState.hidden ||
-            state == AppLifecycleState.paused ||
-            state == AppLifecycleState.detached)) {
-      _setKeepScreenOn(false);
-    }
     // Android revokes the camera when the app goes to the background. Without
     // forwarding this, the preview is black on return with no message.
     final controller = _controller;
@@ -193,28 +138,6 @@ class _SphereCaptureScreenState extends State<SphereCaptureScreen>
     });
   }
 
-  void _onControllerChanged() {
-    final controller = _controller;
-    if (controller == null) return;
-    if (widget.backendProcessing) {
-      if (controller.phase != SphereCapturePhase.complete ||
-          controller.capturedCount < controller.targets.length) {
-        return;
-      }
-      if (_captureCompleteNotified) return;
-      _captureCompleteNotified = true;
-      widget.onCaptureComplete?.call();
-      return;
-    }
-    final path = controller.panoramaPath;
-    if (controller.stitching || path == null) return;
-    // Notify the host once per NEW panorama: the first stitch, and every
-    // replacement produced after a manual retake re-stitches the sphere.
-    if (controller.panoramaRevision == _notifiedPanoramaRevision) return;
-    _notifiedPanoramaRevision = controller.panoramaRevision;
-    widget.onPanoramaReady?.call(path);
-  }
-
   Future<void> _start() async {
     if (_starting || _controller != null) return;
     setState(() {
@@ -222,61 +145,24 @@ class _SphereCaptureScreenState extends State<SphereCaptureScreen>
       _startError = null;
     });
     try {
-      // SPHERE_ORB_PRECAPTURE: fail early if this APK omitted ORB symbols.
-      // Keep existing saved frames untouched; fixing the native build is
-      // preferable to capturing 38 photos before discovering a missing symbol.
-      if (!widget.backendProcessing) {
-        final capabilities = OpenCvNativeProbe.run();
-        final message = OpenCvNativeProbe.failureMessage(capabilities);
-        if (message != null) {
-          if (mounted) {
-            setState(() {
-              _starting = false;
-              _startError =
-                  'Android panorama stitching is unavailable in '
-                  'this installation. $message';
-            });
-          }
-          return;
-        }
-      }
-      final defaults = createSphereDefaults();
-      final camera = widget.camera ?? defaults.camera;
-      final rotation = widget.rotation ?? defaults.rotation;
-      final repository =
-          widget.repository ?? await FileCaptureRepository.create();
-      final store = widget.sessions;
-      // Resume before creating. A user who closed the app at target 31 must come
-      // back to target 31, not to a fresh 38-target session that orphans the 30
-      // photographs already on disk.
-      String stationId;
-      if (widget.sessionId != null) {
-        stationId = widget.sessionId!;
-      } else {
-        final resumable = await store?.findResumableSession(
-          userId: widget.userId,
-        );
-        stationId =
-            resumable?.sessionId ??
-            'sphere-${DateTime.now().millisecondsSinceEpoch}';
-      }
+      final camera = widget.camera ?? PluginSphereCamera();
+      final rotation = widget.rotation ?? NativeRotationSource();
+      final repository = widget.repository;
       final controller = SphereCaptureController(
         rotation: rotation,
         camera: camera,
         repository: repository,
-        stitcher: widget.stitcher ?? defaults.stitcher,
-        backendProcessing: widget.backendProcessing,
-        planVersion: sitewisePlanVersionForCount(widget.requiredTargetCount),
-        stationId: stationId,
-        // The 4:3 normaliser links OpenCV, so it is supplied here rather than
-        // defaulted inside the controller: that keeps the controller — and its
-        // tests — free of the native stitching library.
-        normalize: defaults.normalize,
-        sessions: store,
+        stationId: widget.sessionId,
+        planVersion: widget.planVersion,
+        // The normaliser measures the JPEG's real geometry and keeps the
+        // sensor's bytes: nothing in the capture loop decodes a
+        // full-resolution still, and no native library is involved.
+        normalize: const JpegNormalizer().normalize,
+        sessions: widget.sessions,
         userId: widget.userId,
         propertyId: widget.propertyId,
         onFrameSaved: widget.onFrameSaved,
-        qualityAnalyzer: widget.qualityAnalyzer,
+        onCaptureComplete: widget.onCaptureComplete,
         motion:
             widget.motionStream ??
             accelerometerEventStream(
@@ -290,7 +176,6 @@ class _SphereCaptureScreenState extends State<SphereCaptureScreen>
               samplingPeriod: SensorInterval.gameInterval,
             ).map((GyroscopeEvent e) => Vec3(e.x, e.y, e.z)),
       );
-      controller.addListener(_onControllerChanged);
       if (!mounted) return;
       setState(() {
         _controller = controller;
@@ -315,8 +200,6 @@ class _SphereCaptureScreenState extends State<SphereCaptureScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _setKeepScreenOn(false);
-    _controller?.removeListener(_onControllerChanged);
     _controller?.dispose();
     super.dispose();
   }
@@ -326,17 +209,35 @@ class _SphereCaptureScreenState extends State<SphereCaptureScreen>
     final controller = _controller;
     final camera = _camera;
     if (controller == null || camera == null) {
+      // A guide-started capture must not show a second Start button.
+      // On genuine camera errors, retain the existing retry UI.
+      if (widget.autoStart && _startError == null) {
+        return const Scaffold(
+          backgroundColor: CaptureColors.cameraChrome,
+          body: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(color: CaptureColors.accentOnDark),
+                SizedBox(height: 18),
+                Text('Opening 360° camera…',
+                    style: TextStyle(color: Colors.white, fontSize: 16)),
+              ],
+            ),
+          ),
+        );
+      }
       return _StartScreen(
         onStart: _starting ? null : _start,
         starting: _starting,
         error: _startError,
-        requiredTargetCount: widget.requiredTargetCount,
+        planVersion: widget.planVersion,
       );
     }
     return _LiveCapture(
       controller: controller,
       camera: camera,
-      backendProcessing: widget.backendProcessing,
+      onStartNewCapture: widget.onStartNewCapture,
     );
   }
 }
@@ -347,156 +248,171 @@ class _StartScreen extends StatelessWidget {
   const _StartScreen({
     required this.onStart,
     required this.starting,
-    required this.requiredTargetCount,
     this.error,
+    required this.planVersion,
   });
 
   final VoidCallback? onStart;
   final bool starting;
-  final int requiredTargetCount;
   final String? error;
+  final int planVersion;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    backgroundColor: CaptureColors.cameraChrome,
-    body: SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                const Icon(
-                  Icons.threesixty,
-                  color: CaptureColors.accentOnDark,
-                  size: 26,
+  Widget build(BuildContext context) {
+    final targetCount = sphereTargetCountForPlan(planVersion);
+    return Scaffold(
+      backgroundColor: CaptureColors.cameraChrome,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  const Icon(
+                    Icons.threesixty,
+                    color: CaptureColors.accentOnDark,
+                    size: 26,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'SiteWise',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.92),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Text(
+                    '360° Capture',
+                    style: TextStyle(
+                      color: CaptureColors.mutedOnDark,
+                      fontSize: 15,
+                    ),
+                  ),
+                ],
+              ),
+              const Spacer(flex: 2),
+              Center(
+                child: _SphereDiagram(size: 220, planVersion: planVersion),
+              ),
+              const SizedBox(height: 30),
+              Text(
+                '360° Capture ($targetCount Targets)',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 25,
+                  fontWeight: FontWeight.w700,
+                  height: 1.25,
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  'SiteWise',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.92),
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.2,
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'Hold the phone level and face the first wall, then tap Start. '
+                'The targets follow an adaptive five-ring plan — turn to bring '
+                'the next one into the centre ring and the photograph is taken '
+                'automatically.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: CaptureColors.mutedOnDark,
+                  fontSize: 13,
+                  height: 1.5,
+                ),
+              ),
+              const Spacer(flex: 3),
+              if (error != null) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: CaptureColors.danger.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: CaptureColors.danger.withValues(alpha: 0.5),
+                    ),
+                  ),
+                  child: Text(
+                    error!,
+                    style: const TextStyle(
+                      color: CaptureColors.danger,
+                      fontSize: 12,
+                      height: 1.4,
+                    ),
                   ),
                 ),
-                const SizedBox(width: 6),
-                const Text(
-                  '360° Capture',
-                  style: TextStyle(
-                    color: CaptureColors.mutedOnDark,
-                    fontSize: 15,
-                  ),
-                ),
+                const SizedBox(height: 12),
               ],
-            ),
-            const Spacer(flex: 2),
-            const Center(child: _SphereDiagram(size: 220)),
-            const SizedBox(height: 30),
-            Text(
-              'AR 360° Capture ($requiredTargetCount Targets)',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 25,
-                fontWeight: FontWeight.w700,
-                height: 1.25,
-              ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              'Hold the phone level and face the first wall, then tap Start. '
-              'The $requiredTargetCount targets are levelled to gravity — turn '
-              'to bring the next one into the centre ring and the photograph '
-              'is taken automatically. Try to turn around one spot and keep '
-              'the phone at a similar height as you move between targets.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: CaptureColors.mutedOnDark,
-                fontSize: 13,
-                height: 1.5,
-              ),
-            ),
-            const Spacer(flex: 3),
-            if (error != null) ...[
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: CaptureColors.danger.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: CaptureColors.danger.withValues(alpha: 0.5),
+              FilledButton(
+                onPressed: onStart,
+                style: FilledButton.styleFrom(
+                  backgroundColor: CaptureColors.accent,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size.fromHeight(52),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
                   ),
                 ),
-                child: Text(
-                  error!,
-                  style: const TextStyle(
-                    color: CaptureColors.danger,
-                    fontSize: 12,
-                    height: 1.4,
-                  ),
-                ),
+                child: starting
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : const Text(
+                        'Start Capture',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
               ),
               const SizedBox(height: 12),
-            ],
-            FilledButton(
-              onPressed: onStart,
-              style: FilledButton.styleFrom(
-                backgroundColor: CaptureColors.accent,
-                foregroundColor: Colors.white,
-                minimumSize: const Size.fromHeight(52),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
+              const Text(
+                '3DoF rotation only · levelled to gravity at Start · the sphere '
+                'stays locked to the room',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: CaptureColors.mutedOnDark, fontSize: 11),
               ),
-              child: starting
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                    )
-                  : const Text(
-                      'Start Capture',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              '3DoF rotation only · levelled to gravity at Start · the sphere '
-              'stays locked to the room',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: CaptureColors.mutedOnDark, fontSize: 11),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
-/// The 38 dots, drawn orthographically so the layout is visible before Start.
+/// The plan's targets, drawn orthographically so the layout is visible before
+/// Start.
 class _SphereDiagram extends StatelessWidget {
-  const _SphereDiagram({required this.size});
+  const _SphereDiagram({required this.size, required this.planVersion});
 
   final double size;
+  final int planVersion;
 
   @override
   Widget build(BuildContext context) => SizedBox(
     width: size,
     height: size,
-    child: CustomPaint(painter: _SphereDiagramPainter()),
+    child: CustomPaint(
+      painter: _SphereDiagramPainter(
+        targets: buildSphereTargets(planVersion: planVersion),
+      ),
+    ),
   );
 }
 
 class _SphereDiagramPainter extends CustomPainter {
+  const _SphereDiagramPainter({required this.targets});
+
+  final List<SphereTargetSpec> targets;
+
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
@@ -507,7 +423,7 @@ class _SphereDiagramPainter extends CustomPainter {
       ..color = Colors.white.withValues(alpha: 0.28);
     canvas.drawCircle(center, radius, outline);
 
-    // The three rings, foreshortened the way a sphere reads in a still image.
+    // The rings, foreshortened the way a sphere reads in a still image.
     final ringPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 0.9
@@ -521,7 +437,10 @@ class _SphereDiagramPainter extends CustomPainter {
       ),
       ringPaint,
     );
-    for (final pitch in <double>[kSphereRingPitchDeg, -kSphereRingPitchDeg]) {
+    final pitches = <double>{
+      for (final target in targets) target.pitchDeg,
+    }.toList()..sort();
+    for (final pitch in pitches) {
       final y = -math.sin(pitch * math.pi / 180) * radius;
       final rx = math.cos(pitch * math.pi / 180) * radius;
       canvas.drawOval(
@@ -534,16 +453,17 @@ class _SphereDiagramPainter extends CustomPainter {
       );
     }
 
-    for (final target in buildSphereTargets()) {
+    for (final target in targets) {
       final d = target.direction;
       final point = center + Offset(d.x * radius, -d.y * radius);
       final front = d.z <= 0;
-      final isPole = target.isZenith || target.isNadir;
+      final isPolar = target.pitchDeg.abs() > 45;
       canvas.drawCircle(
         point,
-        isPole ? 4.2 : 3.2,
+        isPolar ? 4.2 : 3.2,
         Paint()
-          ..color = sphereRingColor(target).withValues(alpha: front ? 1 : 0.35),
+          ..color =
+              sphereRingColor(target).withValues(alpha: front ? 1 : 0.35),
       );
     }
 
@@ -575,7 +495,8 @@ class _SphereDiagramPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_SphereDiagramPainter oldDelegate) => false;
+  bool shouldRepaint(_SphereDiagramPainter oldDelegate) =>
+      oldDelegate.targets.length != targets.length;
 }
 
 // ── live capture ───────────────────────────────────────────────────────────
@@ -584,12 +505,12 @@ class _LiveCapture extends StatelessWidget {
   const _LiveCapture({
     required this.controller,
     required this.camera,
-    required this.backendProcessing,
+    this.onStartNewCapture,
   });
 
   final SphereCaptureController controller;
   final SphereCamera camera;
-  final bool backendProcessing;
+  final VoidCallback? onStartNewCapture;
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -599,12 +520,9 @@ class _LiveCapture extends StatelessWidget {
       children: [
         // Toolbar and capture controls sit OUTSIDE the viewfinder; the camera
         // image lives in an explicit 3:4 box whose size drives the marker
-        // projection. Previously the preview filled the whole screen and the
-        // overlay was projected for that fullscreen viewport, so on a tall
-        // phone the preview was cover-cropped horizontally while the markers
-        // were laid out for the cropped width — the geometry only stayed
-        // consistent by accident, and the visible framing was never the 3:4
-        // frame the photographs actually capture.
+        // projection. A fullscreen cover-cropped preview and a fullscreen
+        // projection only stay consistent by accident — and the photographs
+        // are 3:4, so the viewfinder shows exactly what will be saved.
         SafeArea(
           child: Column(
             children: [
@@ -644,12 +562,13 @@ class _LiveCapture extends StatelessWidget {
           animation: controller,
           builder: (BuildContext context, Widget? child) {
             if (controller.phase == SphereCapturePhase.complete) {
-              return backendProcessing
-                  ? _BackendCompletionOverlay(controller: controller)
-                  : _CompletionOverlay(controller: controller);
+              return _CompletionOverlay(controller: controller);
             }
             if (controller.phase == SphereCapturePhase.failed) {
-              return _FailureOverlay(controller: controller);
+              return _FailureOverlay(
+                controller: controller,
+                onStartNewCapture: onStartNewCapture,
+              );
             }
             return const SizedBox.shrink();
           },
@@ -736,10 +655,11 @@ class _Viewfinder extends StatelessWidget {
             top: 10,
             left: 16,
             right: 16,
-            child: AnimatedBuilder(
-              animation: controller,
-              builder: (BuildContext context, Widget? child) => Center(
-                child: _CapturedBanner(visible: controller.banner != null),
+            child: Center(
+              child: AnimatedBuilder(
+                animation: controller,
+                builder: (BuildContext context, Widget? child) =>
+                    _CapturedBanner(visible: controller.banner != null),
               ),
             ),
           ),
@@ -753,11 +673,8 @@ class _Viewfinder extends StatelessWidget {
 /// `--dart-define=sphere_diagnostics=true`).
 ///
 /// Logs the numbers needed to answer "is the middle ring where gravity says
-/// it is" from a device log — viewfinder geometry, the lens assumption, the
-/// camera's elevation relative to the levelled reference, the selected
-/// target's fixed direction, and where both the target and the reticle are
-/// drawn. Throttled to once a second: the sensor itself runs at 50 Hz and a
-/// per-sample log would drown the device console.
+/// it is" from a device log. Throttled to once a second: the sensor itself
+/// runs at 50 Hz and a per-sample log would drown the device console.
 class _ProjectionDiagnostics extends StatefulWidget {
   const _ProjectionDiagnostics({
     required this.controller,
@@ -799,12 +716,11 @@ class _ProjectionDiagnosticsState extends State<_ProjectionDiagnostics> {
     Offset? projected;
     if (device != null && start != null) {
       // The camera's elevation in the *levelled sphere frame* (+Y up): the
-      // same frame the middle ring's 0° pitch is defined in, so a non-zero
-      // value here is exactly the angle by which the horizon sits above or
-      // below the reticle.
+      // same frame the middle ring's 0° pitch is defined in.
       final relative = (start.conjugate * device).normalized;
       final forward = relative.rotate(const Vec3(0, 0, -1));
-      elevationDeg = math.asin(forward.y.clamp(-1.0, 1.0)) * 180 / math.pi;
+      elevationDeg =
+          math.asin(forward.y.clamp(-1.0, 1.0)) * 180 / math.pi;
       final reference = start.rotate(const Vec3(0, 0, -1));
       referenceHeadingDeg =
           math.atan2(reference.x, -reference.z) * 180 / math.pi;
@@ -823,7 +739,6 @@ class _ProjectionDiagnosticsState extends State<_ProjectionDiagnostics> {
       'aspect=${(p.width / p.height).toStringAsFixed(3)} '
       'previewAspect=${widget.camera.previewAspectRatio?.toStringAsFixed(3) ?? 'n/a'} '
       'vfov=${p.verticalFovDeg.toStringAsFixed(1)}° '
-      'focalY=${p.focalLengthY.toStringAsFixed(1)} '
       'cameraElevation=${elevationDeg?.toStringAsFixed(1) ?? 'n/a'}° '
       'referenceHeading=${referenceHeadingDeg?.toStringAsFixed(1) ?? 'n/a'}° '
       'target=${target?.spec.targetId ?? '-'} '
@@ -871,9 +786,7 @@ class _ProjectionDiagnosticsState extends State<_ProjectionDiagnostics> {
                 '${widget.projection.height.round()} '
                 'f${widget.projection.focalLengthY.round()}',
               ),
-              Text(
-                'elev $elevation  err ${c.activeErrorDeg.toStringAsFixed(1)}°',
-              ),
+              Text('elev $elevation  err ${c.activeErrorDeg.toStringAsFixed(1)}°'),
               Text(
                 'T${target?.spec.targetId ?? '-'} '
                 'y${target?.spec.yawDeg.toStringAsFixed(0) ?? '-'} '
@@ -906,6 +819,15 @@ class _TopBar extends StatelessWidget {
             _MotionChip(moving: controller.moving),
       ),
       const SizedBox(width: 8),
+      // In-session help: opens the capture guide on top of the live session.
+      // The controller below stays mounted and keeps its state, so reopening
+      // the instructions never restarts or resets the capture.
+      _GlassButton(
+        icon: Icons.help_outline,
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => const CaptureGuideScreen()),
+        ),
+      ),
       const Spacer(),
       SphereProgressMap(controller: controller),
     ],
@@ -983,12 +905,8 @@ class _BottomPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // SITEWISE_CAPTURE_PLAN_UI_V1
-    final total = controller.targets.length;
-    final active = controller.activeTarget;
-    final aligned = active != null &&
-        !controller.moving &&
-        controller.activeErrorDeg <= controller.toleranceDeg;
+    final aligned = controller.activeErrorDeg <= controller.toleranceDeg;
+    final total = controller.targetCount;
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
       decoration: BoxDecoration(
@@ -1013,9 +931,7 @@ class _BottomPanel extends StatelessWidget {
           ),
           const SizedBox(height: 9),
           Text(
-            active == null
-                ? '${controller.capturedCount} of $total photos saved'
-                : 'Capture ${controller.activeCaptureStep ?? controller.capturedCount + 1} of $total · ${active.spec.ringName}',
+            controller.progressLabel,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
@@ -1024,16 +940,11 @@ class _BottomPanel extends StatelessWidget {
               fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: 6),
-          Text(
-            '${controller.capturedCount} of $total photos saved',
-            style: const TextStyle(color: Colors.white70, fontSize: 13),
-          ),
           const SizedBox(height: 10),
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
-              value: total == 0 ? 0.0 : (controller.capturedCount / total).clamp(0.0, 1.0).toDouble(),
+              value: total == 0 ? 0 : controller.capturedCount / total,
               minHeight: 4,
               backgroundColor: Colors.white.withValues(alpha: 0.14),
               valueColor: const AlwaysStoppedAnimation<Color>(CaptureColors.ok),
@@ -1080,97 +991,10 @@ class _MotionChip extends StatelessWidget {
   );
 }
 
-class _CaptureSavedRing extends StatelessWidget {
-  const _CaptureSavedRing({required this.controller});
-  final SphereCaptureController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    final total = controller.targets.length;
-    final saved = controller.capturedCount;
-    final fraction = total == 0 ? 0.0 : (saved / total).clamp(0.0, 1.0).toDouble();
-    return Semantics(
-      label: '$saved of $total photos saved',
-      child: SizedBox.square(
-        dimension: 116,
-        child: Stack(alignment: Alignment.center, children: [
-          SizedBox.expand(child: CircularProgressIndicator(
-            value: fraction,
-            strokeWidth: 8,
-            color: CaptureColors.ok,
-            backgroundColor: Colors.white24,
-          )),
-          Column(mainAxisSize: MainAxisSize.min, children: [
-            Text('$saved / $total', style: const TextStyle(
-              color: Colors.white, fontSize: 19, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 4),
-            Icon(saved == total && total > 0 ? Icons.check : Icons.camera_alt_outlined,
-              color: CaptureColors.ok, size: 23),
-          ]),
-        ]),
-      ),
-    );
-  }
-}
-
-class _BackendCompletionOverlay extends StatelessWidget {
-  const _BackendCompletionOverlay({required this.controller});
-
-  final SphereCaptureController controller;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    color: Colors.black.withValues(alpha: 0.72),
-    child: Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: CaptureColors.sheet,
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: CaptureColors.hairlineOnDark),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _CaptureSavedRing(controller: controller),
-              const SizedBox(height: 12),
-              const Text(
-                'Capture complete',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '${controller.capturedCount} / ${controller.targets.length} photos saved',
-                style: const TextStyle(
-                  color: CaptureColors.mutedOnDark,
-                  fontSize: 14,
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'SiteWise processes the panorama on the server. Your original '
-                'photos stay on this device if an upload needs to be retried.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: CaptureColors.mutedOnDark,
-                  fontSize: 13,
-                  height: 1.5,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
-}
-
+/// Shown the moment the last photograph is durable. The host replaces this
+/// screen with the handoff/processing progression as soon as it reacts to
+/// [SphereCaptureController.onCaptureComplete]; this overlay exists so the
+/// final save never visually falls off a cliff.
 class _CompletionOverlay extends StatelessWidget {
   const _CompletionOverlay({required this.controller});
 
@@ -1192,7 +1016,7 @@ class _CompletionOverlay extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _CaptureSavedRing(controller: controller),
+              const Icon(Icons.check_circle, color: CaptureColors.ok, size: 54),
               const SizedBox(height: 12),
               const Text(
                 'Capture Complete!',
@@ -1204,33 +1028,33 @@ class _CompletionOverlay extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                '${controller.capturedCount} / ${controller.targets.length} Targets',
+                '${controller.capturedCount} / ${controller.targetCount} Targets',
                 style: const TextStyle(
                   color: CaptureColors.mutedOnDark,
                   fontSize: 13,
                 ),
               ),
               const SizedBox(height: 16),
-              _PanoramaStatus(controller: controller),
-              const SizedBox(height: 18),
-              FilledButton.icon(
-                onPressed: controller.panoramaPath == null
-                    ? null
-                    : () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => SpherePanoramaScreen(
-                            panoramaPath: controller.panoramaPath!,
-                            photoCount: controller.targetCount,
-                          ),
-                        ),
+              const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  SizedBox(width: 10),
+                  Flexible(
+                    child: Text(
+                      'Uploading your photographs and preparing the panorama…',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: CaptureColors.mutedOnDark,
+                        fontSize: 12,
                       ),
-                icon: const Icon(Icons.threesixty, size: 18),
-                label: const Text('View 360° Panorama'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: CaptureColors.accent,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size.fromHeight(46),
-                ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -1240,149 +1064,86 @@ class _CompletionOverlay extends StatelessWidget {
   );
 }
 
-class _PanoramaStatus extends StatelessWidget {
-  const _PanoramaStatus({required this.controller});
-
-  final SphereCaptureController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    if (controller.stitching) {
-      return Row(
-        children: [
-          const SizedBox(
-            width: 16,
-            height: 16,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-          const SizedBox(width: 10),
-          // The stitcher's per-stage wording ("Matching overlaps: 12/38
-          // pairs") is an image-processing diagnostic and is logged by the
-          // controller instead. Progress itself stays visible: spinner here,
-          // plus the capture's own progress bar.
-          const Expanded(
-            child: Text(
-              'Creating the 360° panorama…',
-              style: TextStyle(color: CaptureColors.mutedOnDark, fontSize: 12),
-            ),
-          ),
-        ],
-      );
-    }
-    if (controller.stitchError != null) {
-      // The stitcher's own message — frame indices, inlier counts, OpenCV
-      // failures — is a diagnostic. The controller has already written it to
-      // the device log, so the screen shows only what the agent can act on.
-      return Column(
-        children: [
-          const Text(
-            'Unable to generate the panorama. Please try again.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: CaptureColors.warn,
-              fontSize: 11.5,
-              height: 1.4,
-            ),
-          ),
-          TextButton(
-            onPressed: controller.retryStitching,
-            style: TextButton.styleFrom(
-              // The app's default theme is the light one, so a text button on
-              // this dark screen has to name its own colour.
-              foregroundColor: CaptureColors.linkOnDark,
-              minimumSize: const Size(0, CaptureMetrics.minTouchTarget),
-            ),
-            child: const Text('Retry stitching'),
-          ),
-        ],
-      );
-    }
-    if (controller.panoramaPath != null) {
-      return Column(
-        children: [
-          const Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.check, color: CaptureColors.ok, size: 15),
-              SizedBox(width: 6),
-              Text(
-                '360° panorama ready',
-                style: TextStyle(
-                  color: CaptureColors.mutedOnDark,
-                  fontSize: 12,
-                ),
-              ),
-            ],
-          ),
-          if (controller.galleryPath != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              'Saved to ${controller.galleryFolder}',
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: CaptureColors.linkOnDark,
-                fontSize: 10.5,
-                height: 1.4,
-              ),
-            ),
-          ],
-        ],
-      );
-    }
-    return Text(
-      'The panorama will be generated from the ${controller.targetCount} saved '
-      'photographs.',
-      textAlign: TextAlign.center,
-      style: TextStyle(color: CaptureColors.mutedOnDark, fontSize: 11.5),
-    );
-  }
-}
-
+/// The camera could not start. Offers the two recoveries that actually exist:
+/// try again (transient camera or sensor failures), or — when the host
+/// supplies it — archive the station and start fresh (an unreadable session).
 class _FailureOverlay extends StatelessWidget {
-  const _FailureOverlay({required this.controller});
+  const _FailureOverlay({
+    required this.controller,
+    this.onStartNewCapture,
+  });
 
   final SphereCaptureController controller;
+  final VoidCallback? onStartNewCapture;
 
   @override
   Widget build(BuildContext context) => Container(
-    color: Colors.black.withValues(alpha: 0.82),
+    color: Colors.black.withValues(alpha: 0.78),
     child: Center(
       child: Padding(
-        padding: const EdgeInsets.all(28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.error_outline,
-              color: CaptureColors.danger,
-              size: 42,
-            ),
-            const SizedBox(height: 14),
-            Text(
-              controller.message ?? 'The capture stopped.',
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                height: 1.5,
+        padding: const EdgeInsets.all(24),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(22, 24, 22, 18),
+          decoration: BoxDecoration(
+            color: CaptureColors.sheet,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: CaptureColors.hairlineOnDark),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Icon(
+                Icons.error_outline,
+                color: CaptureColors.danger,
+                size: 48,
               ),
-            ),
-            const SizedBox(height: 20),
-            FilledButton(
-              onPressed: controller.start,
-              style: FilledButton.styleFrom(
-                backgroundColor: CaptureColors.accent,
+              const SizedBox(height: 12),
+              const Text(
+                'The capture could not start',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-              child: const Text('Try again'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).maybePop(),
-              child: const Text(
-                'Back',
-                style: TextStyle(color: CaptureColors.mutedOnDark),
+              const SizedBox(height: 10),
+              Text(
+                controller.message ?? 'An unknown camera error occurred.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: CaptureColors.mutedOnDark,
+                  fontSize: 12,
+                  height: 1.45,
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 18),
+              FilledButton.icon(
+                onPressed: () => controller.start(),
+                icon: const Icon(Icons.refresh, size: 18),
+                label: const Text('Try Again'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: CaptureColors.accent,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size.fromHeight(46),
+                ),
+              ),
+              if (onStartNewCapture != null) ...[
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  onPressed: onStartNewCapture,
+                  icon: const Icon(Icons.restart_alt, size: 18),
+                  label: const Text('Start a New Capture'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size.fromHeight(46),
+                    side: const BorderSide(color: CaptureColors.hairlineOnDark),
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     ),

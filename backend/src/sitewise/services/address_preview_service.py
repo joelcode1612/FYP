@@ -52,6 +52,27 @@ CANONICAL_ADDRESS_VERSION = "sw-addr-v1"
 #: are stored as server-side verdicts, not licensed data assets to hoard.
 CONFIRMATION_TOKEN_TTL_SECONDS = 6 * 3600
 
+#: Provider-configuration detail (missing key, disabled API, transport error)
+#: is an OPERATOR concern. It must never be returned as an address verdict:
+#: the client renders the first note as the verification result, so a missing
+#: key made a successful geocode look like a failed verification.
+FALLBACK_GOOGLE_NOTE = (
+    "Google Address Validation is unavailable."
+)
+
+
+def _google_note(google_error: str | None) -> str | None:
+    """One operator note that carries the provider's actual cause.
+
+    The note must not be rendered as the address verdict: a successful
+    fallback geocode still supplies coordinates and a signed confirmation.
+    """
+    if not google_error:
+        return None
+    if google_error.startswith("Google Address Validation is unavailable"):
+        return google_error
+    return f"{FALLBACK_GOOGLE_NOTE} {google_error}"
+
 #: Fallback signing secret so a dev environment without SECRET_KEY still
 #: produces verifiable (short-lived) tokens instead of silently dropping the
 #: whole confirm flow. Production sets SECRET_KEY.
@@ -222,6 +243,14 @@ def _classify_osm(place: dict, *, city: str, state: str, postcode: str):
     notes = [
         "Matched by the fallback geocoder; component agreement is approximate.",
     ]
+    if not checks["city_matches"]:
+        notes.append("The matched locality differs from the selected city.")
+    if not checks["state_matches"]:
+        notes.append("The matched state differs from the selected state.")
+    if not checks["postcode_matches"]:
+        notes.append("The matched postcode differs from the entered postcode.")
+    if not all(checks[key] for key in ("city_matches", "state_matches", "postcode_matches")):
+        return "ambiguous", checks, notes
     return "approximate", checks, notes
 
 
@@ -310,17 +339,37 @@ def _osm_query_variants(
     is not found at all.
     """
     street = " ".join(part.strip() for part in (address_line1, address_line2) if part and part.strip())
+    road = _road_component(address_line1)
     state_q = _query_state(state)
     variants = [
         ", ".join(part for part in (street, postcode.strip(), city.strip(), state_q) if part),
+        ", ".join(part for part in (road, city.strip(), state_q) if part)
+        if road and _norm(road) != _norm(street)
+        else "",
         ", ".join(part for part in (street, city.strip(), state_q) if part),
         ", ".join(part for part in (street, city.strip()) if part),
+        ", ".join(part for part in (road, city.strip()) if part)
+        if road and _norm(road) != _norm(street)
+        else "",
     ]
     seen: list[str] = []
     for variant in variants:
         if variant and variant not in seen:
             seen.append(variant)
     return seen
+
+
+def _road_component(address: str) -> str:
+    """Return the comma-delimited road segment, excluding neighbourhood text."""
+    road_prefixes = (
+        "jalan ", "jln ", "lorong ", "lrg ", "persiaran ", "psn ",
+        "lebuh ", "lebuhraya ",
+    )
+    for part in (item.strip() for item in (address or "").split(",")):
+        normalized = _norm(part)
+        if any(normalized.startswith(prefix) for prefix in road_prefixes):
+            return part
+    return address.strip()
 
 
 def preview_address(
@@ -330,6 +379,7 @@ def preview_address(
     city: str,
     state: str,
     postcode: str,
+    force_refresh: bool = False,
 ) -> dict:
     """Resolve one typed address and classify the match. PERSISTS NOTHING."""
     address_hash = canonical_address_hash(
@@ -398,9 +448,12 @@ def preview_address(
     place = None
     rejected: list[str] = []
     unavailable: str | None = None
+    road = _road_component(address_line1)
     for query in _osm_query_variants(address_line1, address_line2, city, state, postcode):
         try:
-            candidate = lookup_malaysian_address(f"{query}, Malaysia")
+            candidate = lookup_malaysian_address(
+                f"{query}, Malaysia", bypass_cache=force_refresh
+            )
         except ValueError:
             candidate = None
         except GeocodingUnavailable as exc:
@@ -408,10 +461,10 @@ def preview_address(
             break
         if candidate is None:
             continue
-        if not _osm_result_names_street(address_line1, candidate):
+        if not _osm_result_names_street(road, candidate):
             rejected.append(
-                "The fallback geocoder returned a place that does not name the "
-                "street that was entered, so it was not used."
+                "The fallback geocoder found a different street, so that location "
+                "was not used. Check the street name and building number."
             )
             continue
         place = candidate
@@ -420,21 +473,42 @@ def preview_address(
         result.update(
             match_class="service_unavailable",
             provider=None,
-            notes=[note for note in (google_error, unavailable) if note],
+            notes=[
+                note
+                for note in (
+                    _google_note(google_error),
+                    unavailable,
+                )
+                if note
+            ],
         )
         return result
     if place is None:
         result.update(
             match_class="not_found",
             provider="openstreetmap_nominatim",
-            notes=[note for note in (google_error, *rejected) if note],
+            notes=[
+                note
+                for note in (
+                    _google_note(google_error),
+                    *dict.fromkeys(rejected),
+                )
+                if note
+            ],
         )
+        if not rejected:
+            result["notes"].append(
+                "The address could not be located. Check the street, building number and postcode."
+            )
         return result
     match_class, checks, notes = _classify_osm(
         place, city=city, state=state, postcode=postcode
     )
     if google_error:
-        notes.append(google_error)
+        notes.append(_google_note(google_error))
+    notes.append(
+        "Located by OpenStreetMap. This is an approximate address match; check the map before saving."
+    )
     result.update(
         match_class=match_class,
         provider=place.get("source") or "openstreetmap_nominatim",

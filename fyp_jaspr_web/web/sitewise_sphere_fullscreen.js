@@ -117,6 +117,8 @@
     return card && !card.matches('.vd-main,.vd-layout,.vd') ? card : null;
   }
   function mark() {
+    // The Jaspr inspection panel owns its layout and expansion state.
+    if (frame.closest('.admin-pano-review')) return false;
     if (!frame.isConnected) return false;
     const panel = findPanel();
     if (!panel) return false;

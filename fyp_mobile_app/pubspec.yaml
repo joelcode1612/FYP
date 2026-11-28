@@ -146,13 +146,10 @@ dev_dependencies:
 # The following section is specific to Flutter packages.
 flutter:
   assets:
-    - models/target_reticle.glb
     # The AR capture target and its bezel, parsed by the Dart glTF reader and
     # drawn by the native ARCore renderer. Declared explicitly (not as a
     # directory) so a rename fails the build instead of silently shipping no
     # marker.
-    - assets/models/ar_capture_target.glb
-    - assets/models/white_frame_bezel.glb
     - assets/sitewise-mark-64.png
     - assets/config/sitewise_dev.json
     - assets/images/capture_guide/

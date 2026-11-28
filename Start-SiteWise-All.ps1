@@ -159,9 +159,9 @@ if (-not $WebOnly) {
 
     # The asset is git-ignored, so a fresh clone, a new worktree or a branch
     # switch arrives without it and the Flutter build fails on the pubspec
-    # asset entry before any Dart code runs. The provisioner writes it from the
-    # authorised public defaults (or from backend/.env when that is present)
-    # and leaves an existing valid file byte-for-byte untouched.
+    # asset entry before any Dart code runs. The provisioner synchronizes
+    # public authentication values from backend/.env and preserves device
+    # networking settings from the existing local asset.
     $ensureConfig = Join-Path `
         $mobileDir `
         'tool\ensure_sitewise_dev_config.js'
@@ -366,33 +366,6 @@ MustSucceed 'npm gen-auth-config'
 
 & npm.cmd run build-auth --prefix $toolDir
 MustSucceed 'npm build-auth'
-
-# ============================================================
-# 11. OPTIONAL MAP CONFIGURATION
-# ============================================================
-
-Step 'Check optional map configuration'
-
-$backendEnv = Get-Content `
-    -LiteralPath (Join-Path $backendDir '.env')
-
-$hasMapKey = @(
-    $backendEnv | Where-Object {
-        $_ -match '^\s*CARTO_BASEMAPS_KEY\s*=\s*cb1_'
-    }
-).Count -gt 0
-
-if ($hasMapKey) {
-
-    & npm.cmd run gen-map-config --prefix $toolDir
-
-    MustSucceed 'npm gen-map-config'
-}
-else {
-
-    Write-Warning `
-        'CARTO_BASEMAPS_KEY not detected; some map tiles may be unavailable.'
-}
 
 # ============================================================
 # 12. BUILD JASPR WEB WITH FVM DART

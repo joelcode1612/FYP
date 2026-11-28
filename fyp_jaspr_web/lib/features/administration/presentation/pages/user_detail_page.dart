@@ -1,32 +1,13 @@
+import 'package:sitewise_jaspr_web/shared/presentation/components/dashboard_kit.dart';
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart';
-import 'package:sitewise_jaspr_web/core/di/app_locator.dart';
 import 'package:sitewise_jaspr_web/features/authentication/data/auth_service.dart';
 import 'package:sitewise_jaspr_web/features/administration/data/user_detail_api.dart';
 import 'package:sitewise_jaspr_web/shared/presentation/layouts/app_layout.dart';
 
-/// Simplified Sitewise Admin user detail — READ-ONLY ROLES.
-///
-/// Four sections only: user summary, user information, role & status, and the
-/// page actions (Back to Users / Save Changes). The record still comes from
-/// [AppLocator.userRepo] through the unchanged `UserDetailPage(id: userId)`
-/// constructor and the existing
-/// `AppLayout(role: AppRole.admin, currentRoute: '/admin/users')` chrome.
-///
-/// THE ROLE IS DISPLAY-ONLY: it is assigned by the authorised registration,
-/// invitation and onboarding workflows and cannot be changed here. The role
-/// dropdown was removed, and the backend's
-/// `PATCH /api/v1/users/{id}` (`backend/src/sitewise/api/v1/users.py`)
-/// refuses any role payload outright (`role_change_not_supported`), so no
-/// unrestricted role-change path remains. Saving uses the same authorised
-/// administrative operation for ACCOUNT STATUS only; that endpoint is guarded
-/// by `require_admin_mfa`, validates the status vocabulary, syncs the
-/// identity row and writes the audit event server-side.
-/// [_UserDetailPageState._isAdmin] is only a presentation guard; FastAPI
-/// remains the authority. Nothing here reads or stores credentials.
 @client
 class UserDetailPage extends StatefulComponent {
   final String id;
@@ -42,7 +23,7 @@ class UserDetailPage extends StatefulComponent {
 const List<(String, String)> _statuses = [
   ('pending', 'Pending'),
   ('active', 'Active'),
-  ('suspended', 'Suspended'),
+  ('suspended', 'Blocked'),
 ];
 
 class _UserDetailPageState extends State<UserDetailPage> {
@@ -51,7 +32,7 @@ class _UserDetailPageState extends State<UserDetailPage> {
   /// Last server-confirmed status. The selected value is compared against
   /// this, never against a locally optimistic copy.
   String _savedStatus = 'pending';
-  String _status = 'pending';
+  String? _confirmStatus;
 
   bool _saving = false;
   String? _notice;
@@ -99,7 +80,6 @@ class _UserDetailPageState extends State<UserDetailPage> {
     // payload rather than a second request.
     final user = ApiUserRepository.fromJson(row);
     _savedStatus = _statusValue(user.status);
-    _status = _savedStatus;
 
     return _UserRecord(
       user: user,
@@ -111,22 +91,29 @@ class _UserDetailPageState extends State<UserDetailPage> {
   void _retry() => setState(() => _future = _load());
 
   Future<void> _save() async {
-    if (_saving || !_isAdmin) return;
+    final target = _confirmStatus;
+    if (_saving ||
+        !_isAdmin ||
+        target == null ||
+        WebAuth.profile?['user_id']?.toString() == component.id) {
+      return;
+    }
     // Roles are never sent: they are provisioning-only, and `UserDetailApi`
     // exposes no signature for them. Only a changed status is written, so an
     // untouched record never triggers an update (and never creates an audit
     // event).
-    if (_status == _savedStatus) return;
+    if (target == _savedStatus) return;
 
     setState(() {
       _saving = true;
+      _confirmStatus = null;
       _notice = null;
       _noticeIsError = false;
       _noticeIsWarning = false;
     });
 
     try {
-      final result = await UserDetailApi.updateStatus(component.id, _status);
+      final result = await UserDetailApi.updateStatus(component.id, target);
       if (!mounted) return;
 
       if (result['ok'] != true) {
@@ -147,7 +134,8 @@ class _UserDetailPageState extends State<UserDetailPage> {
         setState(() {
           _saving = false;
           _noticeIsError = true;
-          _notice = 'The server returned a response this page cannot read, so '
+          _notice =
+              'The server returned a response this page cannot read, so '
               'nothing was marked as saved. Reload the account to check its '
               'current status.';
         });
@@ -156,26 +144,30 @@ class _UserDetailPageState extends State<UserDetailPage> {
 
       // Success is shown only when the server echoes back the value we asked
       // for. A partial or unexpected response is treated as unconfirmed.
-      final echoedStatus =
-          (response['account_status'] as String?)?.toLowerCase().trim();
-      final confirmed = echoedStatus == _status;
+      final echoedStatus = (response['account_status'] as String?)
+          ?.toLowerCase()
+          .trim();
+      final confirmed = echoedStatus == target;
 
       if (!confirmed) {
         setState(() {
           _saving = false;
           _noticeIsError = true;
-          _notice = 'The server did not confirm this change. Nothing was '
+          _notice =
+              'The server did not confirm this change. Nothing was '
               'marked as saved.';
         });
         return;
       }
 
       setState(() {
-        _savedStatus = _status;
+        _savedStatus = target;
         _saving = false;
         _noticeIsError = false;
         _noticeIsWarning = response['audit_recorded'] == false;
-        _notice = _successMessage(response['audit_recorded']);
+        _notice = _noticeIsWarning
+            ? 'Account status changed, but the change could not be recorded in account history.'
+            : 'Account status updated.';
       });
     } catch (error) {
       if (!mounted) return;
@@ -187,23 +179,16 @@ class _UserDetailPageState extends State<UserDetailPage> {
     }
   }
 
-  void _setStatus(String value) => setState(() {
-    _status = value;
-    _notice = null;
-  });
-
   @override
   Component build(BuildContext context) {
     return AppLayout(
       role: AppRole.admin,
-      currentRoute: '/admin/users',
-      title: 'User Detail',
-      eyebrow: 'Accounts',
-      subtitle:
-          'View user information and account status. Roles are assigned '
-          'through registration, invitation and onboarding and are shown '
-          'read-only.',
-      child: div(classes: 'stack stack--md', [
+      currentRoute: '/admin/user-detail',
+      title: 'User details',
+      actions: const [
+        ActionLink('Back to users', href: '/admin/users', variant: 'secondary'),
+      ],
+      child: div(classes: 'admin-user-detail stack stack--sections', [
         // The notice lives outside the FutureBuilder so it stays visible while
         // the record re-renders, and is never shown before server confirmation.
         if (_notice != null)
@@ -249,171 +234,124 @@ class _UserDetailPageState extends State<UserDetailPage> {
 
   Component _details(_UserRecord record) {
     final user = record.user;
-    final changed = _status != _savedStatus;
     final isSelf = WebAuth.profile?['user_id']?.toString() == user.id;
-    final canSave = _isAdmin && !isSelf && changed && !_saving;
+    final knownStatus = _savedStatus.isNotEmpty;
 
-    return div(classes: 'stack stack--md', [
-      const Breadcrumbs(['Users', 'User detail']),
-
-      // --- D. Page actions -------------------------------------------------
-      div(
-        classes: 'row row--md',
-        styles: const Styles(raw: {
-          'flex-wrap': 'wrap',
-          'align-items': 'center',
-          'justify-content': 'space-between',
-        }),
-        [
-          const ActionLink(
-            'Back to Users',
-            href: '/admin/users',
-            variant: 'secondary',
-          ),
-          button(
-            attributes: {'type': 'button', if (!canSave) 'disabled': 'true'},
-            classes: canSave
-                ? 'btn btn--accent'
-                : 'btn btn--accent is-disabled',
-            onClick: canSave ? () => _save() : null,
-            [Component.text(_saving ? 'Saving…' : 'Save Changes')],
-          ),
-        ],
-      ),
-
-      // --- A. User summary -------------------------------------------------
+    return div(classes: 'stack stack--sections', [
       div(classes: 'card stack stack--md', [
-        div(classes: 'row row--md', [
+        div(classes: 'row admin-user-detail__identity', [
           span(classes: 'avatar', [Component.text(_initials(user.name))]),
           div(classes: 'grow stack', [
             span(classes: 'title', [
-              Component.text(_value(user.name, 'Unnamed user')),
+              Component.text(_value(user.name, 'Unnamed account')),
             ]),
             span(classes: 'body', [
-              Component.text(_value(user.email, 'Not provided')),
+              Component.text(_value(user.email, 'Email not provided')),
             ]),
           ]),
           Pill(_pretty(_savedStatus), tone: _statusTone(_savedStatus)),
         ]),
         div(classes: 'grid-2', [
-          _row('Current role', _pretty(_roleValue(user.role))),
-          _row('Account status', _pretty(_savedStatus)),
+          _row('Account role', _pretty(_roleValue(user.role))),
           _row('Registration date', _date(user.joinedAt)),
-          _row('Last login', _dateTime(record.lastLogin)),
+          if (record.phone != null) _row('Phone number', record.phone!),
+          _row('Last sign-in', _dateTime(record.lastLogin)),
         ]),
       ]),
-
-      // `.grid-2` collapses to one column at <= 640px in web/styles.css.
-      div(classes: 'grid-2', [
-        // --- B. User information -------------------------------------------
-        div(classes: 'card stack', [
-          span(classes: 'title', [Component.text('User Information')]),
-          _row('User ID', _value(user.id, 'Not provided')),
-          _row('Full name', _value(user.name, 'Not provided')),
-          _row('Email', _value(user.email, 'Not provided')),
-          _row('Phone number', record.phone ?? 'Not provided'),
-          _row('Location', _value(user.location, 'Not provided')),
-        ]),
-
-        // --- C. Role & status ----------------------------------------------
-        // The role is a read-only badge: provisioning-only, never editable.
-        div(classes: 'card stack stack--md', [
-          span(classes: 'title', [Component.text('Role & Status')]),
-          _row(
-            'Role',
-            _pretty(_roleValue(user.role)),
-          ),
-          span(classes: 'small muted', [
-            Component.text(
-              'The role is assigned by the authorised registration, '
-              'invitation and onboarding workflows and cannot be changed '
-              'here.',
+      div(classes: 'card stack stack--md', [
+        h2(classes: 'title', [const Component.text('Account access')]),
+        if (isSelf)
+          p(classes: 'body', [
+            const Component.text(
+              'You cannot disable your own administrator account.',
             ),
+          ])
+        else if (_isAdmin && knownStatus)
+          div(classes: 'row', [
+            if (user.role == AppRole.owner && _savedStatus == 'pending')
+              p(classes: 'body', [
+                const Component.text(
+                  'The owner needs to complete account setup to activate their account.',
+                ),
+              ]),
+            for (final (status, _) in _statuses)
+              if (status != _savedStatus &&
+                  !(user.role == AppRole.owner &&
+                      _savedStatus == 'pending' &&
+                      status == 'active'))
+                ActionButton(
+                  _actionLabel(status),
+                  variant: status == 'suspended'
+                      ? 'danger-outline'
+                      : 'secondary',
+                  onClick: _saving
+                      ? null
+                      : () => setState(() => _confirmStatus = status),
+                ),
+            if (_saving)
+              span(
+                attributes: {'role': 'status'},
+                [const Component.text('Updating account…')],
+              ),
           ]),
-          _dropdown(
-            'Account Status',
-            _status,
-            _statuses,
-            _isAdmin && !isSelf ? _setStatus : null,
-          ),
-          if (isSelf)
-            span(classes: 'small muted', [
-              Component.text('You cannot disable your own administrator account.'),
-            ])
-          else if (!_isAdmin)
-            span(classes: 'small muted', [
-              Component.text(
-                'Only an authorized administrator can change the account '
-                'status. The backend independently verifies the session.',
-              ),
-            ])
-          else if (!changed)
-            span(classes: 'small muted', [
-              Component.text(
-                'Select a different account status to enable Save Changes.',
-              ),
-            ]),
-        ]),
       ]),
+      if (_confirmStatus case final String target) _confirmation(user, target),
     ]);
   }
 
-  Component _dropdown(
-    String label,
-    String value,
-    List<(String, String)> values,
-    void Function(String)? onChanged,
-  ) {
-    return Field(
-      labelText: label,
-      child: select(
-        attributes: {
-          'aria-label': label,
-          if (onChanged == null) 'disabled': 'true',
-        },
-        events: events<List<String>>(onInput: (selected) {
-          if (onChanged != null && selected.isNotEmpty) {
-            onChanged(selected.first);
-          }
-        }),
-        [
-          // `entry`, not `option`: the local name must not shadow the DOM
-          // `option()` builder imported from package:jaspr/dom.dart.
-          for (final entry in values)
-            option(
-              value: entry.$1,
-              attributes: entry.$1 == value ? const {'selected': ''} : null,
-              [Component.text(entry.$2)],
-            ),
-        ],
-      ),
+  String _actionLabel(String status) => switch (status) {
+    'suspended' => 'Block account',
+    'active' when _savedStatus == 'suspended' => 'Unblock account',
+    'active' => 'Activate account',
+    _ => 'Set account to pending',
+  };
+
+  Component _confirmation(SitewiseUser user, String target) {
+    final action = _actionLabel(target);
+    final account = _value(user.email, _value(user.name, 'This account'));
+    final effect = switch (target) {
+      'suspended' =>
+        'Blocking prevents $account from accessing SiteWise until the account is unblocked. Existing account records and its role will be kept.',
+      'active' =>
+        '$account will have active access with the same role and sign-in requirements.',
+      _ =>
+        '$account will be marked pending and access may be limited until activation.',
+    };
+    void cancel() => setState(() => _confirmStatus = null);
+    return SitewiseDialog(
+      title: '$action?',
+      ariaLabel: action,
+      onClose: cancel,
+      body: p(classes: 'body', [Component.text(effect)]),
+      actions: [
+        ActionButton('Cancel', variant: 'secondary', onClick: cancel),
+        ActionButton(
+          action,
+          variant: target == 'suspended' ? 'danger-outline' : 'primary',
+          onClick: _save,
+        ),
+      ],
     );
   }
 
-  Component _row(String label, String value) => div(
-    classes: 'row',
-    styles: const Styles(raw: {
-      'justify-content': 'space-between',
-      'flex-wrap': 'wrap',
-      'padding': '6px 0',
-      'border-bottom': '1px solid var(--border)',
-    }),
-    [
-      span(classes: 'small muted', [Component.text(label)]),
-      span(classes: 'small', [Component.text(value)]),
-    ],
-  );
+  Component _row(String label, String value) =>
+      div(classes: 'admin-user-detail__field', [
+        span(classes: 'small muted', [Component.text(label)]),
+        span(classes: 'small', [Component.text(value)]),
+      ]);
 
-  Component _empty(String title, String body, {Component? action}) => EmptyState(
-    title: title,
-    body: body,
-    action: action ??
-        const ActionLink(
-          'Back to Users',
-          href: '/admin/users',
-          variant: 'secondary',
-        ),
-  );
+  Component _empty(String title, String body, {Component? action}) =>
+      EmptyState(
+        title: title,
+        body: body,
+        action:
+            action ??
+            const ActionLink(
+              'Back to Users',
+              href: '/admin/users',
+              variant: 'secondary',
+            ),
+      );
 }
 
 /// The domain record plus the two optional attributes that `SitewiseUser` does
@@ -423,11 +361,7 @@ class _UserRecord {
   final String? phone;
   final String? lastLogin;
 
-  const _UserRecord({
-    required this.user,
-    this.phone,
-    this.lastLogin,
-  });
+  const _UserRecord({required this.user, this.phone, this.lastLogin});
 }
 
 /// The stored role id, matching `rbac.ALL_ROLES` — display and echo only.
@@ -439,22 +373,6 @@ String _roleValue(AppRole role) => switch (role) {
   AppRole.agent => 'agent',
   AppRole.entrepreneur => 'entrepreneur',
 };
-
-/// The backend's `audit_recorded` is three-valued: true = event written,
-/// false = the change applied but the audit write failed, null = no status
-/// change was made, so no event was due.
-String _successMessage(Object? auditRecorded) {
-  if (auditRecorded == false) {
-    return 'Changes saved and confirmed by the server, but the audit event '
-        'was NOT recorded. The account status is in effect; the '
-        'audit trail is incomplete for this change.';
-  }
-  if (auditRecorded == true) {
-    return 'Changes saved. The server confirmed the new value and recorded '
-        'the change in its audit trail.';
-  }
-  return 'Changes saved and confirmed by the server.';
-}
 
 String _failureMessage(Map<String, dynamic> result) {
   final message = (result['message'] as String?)?.trim();
@@ -478,7 +396,7 @@ String _failureMessage(Map<String, dynamic> result) {
 
 String _statusValue(String raw) {
   final value = raw.toLowerCase().trim();
-  return _statuses.any((entry) => entry.$1 == value) ? value : 'pending';
+  return _statuses.any((entry) => entry.$1 == value) ? value : '';
 }
 
 String _pretty(String value) => switch (value) {
@@ -488,7 +406,8 @@ String _pretty(String value) => switch (value) {
   'entrepreneur' => 'Entrepreneur',
   'pending' => 'Pending',
   'active' => 'Active',
-  'suspended' => 'Suspended',
+  'suspended' => 'Blocked',
+  '' => 'Status unavailable',
   _ => value,
 };
 

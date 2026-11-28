@@ -277,8 +277,8 @@ def download_document(
     session: DbSession,
     current: ActiveUser,
 ) -> FileResponse:
-    """Stream a private document. Access: the submitting owner, or an
-    administrator with completed MFA. Everyone else gets 403/404."""
+    """Stream private evidence to its Owner, the current MFA-verified Agent,
+    or an administrator with completed MFA. Everyone else gets 403/404."""
     document = PropertyVerificationService(session).document_for_download(
         document_id, current.user_id, is_admin=_is_admin(current),
         agent_role=current.role if current.assurance_level == "aal2" else None,
@@ -303,6 +303,9 @@ def review_queue(
     q: str | None = None,
     listing_status: str | None = None,
     ownership_status: str | None = None,
+    lifecycle: str | None = None,
+    source: str | None = None,
+    scope: str | None = None,
     property_type: str | None = None,
     state: str | None = None,
     city: str | None = None,
@@ -313,12 +316,20 @@ def review_queue(
     offset: int = 0,
     limit: int = 20,
 ) -> dict:
-    """Server-side filtered/sorted/paginated submission queue with faceted
-    status counts. Filters compose; the catalogue is never loaded wholesale."""
+    """Server-side filtered/sorted/paginated property directory with faceted
+    status counts. Filters compose; the catalogue is never loaded wholesale.
+
+    Every property in ``fyp.rental_properties`` is listed — published,
+    unpublished, imported, owner- or agent-created, draft, rejected and
+    pending — whether or not a verification record exists.
+    """
     return AdminPropertyReviewService(session).queue(
         q=(q or "").strip() or None,
         listing_status=listing_status or None,
         ownership_status=ownership_status or None,
+        lifecycle=lifecycle or None,
+        source=source or None,
+        scope=scope or None,
         property_type=property_type or None,
         state=state or None,
         city=city or None,

@@ -25,8 +25,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session
 
 from sitewise.db.analytics_session import get_analytics_db
+from sitewise.db.session import get_db
 from sitewise.dependencies import CurrentUser, ExploreServiceImpl
 from sitewise.ml.pu_expanded import expanded_display_scores
+from sitewise.repositories.fyp_property_repository import FypPropertyRepository
 
 router = APIRouter()
 
@@ -114,7 +116,8 @@ def explore_properties(
 
 @router.get("/properties/{property_id}")
 def explore_property_detail(
-    property_id: int, _user: CurrentUser, service: ExploreServiceImpl
+    property_id: int, _user: CurrentUser, service: ExploreServiceImpl,
+    session: Annotated[Session, Depends(get_db)],
 ) -> dict:
     """Detail payload: listing + photos + amenities + research linkage.
 
@@ -130,6 +133,23 @@ def explore_property_detail(
                 "code": "property_not_found",
                 "message": "No published property with this id.",
             },
+        )
+    listing = detail["data"]
+    repo = FypPropertyRepository(session)
+    research = repo.get_research_evidence(property_id)
+    if research and research["nearest_competitor_distance_m"] is not None:
+        listing["nearest_competitor"] = {
+            "distance_m": float(research["nearest_competitor_distance_m"]),
+            "name": research["nearest_competitor_name"],
+            "category": research["nearest_competitor_category"],
+            "source": "Historical research measurement",
+        }
+    else:
+        nearest = repo.saved_nearest_competitor(
+            property_id, listing.get("latitude"), listing.get("longitude")
+        )
+        listing["nearest_competitor"] = (
+            {**nearest, "source": "OpenStreetMap · straight-line distance"} if nearest else None
         )
     return detail
 
@@ -234,6 +254,33 @@ def explore_analysis(
         ).get(property_id),
         measurements=measurements,
     )
+    # Keep the normal analysis lookup published-only. An Agent can read the
+    # same location evidence for an unpublished property only after the
+    # backend confirms both the active staff MFA session and that this exact
+    # listing is assigned to that Agent.
+    if result is None and ref.strip().isdigit():
+        from sitewise.domain import rbac
+
+        if rbac.canonical_role(_user.role) == rbac.ROLE_AGENT:
+            if _user.assurance_level != "aal2":
+                raise HTTPException(
+                    status_code=403,
+                    detail={
+                        "code": "staff_mfa_required",
+                        "message": "Complete staff MFA to view this assigned listing.",
+                    },
+                )
+            from sitewise.api.v1.properties import _agent_manages_listing
+
+            if _agent_manages_listing(session, int(ref.strip()), _user):
+                result = service.analysis(
+                    ref,
+                    catalogue_score=lambda property_id: expanded_display_scores(
+                        analytics, [property_id]
+                    ).get(property_id),
+                    measurements=measurements,
+                    include_unpublished=True,
+                )
     if result is None:
         raise HTTPException(
             status_code=404,

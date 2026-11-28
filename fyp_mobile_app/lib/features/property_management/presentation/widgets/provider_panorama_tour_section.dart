@@ -14,7 +14,7 @@ import 'package:fyp/features/capture_360/application/frame_upload_queue.dart';
 import 'package:fyp/features/capture_360/data/api_panorama_viewer_repository.dart';
 import 'package:fyp/features/capture_360/data/sphere/sitewise_sphere_session_store.dart';
 import 'package:fyp/features/panorama_viewer/presentation/pages/panorama_fullscreen_page.dart';
-import 'package:fyp/shared/presentation/widgets/sitewise_button.dart';
+import 'package:fyp/shared/presentation/components/provider_card_actions.dart';
 
 /// The **360° Property Tour** section of the authorized Agent property
 /// detail (spec §9).
@@ -39,10 +39,8 @@ class ProviderPanoramaTourSection extends StatefulWidget {
     super.key,
     required this.propertyId,
     required this.onStartCapture,
-    this.onOpenWorkflow,
     this.beforeSync,
     this.onSynced,
-    this.requiresRecapture = false,
     this.captureHint,
     this.readOnly = false,
   });
@@ -50,14 +48,11 @@ class ProviderPanoramaTourSection extends StatefulWidget {
   final int propertyId;
   final bool readOnly;
 
-  /// Opens the capture flow (the page's own navigation concern). The capture
-  /// host resumes the previous session, so this is also how an existing
-  /// capture continues.
+  /// Opens the capture flow, which resumes an unfinished attempt or starts
+  /// a separate draft for a first capture or a replacement.
   final VoidCallback? onStartCapture;
-  final Future<void> Function(String tourId)? onOpenWorkflow;
   final Future<bool> Function()? beforeSync;
   final Future<void> Function()? onSynced;
-  final bool requiresRecapture;
   final String? captureHint;
 
   @override
@@ -70,8 +65,12 @@ class _ProviderPanoramaTourSectionState
   bool _loading = true;
   bool _lookupFailed = false;
   String? _draftTourId;
+  String? _stationId;
   CanonicalPanorama? _canonical;
   String? _localPanoramaPath;
+  String? _previousPanoramaPath;
+  bool _unfinishedCapture = false;
+  bool _candidateAwaitingConfirmation = false;
   FrameUploadQueueState? _queueState;
   bool _syncing = false;
   String? _syncError;
@@ -110,11 +109,17 @@ class _ProviderPanoramaTourSectionState
     // Restore any unfinished upload for this inspection.
     FrameUploadQueueState? queueState;
     final tourId = tour?.id;
+    String? stationId;
     if (tourId != null && tourId.isNotEmpty) {
       try {
+        stationId = await SitewiseSphereSessionStore.stationIdForTour(
+          frameStore: ServiceLocator.frameStore,
+          tourId: tourId,
+        );
         queueState = await FrameUploadQueue.readState(
           ServiceLocator.frameStore,
           tourId,
+          stationId: stationId,
         );
       } on Object {
         queueState = null;
@@ -135,7 +140,8 @@ class _ProviderPanoramaTourSectionState
         final session = await SitewiseSphereSessionStore(
           frameStore: ServiceLocator.frameStore,
           tourId: tour.id,
-        ).getSession(tour.id);
+          stationId: stationId,
+        ).getSession(stationId ?? tour.id);
         final stitched = session?.localPanoramaPath;
         if (stitched != null &&
             stitched.isNotEmpty &&
@@ -156,13 +162,44 @@ class _ProviderPanoramaTourSectionState
       CaptureLog.log('Canonical panorama read failed for $pid: $error');
     }
 
+    // An unfinished replacement is newer than the tour it will replace.
+    // Keep the last saved file viewable without syncing it as the new attempt.
+    String? previousPath;
+    final unfinished = tour != null && tour.status != VirtualTourStatus.ready;
+    if (localPath == null && unfinished) {
+      try {
+        final previous = await ServiceLocator.tourRepo
+            .latestReadyInspectionCapture('$pid');
+        final path = previous?.panoramaPath;
+        if (path != null && path.isNotEmpty && await File(path).exists()) {
+          previousPath = path;
+        }
+      } on Object catch (error) {
+        CaptureLog.log('Previous tour lookup failed for $pid: $error');
+      }
+    }
+
+    final candidateId = queueState?.panorama?.panoramaId;
+    final candidateAwaitingConfirmation =
+        queueState?.panoramaConfirmed == true &&
+        (canonical == null || candidateId != canonical.panoramaId);
+    if (candidateAwaitingConfirmation) {
+      // A generated candidate is visible only through the capture review. It
+      // must never replace the active canonical preview before the Agent
+      // explicitly accepts it.
+      localPath = null;
+    }
     if (!mounted) return;
     setState(() {
       _queueState = queueState;
       _localPanoramaPath = localPath;
+      _previousPanoramaPath = previousPath;
+      _unfinishedCapture = unfinished;
+      _candidateAwaitingConfirmation = candidateAwaitingConfirmation;
       _canonical = canonical;
       _lookupFailed = lookupFailed;
       _draftTourId = tourId;
+      _stationId = stationId;
       _loading = false;
     });
     if (!_syncing &&
@@ -181,6 +218,7 @@ class _ProviderPanoramaTourSectionState
       FrameUploadQueue.forTour(
         frameStore: ServiceLocator.frameStore,
         tourId: tourId,
+        stationId: stationId,
       ).resumeInBackground();
     }
   }
@@ -190,10 +228,15 @@ class _ProviderPanoramaTourSectionState
   /// state.
   String get _statusLabel {
     if (_syncing) return 'Syncing 360° tour';
+    if (_candidateAwaitingConfirmation) {
+      return _canonical != null
+          ? 'New panorama ready for review — current tour still active'
+          : 'New panorama ready for review';
+    }
     if (_hasLocalDraft && _queueState?.panoramaConfirmed != true) {
       return 'Saved on this device';
     }
-    if (widget.requiresRecapture) return 'New capture required';
+    if (_previousPanoramaPath != null) return 'Saved on this device';
     if (_canonical != null) {
       final verification = _canonical!.verificationStatus;
       if (verification == 'approved' || _canonical!.publishedAt != null) {
@@ -214,9 +257,13 @@ class _ProviderPanoramaTourSectionState
     return _draftTourId != null ? 'Capture draft' : 'No 360° tour yet';
   }
 
-  bool get _hasPanorama =>
-      _canonical != null ||
-      (_localPanoramaPath != null && _localPanoramaPath!.isNotEmpty);
+  String? get _viewableLocalPath =>
+      _hasLocalDraft ? _localPanoramaPath : _previousPanoramaPath;
+
+  bool get _hasPanorama => _canonical != null || _viewableLocalPath != null;
+
+  bool get _canOpenCapture =>
+      !widget.readOnly && !_syncing && widget.onStartCapture != null;
 
   Future<void> _syncDraft() async {
     final beforeSync = widget.beforeSync;
@@ -232,16 +279,23 @@ class _ProviderPanoramaTourSectionState
     try {
       if (!await beforeSync() || !mounted) return;
       final frameStore = ServiceLocator.frameStore;
+      final stationId = _stationId ??
+          await SitewiseSphereSessionStore.stationIdForTour(
+            frameStore: frameStore,
+            tourId: tourId,
+          );
       final queue = FrameUploadQueue.forTour(
         frameStore: frameStore,
         tourId: tourId,
+        stationId: stationId,
       );
       final sessions = SitewiseSphereSessionStore(
         frameStore: frameStore,
         tourId: tourId,
+        stationId: stationId,
       );
       await queue.reconcileFrames(
-        await sessions.loadFrames(tourId),
+        await sessions.loadFrames(stationId),
         propertyId: widget.propertyId,
       );
       await queue.enqueuePanorama(path, propertyId: widget.propertyId);
@@ -272,17 +326,18 @@ class _ProviderPanoramaTourSectionState
 
   Color get _statusColor {
     if (_canonical != null) return SitewiseColors.success;
-    if (_localPanoramaPath != null) return SitewiseColors.warning;
+    if (_viewableLocalPath != null) return SitewiseColors.warning;
     return SitewiseM3.muted;
   }
 
   @override
   Widget build(BuildContext context) {
+    final localPreview = _viewableLocalPath;
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: SitewiseM3.surface,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(SitewiseM3.radiusCard),
         border: Border.all(color: SitewiseM3.line),
       ),
       child: Column(
@@ -337,9 +392,9 @@ class _ProviderPanoramaTourSectionState
               borderRadius: BorderRadius.circular(12),
               child: SizedBox(
                 height: 220,
-                child: _hasLocalDraft
+                child: localPreview != null
                     ? _LocalPanoramaBox(
-                        path: _localPanoramaPath!,
+                        path: localPreview,
                         onOpen: _openFullscreen,
                       )
                     : _canonical != null
@@ -351,36 +406,47 @@ class _ProviderPanoramaTourSectionState
               ),
             ),
             const SizedBox(height: 12),
-            SitewiseButton(
-              label: 'View 360° Panorama',
-              icon: Icons.fullscreen_rounded,
-              onPressed: _openFullscreen,
-            ),
-            if (_hasLocalDraft &&
-                _queueState?.panoramaConfirmed != true &&
-                widget.beforeSync != null)
-              OutlinedButton(
-                onPressed: _syncing ? null : _syncDraft,
-                child: Text(
-                  _syncError == null ? 'Sync 360° tour' : 'Retry sync',
+            ProviderCardActions(
+              actions: [
+                ProviderCardAction(
+                  label: 'View 360° Panorama',
+                  icon: Icons.fullscreen_rounded,
+                  onPressed: _openFullscreen,
+                  emphasis: ProviderCardActionEmphasis.primary,
                 ),
-              ),
-            if (widget.requiresRecapture &&
-                !_syncing &&
-                (_draftTourId?.isNotEmpty ?? false) &&
-                widget.onOpenWorkflow != null)
-              TextButton(
-                onPressed: () => widget.onOpenWorkflow!(_draftTourId!),
-                child: const Text('Recapture 360° tour'),
-              ),
-            if (_draftTourId == null && widget.onStartCapture != null)
-              TextButton(
-                onPressed: widget.onStartCapture,
-                child: const Text('Start new 360° capture'),
-              ),
+                if (_hasLocalDraft &&
+                    _queueState?.panoramaConfirmed != true &&
+                    widget.beforeSync != null)
+                  ProviderCardAction(
+                    label: _syncError == null ? 'Sync 360° tour' : 'Retry sync',
+                    icon: Icons.cloud_upload_outlined,
+                    onPressed: _syncing ? null : _syncDraft,
+                  ),
+                if (_canOpenCapture)
+                  ProviderCardAction(
+                    label: _candidateAwaitingConfirmation
+                        ? 'Review new panorama'
+                        : _unfinishedCapture
+                        ? 'Open 360° capture'
+                        : 'Recapture 360° tour',
+                    icon: Icons.replay_outlined,
+                    onPressed: widget.onStartCapture,
+                  ),
+              ],
+            ),
           ] else if (_lookupFailed) ...[
+            const SizedBox(height: 12),
             const Text('Could not check whether this property has a tour.'),
-            TextButton(onPressed: _load, child: const Text('Try again')),
+            const SizedBox(height: 12),
+            ProviderCardActions(
+              actions: [
+                ProviderCardAction(
+                  label: 'Try again',
+                  icon: Icons.refresh_outlined,
+                  onPressed: _load,
+                ),
+              ],
+            ),
           ] else if (widget.readOnly) ...[
             const Text(
               'No 360° panorama is available for this approved listing.',
@@ -392,9 +458,9 @@ class _ProviderPanoramaTourSectionState
             ),
           ] else ...[
             Text(
-              'Capture the 38-point 360° tour for this property. The '
-              'panorama is created on this device and saved as a draft '
-              'automatically.',
+              'Capture the adaptive 360° tour (44 directions) for this '
+              'property. The panorama is created on this device and saved as '
+              'a draft automatically.',
               style: const TextStyle(
                 fontFamily: kFontFamily,
                 fontSize: 13,
@@ -403,12 +469,20 @@ class _ProviderPanoramaTourSectionState
               ),
             ),
             const SizedBox(height: 12),
-            SitewiseButton(
-              label: _draftTourId != null
-                  ? 'Open 360° capture'
-                  : 'Start 360° capture',
-              icon: Icons.camera_alt_outlined,
-              onPressed: widget.onStartCapture,
+            ProviderCardActions(
+              actions: [
+                if (_canOpenCapture)
+                  ProviderCardAction(
+                    label: _candidateAwaitingConfirmation
+                        ? 'Review new panorama'
+                        : _unfinishedCapture
+                        ? 'Open 360° capture'
+                        : 'Start 360° capture',
+                    icon: Icons.camera_alt_outlined,
+                    onPressed: widget.onStartCapture,
+                    emphasis: ProviderCardActionEmphasis.primary,
+                  ),
+              ],
             ),
           ],
           if (widget.captureHint case final hint?) Text(hint),
@@ -427,9 +501,9 @@ class _ProviderPanoramaTourSectionState
   /// canonical signed fetch otherwise. The screen re-loads on return, so an
   /// upload that finished while the Agent was viewing is reflected.
   Future<void> _openFullscreen([Uint8List? previewBytes]) async {
-    if (previewBytes != null || _hasLocalDraft) {
-      final bytes =
-          previewBytes ?? await File(_localPanoramaPath!).readAsBytes();
+    final localPath = _viewableLocalPath;
+    if (previewBytes != null || localPath != null) {
+      final bytes = previewBytes ?? await File(localPath!).readAsBytes();
       if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
@@ -589,8 +663,16 @@ class _CanonicalPreviewState extends State<_CanonicalPreview> {
               const SizedBox(height: 8),
               TextButton.icon(
                 onPressed: _load,
-                icon: const Icon(Icons.refresh_rounded, size: 16),
+                icon: const Icon(Icons.refresh_rounded, size: 18),
                 label: const Text('Try again'),
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(0, 48),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(SitewiseM3.radiusPill),
+                  ),
+                ),
               ),
             ],
           ),
@@ -749,8 +831,16 @@ class _CanonicalFullscreenPageState extends State<_CanonicalFullscreenPage> {
               const SizedBox(height: 12),
               TextButton.icon(
                 onPressed: _load,
-                icon: const Icon(Icons.refresh_rounded, size: 16),
+                icon: const Icon(Icons.refresh_rounded, size: 18),
                 label: const Text('Try again'),
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(0, 48),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(SitewiseM3.radiusPill),
+                  ),
+                ),
               ),
             ],
           ),

@@ -36,14 +36,12 @@
     no 0.0.0.0 bind and no firewall change. `-AllowLan` remains available for
     devices that must use a real LAN address.
 
-    ### Starting this script does NOT rebuild the Flutter app
+    ### Flutter configuration
 
-    SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY / API_BASE_URL are Dart
-    compile-time defines baked into the APK at `flutter run`. A server process
-    cannot inject them into an already-built binary. Re-run the app from
-    Android Studio (or `flutter run`) with
-    `--dart-define-from-file=fyp_mobile_app/config/dev.env` after changing
-    that file or the selected host mode.
+    Before starting FastAPI this script synchronizes the ignored Flutter
+    runtime config from backend/.env. Device-specific API host settings remain
+    local. Rebuild/re-run Flutter after changing authentication configuration
+    so the updated asset is bundled into the app.
 
 .EXAMPLE
     .\run-sitewise.ps1
@@ -76,6 +74,8 @@ $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $backendDir = Join-Path $root 'backend'
 $distDir = Join-Path $root 'fyp_jaspr_web\build\jaspr'
 $pythonExe = Join-Path $backendDir '.venv\Scripts\python.exe'
+$authConfigGenerator = Join-Path $root 'fyp_jaspr_web\tool\gen_auth_config.js'
+$mobileConfigGenerator = Join-Path $root 'fyp_mobile_app\tool\ensure_sitewise_dev_config.js'
 
 Write-Host 'Unified SiteWise launcher' -ForegroundColor Cyan
 
@@ -88,6 +88,23 @@ if (-not (Test-Path -LiteralPath $pythonExe)) {
     Write-Host '       create it first (python -m venv backend/.venv + pip install -r backend/requirements.txt).'
     exit 1
 }
+
+# Validate the public auth settings before FastAPI starts and prepare the
+# ignored Flutter asset from the same backend/.env source. These scripts emit
+# variable names and statuses only; they never print configuration values.
+$nodeCommand = Get-Command node -ErrorAction SilentlyContinue
+if (-not $nodeCommand) {
+    Write-Host 'ERROR: Node.js is required to validate and synchronize local app configuration.' -ForegroundColor Red
+    exit 1
+}
+if (-not (Test-Path -LiteralPath (Join-Path $backendDir '.env'))) {
+    Write-Host 'ERROR: backend/.env is missing. Copy backend/.env.example to backend/.env and provision the required values.' -ForegroundColor Red
+    exit 1
+}
+& node $authConfigGenerator
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& node $mobileConfigGenerator
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 if (-not (Test-Path -LiteralPath (Join-Path $distDir 'index.html'))) {
     Write-Host "ERROR: compiled frontend not found: $distDir\index.html" -ForegroundColor Red

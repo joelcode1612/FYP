@@ -7,6 +7,7 @@ from typing import Literal
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel, Field, ValidationInfo, field_validator
 from sqlalchemy import text
 from sqlmodel import Session
@@ -340,12 +341,20 @@ def list_own_listings(
     ids = [int(row["id"]) for row in rows]
     management = resolve_listings(session, ids)
     photos = repo.listing_photos_by_ids(ids)
+    locked_ids = set()
+    if ids:
+        locked_ids = set(session.execute(text("""
+            SELECT listing_id FROM fyp.agent_listing_assignment
+             WHERE listing_id = ANY(CAST(:ids AS integer[]))
+               AND workflow_status IN ('requested', 'accepted', 'needs_correction')
+        """), {"ids": ids}).scalars().all())
     return {
         "data": [
             {
                 **row,
                 "management": management.get(int(row["id"])),
                 "photos": photos.get(int(row["id"]), []),
+                "owner_edit_locked": int(row["id"]) in locked_ids,
             }
             for row in rows
         ]
@@ -590,6 +599,82 @@ def _owned_listing_or_error(
     )
 
 
+def _require_listing_edit_permission(
+    session: Session, property_id: int, listing: dict,
+    current: AuthenticatedUser,
+) -> int | None:
+    """Enforce the edit window for Owners and the currently assigned Agent.
+
+    Agents may maintain listing facts only after accepting the assignment and
+    until submission. Owners are locked while an accepted/correction inspection
+    is active so the Agent and Owner cannot overwrite each other's work.
+    """
+    agent_id = _provider_agent_id(session, current)
+    assignment = session.execute(text("""
+        SELECT agent_id, workflow_status FROM fyp.agent_listing_assignment
+         WHERE listing_id=:pid FOR UPDATE
+    """), {"pid": property_id}).mappings().one_or_none()
+    if agent_id is not None:
+        if (assignment is None or assignment["agent_id"] != agent_id
+                or assignment["workflow_status"] not in ("accepted", "needs_correction")):
+            raise ForbiddenError(
+                "Only the currently assigned Agent may edit during an accepted inspection."
+            )
+    elif (
+        assignment is not None
+        and assignment["workflow_status"] in ("requested", "accepted", "needs_correction")
+        and not rbac.can_administer_users(current.role)
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="The assigned Agent is inspecting this property. Its details are temporarily locked for the Owner.",
+        )
+
+    if listing.get("is_published") or listing.get("verification_status") not in (
+        "draft", "rejected", "information_requested"
+    ):
+        raise HTTPException(status_code=409, detail="The property is locked for review or publication.")
+    from sitewise.db.models.property_verification import can_resubmit
+    from sitewise.services.property_verification_service import verification_row
+    verification = verification_row(session, property_id)
+    listing_review_in_progress = verification is not None and (
+        verification.listing_status in ("pending", "under_review", "verified")
+    )
+    ownership_review_in_progress = verification is not None and (
+        verification.ownership_status in ("pending", "under_review", "verified")
+    )
+    if agent_id is None and not rbac.can_administer_users(current.role) and (
+        listing_review_in_progress or ownership_review_in_progress
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="This property is with the Administrator for review and cannot be edited.",
+        )
+    if agent_id is not None and listing_review_in_progress and (
+        assignment is None or assignment["workflow_status"] != "needs_correction"
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="This property is with the Administrator for review and cannot be edited.",
+        )
+    if verification is not None and not can_resubmit(
+        verification.listing_status, verification.ownership_status
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="This property is awaiting or has passed review; its details can no longer be edited.",
+        )
+    return agent_id
+
+
+def _owner_edit_locked_by_agent(session: Session, property_id: int) -> bool:
+    status = session.execute(text("""
+        SELECT workflow_status FROM fyp.agent_listing_assignment
+         WHERE listing_id=:pid
+    """), {"pid": property_id}).scalar_one_or_none()
+    return status in ("requested", "accepted", "needs_correction")
+
+
 def _queue_expanded64(session: Session, property_id: int) -> None:
     """Queue the informational location measurements for one listing.
 
@@ -831,6 +916,7 @@ def get_own_listing(
             **listing,
             "photos": repo.listing_photos(property_id),
             "management": resolve_management(session, listing_id=property_id),
+            "owner_edit_locked": _owner_edit_locked_by_agent(session, property_id),
         }
     }
 
@@ -842,89 +928,26 @@ def update_own_listing(
     session: Session = Depends(get_db),
     current: AuthenticatedUser = Depends(require_property_owner),
 ):
-    """Update an owned draft. Editing is blocked once a submission is
-    awaiting review (pending/under_review/verified) so submitted evidence
-    cannot be invalidated; draft, rejected and corrections-requested states
-    remain editable, and a repeat save updates the SAME row."""
-    from sitewise.db.models.property_verification import can_resubmit
-    from sitewise.services.property_verification_service import verification_row
+    """Update a property draft through its Owner or accepted Agent scope.
 
+    Assigned Agent writes are limited to the accepted inspection/correction
+    window and listing facts; Owners are locked while an Agent inspection is
+    active. Review and publication state remain immutable here.
+    """
     repo = FypPropertyRepository(session)
-    agent_id = _provider_agent_id(session, current)
-    if agent_id is None:
-        listing = _owned_listing_or_error(repo, property_id, current, for_update=True)
-    else:
-        # Scope the initial lookup before locking a property. Recheck against
-        # the locked assignment below in case it changed during this request.
-        if not provider_scope.agent_is_assigned(session, listing_id=property_id, agent_id=agent_id):
-            raise ForbiddenError("Only the currently assigned Agent may edit this draft.")
-        listing = repo.owner_listing(property_id, for_update=True)
-        if listing is None:
-            raise HTTPException(status_code=404, detail="Property not found.")
-    assignment = session.execute(text("""
-        SELECT agent_id, workflow_status FROM fyp.agent_listing_assignment
-         WHERE listing_id=:pid FOR UPDATE
-    """), {"pid": property_id}).mappings().one_or_none()
-    if agent_id is not None and (
-        assignment is None or assignment["agent_id"] != agent_id
-        or assignment["workflow_status"] not in ("requested", "accepted", "needs_correction", "submitted")
-    ):
-        raise ForbiddenError("Only the currently assigned Agent may edit this draft.")
-    if listing.get("is_published") or listing.get("verification_status") not in ("draft", "rejected"):
-        raise HTTPException(status_code=409, detail="The property is locked for review or published.")
-    verification = verification_row(session, property_id)
-    editable = verification is None or can_resubmit(
-        verification.listing_status, verification.ownership_status
-    )
-    if not editable:
-        raise HTTPException(
-            status_code=409,
-            detail="This property is awaiting or has passed review; "
-            "its details can no longer be edited.",
-        )
+    listing = _owned_listing_or_error(repo, property_id, current, for_update=True)
+    if listing is None:
+        raise HTTPException(status_code=404, detail="Property not found.")
+    agent_id = _require_listing_edit_permission(session, property_id, listing, current)
     fields = payload.model_dump(
         exclude_unset=True, exclude={"draft_request_id", "address_confirmation_token"}
     )
     _validate_draft_values(fields, listing)
-    # Once inspection starts, changes go through its correction workflow.
-    if assignment and assignment["workflow_status"] in ("accepted", "needs_correction", "submitted"):
-        changed = [
-            key for key, value in fields.items()
-            if key in FypPropertyRepository._OWNER_WRITABLE
-            and _owner_field_changed(listing.get(key), value, key)
-        ]
-        if changed and assignment["workflow_status"] == "needs_correction" and rbac.has_role(
-            current.role, (rbac.ROLE_OWNER,)
-        ):
-            correction = session.execute(text("""
-                SELECT reason FROM fyp.verification_audit WHERE property_id=:id
-                  AND action IN ('property_rejected','property_information_requested','property_approved')
-                ORDER BY created_at DESC LIMIT 1
-            """), {"id": property_id}).scalar()
-            if correction and correction.startswith("Property:"):
-                # Require the Agent to reconfirm amended facts. Keep the submitted
-                # panorama ID and all unrelated evidence linked to the property.
-                session.execute(text("""
-                    UPDATE fyp.agent_listing_assignment
-                    SET inspection_updated_at=NULL, updated_at=now()
-                    WHERE listing_id=:id
-                """), {"id": property_id})
-                if set(changed).intersection(("address", "city", "state", "postcode")):
-                    session.execute(text("""
-                        UPDATE fyp.panoramas SET verification_status='rejected',
-                            review_reason='Listing address changed; submit a panorama of the current site.',
-                            updated_at=now()
-                        WHERE panorama_id=(SELECT panorama_id FROM fyp.agent_listing_assignment WHERE listing_id=:id)
-                    """), {"id": property_id})
-                changed = []
-        if changed:
-            raise HTTPException(
-                status_code=409,
-                detail=("An Agent inspection is active. These property details "
-                        "must be corrected through the Agent workflow to "
-                        "preserve the saved checklist and 360° tour: "
-                        + ", ".join(changed)),
-            )
+    changed = [
+        key for key, value in fields.items()
+        if key in FypPropertyRepository._OWNER_WRITABLE
+        and _owner_field_changed(listing.get(key), value, key)
+    ]
     row = repo.update_owner_listing(property_id, fields, commit=False)
     if row is None:
         raise HTTPException(status_code=404, detail="Property not found.")
@@ -935,7 +958,53 @@ def update_own_listing(
     confirmation = _apply_address_confirmation(
         session, repo, property_id, payload.address_confirmation_token, row
     )
+    location_changed = (
+        any(key in changed for key in ("address", "city", "state", "postcode"))
+        or row.get("latitude") != listing.get("latitude")
+        or row.get("longitude") != listing.get("longitude")
+    )
+    audit_fields = list(changed)
+    if agent_id is not None and confirmation.get("applied"):
+        audit_fields.append("verified_coordinates")
     _queue_expanded64(session, property_id)
+    if agent_id is not None and audit_fields:
+        session.execute(text("""
+            INSERT INTO fyp.verification_audit
+                (audit_id, property_id, verification_id, verification_type,
+                 previous_status, new_status, action, reason, created_at)
+            VALUES (gen_random_uuid(), :pid, NULL, NULL, NULL, NULL,
+                    'agent_updated_property_details', :reason, now())
+        """), {
+            "pid": property_id,
+            "reason": f"Agent {current.user_id} updated property details: "
+                      + ", ".join(sorted(audit_fields)),
+        })
+    if agent_id is not None and (location_changed or set(changed).intersection({
+        "property_type", "address", "city", "state", "postcode",
+        "latitude", "longitude", "size_sqft", "floor_level",
+        "floor_description", "frontage_ft", "furnishing", "unit_position",
+        "has_parking",
+    })):
+        # Re-check on-site facts after a material listing correction. If the
+        # confirmed location moved, leave the old panorama record intact but
+        # detach it from this inspection so it cannot satisfy a new submission.
+        session.execute(text("""
+            UPDATE fyp.agent_listing_assignment
+               SET inspection_data=COALESCE(inspection_data, '{}'::jsonb) ||
+                     '{"floor_area_verified":false,"condition_verified":false,
+                       "parking_verified":false,"accessibility_verified":false}'::jsonb,
+                   inspection_updated_at=NULL,
+                   panorama_id=CASE WHEN :location_changed THEN NULL ELSE panorama_id END,
+                   panorama_tour_id=CASE WHEN :location_changed THEN NULL ELSE panorama_tour_id END,
+                   panorama_job_id=CASE WHEN :location_changed THEN NULL ELSE panorama_job_id END,
+                   panorama_uploaded_at=CASE WHEN :location_changed THEN NULL ELSE panorama_uploaded_at END,
+                   updated_at=now()
+             WHERE listing_id=:pid AND agent_id=:aid
+        """), {
+            "pid": property_id,
+            "aid": agent_id,
+            "location_changed": location_changed,
+        })
     session.commit()
     # An edited address invalidates the previous location, so the same
     # automatic resolution applies here: the new address is geocoded before the
@@ -947,6 +1016,76 @@ def update_own_listing(
 # ---------------------------------------------------------------------------
 # Property photos (display media — public bucket, permanent URLs)
 # ---------------------------------------------------------------------------
+
+
+@router.put("/listings/{property_id}/reference-image")
+async def replace_reference_image(
+    property_id: int,
+    file: UploadFile = File(...),
+    session: Session = Depends(get_db),
+    current: AuthenticatedUser = Depends(require_property_owner),
+):
+    """Store a small, validated exterior reference photo on the property row."""
+    import cv2
+    import numpy as np
+
+    repo = FypPropertyRepository(session)
+    listing = _owned_listing_or_error(repo, property_id, current, for_update=True)
+    _require_listing_edit_permission(session, property_id, listing, current)
+    raw = await file.read(8 * 1024 * 1024 + 1)
+    if not raw or len(raw) > 8 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Choose an image smaller than 8 MB before compression.")
+    decoded = cv2.imdecode(np.frombuffer(raw, dtype=np.uint8), cv2.IMREAD_COLOR)
+    if decoded is None:
+        raise HTTPException(status_code=422, detail="The selected file is not a supported image.")
+    name = (file.filename or "").lower()
+    detected = cv2.imdecode(np.frombuffer(raw, dtype=np.uint8), cv2.IMREAD_UNCHANGED)
+    mime = "image/png" if name.endswith(".png") and detected is not None else "image/jpeg"
+    height, width = decoded.shape[:2]
+    scale = min(1.0, 1600 / max(width, height))
+    if scale < 1.0:
+        decoded = cv2.resize(decoded, (round(width * scale), round(height * scale)), interpolation=cv2.INTER_AREA)
+    quality = 88
+    while True:
+        ok, encoded = cv2.imencode(".jpg", decoded, [cv2.IMWRITE_JPEG_QUALITY, quality])
+        if not ok:
+            raise HTTPException(status_code=422, detail="The image could not be processed.")
+        data = encoded.tobytes()
+        if len(data) <= 2 * 1024 * 1024:
+            break
+        if quality > 55:
+            quality -= 8
+        elif max(decoded.shape[:2]) > 640:
+            decoded = cv2.resize(decoded, (round(decoded.shape[1] * .8), round(decoded.shape[0] * .8)), interpolation=cv2.INTER_AREA)
+        else:
+            raise HTTPException(status_code=413, detail="The compressed reference image exceeds 2 MB.")
+    mime = "image/jpeg"
+    session.execute(text("""
+        UPDATE fyp.rental_properties
+           SET reference_image=:image, reference_image_mime_type=:mime, updated_at=now()
+         WHERE id=:pid
+    """), {"image": data, "mime": mime, "pid": property_id})
+    session.commit()
+    return {"data": {"property_id": property_id, "mime_type": mime, "size_bytes": len(data)}}
+
+
+@router.get("/listings/{property_id}/reference-image")
+def get_reference_image(
+    property_id: int,
+    session: Session = Depends(get_db),
+    current: AuthenticatedUser = Depends(require_property_owner),
+):
+    """Return the reference image only to an Owner, assigned Agent, or Admin."""
+    repo = FypPropertyRepository(session)
+    _owned_listing_or_error(repo, property_id, current)
+    row = session.execute(text("""
+        SELECT reference_image, reference_image_mime_type
+          FROM fyp.rental_properties WHERE id=:pid
+    """), {"pid": property_id}).first()
+    if row is None or not row[0]:
+        raise HTTPException(status_code=404, detail="No reference image is available.")
+    mime = row[1] if row[1] in ("image/jpeg", "image/png", "image/webp") else "image/jpeg"
+    return Response(content=bytes(row[0]), media_type=mime, headers={"Cache-Control": "private, no-store"})
 
 
 @router.post("/listings/{property_id}/photos", status_code=201)
@@ -962,35 +1101,24 @@ async def upload_listing_photo(
     and persist its permanent URL on the listing. The bytes are uploaded
     BEFORE the row insert, so a failed upload never leaves a dangling row
     and the draft stays intact."""
-    from sitewise.db.models.property_verification import can_resubmit
     from sitewise.services import photo_storage
     from sitewise.services.photo_storage import (
         PhotoRejected,
         PhotoStorageUnavailable,
     )
-    from sitewise.services.property_verification_service import verification_row
-
-    _owner_write_only(current)
     repo = FypPropertyRepository(session)
     listing = _owned_listing_or_error(repo, property_id, current)
-    if listing.get("is_published") or listing.get("verification_status") not in ("draft", "rejected"):
-        raise HTTPException(status_code=409, detail="Photos are locked for review or publication.")
-    verification = verification_row(session, property_id)
-    editable = verification is None or can_resubmit(
-        verification.listing_status, verification.ownership_status
-    )
-    if not editable:
-        raise HTTPException(
-            status_code=409,
-            detail="This property is awaiting or has passed review; "
-            "photos can no longer be changed.",
-        )
+    if not rbac.has_role(current.role, (rbac.ROLE_AGENT,)):
+        _owner_write_only(current)
+    agent_id = _require_listing_edit_permission(session, property_id, listing, current)
     data = await file.read()
     try:
         ext = photo_storage.validate_photo(
             file.filename or "", file.content_type or "", len(data)
         )
-        url = photo_storage.save_photo(data, ext, file.content_type or "")
+        url = photo_storage.save_photo(
+            data, ext, file.content_type or "", identity=str(property_id)
+        )
     except PhotoRejected as exc:
         raise HTTPException(
             status_code=413 if exc.oversized else 422, detail=str(exc)
@@ -998,16 +1126,33 @@ async def upload_listing_photo(
     except PhotoStorageUnavailable as exc:
         # 503 with the exact reason; the draft is untouched.
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+    existing = repo.listing_photo_by_url(property_id, url)
+    if existing is not None:
+        # A retry of the same bytes: the stable object and its row already
+        # exist. Return the row rather than adding a duplicate gallery entry.
+        return {"data": existing}
     try:
         photo = repo.add_listing_photo(
             property_id, url, (caption or "").strip()[:200], is_primary, commit=False
         )
     except Exception:
+        logger.exception(
+            "Property photo database insert failed (property_id=%s)", property_id
+        )
         try:
             session.rollback()
         finally:
             photo_storage.delete_photo(url)
         raise
+    if agent_id is not None:
+        session.execute(text("""
+            INSERT INTO fyp.verification_audit
+                (audit_id, property_id, verification_id, verification_type,
+                 previous_status, new_status, action, reason, created_at)
+            VALUES (gen_random_uuid(), :pid, NULL, NULL, NULL, NULL,
+                    'agent_updated_property_photos', :reason, now())
+        """), {"pid": property_id,
+               "reason": f"Agent {current.user_id} added a property photograph."})
     # If commit itself fails, its outcome may be unknown. Keep the object
     # rather than risk deleting a photo referenced by a committed row.
     session.commit()
@@ -1035,11 +1180,9 @@ def delete_listing_photo(
     from sitewise.services import photo_storage
 
     repo = FypPropertyRepository(session)
-    _owned_listing_or_error(repo, property_id, current)
-    _owner_write_only(current)
     listing = _owned_listing_or_error(repo, property_id, current)
-    if listing.get("is_published") or listing.get("verification_status") not in ("draft", "rejected"):
-        raise HTTPException(status_code=409, detail="Photos are locked for review or publication.")
+    _owner_write_only(current)
+    _require_listing_edit_permission(session, property_id, listing, current)
     deleted = repo.delete_listing_photo(property_id, photo_id)
     if deleted is None:
         raise HTTPException(status_code=404, detail="Photo not found.")
@@ -1055,13 +1198,22 @@ def set_primary_listing_photo(
     current: AuthenticatedUser = Depends(require_property_owner),
 ):
     repo = FypPropertyRepository(session)
-    _owned_listing_or_error(repo, property_id, current)
-    _owner_write_only(current)
     listing = _owned_listing_or_error(repo, property_id, current)
-    if listing.get("is_published") or listing.get("verification_status") not in ("draft", "rejected"):
-        raise HTTPException(status_code=409, detail="Photos are locked for review or publication.")
-    if not repo.set_primary_listing_photo(property_id, photo_id):
+    if not rbac.has_role(current.role, (rbac.ROLE_AGENT,)):
+        _owner_write_only(current)
+    agent_id = _require_listing_edit_permission(session, property_id, listing, current)
+    if not repo.set_primary_listing_photo(property_id, photo_id, commit=False):
         raise HTTPException(status_code=404, detail="Photo not found.")
+    if agent_id is not None:
+        session.execute(text("""
+            INSERT INTO fyp.verification_audit
+                (audit_id, property_id, verification_id, verification_type,
+                 previous_status, new_status, action, reason, created_at)
+            VALUES (gen_random_uuid(), :pid, NULL, NULL, NULL, NULL,
+                    'agent_updated_property_photos', :reason, now())
+        """), {"pid": property_id,
+               "reason": f"Agent {current.user_id} changed the primary property photograph."})
+    session.commit()
     return {"data": repo.listing_photos(property_id)}
 
 
@@ -1340,6 +1492,7 @@ class AddressPreviewRequest(BaseModel):
     city: str = Field(min_length=1, max_length=80)
     state: str = Field(min_length=1, max_length=80)
     postcode: str = Field(pattern=r"^\d{5}$")
+    refresh: bool = False
 
     @field_validator("address", "city", "state")
     @classmethod
@@ -1372,6 +1525,7 @@ def preview_property_address(
         city=payload.city,
         state=payload.state,
         postcode=payload.postcode,
+        force_refresh=payload.refresh,
     )
     return {
         "data": result,

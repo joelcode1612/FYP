@@ -1,6 +1,7 @@
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 
+import 'package:sitewise_jaspr_web/core/routing/landing_routes.dart';
 import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart';
 
 /// The retired Agent web workspace.
@@ -25,7 +26,7 @@ class AgentRetiredPage extends StatelessComponent {
             'verification submissions and assigned-property management are '
             'all available there with the same account.',
         action: div(classes: 'empty__links', [
-          const ActionLink('Go to SiteWise', href: '/'),
+          const ActionLink('Go to SiteWise', href: LandingRoutes.home),
           const ActionLink(
             'Entrepreneur sign in',
             href: '/login',

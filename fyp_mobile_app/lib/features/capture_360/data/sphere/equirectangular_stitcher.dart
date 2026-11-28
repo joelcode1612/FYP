@@ -1752,6 +1752,7 @@ const int _kStitcherShortSidePx = 720;
 
   final mats = <cv.Mat>[];
   cv.Stitcher? stitcher;
+  cv.VecMat? input;
   cv.Mat? pano;
   final watch = Stopwatch()..start();
   try {
@@ -1759,6 +1760,7 @@ const int _kStitcherShortSidePx = 720;
       final source = cv.imread(path, flags: cv.IMREAD_COLOR);
       if (source.isEmpty) {
         debugPrint('FLUTTER_STITCH: OPENCV_STITCHER ring decode failed: $path');
+        source.dispose();
         return (pano: null, status: 'decode-failed');
       }
       // Short side 720, longer side follows the source aspect (3:4 portrait
@@ -1779,7 +1781,7 @@ const int _kStitcherShortSidePx = 720;
     );
     stitcher = cv.Stitcher.create(mode: cv.StitcherMode.PANORAMA)
       ..panoConfidenceThresh = 0.35;
-    final input = cv.VecMat.fromList(mats);
+    input = cv.VecMat.fromList(mats);
     final result = stitcher.stitch(input);
     final status = result.$1;
     pano = result.$2;
@@ -1812,6 +1814,7 @@ const int _kStitcherShortSidePx = 720;
     return (pano: null, status: 'exception');
   } finally {
     pano?.dispose();
+    input?.dispose();
     stitcher?.dispose();
     for (final mat in mats) {
       mat.dispose();

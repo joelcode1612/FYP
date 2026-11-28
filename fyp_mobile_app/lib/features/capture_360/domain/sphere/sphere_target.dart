@@ -1,10 +1,20 @@
 import 'dart:math' as math;
 
+import 'package:fyp/features/capture_360/domain/sphere/adaptive_sphere_plan.dart';
+import 'package:fyp/features/capture_360/domain/sphere/sphere_plan_v11.dart';
+import 'package:fyp/features/capture_360/domain/sphere/sphere_plan_v12.dart';
 import 'package:fyp/features/capture_360/domain/virtual_tour/math/quaternions.dart';
 import 'package:fyp/features/capture_360/domain/virtual_tour/math/scalars.dart';
 import 'package:fyp/features/capture_360/domain/virtual_tour/math/vectors.dart';
 
-// The fixed 38-direction sphere of the 3DoF capture architecture.
+// Plans 5, 7 and 9 live in their own libraries (their canonical tables are
+// long), but every caller reaches plan versions through this file.
+// Re-exporting keeps a single import for the plan vocabulary instead of asking
+// each screen to know which file a constant is declared in.
+export 'package:fyp/features/capture_360/domain/sphere/sphere_plan_v11.dart';
+export 'package:fyp/features/capture_360/domain/sphere/sphere_plan_v12.dart';
+
+// The sphere of the 3DoF capture architecture.
 //
 // ## The one architectural difference from the ARCore flow
 //
@@ -30,44 +40,116 @@ import 'package:fyp/features/capture_360/domain/virtual_tour/math/vectors.dart';
 // `+Z` up (East–North–Up); this project's own pose helpers use `+Y`. Getting
 // those two confused tilts every target by 90°, so the axis is never guessed.
 //
-// ## Layout (R = 1.0) — 38 directions
+// ## Layouts
 //
-// ids 1–12:  Middle Ring, pitch 0°,   yaw 0°, 30°, … 330°
-// id 13:     Zenith,      pitch +90°
-// ids 14–25: Upper Ring,  pitch +40°, yaw −30°, −60°, … 0° (reverse sweep)
-// ids 26–37: Lower Ring,  pitch −40°, yaw 0°, 30°, … 330°
-// id 38:     Nadir,       pitch −90°
+// **Plan 4 (current)** — the adaptive five-ring layout generated in
+// `adaptive_sphere_plan.dart`. For the documented 65° vertical field of view
+// it is 44 targets: 4 upper polar (+65°), 12 upper (+30°), 12 middle (0°),
+// 12 lower (−30°), 4 lower polar (−65°). The three main rings share the same
+// yaw positions and the polar rings sit directly above and below middle
+// targets, which is what gives the vertical connections their overlap. A
+// camera with a different field of view gets a different count and different
+// spacing — the layout is measured, not assumed.
 //
-// ## Why 38 and not 26
+// **Plan 3** — the retired 56-target experiment (18 per ring). Readable so
+// historical sessions keep their geometry, never selected for a new capture.
 //
-// The rear camera measures ~53° horizontal and ~67° vertical in portrait (a
-// 3072 × 4096 still). At 45° yaw spacing — the 26-target template — adjacent
-// frames share only 8°, i.e. 15% overlap, and the ±30° rings leave a 60° gap to
-// the poles. That is enough for coverage but thin for blending: the seam band
-// is a few degrees wide, so a 1–2° orientation error shows as a visible step.
+// **Plan 2** — the retired 38-target layout (12 per ring at ±40° plus zenith
+// and nadir). Readable for the same reason.
 //
-// Twelve per ring puts the yaw step at 30°, i.e. 44% horizontal overlap. Rings
-// at ±40° put the vertical ring gap at 40° (≈38% overlap against the 65°
-// assumed vertical field of view) while the pole gap is 50° (≈23% overlap).
-// Every adjacent pair of rings still shares a real band of sky at the assumed
-// lens — the zenith frame reaches down to ≈57.5° and the upper ring up to
-// ≈72.5° — so the blend seams stay inside overlapping content; re-run
-// tool/sphere_coverage_report.py whenever the lens assumption changes. The ring
-// target IDs describe geometry; the guided capture order is separate and is
-// middle → upper → lower → zenith → nadir, establishing ring overlaps before
-// the pole caps.
+// **Plan 1** — the retired ±35° rings. Readable.
 //
-// The upper ring sweeps backwards so it starts at the yaw where the middle ring
-// ended, preserving continuity when the flow moves from the middle to upper
-// ring.
+// Historical sessions persist each frame's intended yaw/pitch, so recovery and
+// stitching never depend on the current constant matching the layout the older
+// photographs were taken with.
 
-/// How many directions a complete sphere has.
-const int kSphereTargetCount = 38;
+/// The adaptive five-ring plan version (current).
+///
+/// Declared here rather than in the planner so both libraries can name it
+/// without a const-initialisation cycle: the planner imports this file for
+/// [SphereTargetSpec], and this file imports the planner for the layout.
+const int kAdaptiveSpherePlanVersion = 4;
+
+/// The canonical adaptive five-ring capture plan for every new session.
+///
+/// Plan 12 carries the reference configuration — 36 primary targets on
+/// 0°/±30° rings plus 8 polar targets at ±65° — with target ids equal to the
+/// connected-sector capture order. Plans 4 and 11 remain readable for
+/// historical sessions; they are never selected for a new capture.
+const int kSphereCanonicalPlanVersion = kSpherePlanV12Version;
+
+/// Reference target count of the current capture plan.
+///
+/// The adaptive five-ring planner starts from the 44-target reference layout
+/// (12/12/12 at 0°/±30° plus 4+4 polar targets at ±65°) and may add positions
+/// when the measured lens cannot satisfy coverage. V11 is retained read-only
+/// for sessions captured with its fixed staggered geometry.
+const int kSphereTargetCount = 44;
+
+/// The retired 38-target layout (plan 2), still readable.
+const int kSphereLegacyTargetCount = 38;
+
+/// The retired 56-target experiment (plan 3), still readable.
 const int kSphereEnhancedTargetCount = 56;
 const int kSphereEnhancedPlanVersion = 3;
 
-int sphereTargetCountForPlan(int version) =>
-    version == kSphereEnhancedPlanVersion ? kSphereEnhancedTargetCount : kSphereTargetCount;
+/// The retired 38-target plan version.
+const int kSphereLegacyPlanVersion = 2;
+
+int sphereTargetCountForPlan(int version) {
+  if (version == kSpherePlanV12Version) {
+    return kSpherePlanV12TargetCount;
+  }
+  if (version == kSpherePlanV11Version) {
+    return kSpherePlanV11TargetCount;
+  }
+  if (version == kAdaptiveSpherePlanVersion) {
+    return kAdaptiveSpherePlan.targetCount;
+  }
+  if (version == kSphereEnhancedPlanVersion) {
+    return kSphereEnhancedTargetCount;
+  }
+  if (version == 1) {
+    return kSphereLegacyTargetCount;
+  }
+  if (version == kSphereLegacyPlanVersion) {
+    return kSphereLegacyTargetCount;
+  }
+  throw StateError('Unsupported sphere capture plan version: $version');
+}
+
+bool planIsBackendStitched(int version) =>
+    version == kSpherePlanV12Version ||
+    version == kSpherePlanV11Version ||
+    version == kAdaptiveSpherePlanVersion;
+
+AdaptiveSpherePlan planForVersion(
+  int version, {
+  SphereCameraProfile? cameraProfile,
+}) {
+  if (version == kSpherePlanV12Version) {
+    return cameraProfile == null
+        ? kSpherePlanV12
+        : buildPlanV12(profile: cameraProfile);
+  }
+  if (version == kSpherePlanV11Version) {
+    return cameraProfile == null
+        ? kSpherePlanV11
+        : buildPlanV11(profile: cameraProfile);
+  }
+  if (version == kAdaptiveSpherePlanVersion) {
+    // Re-plan from the measured lens when one is available. Before the first
+    // photograph this is safe: target ids are regenerated together with the
+    // geometry, and the session persists the resulting plan. Once frames exist
+    // the controller keeps the saved geometry instead of calling this.
+    return cameraProfile == null
+        ? kAdaptiveSpherePlan
+        : generateAdaptivePlan(camera: cameraProfile);
+  }
+  throw StateError(
+    'Capture plan $version is backup or unsupported for plan evaluation.',
+  );
+}
 
 /// The vertical field of view **assumed** for the rear camera, in degrees.
 ///
@@ -103,22 +185,19 @@ const double kSphereAssumedVerticalFovDeg = _kSphereFovOverride > 0
 /// documentation and future 3D previews rather than a placement input.
 const double kSphereRadiusM = 1.0;
 
-/// Elevation of the upper and lower rings, in degrees.
+/// Elevation of the upper and lower rings of the **retired** 38-target plan.
 ///
-/// The SiteWise capture specification fixes the rings at **±40°**: with the
-/// assumed 65° vertical field of view every adjacent ring pair still overlaps
-/// (the between-ring band is ≈25° of frame height and the pole band ≈15°), so
-/// stitching keeps real shared content while the layout matches the spec's
-/// three-ring-plus-poles geometry.
+/// The adaptive plan derives its ring pitches from the camera footprint
+/// instead; this constant survives so historical plan-1/2 sessions can still
+/// be read and so the guide can illustrate the retired geometry.
 const double kSphereRingPitchDeg = 40;
 
-/// The capture-plan version recorded with every session and frame.
+/// The capture-plan version recorded with every new session and frame.
 ///
-/// **2** is the ±40° three-ring-plus-poles layout above. Version 1 sessions
-/// (the earlier ±35° rings) remain readable: every frame persists its own
-/// intended yaw/pitch, so recovery and stitching never depend on the current
-/// constant matching the layout the older photographs were taken with.
-const int kSphereCapturePlanVersion = 2;
+/// Every new capture and recapture is recorded as the canonical adaptive
+/// five-ring plan (plan 12). Historical plans remain readable for sessions
+/// captured with them.
+const int kSphereCapturePlanVersion = kSphereCanonicalPlanVersion;
 
 /// The alignment cone that turns a target green and starts the hold ring.
 ///
@@ -143,9 +222,10 @@ const double kSphereAlignmentToleranceDeg = 2.0;
 /// as it always has.
 const double kSphereAlignmentExitDeg = 2.6;
 
-/// One of the 38 directions, before any photograph exists.
+/// One capture direction, before any photograph exists.
 class SphereTargetSpec {
-  /// 1-based, 1…38.
+  /// 1-based. Assigned by ring, so it is a stable geometry key rather than a
+  /// capture-order position.
   final int targetId;
 
   /// Azimuth within its ring, in degrees. `0` is straight ahead at Start.
@@ -154,7 +234,8 @@ class SphereTargetSpec {
   /// Elevation, in degrees: `+90` zenith, `0` horizon, `−90` nadir.
   final double pitchDeg;
 
-  /// `Middle Ring`, `Upper Ring`, `Lower Ring`, `Zenith` or `Nadir`.
+  /// `Upper polar ring`, `Upper ring`, `Middle ring`, `Lower ring`,
+  /// `Lower polar ring`, `Zenith` or `Nadir`.
   final String ringName;
 
   /// 1-based position within [ringName]; the poles leave it `null`.
@@ -176,25 +257,42 @@ class SphereTargetSpec {
 
   bool get isNadir => pitchDeg <= -89.999;
 
-  /// `Zenith`, `Nadir`, or `Middle Ring (0°)`.
+  /// `Zenith`, `Nadir`, or `Middle ring (0°)`.
   String get ringLabel {
     if (isZenith || isNadir) return ringName;
     return '$ringName (${yawDeg.round()}°)';
   }
 
-  /// The bottom pill's sentence: `Target 1 / 38 — Middle Ring (0°)`.
-  String get progressLabel =>
-      'Target $targetId / $kSphereTargetCount — '
-      '$ringLabel';
+  /// The ring in words, for the guidance sentence: `middle`, `upper polar`.
+  String get ringWord {
+    final lower = ringName.toLowerCase();
+    if (lower.contains('polar')) {
+      return lower.startsWith('upper') ? 'upper polar' : 'lower polar';
+    }
+    if (lower.startsWith('middle')) return 'middle';
+    if (lower.startsWith('upper')) return 'upper';
+    if (lower.startsWith('lower')) return 'lower';
+    return 'next';
+  }
+
+  /// `Step 3 / 44 — Upper ring (0°)`.
+  ///
+  /// The step is the position in the guided sequence, which is what the
+  /// photographer is counting; [targetId] is a stable geometry key and would be
+  /// misleading here because ids are assigned by ring, not by capture order.
+  String progressLabel({int? step, int total = kSphereTargetCount}) {
+    if (step == null) return ringLabel;
+    return 'Step $step / $total — $ringLabel';
+  }
 
   /// The target as the guidance says it out loud.
   String get shortName {
-    if (isZenith) return 'the zenith target';
-    if (isNadir) return 'the nadir target';
+    if (isZenith) return 'the ceiling target';
+    if (isNadir) return 'the floor target';
     if (yawDeg.abs() < 1e-9 && pitchDeg.abs() < 1e-9) {
       return 'the front target';
     }
-    return 'target $targetId';
+    return 'the $ringWord target';
   }
 }
 
@@ -214,18 +312,39 @@ Vec3 sphereDirection(double yawDeg, double pitchDeg) {
   );
 }
 
-/// Builds the fixed 38-target layout in capture order.
+/// Builds the target layout for [planVersion], in deterministic target-id order.
 ///
-/// Pure and deterministic: the id→angle mapping is asserted once in the test
-/// suite rather than re-derived per session. The order is the sequence the
-/// progress pill counts through and the order the guide arrow follows, so the
-/// two cannot disagree.
+/// Plan 4 is the adaptive five-ring layout. Its ids are assigned by ring
+/// (upper polar, upper, middle, lower, lower polar, caps) and are therefore
+/// independent of the guided capture order — a target id means the same
+/// direction whether it was the third or the fortieth photograph.
 ///
-/// Target **1 is always the middle ring at yaw 0** — the direction the user was
-/// facing when the sphere was calibrated. The controller refuses to capture
-/// anything else until it is saved, which is what makes the first photograph a
-/// known, horizon-level frame rather than whatever happened to be nearest.
-List<SphereTargetSpec> buildSphereTargets({int planVersion = kSphereCapturePlanVersion}) {
+/// Plans 1–3 are the retired fixed layouts, kept so historical sessions still
+/// resolve their geometry. They are never selected for a new capture.
+///
+/// Pure and deterministic for a given plan version and camera.
+List<SphereTargetSpec> buildSphereTargets({
+  int planVersion = kSphereCapturePlanVersion,
+}) {
+  if (![
+    1,
+    kSphereLegacyPlanVersion,
+    kSphereEnhancedPlanVersion,
+    kAdaptiveSpherePlanVersion,
+    kSpherePlanV11Version,
+    kSpherePlanV12Version,
+  ].contains(planVersion)) {
+    throw StateError('Unsupported sphere capture plan version: $planVersion');
+  }
+  if (planVersion == kSpherePlanV12Version) {
+    return kSpherePlanV12.targets;
+  }
+  if (planVersion == kSpherePlanV11Version) {
+    return kSpherePlanV11.targets;
+  }
+  if (planVersion == kAdaptiveSpherePlanVersion) {
+    return kAdaptiveSpherePlan.targets;
+  }
   if (planVersion == kSphereEnhancedPlanVersion) {
     final targets = <SphereTargetSpec>[];
     double wrap(double yaw) => ((yaw + 180) % 360 + 360) % 360 - 180;
@@ -233,17 +352,48 @@ List<SphereTargetSpec> buildSphereTargets({int planVersion = kSphereCapturePlanV
       for (var i = 0; i < yaws.length; i++) {
         final yaw = wrap(yaws[i]);
         final id = targets.length + 1;
-        targets.add(SphereTargetSpec(targetId: id, yawDeg: yaw, pitchDeg: pitch,
-          ringName: name, indexInRing: i + 1, direction: sphereDirection(yaw, pitch)));
+        targets.add(
+          SphereTargetSpec(
+            targetId: id,
+            yawDeg: yaw,
+            pitchDeg: pitch,
+            ringName: name,
+            indexInRing: i + 1,
+            direction: sphereDirection(yaw, pitch),
+          ),
+        );
       }
     }
+
     ring(List<double>.generate(18, (i) => i * 20.0), 0, 'Middle Ring');
-    targets.add(SphereTargetSpec(targetId: targets.length + 1, yawDeg: 0, pitchDeg: 90,
-      ringName: 'Zenith', direction: sphereDirection(0, 90)));
-    ring(List<double>.generate(18, (i) => -20.0 - i * 20.0), kSphereRingPitchDeg, 'Upper Ring');
-    ring(List<double>.generate(18, (i) => i * 20.0), -kSphereRingPitchDeg, 'Lower Ring');
-    targets.add(SphereTargetSpec(targetId: targets.length + 1, yawDeg: 0, pitchDeg: -90,
-      ringName: 'Nadir', direction: sphereDirection(0, -90)));
+    targets.add(
+      SphereTargetSpec(
+        targetId: targets.length + 1,
+        yawDeg: 0,
+        pitchDeg: 90,
+        ringName: 'Zenith',
+        direction: sphereDirection(0, 90),
+      ),
+    );
+    ring(
+      List<double>.generate(18, (i) => -20.0 - i * 20.0),
+      kSphereRingPitchDeg,
+      'Upper Ring',
+    );
+    ring(
+      List<double>.generate(18, (i) => i * 20.0),
+      -kSphereRingPitchDeg,
+      'Lower Ring',
+    );
+    targets.add(
+      SphereTargetSpec(
+        targetId: targets.length + 1,
+        yawDeg: 0,
+        pitchDeg: -90,
+        ringName: 'Nadir',
+        direction: sphereDirection(0, -90),
+      ),
+    );
     return List<SphereTargetSpec>.unmodifiable(targets);
   }
   const List<double> middleYaws = <double>[
@@ -326,8 +476,9 @@ List<SphereTargetSpec> buildSphereTargets({int planVersion = kSphereCapturePlanV
     ),
   );
 
-  addRing(upperYaws, kSphereRingPitchDeg, 'Upper Ring');
-  addRing(lowerYaws, -kSphereRingPitchDeg, 'Lower Ring');
+  final legacyPitch = planVersion == 1 ? 35.0 : kSphereRingPitchDeg;
+  addRing(upperYaws, legacyPitch, 'Upper Ring');
+  addRing(lowerYaws, -legacyPitch, 'Lower Ring');
 
   // Yaw is undefined at the poles and stays 0, so the recorded value is stable
   // rather than NaN.
@@ -344,16 +495,50 @@ List<SphereTargetSpec> buildSphereTargets({int planVersion = kSphereCapturePlanV
   return List<SphereTargetSpec>.unmodifiable(targets);
 }
 
-/// Capture order for new standard-plan sessions. Target IDs remain the
-/// geometry keys persisted to storage and consumed by the backend; this list
-/// only controls the guided order shown to the photographer.
+/// Capture order for new sessions. Target ids remain the geometry keys
+/// persisted to storage and consumed by the backend; this list only controls
+/// the guided order shown to the photographer.
 ///
-/// Establish the horizon first, then capture both connecting rings, and leave
-/// the pole caps until ring-to-ring overlap has been recorded. Historical
-/// 56-target sessions retain their original sequence.
+/// Plan 4 uses the connected-sector order from the adaptive planner: two
+/// neighbouring middle frames first, then their upper and lower counterparts
+/// and a polar frame, then sector by sector — so horizontal and vertical
+/// alignment are established before the photographer has walked a quarter of
+/// the way round. The pole caps are placed where they connect to frames
+/// already on the sphere.
+///
+/// Historical sessions retain their original sequence.
 List<int> sphereCaptureSequence({int planVersion = kSphereCapturePlanVersion}) {
+  if (![
+    1,
+    kSphereLegacyPlanVersion,
+    kSphereEnhancedPlanVersion,
+    kAdaptiveSpherePlanVersion,
+    kSpherePlanV11Version,
+    kSpherePlanV12Version,
+  ].contains(planVersion)) {
+    throw StateError('Unsupported sphere capture plan version: $planVersion');
+  }
+  if (planVersion == kSpherePlanV12Version) {
+    // Plan 12's ids ARE the capture order: the connected-sector sequence is
+    // 1…44 by construction.
+    return kSpherePlanV12.captureOrder;
+  }
+  if (planVersion == kSpherePlanV11Version) {
+    // Ids are the capture order: each middle target is followed by a ceiling or
+    // floor arch, so almost every step is 15° of yaw with 30° of pitch and the
+    // previous photograph is still inside the frame (39/43 verified). The four
+    // upper→lower steps that cannot be visible are published by the plan and
+    // exempted from the shutter gate.
+    return kSpherePlanV11.captureOrder;
+  }
+  if (planVersion == kAdaptiveSpherePlanVersion) {
+    return kAdaptiveSpherePlan.captureOrder;
+  }
   if (planVersion == kSphereEnhancedPlanVersion) {
-    return List<int>.generate(sphereTargetCountForPlan(planVersion), (i) => i + 1);
+    return List<int>.generate(
+      sphereTargetCountForPlan(planVersion),
+      (i) => i + 1,
+    );
   }
   return <int>[
     ...List<int>.generate(12, (i) => i + 1),
@@ -465,22 +650,69 @@ double cameraElevationDeg(Quat deviceToWorld, {Vec3 worldUp = Vec3.unitY}) {
   return math.asin(clampDouble(forward.dot(up), -1, 1)) * radToDeg;
 }
 
-
 // SITEWISE_CAPTURE_PLAN_WIRING_V2: backend-verified v3 geometry, existing standard generator retained.
 const int kSitewiseEnhancedTargetCount = 56;
 
+/// The version a **new** session with [count] targets is created under.
+///
+/// The canonical adaptive five-ring plan (12) is returned for the 44-target
+/// reference capture. Historical sessions use the explicit version saved with
+/// the session rather than inferring it from count.
 int sitewisePlanVersionForCount(int count) {
-  if (count == 38) return 2;
-  if (count == kSitewiseEnhancedTargetCount) return 3;
-  throw StateError('Unsupported sphere capture plan: $count');
+  if (count == 44) return kSphereCanonicalPlanVersion;
+  if (count == kSitewiseEnhancedTargetCount) return kSphereEnhancedPlanVersion;
+  throw StateError(
+    'The saved capture plan version is required for this target count.',
+  );
 }
 
-List<SphereTargetSpec> buildSitewiseSessionTargets(int count) {
-  sitewisePlanVersionForCount(count);
-  if (count == 38) {
-    final standard = buildSphereTargets(planVersion: 2);
-    if (standard.length != 38) throw StateError('Standard sphere plan must have 38 targets.');
-    return standard;
+bool planVersionMatchesCount(int version, int count) {
+  if (version == kSpherePlanV12Version ||
+      version == kSpherePlanV11Version ||
+      version == kAdaptiveSpherePlanVersion) {
+    return count == kSpherePlanV12TargetCount;
+  }
+  if (version == kSphereLegacyPlanVersion) {
+    return count == kSphereLegacyTargetCount;
+  }
+  if (version == 1) {
+    return count == kSphereLegacyTargetCount;
+  }
+  if (version == kSphereEnhancedPlanVersion) {
+    return count == kSitewiseEnhancedTargetCount;
+  }
+  return false;
+}
+
+List<SphereTargetSpec> buildSitewiseSessionTargets(
+  int count, {
+  int? planVersion,
+}) {
+  if (planVersion == null &&
+      (count == kSpherePlanV12TargetCount ||
+          count == kSphereLegacyTargetCount)) {
+    throw StateError(
+      'This saved session must record its plan version because multiple plans share its target count.',
+    );
+  }
+  final version = planVersion ?? sitewisePlanVersionForCount(count);
+  if (!planVersionMatchesCount(version, count)) {
+    throw StateError('Plan $version does not have $count targets.');
+  }
+  if (version == kSpherePlanV12Version) {
+    return kSpherePlanV12.targets;
+  }
+  if (version == kSpherePlanV11Version) {
+    return kSpherePlanV11.targets;
+  }
+  if (version == kAdaptiveSpherePlanVersion) {
+    return kAdaptiveSpherePlan.targets;
+  }
+  if (version == 1 || version == kSphereLegacyPlanVersion) {
+    return buildSphereTargets(planVersion: version);
+  }
+  if (version != kSphereEnhancedPlanVersion) {
+    throw StateError('Unsupported saved sphere capture plan version: $version');
   }
   const directions = <(double, double)>[
     (0.000000, 0.000000),
@@ -548,9 +780,12 @@ List<SphereTargetSpec> buildSitewiseSessionTargets(int count) {
     final (yaw, pitch) = directions[i];
     final t = enhanced[i];
     final yawError = ((t.yawDeg - yaw + 180) % 360 - 180).abs();
-    if (t.targetId != i + 1 || yawError > 0.0001 ||
+    if (t.targetId != i + 1 ||
+        yawError > 0.0001 ||
         (t.pitchDeg - pitch).abs() > 0.0001) {
-      throw StateError('Mobile enhanced plan differs from backend v3 at target ${i + 1}.');
+      throw StateError(
+        'Mobile enhanced plan differs from backend v3 at target ${i + 1}.',
+      );
     }
   }
   return List<SphereTargetSpec>.unmodifiable(enhanced);

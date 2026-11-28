@@ -18,6 +18,6 @@ class AuthNavbar extends StatelessComponent {
 
   @override
   Component build(BuildContext context) {
-    return div(classes: 'lp-nav lnd', [const SiteTopbar(linkPrefix: '/')]);
+    return div(classes: 'lp-nav lnd', [const SiteTopbar()]);
   }
 }

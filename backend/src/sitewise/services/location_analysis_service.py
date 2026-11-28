@@ -96,6 +96,9 @@ class LocationAnalysisService:
         geo = self._repo.get_geo_features(property_id)
         population = self._repo.get_population(property_id)
         research = self._repo.get_research_evidence(property_id)
+        nearest_competitor = self._repo.saved_nearest_competitor(
+            property_id, listing.get("latitude"), listing.get("longitude")
+        )
         population_extra = self._population_extra(property_id)
         enrichment = self._enrichment_states(property_id)
         photos_count = self._photos_count(property_id)
@@ -115,7 +118,7 @@ class LocationAnalysisService:
         )
         part_b = self._part_b(
             listing, geo, population, population_extra, research, enrichment,
-            research_association,
+            research_association, nearest_competitor,
         )
         part_c = self._part_c(part_b, enrichment, freshness, provenance)
         recommendation = self._recommendation(part_a, part_c, verification, listing)
@@ -351,6 +354,7 @@ class LocationAnalysisService:
         research: dict[str, Any] | None,
         enrichment: dict[str, str],
         research_association: dict[str, Any],
+        nearest_competitor: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         return {
             "population": self._population_family(
@@ -360,7 +364,7 @@ class LocationAnalysisService:
                 population_extra, research, geo
             ),
             "fnb_environment": self._fnb_environment_family(
-                listing, geo, research, population
+                listing, geo, research, population, nearest_competitor
             ),
             "accessibility": self._accessibility_family(
                 listing, geo, research, enrichment
@@ -485,6 +489,7 @@ class LocationAnalysisService:
         geo: dict[str, Any] | None,
         research: dict[str, Any] | None,
         population: dict[str, Any] | None,
+        nearest_competitor: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         method = (
             "F&B competitors are research-outlet records inside the study "
@@ -509,6 +514,7 @@ class LocationAnalysisService:
             )
         breakdown = None
         nearest = None
+        name = category = nearest_source = None
         analysis_status = None
         if research is not None:
             breakdown = {
@@ -517,7 +523,16 @@ class LocationAnalysisService:
                 "fast_food_500m": _num(research.get("fast_food_count_500m")),
             }
             nearest = _num(research.get("nearest_competitor_distance_m"))
+            if nearest is not None:
+                name = research.get("nearest_competitor_name")
+                category = research.get("nearest_competitor_category")
+                nearest_source = "Historical research measurement"
             analysis_status = research.get("analysis_status")
+        if nearest is None and nearest_competitor is not None:
+            nearest = nearest_competitor["distance_m"]
+            name = nearest_competitor.get("name")
+            category = nearest_competitor.get("category")
+            nearest_source = "OpenStreetMap · straight-line distance"
         anchors = None
         if population is not None:
             anchors = {
@@ -537,6 +552,9 @@ class LocationAnalysisService:
             competitor_status=geo.get("competitor_status") if geo else None,
             competitor_breakdown_500m=breakdown,
             nearest_competitor_m=nearest,
+            nearest_competitor_name=name,
+            nearest_competitor_category=category,
+            nearest_competitor_source=nearest_source,
             research_analysis_status=analysis_status,
             demand_generator_count_500m=demand_500,
             demand_generator_count_1km=demand_1km,

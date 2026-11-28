@@ -1,23 +1,33 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
-import 'package:shared_logic/shared_logic.dart' show VirtualTourStatus;
+import 'package:shared_logic/shared_logic.dart' show readableFailure;
 
 import 'package:fyp/core/di/service_locator.dart';
 import 'package:fyp/core/utils/capture_log.dart';
 import 'package:fyp/features/capture_360/application/backend_capture_coordinator.dart';
 import 'package:fyp/features/capture_360/data/capture_frame_store.dart';
+import 'package:fyp/features/capture_360/data/sphere/processing_derivative.dart';
 import 'package:fyp/features/capture_360/data/sphere/sitewise_sphere_session_store.dart';
 import 'package:fyp/features/capture_360/domain/quality/capture_quality_models.dart';
 import 'package:fyp/features/capture_360/domain/sphere/sphere_capture_session.dart';
+import 'package:fyp/features/capture_360/domain/sphere/sphere_target.dart'
+    show
+        kSphereEnhancedPlanVersion,
+        kSpherePlanV11TargetCount,
+        planForVersion,
+        planIsBackendStitched,
+        sitewisePlanVersionForCount;
 
-/// How many original photographs upload at once. Two keeps the queue moving
-/// without competing with the OpenCV stitcher for memory.
-const int kFrameUploadConcurrency = 2;
+/// One active photograph transfer. The previous direct-to-Supabase queue ran
+/// three; the FastAPI receive endpoint is deliberately serialised so capture,
+/// ORB and the upload stream cannot compete for the same memory and radio.
+const int kFrameUploadConcurrency = 1;
 
 /// Per-item attempts inside one drain before the item parks as
 /// `failed_retryable`. `resume()` re-arms parked items — nothing is ever
@@ -53,17 +63,32 @@ class FrameUploadRecord {
     this.storagePath,
     this.retryCount = 0,
     this.lastError,
+    this.derivative,
     DateTime? updatedAt,
   }) : updatedAt = updatedAt ?? DateTime.now().toUtc();
 
   final int targetId;
+
+  /// The original photograph on this device. Never modified or removed by
+  /// the queue.
   final String localFilePath;
-  final String checksumSha256;
+
+  /// Digest of the original bytes sent to FastAPI.
+  String checksumSha256;
+
+  /// Legacy queue documents may still carry a derivative descriptor. It is
+  /// ignored and cleared on the first retry; the current transport sends the
+  /// original.
+  ProcessingDerivative? derivative;
+
   FrameUploadState status;
   String? storagePath;
   int retryCount;
   String? lastError;
   DateTime updatedAt;
+
+  /// The file this record sends. The original is the only payload now.
+  String get uploadFilePath => localFilePath;
 
   Map<String, Object?> toJson() => <String, Object?>{
     'target_id': targetId,
@@ -73,6 +98,7 @@ class FrameUploadRecord {
     'storage_path': storagePath,
     'retry_count': retryCount,
     'last_error': lastError,
+    'derivative': derivative?.toJson(),
     'updated_at': updatedAt.toIso8601String(),
   };
 
@@ -85,6 +111,7 @@ class FrameUploadRecord {
         storagePath: json['storage_path'] as String?,
         retryCount: (json['retry_count'] as num?)?.toInt() ?? 0,
         lastError: json['last_error'] as String?,
+        derivative: ProcessingDerivative.fromJson(json['derivative']),
         updatedAt:
             DateTime.tryParse(json['updated_at'] as String? ?? '') ??
             DateTime.now().toUtc(),
@@ -209,10 +236,11 @@ String _newAttemptKey() {
 /// The reliable per-photograph upload pipeline.
 ///
 /// After EVERY capture the photograph is persisted locally, its queue record
-/// is written to disk (checksum included), and the worker drains it to
-/// Supabase Storage through FastAPI's signed URLs — without blocking the
-/// camera or waiting for stitching. Panorama drafts join the same document
-/// and are drained FIRST, because the panorama is the deliverable.
+/// is written to disk (checksum included), and the worker streams one original
+/// at a time to FastAPI. FastAPI owns the Supabase write and frame
+/// confirmation, so the device never requests signed frame-upload URLs.
+/// Panorama drafts join the same document and are drained FIRST, because the
+/// panorama is the deliverable.
 ///
 /// Everything here is restart-safe by construction:
 ///  * every state change is flushed to `upload_queue.json` before the next
@@ -249,6 +277,29 @@ class FrameUploadQueue {
   static final Map<String, FrameUploadQueue> _instances =
       <String, FrameUploadQueue>{};
 
+  /// Whether the backend worker produces this session's panorama.
+  ///
+  /// True for the 56-target enhanced plan and for the adaptive five-ring plan
+  /// — both upload originals and wait on the worker, and neither may upload a
+  /// device panorama, which the panorama endpoint refuses. The check is by
+  /// plan version rather than by count because the adaptive count is derived
+  /// from the camera, not fixed.
+  static bool _backendStitched(int? requiredTargetCount, {int? planVersion}) {
+    if (requiredTargetCount == null) return false;
+    if (planVersion != null) {
+      return planVersion == kSphereEnhancedPlanVersion &&
+              requiredTargetCount == 56 ||
+          planIsBackendStitched(planVersion);
+    }
+    // V4 and V11 both contain 44 targets. An absent version must never pick
+    // either geometry based on count alone.
+    if (requiredTargetCount == kSpherePlanV11TargetCount) return false;
+    if (requiredTargetCount == 56) return true;
+    return planIsBackendStitched(
+      sitewisePlanVersionForCount(requiredTargetCount),
+    );
+  }
+
   /// The queue for one capture station. [stationId] defaults to the tour id
   /// — the same convention the session store uses.
   factory FrameUploadQueue.forTour({
@@ -274,7 +325,11 @@ class FrameUploadQueue {
       for (final tour in tours) {
         try {
           final store = ServiceLocator.frameStore;
-          final state = await readState(store, tour.id);
+          final stationId = await SitewiseSphereSessionStore.stationIdForTour(
+            frameStore: store,
+            tourId: tour.id,
+          );
+          final state = await readState(store, tour.id, stationId: stationId);
           if (state.panoramaConfirmed) continue;
           if (await ServiceLocator.tourRepo.tourById(tour.id) == null) continue;
           final path = tour.panoramaPath;
@@ -282,11 +337,13 @@ class FrameUploadQueue {
             FrameUploadQueue.forTour(
               frameStore: store,
               tourId: tour.id,
+              stationId: stationId,
             ).resumeInBackground();
           } else if (path != null && await File(path).exists()) {
             await FrameUploadQueue.forTour(
               frameStore: store,
               tourId: tour.id,
+              stationId: stationId,
             ).enqueuePanorama(path, propertyId: int.tryParse(tour.propertyId));
           }
         } catch (error) {
@@ -312,6 +369,11 @@ class FrameUploadQueue {
   Future<void> _writing = Future<void>.value();
   bool _wakeRequested = false;
   Timer? _panoramaRetry;
+  final Map<int, List<Completer<void>>> _frameWaiters =
+      <int, List<Completer<void>>>{};
+  bool _transfersCancelled = false;
+  bool _transportPaused = false;
+  Timer? _transportRetry;
 
   // ------------------------------------------------------------------
   // Document IO.
@@ -392,15 +454,33 @@ class FrameUploadQueue {
   // ------------------------------------------------------------------
 
   Future<String> _checksum(String path) async {
-    final file = File(path);
-    if (!await file.exists()) {
+    if (!await File(path).exists()) {
       throw const BackendHandoffFailure('The file to upload is missing.');
     }
-    // Incremental hashing: a multi-megabyte JPEG is never held in memory,
-    // which is what keeps the queue from competing with the stitcher.
+    try {
+      // Hashing a 10 MB original is CPU work. Keep it off the UI isolate so
+      // the CameraX preview and shutter stay responsive while the queue works.
+      return await Isolate.run(
+        () => _checksumSync(path),
+      ).timeout(const Duration(seconds: 20));
+    } on Object {
+      throw const BackendHandoffFailure('The file could not be read.');
+    }
+  }
+
+  static String _checksumSync(String path) {
     final sink = _DigestSink();
     final digest = sha256.startChunkedConversion(sink);
-    await file.openRead().forEach(digest.add);
+    final file = File(path).openSync();
+    try {
+      while (true) {
+        final chunk = file.readSync(1024 * 1024);
+        if (chunk.isEmpty) break;
+        digest.add(chunk);
+      }
+    } finally {
+      file.closeSync();
+    }
     digest.close();
     final value = sink.value;
     if (value == null) {
@@ -418,24 +498,121 @@ class FrameUploadQueue {
   /// and wakes the worker. [propertyId] pins the queue to the property the
   /// first time it is seen — before that, the session store's association
   /// (or the handoff) supplies it.
-  Future<void> enqueueFrame(CapturedFrame frame, {int? propertyId}) async {
+  ///
+  /// The original JPEG is the transfer payload and stays untouched on the
+  /// device until FastAPI confirms durable receipt.
+  Future<void> enqueueFrame(
+    CapturedFrame frame, {
+    int? propertyId,
+  }) async {
+    if (_transfersCancelled) return;
     final doc = await _loadOrCreate();
     doc.propertyId ??= propertyId;
-    final record = FrameUploadRecord(
+    // The FastAPI endpoint receives the original. A scaled derivative is no
+    // longer part of the transport: it would be a second byte stream for the
+    // same canonical object and would reduce the server's source quality.
+    final checksum = await _checksum(frame.imagePath);
+    final existing = doc.frames[frame.targetId];
+    if (existing != null &&
+        existing.status == FrameUploadState.confirmed &&
+        existing.checksumSha256 == checksum &&
+        existing.derivative == null) {
+      // The same bytes are already confirmed. Re-queueing them would reset a
+      // confirmed frame to pending and re-upload a photograph the server has
+      // already accepted.
+      return;
+    }
+    doc.frames[frame.targetId] = FrameUploadRecord(
       targetId: frame.targetId,
       localFilePath: frame.imagePath,
-      checksumSha256: await _checksum(frame.imagePath),
+      checksumSha256: checksum,
     );
-    doc.frames[frame.targetId] = record;
     await _flush();
     _wake();
+  }
+
+  /// Waits until the single FastAPI transfer path has confirmed [targetId].
+  ///
+  /// Capture-time verification uses this instead of uploading a second copy
+  /// itself. The wait is bounded and does not hold the shutter: the next
+  /// photograph can still be captured while this future is pending.
+  Future<void> ensureFrameUploaded(
+    int targetId, {
+    Duration timeout = const Duration(seconds: 90),
+  }) async {
+    var doc = await _loadOrCreate();
+    if (doc.frames[targetId]?.status == FrameUploadState.confirmed) return;
+    if (doc.frames[targetId]?.status == FrameUploadState.failedRetryable) {
+      doc.frames[targetId]!
+        ..status = FrameUploadState.pending
+        ..lastError = null;
+      await _flush();
+    }
+    if (!doc.frames.containsKey(targetId)) {
+      final frames = await _safeLoadFrames();
+      for (final frame in frames) {
+        if (frame.targetId == targetId) {
+          await enqueueFrame(frame);
+          break;
+        }
+      }
+      doc = await _loadOrCreate();
+      if (doc.frames[targetId]?.status == FrameUploadState.confirmed) return;
+    }
+    final completer = Completer<void>();
+    _frameWaiters.putIfAbsent(targetId, () => <Completer<void>>[]).add(completer);
+    _wake();
+    try {
+      await completer.future.timeout(timeout);
+    } on TimeoutException {
+      throw BackendHandoffFailure(
+        'Target $targetId has not reached Sitewise yet. Your photograph is '
+        'saved; retry the upload when the connection is back.',
+      );
+    } finally {
+      _frameWaiters[targetId]?.remove(completer);
+      if (_frameWaiters[targetId]?.isEmpty ?? false) {
+        _frameWaiters.remove(targetId);
+      }
+    }
+  }
+
+  void _settleFrameWaiters(int targetId, Object? error) {
+    final waiters = _frameWaiters.remove(targetId);
+    if (waiters == null) return;
+    for (final waiter in waiters) {
+      if (waiter.isCompleted) continue;
+      if (error == null) {
+        waiter.complete();
+      } else {
+        waiter.completeError(error);
+      }
+    }
+  }
+
+  /// Drops the local candidate pointer after an explicit cancellation. The
+  /// candidate JPEG and the session row are retained for audit; only the
+  /// "ready for review" marker is cleared so the property keeps showing the
+  /// previous active panorama.
+  Future<void> discardPanoramaCandidate() async {
+    _transfersCancelled = true;
+    _transportPaused = true;
+    _transportRetry?.cancel();
+    _transportRetry = null;
+    final doc = await _loadOrCreate();
+    if (doc.panorama == null) return;
+    doc.panorama = null;
+    await _flush();
   }
 
   /// Queues the stitched panorama (the cloud draft). The panorama is drained
   /// with priority over the frame backups.
   Future<void> enqueuePanorama(String panoramaPath, {int? propertyId}) async {
     final plan = await _sessions.getSession(_stationId);
-    if (plan?.requiredTargetCount == 56) {
+    if (_backendStitched(
+      plan?.requiredTargetCount,
+      planVersion: plan?.capturePlanVersion,
+    )) {
       // This is the cached backend result, not an upload candidate.
       if (plan?.localPanoramaPath == panoramaPath &&
           plan?.panoramaSyncStatus == FrameSyncStatus.ready) {
@@ -523,6 +700,33 @@ class FrameUploadQueue {
     }
   }
 
+  bool _isTransportFailure(Object error) {
+    final text = error.toString().toLowerCase();
+    return text.contains('unable to reach sitewise') ||
+        text.contains('connection') ||
+        text.contains('network') ||
+        text.contains('socket') ||
+        text.contains('timed out') ||
+        text.contains('timeout');
+  }
+
+  void _pauseTransport() {
+    if (_transportPaused) return;
+    _transportPaused = true;
+    CaptureLog.log(
+      'Frame upload transport paused for 30s after a network failure',
+    );
+    _transportRetry?.cancel();
+    // One bounded retry window instead of hammering a dead network for every
+    // queued photograph. The photographs stay pending and are retried later.
+    _transportRetry = Timer(const Duration(seconds: 30), () {
+      _transportRetry = null;
+      if (_transfersCancelled) return;
+      _transportPaused = false;
+      _wake();
+    });
+  }
+
   void _wake() {
     _wakeRequested = true;
     unawaited(
@@ -540,6 +744,7 @@ class FrameUploadQueue {
   }
 
   Future<void> _drainLoop() async {
+    if (_transfersCancelled || _transportPaused) return;
     final doc = await _loadOrCreate();
     final propertyId = doc.propertyId ?? await _resolvePropertyId();
     if (propertyId == null) {
@@ -553,8 +758,17 @@ class FrameUploadQueue {
     if (doc.frames.keys.any((id) => id < 1 || id > plan.requiredTargetCount)) {
       throw StateError('Queued photos do not match the saved plan.');
     }
+    // Adaptive sessions are stitched by the backend from the originals, so
+    // they take the same path as the 56-target enhanced mode: drain the
+    // frames, then wait on the worker. There is no device panorama to upload
+    // for either, and the panorama endpoint refuses one.
+    final backendStitched = _backendStitched(
+      plan.requiredTargetCount,
+      planVersion: plan.capturePlanVersion,
+    );
     if (doc.frames.isEmpty && doc.panorama == null) return;
-    if (plan.requiredTargetCount == 56 && doc.panorama?.confirmed == true &&
+    if (backendStitched &&
+        doc.panorama?.confirmed == true &&
         plan.panoramaSyncStatus == FrameSyncStatus.ready &&
         plan.backendPanoramaId == doc.panorama?.panoramaId &&
         plan.localPanoramaPath == doc.panorama?.localFilePath &&
@@ -568,6 +782,18 @@ class FrameUploadQueue {
         stationId: _stationId,
         propertyId: propertyId,
         attemptKey: doc.attemptKey,
+        // The plan decides how many photographs the session expects and which
+        // directions they were taken at, so the exact geometry must reach the
+        // server before the session exists. `planForVersion` selects the same
+        // plan the capture screen guided: the adaptive five-ring plan for new
+        // sessions or the explicit saved geometry when resuming a backup.
+        plan:
+            _backendStitched(
+              plan.requiredTargetCount,
+              planVersion: plan.capturePlanVersion,
+            )
+            ? planForVersion(plan.capturePlanVersion)
+            : null,
       );
     } on Object catch (error) {
       CaptureLog.log('Upload queue could not open a session: $error');
@@ -575,9 +801,13 @@ class FrameUploadQueue {
       return;
     }
 
-    if (plan.requiredTargetCount == 56) {
+    if (backendStitched) {
       await _drainFrames(doc, sessionId, propertyId);
-      await _finishEnhancedPanorama(doc, sessionId, propertyId);
+      // Job creation only. The panorama is followed by [completeHandoff], which
+      // the capture screen and the preview drive with a real stage. A drain
+      // that waited for the stitch is what used to turn a healthy five-minute
+      // job into "Retry Handoff".
+      await _ensurePanoramaJob(doc, sessionId);
     } else {
       await _drainPanorama(doc, sessionId, propertyId);
       await _drainFrames(doc, sessionId, propertyId);
@@ -585,51 +815,274 @@ class FrameUploadQueue {
     }
   }
 
-  Future<void> _finishEnhancedPanorama(_QueueDoc doc, String sessionId, int propertyId) async {
+  /// Creates (idempotently) the backend panorama job once every photograph is
+  /// confirmed. Returns the job id, or `null` when the uploads are unfinished.
+  Future<String?> _ensurePanoramaJob(_QueueDoc doc, String sessionId) async {
     final plan = await _sessions.getSession(_stationId);
     final expectedCount = plan?.requiredTargetCount;
-    if (expectedCount == null || expectedCount != 56 ||
+    // The count comes from the session's own plan: a plan-driven capture needs
+    // however many targets its geometry produced, and waiting for a fixed
+    // number would leave a finished sweep parked forever.
+    if (expectedCount == null ||
+        expectedCount < 1 ||
         doc.frames.length != expectedCount ||
-        !List<int>.generate(expectedCount, (i) => i + 1).every((id) =>
-          doc.frames[id]?.status == FrameUploadState.confirmed)) {
-      return;
+        !List<int>.generate(
+          expectedCount,
+          (i) => i + 1,
+        ).every((id) => doc.frames[id]?.status == FrameUploadState.confirmed)) {
+      return null;
     }
     final frames = await _sessions.loadFrames(_stationId);
     if (frames.length != expectedCount ||
         frames.map((f) => f.targetId).toSet().length != expectedCount ||
-        frames.any((f) => f.targetId < 1 || f.targetId > expectedCount ||
-            !File(f.imagePath).existsSync())) {
+        frames.any(
+          (f) =>
+              f.targetId < 1 ||
+              f.targetId > expectedCount ||
+              !File(f.imagePath).existsSync(),
+        )) {
       throw StateError('Enhanced capture is incomplete.');
     }
     // Prevent replacing an existing device-generated or different artifact.
     final previous = doc.panorama;
     if (previous != null && !previous.confirmed) {
-      throw StateError('Unexpected queued device panorama in enhanced session.');
+      throw StateError(
+        'Unexpected queued device panorama in enhanced session.',
+      );
     }
-    final result = await _coordinator.finishEnhanced(stationId: _stationId,
-      sessionId: sessionId, directory: await frameStore.tourRoot(tourId));
-    final path = result['localPath'] as String;
-    final id = result['id'] as String;
-    if (previous != null && previous.panoramaId != id) {
-      throw StateError('Existing panorama differs from the completed job.');
+    final job = await _coordinator.ensurePanoramaJob(
+      stationId: _stationId,
+      sessionId: sessionId,
+    );
+    final jobId = job['jobId'] as String?;
+    if (jobId != null && jobId.isNotEmpty) {
+      await _sessions.saveBackendHandoff(
+        sessionId: _stationId,
+        syncStatus: FrameSyncStatus.processing,
+        backendSessionId: sessionId,
+        backendJobId: jobId,
+        backupSyncStatus: FrameSyncStatus.ready,
+        backupUploaded: expectedCount,
+        backupTotal: expectedCount,
+      );
     }
-    final tour = await ServiceLocator.tourRepo.tourById(tourId);
-    if (tour == null || tour.propertyId != '$propertyId') {
-      throw StateError('Panorama property association could not be verified.');
+    return jobId;
+  }
+
+  /// Drives the whole backend handoff for a completed plan-driven capture and
+  /// reports its real stage.
+  ///
+  /// This is the single entry point the capture screen and the preview use.
+  /// It is safe to call repeatedly and from several screens at once: uploads
+  /// are skipped when already confirmed, job creation is idempotent, and the
+  /// same job id is followed rather than a second job being created.
+  Future<PanoramaHandoffOutcome> completeHandoff({
+    void Function(PanoramaJobStage stage, String message)? onStage,
+  }) async {
+    // Wall-clock per stage, logged once at the end. These are measurements,
+    // never inputs: nothing in this method is timed out or shortened to hit a
+    // target, and the numbers are what the report quotes.
+    final started = DateTime.now();
+    var uploadsMs = 0;
+    var doc = await _loadOrCreate();
+    final plan = await _sessions.getSession(_stationId);
+    if (plan == null) {
+      return const PanoramaHandoffOutcome.failed(
+        'The saved capture could not be read. Your photographs are kept.',
+      );
     }
-    await _sessions.savePanorama(sessionId: _stationId,
-      localPanoramaPath: path, status: PanoramaGenerationStatus.ready, error: null);
-    await ServiceLocator.tourRepo.updateTour(tour.copyWith(
-      panoramaPath: path, status: VirtualTourStatus.ready));
-    await _sessions.saveBackendHandoff(sessionId: _stationId,
-      syncStatus: FrameSyncStatus.ready, backendSessionId: sessionId,
-      panoramaSyncStatus: FrameSyncStatus.ready,
-      backupSyncStatus: FrameSyncStatus.ready, backupUploaded: 56, backupTotal: 56,
-      backendPanoramaId: id, clearLastError: true);
-    doc.panorama = PanoramaQueueRecord(localFilePath: path,
-      checksumSha256: await _checksum(path), status: FrameUploadState.confirmed,
-      panoramaId: id, storagePath: result['storagePath'] as String);
-    await _flush();
+    if (!_backendStitched(
+      plan.requiredTargetCount,
+      planVersion: plan.capturePlanVersion,
+    )) {
+      return const PanoramaHandoffOutcome.unsupported();
+    }
+    final propertyId =
+        doc.propertyId ?? plan.propertyId ?? await _resolvePropertyId();
+    if (propertyId == null) {
+      return const PanoramaHandoffOutcome.failed(
+        'The panorama needs a saved property. Save the property draft first.',
+      );
+    }
+    doc.propertyId ??= propertyId;
+
+    // 1. Uploads. `resume()` returns once every photograph is confirmed (or a
+    //    real upload failure parked it), never while the stitch runs.
+    onStage?.call(PanoramaJobStage.processing, 'Finishing photo uploads…');
+    final uploadsStarted = DateTime.now();
+    try {
+      await resume();
+    } on Object catch (error) {
+      CaptureLog.log('Handoff could not finish uploading: $error');
+    }
+    uploadsMs = DateTime.now().difference(uploadsStarted).inMilliseconds;
+    // `resume()` writes confirmations to the queue document. Reload before
+    // deciding the uploads are incomplete, or a healthy handoff reads the
+    // pre-drain snapshot and falsely reports missing frames.
+    doc = await _loadOrCreate();
+    final frames = doc.frames.values;
+    final confirmed = frames
+        .where((record) => record.status == FrameUploadState.confirmed)
+        .length;
+    if (frames.length < plan.requiredTargetCount ||
+        confirmed < plan.requiredTargetCount) {
+      final missing = frames.length < plan.requiredTargetCount
+          ? plan.requiredTargetCount - frames.length
+          : plan.requiredTargetCount - confirmed;
+      return PanoramaHandoffOutcome.failed(
+        '$confirmed of ${plan.requiredTargetCount} photographs are on '
+        'Sitewise. $missing still need to upload — your photos are kept, '
+        'retry when the connection is back.',
+      );
+    }
+
+    // 2. Job creation, then 3. follow it.
+    String? sessionId = plan.backendSessionId;
+    try {
+      sessionId ??= await _coordinator.ensureSession(
+        stationId: _stationId,
+        propertyId: propertyId,
+        attemptKey: doc.attemptKey,
+        // The session's own saved version, never just its target count.
+        plan: planForVersion(plan.capturePlanVersion),
+      );
+    } on Object catch (error) {
+      CaptureLog.log('Handoff could not open the session: $error');
+      return PanoramaHandoffOutcome.failed(
+        'Sitewise could not be reached. Your photos are saved — retry the '
+        'panorama when the connection is back.',
+      );
+    }
+    String? jobId;
+    try {
+      jobId = await _ensurePanoramaJob(doc, sessionId);
+    } on UploadsIncompleteFailure {
+      return const PanoramaHandoffOutcome.failed(
+        'The uploads have not finished yet. Retry to continue.',
+      );
+    } on Object catch (error) {
+      CaptureLog.log('Handoff could not create the panorama job: $error');
+      return PanoramaHandoffOutcome.failed(
+        'The panorama could not be queued: '
+        '${readableFailure(error, fallback: 'service error')} '
+        'Your photographs are saved — retry to continue.',
+      );
+    }
+    if (jobId == null) {
+      return const PanoramaHandoffOutcome.failed(
+        'The capture is not complete yet. Your photographs are saved.',
+      );
+    }
+
+    final result = await _coordinator.followPanoramaJob(
+      stationId: _stationId,
+      sessionId: sessionId,
+      jobId: jobId,
+      directory: await frameStore.tourRoot(tourId),
+      onStage: (stage, job) => onStage?.call(
+        stage,
+        stage == PanoramaJobStage.queued
+            ? 'Your photos are saved. Panorama processing will begin shortly.'
+            : 'Creating your 360° panorama…',
+      ),
+    );
+    if (result.ready) {
+      final saved = await _persistPanorama(
+        result.panorama!,
+        propertyId: propertyId,
+        sessionId: sessionId,
+        expectedCount: plan.requiredTargetCount,
+        jobId: jobId,
+      );
+      if (!saved) {
+        return PanoramaHandoffOutcome.failed(
+          'Your panorama was created but could not be attached to this '
+          'property. Retry to finish saving it — it does not need to be '
+          'generated again.',
+          panoramaId: result.panoramaId,
+        );
+      }
+      CaptureLog.log(
+        'HANDOFF_TIMING: uploads=${uploadsMs}ms '
+        'total=${DateTime.now().difference(started).inMilliseconds}ms '
+        'job=$jobId',
+      );
+      return PanoramaHandoffOutcome.ready(
+        localPath: result.panorama!['localPath'] as String? ?? '',
+        panoramaId: result.panorama!['id'] as String? ?? '',
+        sessionId: sessionId,
+        verificationStatus:
+            result.panorama!['verificationStatus'] as String?,
+      );
+    }
+    if (result.pending) {
+      return PanoramaHandoffOutcome.pending(
+        result.failureMessage ?? 'Your panorama is still being created.',
+      );
+    }
+    return PanoramaHandoffOutcome.failed(
+      result.failureMessage ?? 'The panorama could not be created.',
+      panoramaId: result.panoramaId,
+    );
+  }
+
+  /// Records a completed server panorama as the draft for this tour.
+  ///
+  /// Three writes, all idempotent: the session store (so a restart finds it),
+  /// the tour record (so the property detail and the preview find it), and the
+  /// queue document (so nothing re-downloads it). No server object is touched,
+  /// and no second job is ever created.
+  Future<bool> _persistPanorama(
+    Map<String, dynamic> panorama, {
+    required int propertyId,
+    required String sessionId,
+    required int expectedCount,
+    required String jobId,
+  }) async {
+    final path = panorama['localPath'] as String?;
+    final id = panorama['id'] as String?;
+    if (path == null || path.isEmpty || id == null || id.isEmpty) return false;
+    try {
+      final tour = await ServiceLocator.tourRepo.tourById(tourId);
+      if (tour == null || tour.propertyId != '$propertyId') {
+        throw StateError(
+          'Panorama property association could not be verified.',
+        );
+      }
+      await _sessions.savePanorama(
+        sessionId: _stationId,
+        localPanoramaPath: path,
+        status: PanoramaGenerationStatus.ready,
+        error: null,
+      );
+      // The tour's panorama pointer is deliberately NOT moved here. A worker
+      // result is an unconfirmed candidate; only acceptPanoramaCandidate()
+      // may make it the active inspection panorama.
+      await _sessions.saveBackendHandoff(
+        sessionId: _stationId,
+        syncStatus: FrameSyncStatus.ready,
+        backendSessionId: sessionId,
+        panoramaSyncStatus: FrameSyncStatus.ready,
+        backupSyncStatus: FrameSyncStatus.ready,
+        backupUploaded: expectedCount,
+        backupTotal: expectedCount,
+        backendPanoramaId: id,
+        clearLastError: true,
+      );
+      final doc = await _loadOrCreate();
+      doc.panorama = PanoramaQueueRecord(
+        localFilePath: path,
+        checksumSha256: await _checksum(path),
+        status: FrameUploadState.confirmed,
+        panoramaId: id,
+        storagePath: panorama['storagePath'] as String?,
+      );
+      await _flush();
+      return true;
+    } on Object catch (error) {
+      CaptureLog.log('Completed panorama could not be recorded: $error');
+      return false;
+    }
   }
 
   Future<void> _drainPanorama(
@@ -721,11 +1174,17 @@ class FrameUploadQueue {
     var confirmedCount = doc.frames.values
         .where((r) => r.status == FrameUploadState.confirmed)
         .length;
-    final total = (await _sessions.getSession(_stationId))?.requiredTargetCount ?? doc.frames.length;
+    final total =
+        (await _sessions.getSession(_stationId))?.requiredTargetCount ??
+        doc.frames.length;
 
-    while (true) {
+    while (!_transfersCancelled && !_transportPaused) {
       // A panorama may be queued while a frame batch is uploading.
-      if ((await _sessions.getSession(_stationId))?.requiredTargetCount != 56 &&
+      final currentPlan = await _sessions.getSession(_stationId);
+      if (!_backendStitched(
+            currentPlan?.requiredTargetCount,
+            planVersion: currentPlan?.capturePlanVersion,
+          ) &&
           doc.panorama?.status == FrameUploadState.pending) {
         await _drainPanorama(doc, sessionId, propertyId);
       }
@@ -815,6 +1274,10 @@ class FrameUploadQueue {
         doc.frames.remove(record.targetId);
       }
       await _flush();
+      _settleFrameWaiters(
+        record.targetId,
+        BackendHandoffFailure('The saved photograph is missing on this device.'),
+      );
       return;
     }
     if (frame == null) {
@@ -822,7 +1285,31 @@ class FrameUploadQueue {
         ..status = FrameUploadState.failedRetryable
         ..lastError = 'The saved frame metadata could not be loaded.';
       await _flush();
+      _settleFrameWaiters(
+        record.targetId,
+        BackendHandoffFailure('The saved frame metadata could not be loaded.'),
+      );
       return;
+    }
+    // Older queue documents may still name a processing derivative. The
+    // FastAPI transport sends the original, so migrate the record to the
+    // original's digest before the first retry.
+    if (record.derivative != null) {
+      record.derivative = null;
+      try {
+        record.checksumSha256 = await _checksum(record.localFilePath);
+      } on Object catch (error) {
+        record
+          ..status = FrameUploadState.failedRetryable
+          ..lastError = '$error';
+        await _flush();
+        _settleFrameWaiters(
+          record.targetId,
+          BackendHandoffFailure('The saved photograph could not be read.'),
+        );
+        return;
+      }
+      await _flush();
     }
     record
       ..status = FrameUploadState.uploading
@@ -831,8 +1318,9 @@ class FrameUploadQueue {
     var attempts = 0;
     while (attempts < kMaxDrainAttempts) {
       attempts++;
+      final uploadStarted = DateTime.now();
       try {
-        final storagePath = await _coordinator.uploadFrame(
+        final result = await _coordinator.sendFrameToBackend(
           sessionId: sessionId,
           frame: frame,
           checksum: record.checksumSha256,
@@ -840,6 +1328,12 @@ class FrameUploadQueue {
             frame.qualityJson,
           )?.toJson(),
         );
+        final storagePath = result['storagePath'] as String?;
+        if (storagePath == null || storagePath.isEmpty) {
+          throw const BackendHandoffFailure(
+            'The backend did not return the stored frame path.',
+          );
+        }
         record
           ..status = FrameUploadState.confirmed
           ..storagePath = storagePath
@@ -847,6 +1341,11 @@ class FrameUploadQueue {
           ..retryCount = 0
           ..updatedAt = DateTime.now().toUtc();
         await _flush();
+        CaptureLog.log(
+          'Frame upload target ${record.targetId} confirmed in '
+          '${DateTime.now().difference(uploadStarted).inMilliseconds}ms',
+        );
+        _settleFrameWaiters(record.targetId, null);
         return;
       } on Object catch (error) {
         record
@@ -854,15 +1353,28 @@ class FrameUploadQueue {
           ..lastError = '$error'
           ..updatedAt = DateTime.now().toUtc();
         await _flush();
+        if (_isTransportFailure(error)) {
+          _pauseTransport();
+          break;
+        }
         await Future<void>.delayed(Duration(seconds: attempts));
       }
     }
     record.status = FrameUploadState.failedRetryable;
     await _flush();
+    _settleFrameWaiters(
+      record.targetId,
+      BackendHandoffFailure(
+        'Target ${record.targetId} could not be uploaded. Your photograph is '
+        'saved on this device.',
+      ),
+    );
   }
 
   Future<void> _recordTotals(_QueueDoc doc) async {
-    final total = (await _sessions.getSession(_stationId))?.requiredTargetCount ?? doc.frames.length;
+    final total =
+        (await _sessions.getSession(_stationId))?.requiredTargetCount ??
+        doc.frames.length;
     final confirmed = doc.frames.values
         .where((r) => r.status == FrameUploadState.confirmed)
         .length;
@@ -937,6 +1449,9 @@ class FrameUploadQueue {
   /// recapturing anything.
   Future<void> resume() async {
     await _draining;
+    _transportPaused = false;
+    _transportRetry?.cancel();
+    _transportRetry = null;
     final doc = await _loadOrCreate();
     var dirty = false;
     for (final record in doc.frames.values) {
@@ -984,11 +1499,20 @@ class FrameUploadQueue {
     String tourId, {
     String? stationId,
   }) async {
+    // Readers that omit the station still get the CURRENT attempt, not the
+    // archived one. After an explicit recovery the station id differs from
+    // the tour id, and assuming equality would show a stale queue state.
+    final resolvedStation =
+        stationId ??
+        await SitewiseSphereSessionStore.stationIdForTour(
+          frameStore: frameStore,
+          tourId: tourId,
+        );
     final file = File(
       p.join(
         await frameStore.tourRoot(tourId),
         'ar_capture',
-        stationId ?? tourId,
+        resolvedStation,
         'upload_queue.json',
       ),
     );
@@ -1063,6 +1587,66 @@ class FrameUploadQueueState {
     }
     return panorama?.lastError;
   }
+}
+
+/// The result of driving a backend panorama handoff to a terminal state.
+///
+/// Three outcomes, not two. Collapsing `pending` into `failed` is what made the
+/// capture screen offer "Retry Handoff" for a job the worker was still
+/// processing normally.
+class PanoramaHandoffOutcome {
+  const PanoramaHandoffOutcome._({
+    required this.ready,
+    required this.pending,
+    required this.supported,
+    this.localPath,
+    this.panoramaId,
+    this.sessionId,
+    this.verificationStatus,
+    this.message,
+  });
+
+  const PanoramaHandoffOutcome.ready({
+    required String localPath,
+    required String panoramaId,
+    required String sessionId,
+    String? verificationStatus,
+  }) : this._(
+         ready: true,
+         pending: false,
+         supported: true,
+         localPath: localPath,
+         panoramaId: panoramaId,
+         sessionId: sessionId,
+         verificationStatus: verificationStatus,
+       );
+
+  const PanoramaHandoffOutcome.pending(String message)
+    : this._(ready: false, pending: true, supported: true, message: message);
+
+  const PanoramaHandoffOutcome.failed(String message, {String? panoramaId})
+    : this._(
+        ready: false,
+        pending: false,
+        supported: true,
+        message: message,
+        panoramaId: panoramaId,
+      );
+
+  /// This plan's panorama is produced on the device, not by the worker.
+  const PanoramaHandoffOutcome.unsupported()
+    : this._(ready: false, pending: false, supported: false);
+
+  final bool ready;
+  final bool pending;
+  final bool supported;
+  final String? localPath;
+  final String? panoramaId;
+  final String? sessionId;
+  final String? verificationStatus;
+  final String? message;
+
+  bool get failed => !ready && !pending && supported;
 }
 
 /// Receives the completed digest from [sha256.startChunkedConversion].

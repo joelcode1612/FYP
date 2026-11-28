@@ -8,6 +8,8 @@
 /// and stays comparable with the Flutter original.
 library;
 
+import 'package:sitewise_jaspr_web/core/routing/landing_routes.dart';
+
 // The role enum now comes from the shared package rather than being declared
 // here. `shared_logic` is the single source of truth for it, so the Flutter app
 // and this one can never disagree about which roles exist or what their home
@@ -35,14 +37,14 @@ abstract final class LandingContent {
       'Recommendations are explained through clear location factors — '
       'you make the final decision.';
 
-  /// In-page anchors. On the web these are plain `#id` links, so the smooth
-  /// scroll needs no JavaScript at all — the Flutter version needed a
-  /// `GlobalKey` plus `Scrollable.ensureVisible` per target.
-  static const List<(String label, String anchor)> navLinks = [
-    ('How It Works', 'how'),
-    ('Location Intelligence', 'geo'),
-    ('Recommendations', 'recs'),
-    ('360° Tours', 'tour'),
+  /// Public landing section paths. These are real routes: the landing page
+  /// scrolls the matching section programmatically without URL fragments,
+  /// while the Flutter app keeps its own in-page anchor copy.
+  static const List<(String label, String path)> navLinks = [
+    ('Problem & solution', LandingRoutes.problem),
+    ('Explore', LandingRoutes.explore),
+    ('Assessment', LandingRoutes.assessment),
+    ('Recommendations', LandingRoutes.recommendations),
   ];
 
   static const List<RoleCardData> roles = [

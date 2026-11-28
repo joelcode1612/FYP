@@ -68,6 +68,13 @@ class LocationOverviewComparison extends StatelessComponent {
     ]),
   ]);
 
+  Component _nearestCompetitor(EvidenceMetric metric) => _metric(
+    icon: 'storefront',
+    label: 'Nearest F&B competitor',
+    value: metric.available ? metric.displayValue : 'Unavailable',
+    note: metric.note,
+  );
+
   Component _distanceGroup({
     required String radius,
     required String subtitle,
@@ -205,6 +212,9 @@ class LocationOverviewComparison extends StatelessComponent {
       ]);
     }
     final result = evidence;
+    if (result?.nearestCompetitor case final nearest?) {
+      return _nearestCompetitor(nearest);
+    }
     if (error != null || result == null || !result.available) {
       return section(classes: 'sw-loccmp', [
         h2([const Component.text('Location overview')]),
@@ -249,6 +259,8 @@ class LocationOverviewComparison extends StatelessComponent {
         ),
       ]),
       _accessPanel(metrics),
+      if (metrics['nearest_competitor_distance_m'] case final nearest?)
+        _nearestCompetitor(nearest),
       p(classes: 'sw-loccmp__footer', [
         const Icon('info', size: 'sm'),
         Component.text(

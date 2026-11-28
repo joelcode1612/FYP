@@ -10,43 +10,16 @@ import 'package:sitewise_jaspr_web/features/administration/data/admin_api.dart';
 import 'package:sitewise_jaspr_web/core/di/app_locator.dart';
 import 'package:sitewise_jaspr_web/shared/presentation/layouts/app_layout.dart';
 
-/// Agent management — the administrator's live, company-aware staff roster.
-///
-/// ## What is real
-///
-/// Every number, row and status on this page comes from the FastAPI staff API
-/// (`backend/src/sitewise/api/v1/staff.py`), all guarded by **administrator +
-/// MFA (`aal2`)** on the server and all mutations recorded in
-/// `role_change_audit`:
-///
-/// * `GET  /api/v1/staff/summary` — KPI counts computed on the server,
-/// * `GET  /api/v1/staff/agents` — roster joined to `public.company` and to
-///   the latest `staff_invitations` state,
-/// * `GET  /api/v1/staff/companies` / `POST /api/v1/staff/companies` — the
-///   existing `public.company` directory and registration (id preserved),
-/// * `POST /api/v1/staff/agents` — the four-step wizard's final submission:
-///   provisions the Supabase identity and emails the native password-setup
-///   link. **No password is typed, shown or stored here.**
-/// * `PATCH /api/v1/staff/agents/{id}/status` — suspend / activate / reactivate,
-/// * `GET  /api/v1/staff/invitations` and
-///   `POST /api/v1/staff/invitations/{id}/revoke` — invite tracking.
-///
-/// There are no sample records. A failed read is reported as a callout without
-/// hiding the data that did load; a failed write shows the backend's own
-/// sentence. Accounts stay `pending` until an administrator activates them —
-/// the wizard never activates anything, and authentication/MFA stay server-side.
-@client
 class AdminAgentsPage extends StatefulComponent {
-  const AdminAgentsPage({super.key});
+  const AdminAgentsPage({super.key, this.openInvitation = false});
+
+  final bool openInvitation;
 
   @override
   State<AdminAgentsPage> createState() => _AdminAgentsPageState();
 }
 
-// Company and identity are entered together, then reviewed before sending.
 const _steps = <String>['Agent details', 'Review', 'Invitation'];
-const _existingMode = 'Existing company';
-const _newMode = 'New company';
 
 final _emailPattern = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
 
@@ -77,14 +50,12 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
   String? _error;
   List<StaffAgent> _agents = const [];
   List<StaffInvitation> _invitations = const [];
-  List<CompanyRecord> _companies = const [];
   StaffSummary _summary = StaffSummary.empty;
 
   // --- Directory filters ----------------------------------------------------
   String _query = '';
   String _statusFilter = 'all';
   String _inviteFilter = 'all';
-  String _companyFilter = 'all';
 
   // --- Row actions ----------------------------------------------------------
   String? _confirmingId;
@@ -100,11 +71,7 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
   // --- Invite wizard --------------------------------------------------------
   bool _inviteOpen = false;
   int _step = 0;
-  bool _validatedCompany = false;
   bool _validatedAgent = false;
-  String _companyMode = _existingMode;
-  String _selectedCompanyId = '';
-  String _newCompanyName = '';
   String _invName = '';
   String _invEmail = '';
   String _invPhone = '';
@@ -113,14 +80,6 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
   bool _submitting = false;
   String? _wizardError;
   Map<String, dynamic>? _result;
-  int? _resultCompanyId;
-  String _resultCompanyName = '';
-
-  // --- Standalone company registration -------------------------------------
-  bool _companyDialogOpen = false;
-  String _companyDialogName = '';
-  bool _companySaving = false;
-  String? _companyDialogError;
 
   // --- Supervised MFA recovery ---------------------------------------------
   String? _mfaId;
@@ -131,6 +90,7 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
   @override
   void initState() {
     super.initState();
+    _inviteOpen = component.openInvitation;
     _load();
   }
 
@@ -152,8 +112,9 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
       if (!mounted || sequence != _loadSequence) return;
       setState(() {
         _agents = snapshot.agents;
-        _invitations = snapshot.invitations;
-        _companies = snapshot.companies;
+        _invitations = snapshot.invitations
+            .where((row) => row.invitedRole == 'agent')
+            .toList();
         _summary = snapshot.summary;
         _loading = false;
         _error = null;
@@ -169,31 +130,13 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
 
   // --- Derived values -------------------------------------------------------
 
-  CompanyRecord? get _selectedCompany {
-    if (_selectedCompanyId.isEmpty) return null;
-    for (final company in _companies) {
-      if ('${company.id}' == _selectedCompanyId) return company;
-    }
-    return null;
-  }
-
-  String get _assignmentLabel {
-    if (_companyMode == _existingMode) {
-      return _selectedCompany?.name.isNotEmpty == true
-          ? _selectedCompany!.name
-          : 'No company selected';
-    }
-    final name = _newCompanyName.trim();
-    return name.isEmpty ? 'Not entered' : '$name (new)';
-  }
-
   List<StaffAgent> get _filtered {
     final q = _query.trim().toLowerCase();
     return _agents
         .where((agent) {
           if (q.isNotEmpty) {
             final haystack =
-                '${agent.displayName} ${agent.email} ${agent.companyName} '
+                '${agent.displayName} ${agent.email} '
                         '${agent.status} ${agent.invitationStatus} '
                         '${agent.agentId} ${agent.phone}'
                     .toLowerCase();
@@ -207,9 +150,6 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
             if (agent.invitationStatus.isNotEmpty) return false;
           } else if (_inviteFilter != 'all' &&
               agent.invitationStatus.toLowerCase() != _inviteFilter) {
-            return false;
-          }
-          if (_companyFilter != 'all' && agent.companyId != _companyFilter) {
             return false;
           }
           return true;
@@ -250,36 +190,6 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
   }
 
   String? get _emailFieldError => _emailError ?? _duplicateError;
-
-  String? get _companyError {
-    if (!_validatedCompany) return null;
-    if (_companyMode == _existingMode) {
-      if (_selectedCompany == null) {
-        return 'Choose an existing company, or switch to registering a new one';
-      }
-      return null;
-    }
-    final name = _newCompanyName.trim();
-    if (name.length < 2) {
-      return 'Enter the company name (at least 2 characters)';
-    }
-    if (_companies.any(
-      (company) => company.name.toLowerCase() == name.toLowerCase(),
-    )) {
-      return 'This company already exists — select it from the existing '
-          'directory instead';
-    }
-    return null;
-  }
-
-  bool get _companyStepValid {
-    if (_companyMode == _existingMode) return _selectedCompany != null;
-    final name = _newCompanyName.trim();
-    return name.length >= 2 &&
-        !_companies.any(
-          (company) => company.name.toLowerCase() == name.toLowerCase(),
-        );
-  }
 
   bool get _agentStepValid =>
       _invName.trim().isNotEmpty &&
@@ -345,7 +255,7 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
   Future<void> _setStatus(StaffAgent agent, String status) async {
     final label = switch (status) {
       'active' => 'reactivated',
-      'suspended' => 'suspended',
+      'suspended' => 'blocked',
       _ => 'updated',
     };
     setState(() => _busyId = agent.userId);
@@ -358,8 +268,7 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
       if (!mounted) return;
       setState(() => _confirmingId = null);
       _setNotice(
-        '${agent.displayName} was $label. The change is stored server-side '
-        'and written to the administrator audit log.${_auditSuffix(result)}',
+        '${agent.displayName} was $label.${_auditSuffix(result)}',
         error: false,
       );
     } catch (error) {
@@ -481,83 +390,24 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
     }
   }
 
-  Future<void> _saveCompany() async {
-    final name = _companyDialogName.trim();
-    if (name.length < 2) {
-      setState(() => _companyDialogError = 'Enter at least 2 characters.');
-      return;
-    }
-    setState(() {
-      _companySaving = true;
-      _companyDialogError = null;
-    });
-    try {
-      final created = await AppLocator.adminApi.createCompany(name);
-      await _load(silent: true);
-      if (!mounted) return;
-      setState(() {
-        _companyDialogOpen = false;
-        _companySaving = false;
-        _companyDialogName = '';
-        _selectedCompanyId = '${created.id}';
-        _companyMode = _existingMode;
-      });
-      _setNotice(
-        'Company "${created.name}" registered with company_id ${created.id}.',
-        error: false,
-      );
-      // Company registration audits best-effort; a failed audit write does
-      // not invalidate the created row, and the flag arrives on the success
-      // response (`CompanyRecord` does not carry it).
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _companySaving = false;
-        _companyDialogError = AdminApi.message(error);
-      });
-    }
-  }
-
   Future<void> _submitInvite() async {
     setState(() {
       _validatedAgent = true;
       _wizardError = null;
     });
-    if (!_companyStepValid || !_agentStepValid || !_confirmed) return;
+    if (!_agentStepValid || !_confirmed) return;
     setState(() => _submitting = true);
     try {
-      // A newly registered company is written first so the invitation carries
-      // its real company_id. If the invite fails afterwards the company row
-      // remains and is reusable from the existing-company list.
-      late final int companyId;
-      late final String companyName;
-      if (_companyMode == _existingMode) {
-        final selected = _selectedCompany;
-        if (selected == null) {
-          throw StateError('Select a company before sending the invitation.');
-        }
-        companyId = selected.id;
-        companyName = selected.name;
-      } else {
-        final created = await AppLocator.adminApi.createCompany(
-          _newCompanyName.trim(),
-        );
-        companyId = created.id;
-        companyName = created.name;
-      }
       final result = await AppLocator.adminApi.createAgent(
         fullName: _invName.trim(),
         email: _invEmail.trim(),
         phoneNumber: _invPhone.trim(),
-        companyId: companyId,
         allowExisting: _allowExisting,
       );
       await _load(silent: true);
       if (!mounted) return;
       setState(() {
         _result = result;
-        _resultCompanyId = companyId;
-        _resultCompanyName = companyName;
         _step = 2;
         _submitting = false;
       });
@@ -595,11 +445,7 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
 
   void _resetWizard() {
     _step = 0;
-    _validatedCompany = false;
     _validatedAgent = false;
-    _companyMode = _existingMode;
-    _selectedCompanyId = '';
-    _newCompanyName = '';
     _invName = '';
     _invEmail = '';
     _invPhone = '';
@@ -608,8 +454,6 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
     _submitting = false;
     _wizardError = null;
     _result = null;
-    _resultCompanyId = null;
-    _resultCompanyName = '';
   }
 
   void _openInvite() {
@@ -626,20 +470,6 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
   });
 
   void _noop() {}
-
-  void _closeCompanyDialog() => setState(() {
-    _companyDialogOpen = false;
-    _companyDialogError = null;
-    _companySaving = false;
-  });
-
-  void _openCompanyDialog() {
-    setState(() {
-      _companyDialogOpen = true;
-      _companyDialogError = null;
-    });
-    _focusOpenDialog();
-  }
 
   void _openDetails(String userId) {
     setState(() => _detailsId = userId);
@@ -673,13 +503,12 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
     _mfaBusy = false;
   });
 
-  void _nextFromCompany() {
+  void _reviewInvite() {
     setState(() {
-      _validatedCompany = true;
       _validatedAgent = true;
       _wizardError = null;
     });
-    if (!_companyStepValid || !_agentStepValid) {
+    if (!_agentStepValid) {
       // Focus the first invalid field. Both sections validate together.
       Future<void>.delayed(const Duration(milliseconds: 30), () {
         if (!mounted) return;
@@ -754,17 +583,6 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
 
   // --- Fragments ------------------------------------------------------------
 
-  Component _hero() => OpsHero(
-    icon: 'group_add',
-    title: 'Staff access, issued by the server',
-    body:
-        'Assign a real company, review the agent details, then let Supabase '
-        'create the identity and email the password-setup link. This screen '
-        'never sets, shows or stores an agent password, and never activates '
-        'an account before the agent has authenticated.',
-    action: ActionButton('Invite agent', icon: 'add', onClick: _openInvite),
-  );
-
   Component _metrics() {
     final s = _summary;
     return div(
@@ -778,25 +596,19 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
           note: _loading
               ? 'Loading live data…'
               : '${s.activeAgents} active · ${s.pendingAgents} pending · '
-                    '${s.suspendedAgents} suspended',
+                    '${s.suspendedAgents} blocked',
         ),
         OpsStat(
           icon: 'how_to_reg',
           label: 'Active accounts',
           value: '${s.activeAgents}',
-          note: 'Server-side account_status',
+          note: 'Agents with active access',
         ),
         OpsStat(
           icon: 'forward_to_inbox',
           label: 'Open invitations',
           value: '${s.openInvitations}',
           note: '${s.invitations} invitation records in total',
-        ),
-        OpsStat(
-          icon: 'apartment',
-          label: 'Companies',
-          value: '${s.companies}',
-          note: 'Existing public.company rows',
         ),
       ],
     );
@@ -805,7 +617,7 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
   Component _filters() => div(classes: 'ag-filters', [
     SearchInput(
       label: 'Search agents',
-      placeholder: 'Name, email, company or status',
+      placeholder: 'Name, email or status',
       ariaLabel: 'Search the agent directory',
       onInput: (value) => setState(() => _query = value),
     ),
@@ -816,7 +628,7 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
         _Option('all', 'All statuses'),
         _Option('active', 'Active'),
         _Option('pending', 'Pending'),
-        _Option('suspended', 'Suspended'),
+        _Option('suspended', 'Blocked'),
       ],
       onChanged: (value) => setState(() => _statusFilter = value),
     ),
@@ -829,23 +641,10 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
         _Option('sent', 'Sent'),
         _Option('accepted', 'Accepted'),
         _Option('expired', 'Expired'),
-        _Option('revoked', 'Revoked'),
+        _Option('revoked', 'Cancelled'),
         _Option('none', 'No invitation'),
       ],
       onChanged: (value) => setState(() => _inviteFilter = value),
-    ),
-    _selectField(
-      labelText: 'Company',
-      value: _companyFilter,
-      options: [
-        const _Option('all', 'All companies'),
-        for (final company in _companies)
-          _Option(
-            '${company.id}',
-            company.name.isEmpty ? 'Company #${company.id}' : company.name,
-          ),
-      ],
-      onChanged: (value) => setState(() => _companyFilter = value),
     ),
   ]);
 
@@ -882,8 +681,7 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
     if (rows.isEmpty) {
       return InlineEmpty(
         _agents.isEmpty
-            ? 'No agent accounts exist yet. Use "Invite agent" to provision '
-                  'the first one — Supabase will email the credential setup.'
+            ? 'No Agent accounts yet. Use “Invite agent” to send an invitation.'
             : 'No agents match these filters. Clear the search or choose a '
                   'different status to see the full roster.',
       );
@@ -900,9 +698,9 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
         ]),
       ]),
       DataTable(
+        scrollLabel: 'Agent roster',
         columns: const [
           DataColumn('Agent'),
-          DataColumn('Company'),
           DataColumn('Account status'),
           DataColumn('Invitation status'),
           DataColumn('Joined'),
@@ -926,13 +724,6 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
                   ),
                 ]),
               ]),
-              Component.text(
-                agent.companyName.isEmpty
-                    ? (agent.companyId.isEmpty
-                          ? 'Unassigned'
-                          : '#${agent.companyId}')
-                    : agent.companyName,
-              ),
               agent.status.isEmpty
                   ? const StatusBadge('Unknown', tone: 'neutral')
                   : StatusBadge(
@@ -969,9 +760,9 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
     final status = agent.status.toLowerCase();
     if (status == 'suspended') {
       return ActionButton(
-        'Reactivate',
+        'Unblock account',
         variant: 'secondary',
-        onClick: () => _setStatus(agent, 'active'),
+        onClick: () => _openConfirm(agent.userId),
       );
     }
     if (status == 'pending') {
@@ -981,75 +772,21 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
       );
     }
     return ActionButton(
-      'Suspend',
+      'Block account',
       variant: 'danger-outline',
       onClick: () => _openConfirm(agent.userId),
     );
   }
 
-  Component _companiesPanel() {
-    return SectionCard(
-      title: 'Company directory',
-      action: [
-        ActionButton(
-          'Register company',
-          variant: 'secondary',
-          icon: 'add',
-          onClick: _openCompanyDialog,
-        ),
-      ],
-      child: div(classes: 'stack', [
-        p(classes: 'ag-muted', [
-          Component.text(
-            'Existing public.company rows. The invitation wizard stores the '
-            'company_id on the agent profile; registration only creates a new '
-            'row, so no duplicate table or column is introduced.',
-          ),
-        ]),
-        _loading
-            ? const Skeleton(variant: 'row', count: 2)
-            : _companies.isEmpty
-            ? InlineEmpty(
-                'No companies are registered yet. Register one to make it '
-                'selectable in the invitation wizard.',
-              )
-            : DataTable(
-                columns: const [
-                  DataColumn('Company'),
-                  DataColumn('ID', numeric: true),
-                  DataColumn('Agents', numeric: true),
-                ],
-                rows: [
-                  for (final company in _companies)
-                    [
-                      CellIdentity(
-                        title: company.name.isEmpty
-                            ? 'Company #${company.id}'
-                            : company.name,
-                        caption: 'public.company',
-                      ),
-                      Component.text('${company.id}'),
-                      Component.text(
-                        '${_agents.where((agent) => agent.companyId == company.id.toString()).length}',
-                      ),
-                    ],
-                ],
-              ),
-      ]),
-    );
-  }
-
   Component _invitationsPanel() {
     return SectionCard(
-      title: 'Invitations',
+      title: 'Agent invitations',
       child: _loading
           ? const Skeleton(variant: 'row', count: 3)
           : _invitations.isEmpty
-          ? InlineEmpty(
-              'No invitation records yet. Rows appear here only after the '
-              'server confirms a Supabase invite.',
-            )
+          ? InlineEmpty('No Agent invitations yet.')
           : DataTable(
+              scrollLabel: 'Agent invitations',
               columns: const [
                 DataColumn('Invited address'),
                 DataColumn('Role'),
@@ -1061,12 +798,7 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
               rows: [
                 for (final invite in _invitations)
                   [
-                    CellIdentity(
-                      title: invite.email,
-                      caption: invite.invitedById.isEmpty
-                          ? 'Invitation record'
-                          : 'By ${invite.invitedById}',
-                    ),
+                    Component.text(invite.email),
                     Component.text(
                       invite.invitedRole == 'owner'
                           ? 'Property Owner'
@@ -1137,80 +869,10 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
     ],
   );
 
-  Component _companyStep() => div(classes: 'stack', [
-    p(classes: 'body', [
-      Component.text(
-        'Choose where this agent will be registered. The real company_id is '
-        'stored on the agent profile and shown in the directory.',
-      ),
-    ]),
-    ChipRow(
-      options: const [_existingMode, _newMode],
-      selected: _companyMode,
-      ariaLabel: 'Company assignment mode',
-      onSelect: (value) => setState(() {
-        _companyMode = value;
-        _validatedCompany = false;
-        _wizardError = null;
-      }),
-    ),
-    if (_companyMode == _existingMode)
-      _companies.isEmpty
-          ? InlineEmpty(
-              'No companies are registered yet. Switch to "New company" to '
-              'create the first one, or use "Register company" on the '
-              'directory panel.',
-            )
-          : _selectField(
-              labelText: 'Existing company',
-              value: _selectedCompanyId,
-              options: [
-                const _Option('', 'Select a company'),
-                for (final company in _companies)
-                  _Option(
-                    '${company.id}',
-                    company.name.isEmpty
-                        ? 'Company #${company.id}'
-                        : company.name,
-                  ),
-              ],
-              hint:
-                  'Selected from public.company — no duplicate row is created.',
-              error: _companyError,
-              onChanged: (value) => setState(() {
-                _selectedCompanyId = value;
-                _validatedCompany = false;
-              }),
-            )
-    else
-      Field(
-        labelText: 'New company name',
-        error: _companyError,
-        hint:
-            'Registered in public.company before the invite is sent; the '
-            'returned company_id is preserved with the agent.',
-        child: _textInput(
-          value: _newCompanyName,
-          placeholder: 'e.g. Aina Realty Sdn Bhd',
-          invalid: _companyError != null,
-          onInput: (value) => setState(() {
-            _newCompanyName = value;
-            _validatedCompany = false;
-          }),
-        ),
-      ),
-    Callout(
-      'The live public.company table exposes company_id and company_name only. '
-      'No company type or extra column is written or invented here.',
-      icon: 'info',
-    ),
-  ]);
-
   Component _agentStep() => div(classes: 'stack', [
     p(classes: 'body', [
       Component.text(
-        'Identity only. The agent chooses their own credential through the '
-        'Supabase invite link after the administrator submits the review.',
+        'The Agent sets their password using the invitation link.',
       ),
     ]),
     Field(
@@ -1240,7 +902,7 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
     ),
     Field(
       labelText: 'Phone (optional)',
-      hint: 'Stored on the identity row, never displayed publicly',
+      hint: 'For account contact',
       child: _textInput(
         value: _invPhone,
         placeholder: '+60 12 345 6789',
@@ -1250,18 +912,6 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
         onInput: (value) => setState(() => _invPhone = value),
       ),
     ),
-    div(classes: 'ag-fixed', [
-      InfoRow(
-        icon: 'apartment',
-        label: 'Assigned company',
-        value: _assignmentLabel,
-      ),
-      InfoRow(
-        icon: 'badge',
-        label: 'Role',
-        value: 'Agent — fixed by the server',
-      ),
-    ]),
     label(classes: 'ops-checkrow', [
       input(
         type: InputType.checkbox,
@@ -1272,9 +922,7 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
       ),
       span([
         Component.text(
-          'This email already belongs to an account — grant it staff access '
-          'instead of inviting a new identity. The backend requires this '
-          'explicit opt-in; matching emails never upgrade roles automatically.',
+          'Grant Agent access to an existing account with this email.',
         ),
       ]),
     ]),
@@ -1282,10 +930,7 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
 
   Component _reviewStep() => div(classes: 'stack', [
     p(classes: 'body', [
-      Component.text(
-        'Check every value before the server provisions an identity. Nothing '
-        'has been written yet for this agent.',
-      ),
+      Component.text('Review the details before sending the invitation.'),
     ]),
     div(classes: 'ag-review', [
       InfoRow(icon: 'person', label: 'Full name', value: _invName.trim()),
@@ -1295,18 +940,15 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
         label: 'Phone',
         value: _invPhone.trim().isEmpty ? 'Not provided' : _invPhone.trim(),
       ),
-      InfoRow(icon: 'apartment', label: 'Company', value: _assignmentLabel),
       InfoRow(icon: 'badge', label: 'Role', value: 'Agent'),
       InfoRow(
         icon: 'lock',
-        label: 'Credential',
-        value: 'Set by the agent through the Supabase invite',
+        label: 'Password',
+        value: 'Set by the Agent using the invitation link',
       ),
     ]),
     Callout(
-      'Submitting provisions a pending agent account. It is not activated '
-      'here: activation follows the agent completing authentication and MFA, '
-      'and is recorded in the administrator audit log.',
+      'The Agent will receive an email with a link to set up their account.',
       icon: 'shield',
     ),
     label(classes: 'ops-checkrow', [
@@ -1317,7 +959,7 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
       ),
       span([
         Component.text(
-          'I have reviewed the agent and company details and authorise this '
+          'I have reviewed the Agent details and approve this '
           'invitation.',
         ),
       ]),
@@ -1341,8 +983,7 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
         attributes: const {'role': 'status'},
         [
           ActionNotice(
-            'The server accepted the request. Every value below comes from the '
-            'FastAPI response, not from local form state.',
+            invited ? 'Invitation sent.' : 'Agent access granted.',
             tone: 'info',
           ),
         ],
@@ -1353,17 +994,10 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
           icon: 'mark_email_read',
           label: 'Invitation status',
           value: !invited
-              ? 'No invite sent — staff access granted to an existing identity'
+              ? 'Agent access granted to an existing account'
               : status.isEmpty
               ? 'No invitation record was returned — check the invitations table'
               : _label(status),
-        ),
-        InfoRow(
-          icon: 'apartment',
-          label: 'Assigned company',
-          value: _resultCompanyId == null
-              ? _resultCompanyName
-              : '$_resultCompanyName (company_id $_resultCompanyId)',
         ),
         InfoRow(
           icon: 'toggle_off',
@@ -1377,23 +1011,14 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
         ),
       ]),
       Callout(
-        'The account stays pending until the agent sets a credential through '
-        'the Supabase link and you activate it. Supabase Auth, MFA and the '
-        'audit log remain server-side; this page never sees a password.',
+        'The Agent must complete account setup before activation.',
         icon: 'shield',
       ),
     ]);
   }
 
   /// One complete entry form — no hidden email field on a later page.
-  /// The existing company/agent field builders and validation remain reused.
   Component _invitationForm() => div(classes: 'ag-invite-form', [
-    div(classes: 'ag-invite-form__section', [
-      h3(classes: 'ag-invite-form__heading', [
-        Component.text('Company assignment'),
-      ]),
-      _companyStep(),
-    ]),
     div(classes: 'ag-invite-form__section', [
       h3(classes: 'ag-invite-form__heading', [
         Component.text('Agent information'),
@@ -1431,7 +1056,7 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
         ),
         ActionButton(
           'Review details',
-          onClick: _submitting ? null : _nextFromCompany,
+          onClick: _submitting ? null : _reviewInvite,
         ),
       ];
     }
@@ -1474,48 +1099,49 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
     );
   }
 
-  Component _companyDialog() {
-    return SitewiseDialog(
-      title: 'Register a company',
-      ariaLabel: 'Register a company',
-      onClose: _companySaving ? _noop : _closeCompanyDialog,
-      body: div(classes: 'stack', [
-        p(classes: 'body', [
-          Component.text(
-            'Creates one row in the existing public.company table. Duplicate '
-            'names are refused by the server so an agent is never linked to '
-            'two near-identical companies.',
-          ),
-        ]),
-        if (_companyDialogError != null)
-          div(
-            attributes: const {'role': 'alert'},
-            [ActionNotice(_companyDialogError!, tone: 'danger')],
-          ),
-        Field(
-          labelText: 'Company name',
-          error: _companyDialogError,
-          hint: 'The returned company_id becomes selectable in the wizard.',
-          child: _textInput(
-            value: _companyDialogName,
-            placeholder: 'e.g. Aina Realty Sdn Bhd',
-            invalid: _companyDialogError != null,
-            onInput: (value) => setState(() => _companyDialogName = value),
-          ),
+  Component _workload(StaffAgent agent) {
+    final rows = agent.assignedProperties;
+    int count(String state) => rows.where((row) => row.status == state).length;
+    return div(classes: 'stack ag-workload', [
+      h3([Component.text('Inspection workload')]),
+      p([
+        Component.text(
+          '${rows.length - count('declined')} assigned · '
+          '${count('ongoing') + count('needs_correction')} ongoing · '
+          '${count('pending_review')} pending Admin review · '
+          '${count('completed')} completed',
         ),
       ]),
-      actions: [
-        ActionButton(
-          'Cancel',
-          variant: 'secondary',
-          onClick: _companySaving ? null : _closeCompanyDialog,
+      if (rows.isEmpty)
+        const InlineEmpty('No property assignments yet.')
+      else
+        DataTable(
+          scrollLabel: 'Assigned properties',
+          columns: const [
+            DataColumn('Property'),
+            DataColumn('Inspection status'),
+          ],
+          rows: [
+            for (final row in rows)
+              [
+                a(
+                  href:
+                      '/admin/listing-detail?id=${Uri.encodeComponent(row.id)}',
+                  [Component.text(row.name)],
+                ),
+                Component.text(switch (row.status) {
+                  'requested' => 'Awaiting Agent response',
+                  'ongoing' => 'In progress',
+                  'pending_review' => 'Pending Admin review',
+                  'completed' => 'Completed',
+                  'needs_correction' => 'Needs correction',
+                  'declined' => 'Declined',
+                  _ => 'Status unavailable',
+                }),
+              ],
+          ],
         ),
-        ActionButton(
-          _companySaving ? 'Registering…' : 'Register company',
-          onClick: _companySaving ? null : _saveCompany,
-        ),
-      ],
-    );
+    ]);
   }
 
   Component _detailsDialog() {
@@ -1525,6 +1151,7 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
       title: agent.displayName,
       ariaLabel: 'Agent details',
       wide: true,
+      panelClass: 'ag-details-dialog',
       onClose: () => setState(() => _detailsId = null),
       body: div(classes: 'ag-review', [
         InfoRow(icon: 'mail', label: 'Email', value: agent.email),
@@ -1533,13 +1160,6 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
           icon: 'call',
           label: 'Phone',
           value: agent.phone.isEmpty ? 'Not provided' : agent.phone,
-        ),
-        InfoRow(
-          icon: 'apartment',
-          label: 'Company',
-          value: agent.companyName.isEmpty
-              ? (agent.companyId.isEmpty ? 'Unassigned' : '#${agent.companyId}')
-              : '${agent.companyName} (id ${agent.companyId})',
         ),
         InfoRow(icon: 'badge', label: 'Role', value: _label(agent.role)),
         InfoRow(
@@ -1559,7 +1179,7 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
           label: 'Added',
           value: _shortDate(agent.createdAt),
         ),
-        InfoRow(icon: 'fingerprint', label: 'User id', value: agent.userId),
+        _workload(agent),
       ]),
       actions: [
         ActionButton(
@@ -1568,7 +1188,7 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
           onClick: () => setState(() => _detailsId = null),
         ),
         ActionButton(
-          'Reset MFA',
+          'Reset two-step verification',
           variant: 'secondary',
           icon: 'lock_reset',
           onClick: () => _openMfaRecovery(agent.userId),
@@ -1678,18 +1298,20 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
         .where((row) => row.userId == _confirmingId)
         .firstOrNull;
     if (agent == null) return const span([]);
+    final restoring = agent.status.toLowerCase() == 'suspended';
+    final action = restoring ? 'Unblock account' : 'Block account';
     return SitewiseDialog(
-      title: 'Suspend ${agent.displayName}?',
-      ariaLabel: 'Confirm suspension',
+      title: '$action?',
+      ariaLabel: action,
       onClose: () => setState(() => _confirmingId = null),
       body: div(classes: 'stack', [
         p(classes: 'body', [
           Component.text(
-            'Suspension takes effect immediately on every route the backend '
-            'guards: the account keeps its identity and its invitation '
-            'history, but ${agent.email} loses staff access until you '
-            'reactivate it. The change is recorded in the audit log with '
-            'your administrator identity.',
+            restoring
+                ? '${agent.email} will regain access with the same Agent role. '
+                      'They still need to meet the usual sign-in requirements.'
+                : '${agent.email} will lose access to the Agent workspace. '
+                      'Their account and invitation history will be kept.',
           ),
         ]),
       ]),
@@ -1700,9 +1322,9 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
           onClick: () => setState(() => _confirmingId = null),
         ),
         ActionButton(
-          'Suspend account',
-          variant: 'danger-outline',
-          onClick: () => _setStatus(agent, 'suspended'),
+          action,
+          variant: restoring ? 'primary' : 'danger-outline',
+          onClick: () => _setStatus(agent, restoring ? 'active' : 'suspended'),
         ),
       ],
     );
@@ -1715,27 +1337,16 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
       currentRoute: '/admin/agents',
       title: 'Agent management',
       eyebrow: 'Operations',
-      subtitle:
-          'Live agent roster, company directory and invitations from the '
-          'authenticated staff API — administrator sign-in with MFA is '
-          'required for every mutation.',
+      subtitle: 'Manage Agent access, invitations and inspection workloads.',
       actions: [
         ActionButton('Refresh', variant: 'secondary', onClick: _load),
-        ActionButton(
-          'Register company',
-          variant: 'secondary',
-          icon: 'domain_add',
-          onClick: _openCompanyDialog,
-        ),
         ActionButton('Invite agent', icon: 'add', onClick: _openInvite),
       ],
-      child: div(classes: 'stack ag ops-fade', [
-        _hero(),
+      child: div(classes: 'stack stack--sections ag ops-fade', [
         _metrics(),
         _rosterPanel(),
-        div(classes: 'ag-columns', [_companiesPanel(), _invitationsPanel()]),
+        _invitationsPanel(),
         if (_inviteOpen) _inviteDialog(),
-        if (_companyDialogOpen) _companyDialog(),
         if (_detailsId != null) _detailsDialog(),
         if (_confirmingId != null) _confirmDialog(),
         if (_cancelInvitationId != null) _cancelInvitationDialog(),

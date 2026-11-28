@@ -249,7 +249,8 @@ class _ProviderVerificationMobilePageState
           style: FilledButton.styleFrom(
             backgroundColor: SitewiseColors.action,
             foregroundColor: SitewiseM3.surface,
-            minimumSize: const Size.fromHeight(48),
+            minimumSize: const Size.fromHeight(52),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(SitewiseM3.radiusPill),
             ),
@@ -325,7 +326,8 @@ class _ProviderVerificationMobilePageState
           style: FilledButton.styleFrom(
             backgroundColor: SitewiseColors.action,
             foregroundColor: SitewiseM3.surface,
-            minimumSize: const Size.fromHeight(50),
+            minimumSize: const Size.fromHeight(52),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(SitewiseM3.radiusPill),
             ),
@@ -341,9 +343,16 @@ class _ProviderVerificationMobilePageState
                 )
               : const Text('Submit for review'),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 12),
         TextButton(
           onPressed: _submitting ? null : _load,
+          style: TextButton.styleFrom(
+            minimumSize: const Size.fromHeight(48),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(SitewiseM3.radiusPill),
+            ),
+          ),
           child: const Text('Cancel'),
         ),
         const Text(

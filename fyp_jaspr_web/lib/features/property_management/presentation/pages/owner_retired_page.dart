@@ -1,6 +1,7 @@
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 
+import 'package:sitewise_jaspr_web/core/routing/landing_routes.dart';
 import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart';
 
 /// The retired Property Owner web workspace.
@@ -27,7 +28,7 @@ class OwnerRetiredPage extends StatelessComponent {
             'enquiries, performance and verification all live there under the '
             'same account.',
         action: div(classes: 'empty__links', [
-          const ActionLink('Go to SiteWise', href: '/'),
+          const ActionLink('Go to SiteWise', href: LandingRoutes.home),
           const ActionLink(
             'Sign in',
             href: '/login',

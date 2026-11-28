@@ -15,11 +15,14 @@ arithmetic over the caller's own enquiries.
 
 from __future__ import annotations
 
+from decimal import Decimal
+from math import isfinite
 from typing import Any
 
 from sqlalchemy import text
 from sqlmodel import Session
 
+from sitewise.repositories.agent_assignment_repository import AgentAssignmentRepository
 from sitewise.services.enquiry_service import EnquiryService
 
 #: ``fyp.rental_properties.verification_status`` values this report groups by.
@@ -81,23 +84,30 @@ class ProviderPerformanceService:
         return [dict(row) for row in rows]
 
     def report(
-        self, *, property_ids: list[int] | None, is_agent: bool
+        self,
+        *,
+        property_ids: list[int] | None,
+        is_agent: bool,
+        agent_id: int | None = None,
     ) -> dict[str, Any]:
-        rows = self._listing_rows(property_ids)
+        if is_agent:
+            assignments = (
+                AgentAssignmentRepository(self.session).list_for_agent(agent_id)
+                if agent_id is not None else []
+            )
+            rows = [
+                row for row in assignments if row["property_exists"]
+            ]
+            property_ids = [row["listing_id"] for row in rows]
+        else:
+            rows = self._listing_rows(property_ids)
 
         by_state = {state: 0 for state in _LISTING_STATES}
+        by_inspection: dict[str, int] = {}
         other = 0
         published = 0
-        rents = [
-            float(row["rental_price"])
-            for row in rows
-            if isinstance(row["rental_price"], (int, float))
-        ]
-        sizes = [
-            float(row["size_sqft"])
-            for row in rows
-            if isinstance(row["size_sqft"], (int, float))
-        ]
+        rents = _valid_measurements(rows, "rental_price")
+        sizes = _valid_measurements(rows, "size_sqft")
         for row in rows:
             state = str(row["verification_status"] or "")
             if state in by_state:
@@ -108,6 +118,11 @@ class ProviderPerformanceService:
             # not a live listing.
             if state == "approved" and row["is_published"]:
                 published += 1
+            if is_agent:
+                inspection = row["workflow_status"] or "other"
+                if inspection == "accepted" and row["inspection_updated_at"]:
+                    inspection = "checklist_saved"
+                by_inspection[inspection] = by_inspection.get(inspection, 0) + 1
 
         enquiries = EnquiryService(self.session).metrics(property_ids=property_ids)
 
@@ -121,6 +136,7 @@ class ProviderPerformanceService:
                 "published": published,
                 "by_state": by_state,
                 "other_state": other,
+                **({"by_inspection": by_inspection} if is_agent else {}),
             },
             "portfolio": {
                 "median_rent": _median(rents),
@@ -137,6 +153,17 @@ class ProviderPerformanceService:
                 "metrics": [dict(metric) for metric in _UNTRACKED_METRICS],
             },
         }
+
+
+def _valid_measurements(rows: list[dict[str, Any]], column: str) -> list[float]:
+    return [
+        float(value)
+        for row in rows
+        if isinstance(value := row[column], (int, float, Decimal))
+        and not isinstance(value, bool)
+        and isfinite(value)
+        and value > 0
+    ]
 
 
 def _median(values: list[float]) -> float | None:

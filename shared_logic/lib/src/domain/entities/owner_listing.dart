@@ -92,6 +92,9 @@ class OwnerListing {
   /// their own listing, so no manager is implied.
   final ListingManagement? management;
 
+  /// True when the accepted Agent inspection temporarily locks Owner edits.
+  final bool agentInspectionActive;
+
   const OwnerListing({
     required this.id,
     required this.name,
@@ -131,6 +134,7 @@ class OwnerListing {
     this.updatedAt,
     this.photos = const [],
     this.management,
+    this.agentInspectionActive = false,
   });
 
   static double? _d(Object? v) => (v is num) ? v.toDouble() : null;
@@ -184,6 +188,7 @@ class OwnerListing {
     management: row['management'] is Map<String, dynamic>
         ? ListingManagement.fromJson(row['management'] as Map<String, dynamic>)
         : null,
+    agentInspectionActive: row['owner_edit_locked'] == true,
   );
 
   /// The shared status vocabulary used by badges across the app.

@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:fyp/core/di/service_locator.dart';
 import 'package:fyp/core/theme/sitewise_m3.dart';
 import 'package:fyp/core/theme/sitewise_theme.dart';
 import 'package:fyp/shared/presentation/components/m3_kit.dart';
 import 'package:fyp/shared/presentation/layouts/provider_tab_scope.dart';
 import 'package:fyp/features/dashboard/application/provider_dashboard_controller.dart';
-import 'package:fyp/features/property_management/domain/entities/provider_models.dart' show isMfaRequired;
+import 'package:fyp/features/property_management/domain/entities/provider_models.dart'
+    show ProviderListing, ProviderStage, isMfaRequired;
 import 'package:fyp/shared/presentation/components/provider_ui.dart';
+import 'package:fyp/shared/presentation/components/provider_card_actions.dart';
+import 'package:fyp/shared/presentation/components/sitewise_network_image.dart';
 
 /// The Agent task queue — `/provider/tasks`.
 ///
@@ -34,9 +38,11 @@ class ProviderTasksMobilePage extends ConsumerStatefulWidget {
 /// once; the rest narrow to one.
 enum _TaskFilter {
   all('All'),
-  needsAttention('Needs attention'),
-  awaitingReview('Awaiting review'),
-  approved('Approved');
+  requested('Requested'),
+  inProgress('In Progress'),
+  awaitingReview('In Review'),
+  corrections('Corrections Required'),
+  approved('Completed');
 
   const _TaskFilter(this.label);
   final String label;
@@ -45,6 +51,22 @@ enum _TaskFilter {
 class _ProviderTasksMobilePageState
     extends ConsumerState<ProviderTasksMobilePage> {
   _TaskFilter _filter = _TaskFilter.all;
+
+  @override
+  void initState() {
+    super.initState();
+    // Mutations anywhere in the provider workspace (accept / decline, proof
+    // upload, inspection save, panorama sync, submit, admin decisions) bump
+    // the shared revision; the task queue must re-read it just like Home,
+    // even when Home was never mounted in this session.
+    ServiceLocator.listingsRevision.addListener(_reload);
+  }
+
+  @override
+  void dispose() {
+    ServiceLocator.listingsRevision.removeListener(_reload);
+    super.dispose();
+  }
 
   void _reload() => ref.invalidate(providerDashboardProvider);
 
@@ -112,20 +134,17 @@ class _TasksBody extends StatelessWidget {
   List<ProviderAgentTask> _of(ProviderAgentTaskKind kind) =>
       data.agentTasks.where((task) => task.kind == kind).toList();
 
-  /// Whether one bucket is visible under the current filter. An empty bucket
-  /// is never shown, so a filter can only ever narrow what the records
-  /// actually contain.
-  bool _shows(ProviderAgentTaskKind kind, List<ProviderAgentTask> tasks) {
-    if (tasks.isEmpty) return false;
-    if (filter == _TaskFilter.all) return true;
-    return switch (kind) {
-      ProviderAgentTaskKind.needsAttention =>
-        filter == _TaskFilter.needsAttention,
-      ProviderAgentTaskKind.awaitingReview =>
-        filter == _TaskFilter.awaitingReview,
-      ProviderAgentTaskKind.completed => filter == _TaskFilter.approved,
+  List<ProviderAgentTask> _filteredTasks() => data.agentTasks.where((task) {
+    final listing = task.listing;
+    return switch (filter) {
+      _TaskFilter.all => true,
+      _TaskFilter.requested => listing.assignmentStatus == 'requested',
+      _TaskFilter.inProgress => listing.isInspectionActive,
+      _TaskFilter.awaitingReview => task.kind == ProviderAgentTaskKind.awaitingReview,
+      _TaskFilter.corrections => listing.assignmentStatus == 'needs_correction' || listing.stage == ProviderStage.rejected,
+      _TaskFilter.approved => task.kind == ProviderAgentTaskKind.completed,
     };
-  }
+  }).toList();
 
   @override
   Widget build(BuildContext context) {
@@ -152,8 +171,16 @@ class _TasksBody extends StatelessWidget {
       );
     }
 
+    final tasksForView = filter == _TaskFilter.all ? data.agentTasks : _filteredTasks();
     final shown = <Widget>[
-      if (_shows(ProviderAgentTaskKind.needsAttention, attention))
+      if (filter != _TaskFilter.all && tasksForView.isNotEmpty)
+        _Section(
+          title: filter.label,
+          caption: '${tasksForView.length} assigned ${tasksForView.length == 1 ? 'property' : 'properties'}',
+          tasks: tasksForView,
+          onOpen: onOpen,
+        )
+      else if (attention.isNotEmpty)
         _Section(
           title: 'Needs attention',
           caption:
@@ -161,31 +188,30 @@ class _TasksBody extends StatelessWidget {
               '${attention.length == 1 ? 'property' : 'properties'} '
               'assigned to you '
               '${attention.length == 1 ? 'needs' : 'need'} an action.',
-          tasks: attention,
+          tasks: filter == _TaskFilter.all ? attention : tasksForView,
           onOpen: onOpen,
         ),
-      if (_shows(ProviderAgentTaskKind.awaitingReview, awaiting))
+      if (filter == _TaskFilter.all && awaiting.isNotEmpty)
         _Section(
           title: 'Awaiting administrator review',
           caption: 'Locked while an administrator reviews the submission.',
-          tasks: awaiting,
+          tasks: filter == _TaskFilter.all ? awaiting : tasksForView,
           onOpen: onOpen,
         ),
       // Approved properties are completed records, not tasks. They appear in
       // their own section, and only when an assignment actually holds one.
-      if (_shows(ProviderAgentTaskKind.completed, approved))
+      if (filter == _TaskFilter.all && approved.isNotEmpty)
         _Section(
           title: 'Completed',
           caption: 'Approved by an administrator.',
-          tasks: approved,
+          tasks: filter == _TaskFilter.all ? approved : tasksForView,
           onOpen: onOpen,
         ),
     ];
     // "Caught up" is a statement about the actionable bucket only, so it is
     // said when nothing needs attention — and the tracked submissions and
     // approved properties below it stay visible, because those are real too.
-    final caughtUp = attention.isEmpty &&
-        (filter == _TaskFilter.all || filter == _TaskFilter.needsAttention);
+    final caughtUp = attention.isEmpty && filter == _TaskFilter.all;
 
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -242,11 +268,10 @@ class _PageHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Inspection tasks', style: SitewiseM3Type.h1),
+          Text('Inspection Tasks', style: SitewiseM3Type.h1),
           const SizedBox(height: 6),
           const Text(
-            'Open an assigned property to verify its details, record '
-            'corrections and capture a 360° tour.',
+            'Manage assigned inspection and verification tasks.',
             style: TextStyle(
               fontFamily: kFontFamily,
               fontSize: 13,
@@ -390,9 +415,11 @@ class _FilterStrip extends StatelessWidget {
   final ValueChanged<_TaskFilter> onSelect;
 
   int _count(_TaskFilter filter) => switch (filter) {
-    _TaskFilter.all => data.agentTasks.length,
-    _TaskFilter.needsAttention => data.needsAttentionCount,
-    _TaskFilter.awaitingReview => data.awaitingReviewCount,
+    _TaskFilter.all => data.listings.length,
+    _TaskFilter.requested => data.listings.where((l) => l.assignmentStatus == 'requested').length,
+    _TaskFilter.inProgress => data.listings.where((l) => l.isInspectionActive).length,
+    _TaskFilter.awaitingReview => data.agentTasks.where((t) => t.kind == ProviderAgentTaskKind.awaitingReview).length,
+    _TaskFilter.corrections => data.listings.where((l) => l.assignmentStatus == 'needs_correction' || l.stage == ProviderStage.rejected).length,
     _TaskFilter.approved => data.approvedCount,
   };
 
@@ -503,14 +530,14 @@ class _Section extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         for (final task in tasks)
           Padding(
             padding: const EdgeInsets.fromLTRB(
               providerGutter,
               0,
               providerGutter,
-              10,
+              12,
             ),
             child: _TaskCard(task: task, onOpen: onOpen),
           ),
@@ -533,7 +560,9 @@ class _TaskCard extends StatelessWidget {
   }
 
   String? get _feedbackDate {
-    final raw = task.noteAt ?? task.listing.submittedAt;
+    // The actual submission timestamp (assignment row) when the backend
+    // reports one; the verification row's timestamp as the fallback.
+    final raw = task.noteAt ?? task.listing.submissionTimestamp;
     return _formatDay(raw);
   }
 
@@ -542,11 +571,13 @@ class _TaskCard extends StatelessWidget {
     final note = task.note?.trim();
     final hasNote = note != null && note.isNotEmpty;
     final date = _feedbackDate;
+    // A local so the nullable getter can promote for the progress bar.
+    final progress = task.listing.inspectionProgress;
     return Semantics(
       button: true,
       label: '${task.category}: ${task.listing.displayTitle}',
       child: M3Card(
-        padding: const EdgeInsets.fromLTRB(15, 15, 15, 15),
+        padding: const EdgeInsets.all(16),
         onTap: () => onOpen(task.route, arguments: task.listing.id),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -554,18 +585,25 @@ class _TaskCard extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 38,
-                  height: 38,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: providerWash,
-                    borderRadius: BorderRadius.circular(13),
-                  ),
-                  child: Icon(
-                    task.icon,
-                    size: 20,
-                    color: SitewiseColors.action,
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(13),
+                  child: SitewiseNetworkImage(
+                    url: task.listing.imageUrl,
+                    width: 52,
+                    height: 52,
+                    fit: BoxFit.cover,
+                    semanticLabel: 'Photo of ${task.listing.displayTitle}',
+                    fallback: Container(
+                      width: 52,
+                      height: 52,
+                      color: providerWash,
+                      alignment: Alignment.center,
+                      child: Icon(
+                        task.icon,
+                        size: 22,
+                        color: SitewiseColors.action,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 11),
@@ -597,22 +635,57 @@ class _TaskCard extends StatelessWidget {
                           color: SitewiseM3.muted,
                         ),
                       ),
+                      if (task.listing.assignmentStatus == 'requested' && task.listing.requestedAt != null)
+                        Text('Assigned: ${_formatDay(task.listing.requestedAt)}', style: const TextStyle(fontSize: 11, color: SitewiseM3.muted)),
                     ],
                   ),
                 ),
                 const SizedBox(width: 8),
-                ProviderStatusPill(stage: task.listing.stage, compact: true),
+                _TaskStateBadge(listing: task.listing, kind: task.kind),
               ],
             ),
             const SizedBox(height: 11),
             Wrap(
-              spacing: 7,
-              runSpacing: 7,
+              spacing: 8,
+              runSpacing: 8,
               children: [
                 M3Tag(
                   label: task.category,
                   positive: task.kind == ProviderAgentTaskKind.completed,
                 ),
+                // Whose step this is, when the backend says it is NOT the
+                // agent's: an owner-owned blocker must never read as agent
+                // work.
+                if (task.responsibility == 'owner')
+                  _MetaChip(
+                    icon: Icons.person_outline_rounded,
+                    label: 'Waiting on the property owner',
+                  )
+                else if (task.responsibility == 'system')
+                  _MetaChip(
+                    icon: Icons.autorenew_outlined,
+                    label: 'Processing — no action needed yet',
+                  )
+                else if (task.responsibility == 'admin')
+                  _MetaChip(
+                    icon: Icons.admin_panel_settings_outlined,
+                    label: 'With the administrator',
+                  ),
+                // Requirements still open on an active inspection, stated
+                // only when the record actually reports them and not already
+                // covered by the category above.
+                if (task.responsibility != 'owner' &&
+                    task.listing.ownershipProofUploaded == false)
+                  _MetaChip(
+                    icon: Icons.verified_user_outlined,
+                    label: 'Ownership proof missing',
+                  ),
+                if (task.listing.panoramaConfirmed == false &&
+                    task.listing.nextAction != 'capture_panorama')
+                  _MetaChip(
+                    icon: Icons.threesixty_outlined,
+                    label: 'No confirmed 360° tour',
+                  ),
                 if (task.kind == ProviderAgentTaskKind.awaitingReview &&
                     date != null)
                   _MetaChip(
@@ -622,6 +695,23 @@ class _TaskCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 9),
+            // Inspection progress, computed only from the counters the
+            // backend reports — never a hardcoded percentage. Only rendered
+            // for records that actually carry the counters.
+            if (progress != null) ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: LinearProgressIndicator(
+                  value: progress,
+                  minHeight: 6,
+                  backgroundColor: SitewiseM3.quiet,
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    SitewiseColors.action,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+            ],
             Text(
               task.instruction,
               style: const TextStyle(
@@ -681,28 +771,17 @@ class _TaskCard extends StatelessWidget {
               ),
             ],
             if (task.actionLabel != null) ...[
-              const SizedBox(height: 13),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: () =>
-                      onOpen(task.route, arguments: task.listing.id),
-                  icon: const Icon(Icons.arrow_forward_rounded, size: 18),
-                  label: Text(task.actionLabel!),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: SitewiseColors.action,
-                    foregroundColor: SitewiseM3.surface,
-                    minimumSize: const Size.fromHeight(46),
-                    textStyle: const TextStyle(
-                      fontFamily: kFontFamily,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(SitewiseM3.radiusPill),
-                    ),
+              const SizedBox(height: 12),
+              ProviderCardActions(
+                actions: [
+                  ProviderCardAction(
+                    label: task.actionLabel!,
+                    icon: Icons.arrow_forward_rounded,
+                    onPressed: () =>
+                        onOpen(task.route, arguments: task.listing.id),
+                    emphasis: ProviderCardActionEmphasis.primary,
                   ),
-                ),
+                ],
               ),
             ] else if (task.kind != ProviderAgentTaskKind.completed) ...[
               // The listing is locked or the state refuses an edit: the record
@@ -728,6 +807,30 @@ class _TaskCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _TaskStateBadge extends StatelessWidget {
+  const _TaskStateBadge({required this.listing, required this.kind});
+  final ProviderListing listing;
+  final ProviderAgentTaskKind kind;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = listing.assignmentStatus == 'requested'
+        ? 'Requested'
+        : listing.assignmentStatus == 'needs_correction'
+        ? 'Corrections Required'
+        : kind == ProviderAgentTaskKind.awaitingReview
+        ? 'In Review'
+        : kind == ProviderAgentTaskKind.completed
+        ? listing.isPublished ? 'Published' : 'Approved'
+        : listing.isInspectionActive ? 'In Progress' : 'Inspection';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      decoration: BoxDecoration(color: listing.isPublished ? SitewiseM3.greenWash : SitewiseM3.quiet, borderRadius: BorderRadius.circular(SitewiseM3.radiusPill)),
+      child: Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700)),
     );
   }
 }

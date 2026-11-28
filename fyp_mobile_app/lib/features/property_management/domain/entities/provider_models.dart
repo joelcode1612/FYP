@@ -26,6 +26,10 @@ class ProviderListing {
   /// the card then reports management as unavailable instead of guessing.
   final ProviderManagement? management;
 
+  /// The assigned Agent is inspecting this property, so Owner editing is
+  /// temporarily unavailable.
+  final bool agentInspectionActive;
+
   /// How many photographs the record carries, when the endpoint reports them
   /// (an owner listing does; an agent assignment row carries no photo list).
   /// Null means unknown — a screen must treat that as "not reported", never
@@ -66,6 +70,55 @@ class ProviderListing {
   /// verification dimensions). Null means the payload did not report it.
   final bool? backendEditable;
 
+  // ── Agent assignment workflow (enriched `me/listings` payload only) ──────
+  //
+  // Read from the same authoritative records the backend joins: the
+  // `agent_listing_assignment` row, the single readiness classifier, and the
+  // canonical panorama. Null means the record does not exist or the payload
+  // predates the enrichment — never mapped to a default.
+
+  /// `agent_listing_assignment.workflow_status`:
+  /// requested | accepted | needs_correction | submitted | declined.
+  final String? assignmentStatus;
+
+  /// When the assignment was requested / answered, from the assignment row.
+  final String? requestedAt;
+  final String? respondedAt;
+
+  /// When the agent actually submitted the inspection (assignment row) —
+  /// the submission timestamp, not a derived placeholder.
+  final String? agentSubmittedAt;
+
+  /// Why the assignment was declined, when it was.
+  final String? declineReason;
+
+  /// Last time the on-site inspection checklist was saved.
+  final String? inspectionUpdatedAt;
+
+  /// On-site verification checks saved (of [inspectionChecksTotal]).
+  final int? inspectionChecksCompleted;
+  final int? inspectionChecksTotal;
+
+  /// Ownership proof state, from the backend's readiness classifier.
+  final bool? ownershipProofUploaded;
+  final String? ownershipSubmissionStatus;
+
+  /// Whether a canonical, server-confirmed panorama exists for this agent.
+  final bool? panoramaConfirmed;
+
+  /// The backend's own submission gate verdict.
+  final bool? submissionReady;
+  final List<String> submissionBlockers;
+
+  /// The single next step the records support (`review_request`,
+  /// `await_owner_proof`, `complete_details`, `continue_inspection`,
+  /// `capture_panorama`, `wait_enrichment`, `submit_for_review`,
+  /// `await_admin_review`, `review_corrections`, `view_published`).
+  final String? nextAction;
+
+  /// Who owns that step: agent | owner | admin | system | none.
+  final String? nextActionOwner;
+
   const ProviderListing({
     required this.id,
     required this.title,
@@ -77,6 +130,7 @@ class ProviderListing {
     this.propertyType,
     this.imageUrl,
     this.management,
+    this.agentInspectionActive = false,
     this.photoCount,
     this.taskState,
     this.missingRequiredFields = const [],
@@ -85,6 +139,21 @@ class ProviderListing {
     this.correctionAt,
     this.submittedAt,
     this.backendEditable,
+    this.assignmentStatus,
+    this.requestedAt,
+    this.respondedAt,
+    this.agentSubmittedAt,
+    this.declineReason,
+    this.inspectionUpdatedAt,
+    this.inspectionChecksCompleted,
+    this.inspectionChecksTotal,
+    this.ownershipProofUploaded,
+    this.ownershipSubmissionStatus,
+    this.panoramaConfirmed,
+    this.submissionReady,
+    this.submissionBlockers = const [],
+    this.nextAction,
+    this.nextActionOwner,
   });
 
   ProviderStage get stage => ProviderStage.fromWire(status);
@@ -98,6 +167,7 @@ class ProviderListing {
   /// locked while the administrator decides. `needs_correction` is carried as
   /// `rejected`/`changes_requested` on the wire and remains editable.
   bool get lockedForEditing =>
+      agentInspectionActive ||
       isPublished ||
       status.toLowerCase() == 'approved' ||
       status.toLowerCase() == 'pending' ||
@@ -145,6 +215,65 @@ class ProviderListing {
     propertyType ?? '',
   ].join(' ').toLowerCase();
 
+  // ── Agent workflow derivations (from the fields above, nothing invented) ─
+
+  /// True when the assignment workflow itself says the agent declined.
+  bool get isDeclined => assignmentStatus == 'declined';
+
+  /// True when the assignment is still waiting for the agent to accept.
+  bool get isRequestPending => assignmentStatus == 'requested';
+
+  /// True when the assignment is an active inspection: accepted (or under
+  /// correction) and not yet submitted. Never true for a declined assignment
+  /// and never inferred from a draft status alone — the workflow status must
+  /// actually say so.
+  bool get isInspectionActive =>
+      assignmentStatus == 'accepted' || assignmentStatus == 'needs_correction';
+
+  /// True when this listing is with an administrator: the assignment workflow
+  /// says submitted, or the verification dimension is pending / under review.
+  bool get isSubmittedForReview =>
+      assignmentStatus == 'submitted' ||
+      status.toLowerCase() == 'pending' ||
+      status.toLowerCase() == 'under_review';
+
+  /// Fraction of the four on-site checks saved, computed only from the
+  /// counters the backend reports — never a hardcoded percentage.
+  double? get inspectionProgress {
+    final done = inspectionChecksCompleted;
+    final total = inspectionChecksTotal;
+    if (done == null || total == null || total <= 0) return null;
+    return (done.clamp(0, total)) / total;
+  }
+
+  String get inspectionProgressDisplay {
+    final done = inspectionChecksCompleted;
+    final total = inspectionChecksTotal;
+    if (done == null || total == null) return 'Inspection not reported';
+    return '$done of $total on-site checks saved';
+  }
+
+  /// The actual submission timestamp, preferring the assignment row's own
+  /// `submitted_at` over the verification row's creation time.
+  String? get submissionTimestamp => agentSubmittedAt ?? submittedAt;
+
+  /// The workflow's next step, worded for display. Unknown values render as
+  /// themselves rather than folding into a label the backend did not send.
+  String? get nextActionDisplay => switch (nextAction) {
+    'review_request' => 'Review the assignment request',
+    'await_owner_proof' => 'Waiting for the owner\'s ownership proof',
+    'complete_details' => 'Complete property details',
+    'continue_inspection' => 'Continue the physical inspection',
+    'capture_panorama' => 'Capture the 360° tour',
+    'wait_enrichment' => 'Geospatial processing is running',
+    'submit_for_review' => 'Ready to submit for review',
+    'await_admin_review' => 'Awaiting administrator review',
+    'review_corrections' => 'Review administrator corrections',
+    'view_published' => 'View the published listing',
+    null => null,
+    _ => nextAction,
+  };
+
   static double? _num(dynamic value) {
     if (value is num) return value.toDouble();
     if (value is String) return double.tryParse(value.trim());
@@ -173,6 +302,7 @@ class ProviderListing {
             'label': row.management!.label,
             'name': row.management!.name,
           }),
+    agentInspectionActive: row.agentInspectionActive,
   );
 
   /// An assigned agent listing (`AgentAssignment.raw`, joined server-side with
@@ -205,6 +335,21 @@ class ProviderListing {
       correctionAt: _text(raw['correction_at']),
       submittedAt: _text(raw['verification_submitted_at']),
       backendEditable: raw['editable'] is bool ? raw['editable'] as bool : null,
+      assignmentStatus: row.assignmentStatus,
+      requestedAt: row.requestedAt,
+      respondedAt: row.respondedAt,
+      agentSubmittedAt: row.submittedAt,
+      declineReason: row.declineReason,
+      inspectionUpdatedAt: row.inspectionUpdatedAt,
+      inspectionChecksCompleted: row.inspectionChecksCompleted,
+      inspectionChecksTotal: row.inspectionChecksTotal,
+      ownershipProofUploaded: row.ownershipProofUploaded,
+      ownershipSubmissionStatus: row.ownershipSubmissionStatus,
+      panoramaConfirmed: row.panoramaConfirmed,
+      submissionReady: row.submissionReady,
+      submissionBlockers: row.submissionBlockers,
+      nextAction: row.nextAction,
+      nextActionOwner: row.nextActionOwner,
     );
   }
 
@@ -427,6 +572,7 @@ class ProviderPerformance {
     required this.total,
     required this.published,
     required this.byState,
+    this.byInspection = const {},
     required this.otherState,
     required this.engagementTracked,
     required this.engagementReason,
@@ -440,6 +586,7 @@ class ProviderPerformance {
   final int total;
   final int published;
   final Map<String, int> byState;
+  final Map<String, int> byInspection;
   final int otherState;
 
   /// Always `false` for this build: the events do not exist.
@@ -463,6 +610,7 @@ class ProviderPerformance {
     final scope = json['scope'] as Map? ?? const {};
     final listings = json['listings'] as Map? ?? const {};
     final byState = listings['by_state'] as Map? ?? const {};
+    final byInspection = listings['by_inspection'] as Map? ?? const {};
     final portfolio = json['portfolio'] as Map? ?? const {};
     final engagement = json['engagement'] as Map? ?? const {};
     return ProviderPerformance(
@@ -472,6 +620,10 @@ class ProviderPerformance {
       published: _int(listings['published']),
       byState: {
         for (final entry in byState.entries) '${entry.key}': _int(entry.value),
+      },
+      byInspection: {
+        for (final entry in byInspection.entries)
+          '${entry.key}': _int(entry.value),
       },
       otherState: _int(listings['other_state']),
       engagementTracked: engagement['tracked'] == true,

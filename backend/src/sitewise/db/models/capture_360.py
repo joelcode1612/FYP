@@ -40,6 +40,16 @@ class CaptureSession(SQLModel, table=True):
     expected_frames: int = Field(default=38)
     capture_mode: str = Field(default="device_38")
     capture_plan_version: str = Field(default="1")
+    # The adaptive plan, persisted because it is generated per camera: the
+    # target directions can no longer be derived from a fixed count, and a
+    # resumed or late-stitched session must keep the geometry its photographs
+    # were planned for. NULL on historical sessions, whose geometry comes from
+    # ``capture_plan_version`` exactly as before.
+    plan_geometry: list[Any] | None = Field(default=None, sa_column=Column(JSON))
+    plan_intrinsics: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
+    alignment_summary: dict[str, Any] | None = Field(
+        default=None, sa_column=Column(JSON)
+    )
     created_at: datetime = Field(default_factory=_utcnow)
     updated_at: datetime = Field(default_factory=_utcnow)
 
@@ -63,6 +73,40 @@ class CaptureFrame(SQLModel, table=True):
     captured_at: datetime | None = Field(default=None)
     upload_status: str = Field(default="confirmed")
     uploaded_at: datetime = Field(default_factory=_utcnow)
+    # Per-photograph matching verdict, written by the incremental matcher.
+    # ``verified`` requires at least two strong connections; ``weak`` means the
+    # frame was matched but not reliably; NULL means it has not been attempted.
+    matching_status: str | None = Field(default=None)
+    matching_confidence: float | None = Field(default=None)
+    coverage_contribution: float | None = Field(default=None)
+
+
+class CaptureFrameMatch(SQLModel, table=True):
+    """One attempted image-pair verification, keyed by the ordered target pair.
+
+    Re-matching a pair updates the row in place, so a session cannot hold two
+    contradictory verdicts for the same connection.
+    """
+
+    __tablename__ = "capture_frame_matches"
+    __table_args__ = _FYP_SCHEMA
+
+    session_id: uuid.UUID = Field(
+        foreign_key="fyp.capture_sessions.id", primary_key=True
+    )
+    target_a: int = Field(primary_key=True)
+    target_b: int = Field(primary_key=True)
+    state: str = Field()
+    inliers: int = Field(default=0)
+    candidates: int = Field(default=0)
+    inlier_ratio: float = Field(default=0.0)
+    median_error_px: float = Field(default=0.0)
+    p95_error_px: float = Field(default=0.0)
+    spread_cells: int = Field(default=0)
+    azimuth_sectors: int = Field(default=0)
+    confidence: float = Field(default=0.0)
+    reason: str | None = Field(default=None)
+    updated_at: datetime = Field(default_factory=_utcnow)
 
 
 class PanoramaJob(SQLModel, table=True):

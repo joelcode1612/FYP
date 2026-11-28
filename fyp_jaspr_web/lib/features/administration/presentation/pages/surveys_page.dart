@@ -175,7 +175,7 @@ class _SurveysState extends State<AdminSurveysPage> {
           'The shared participant screening and questionnaire surface — '
           'answering how the study would be presented before any response '
           'capture exists.',
-      child: div(classes: 'stack ops-fade', [
+      child: div(classes: 'stack stack--sections ops-fade', [
         Callout(
           'Survey participation is not provisioned: there is no responses '
           'table and no submission endpoint, so this screen interacts but '

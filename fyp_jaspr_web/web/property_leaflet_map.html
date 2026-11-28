@@ -4,11 +4,12 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>SiteWise nearby property map</title>
-  <!-- Self-hosted Leaflet 1.9.4 (same vendored copy the Explore map uses);
-       no CDN dependency and no API key. -->
+  <!-- Local map libraries shared with Explore. -->
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
   <link rel="stylesheet" href="/vendor/leaflet/MarkerCluster.css" />
   <link rel="stylesheet" href="/vendor/leaflet/MarkerCluster.Default.css" />
+  <link rel="stylesheet" href="/vendor/maplibre/maplibre-gl.css" />
+  <link rel="stylesheet" href="/sitewise_basemap.css" />
   <style>
     html,body{margin:0;height:100%;font-family:Inter,system-ui,-apple-system,Segoe UI,Arial,sans-serif;background:#edf2f9;color:#172b4d}
     .layout{display:flex;flex-direction:column;height:100%;min-height:0}
@@ -81,7 +82,9 @@
   </div>
   <script src="/vendor/leaflet/leaflet.js"></script>
   <script src="/vendor/leaflet/leaflet.markercluster.js"></script>
-  <script defer src="/map-config.js"></script>
+  <script defer src="/vendor/maplibre/maplibre-gl.js"></script>
+  <script defer src="/vendor/maplibre/leaflet-maplibre-gl.js"></script>
+  <script defer src="/sitewise_basemap.js"></script>
   <script defer src="/property_leaflet_map.js"></script>
 </body>
 </html>
